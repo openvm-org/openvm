@@ -1,7 +1,10 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
@@ -33,7 +36,7 @@ use crate::{
 };
 
 struct RvrMeteredInstanceInner<'a> {
-    system_config: &'a SystemConfig,
+    system_config: Cow<'a, SystemConfig>,
     initial_image: RvrInitialImage,
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     compiled: RvrCompiled,
@@ -390,7 +393,7 @@ pub unsafe extern "C" fn metered_memory_buffer_flush(state: *mut MeteringState) 
 impl RvrMeteredInstanceInner<'_> {
     fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.initial_image
-            .create_vm_state(self.system_config, inputs)
+            .create_vm_state(&self.system_config, inputs)
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to
@@ -409,19 +412,32 @@ impl RvrMeteredInstanceInner<'_> {
     }
 }
 
-impl RvrMeteredInstance<'_> {
+impl<'a> RvrMeteredInstance<'a> {
     pub(crate) fn new(
-        system_config: &SystemConfig,
+        system_config: &'a SystemConfig,
         initial_image: RvrInitialImage,
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
         compiled: RvrCompiled,
-    ) -> RvrMeteredInstance<'_> {
+    ) -> Self {
         RvrMeteredInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
+            },
+        }
+    }
+
+    /// Detaches the compiled executor from the [`VmExecutor`](crate::arch::VmExecutor)
+    /// that created it.
+    pub fn into_owned(self) -> RvrMeteredInstance<'static> {
+        RvrMeteredInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config: Cow::Owned(self.inner.system_config.into_owned()),
+                initial_image: self.inner.initial_image,
+                runtime_hooks: self.inner.runtime_hooks,
+                compiled: self.inner.compiled,
             },
         }
     }
@@ -458,7 +474,7 @@ impl RvrMeteredInstance<'_> {
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -483,16 +499,16 @@ impl RvrMeteredInstance<'_> {
     }
 }
 
-impl RvrMeteredSegmentInstance<'_> {
+impl<'a> RvrMeteredSegmentInstance<'a> {
     pub(crate) fn new(
-        system_config: &SystemConfig,
+        system_config: &'a SystemConfig,
         initial_image: RvrInitialImage,
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
         compiled: RvrCompiled,
-    ) -> RvrMeteredSegmentInstance<'_> {
+    ) -> Self {
         RvrMeteredSegmentInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
@@ -535,7 +551,7 @@ impl RvrMeteredSegmentInstance<'_> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(

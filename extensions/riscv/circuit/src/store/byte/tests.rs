@@ -36,8 +36,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -394,9 +394,9 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 32))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 32))
         .unwrap();
     assert_eq!(execution.transcript.initial_write_log.len(), 1);
 
@@ -498,23 +498,23 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(single_program.clone()).with_init_memory(init_memory.clone()),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
     let d_single_program =
         GpuRvrProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
-    let mut corrupt_post = RvrPreflightTranscript {
+    let mut corrupt_post = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
     };
     corrupt_post.memory_log[2].value[0] ^= 1;
     let (d_corrupt, d_corrupt_plan) = d_single_program
-        .upload_transcript(&corrupt_post, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_post, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_range = Arc::new(VariableRangeCheckerChipGPU::new(
         default_var_range_checker_bus(),
@@ -591,10 +591,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         let d_invalid_program =
             GpuRvrProgram::upload(&invalid_program, &memory_config, &device_ctx).unwrap();
         let (d_invalid, d_invalid_plan) = d_invalid_program
-            .upload_transcript(
-                &single_execution.transcript,
-                RvrPreflightEndpoint::Terminated,
-            )
+            .upload_transcript(&single_execution.transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let invalid_range = Arc::new(VariableRangeCheckerChipGPU::new(
             default_var_range_checker_bus(),
@@ -652,12 +649,12 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(public_program.clone()).with_init_memory(public_init),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
     assert_eq!(
         public_execution.transcript.memory_log[2].address_space(),
@@ -689,7 +686,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
     assert_eq!(public_adapter.mem_as, F::from_u32(PUBLIC_VALUES_AS));
 
     // The containing block must be the one selected by the effective byte address.
-    let mut wrong_block = RvrPreflightTranscript {
+    let mut wrong_block = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -697,7 +694,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
     wrong_block.memory_log[2].pointer += RV64_REGISTER_NUM_LIMBS as u32;
     wrong_block.initial_write_log[0].pointer = wrong_block.memory_log[2].pointer;
     let (d_wrong_block, d_wrong_block_plan) = d_single_program
-        .upload_transcript(&wrong_block, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&wrong_block, PreflightEndpoint::Terminated)
         .unwrap();
     let wrong_block_chip = Rv64StoreByteChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(
@@ -729,7 +726,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         ]);
         let d_boundary_program =
             GpuRvrProgram::upload(&boundary_program, &memory_config, &device_ctx).unwrap();
-        let mut boundary_transcript = RvrPreflightTranscript {
+        let mut boundary_transcript = FullLogPreflightTranscript {
             program_log: single_execution.transcript.program_log.clone(),
             memory_log: single_execution.transcript.memory_log.clone(),
             initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -737,7 +734,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         boundary_transcript.memory_log[0].value =
             [(base & u16::MAX as u32) as u16, (base >> 16) as u16, 0, 0];
         let (d_boundary, d_boundary_plan) = d_boundary_program
-            .upload_transcript(&boundary_transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&boundary_transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let boundary_range = Arc::new(VariableRangeCheckerChipGPU::new(
             default_var_range_checker_bus(),
@@ -769,7 +766,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
     }
 
     // The largest u32 byte address remains valid when the configured domain includes it.
-    let mut max_address = RvrPreflightTranscript {
+    let mut max_address = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -790,7 +787,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
     let d_wide_program =
         GpuRvrProgram::upload(&single_program, &wide_memory_config, &device_ctx).unwrap();
     let (d_max_address, d_max_address_plan) = d_wide_program
-        .upload_transcript(&max_address, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&max_address, PreflightEndpoint::Terminated)
         .unwrap();
     let max_address_chip = Rv64StoreByteChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(
@@ -818,14 +815,14 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(repeated_program.clone()).with_init_memory(init_memory),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
-    let mut bad_predecessor = RvrPreflightTranscript {
+    let mut bad_predecessor = FullLogPreflightTranscript {
         program_log: repeated_execution.transcript.program_log,
         memory_log: repeated_execution.transcript.memory_log,
         initial_write_log: repeated_execution.transcript.initial_write_log,
@@ -834,7 +831,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
     let d_repeated_program =
         GpuRvrProgram::upload(&repeated_program, &memory_config, &device_ctx).unwrap();
     let (d_bad_predecessor, d_bad_predecessor_plan) = d_repeated_program
-        .upload_transcript(&bad_predecessor, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&bad_predecessor, PreflightEndpoint::Terminated)
         .unwrap();
     let bad_predecessor_chip = Rv64StoreByteChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(

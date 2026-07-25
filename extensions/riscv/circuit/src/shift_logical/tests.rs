@@ -28,8 +28,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -547,9 +547,9 @@ fn test_cuda_shift_logical_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 27))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 27))
         .unwrap();
 
     let mut tester = GpuChipTestBuilder::default();
@@ -603,7 +603,7 @@ fn test_cuda_shift_logical_tracegen_from_rvr_transcript() {
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
 
-    let mut corrupt_transcript = RvrPreflightTranscript {
+    let mut corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -616,7 +616,7 @@ fn test_cuda_shift_logical_tracegen_from_rvr_transcript() {
         .unwrap()
         .value[1] ^= 1;
     let (d_corrupt, d_corrupt_plan) = d_program
-        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_chip = Rv64ShiftLogicalChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(
@@ -633,7 +633,7 @@ fn test_cuda_shift_logical_tracegen_from_rvr_transcript() {
     // On the rs1 == rs2 row, alter only an upper limb of the second read. It is ignored by the
     // shift arithmetic, so output validation still passes, but predecessor resolution must reject
     // it because the first read is its immediate predecessor.
-    let mut predecessor_corrupt_transcript = RvrPreflightTranscript {
+    let mut predecessor_corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -648,7 +648,7 @@ fn test_cuda_shift_logical_tracegen_from_rvr_transcript() {
     let (d_predecessor_corrupt, d_predecessor_corrupt_plan) = d_program
         .upload_transcript(
             &predecessor_corrupt_transcript,
-            RvrPreflightEndpoint::Terminated,
+            PreflightEndpoint::Terminated,
         )
         .unwrap();
     let predecessor_corrupt_chip = Rv64ShiftLogicalChipGpu::new(

@@ -9,7 +9,7 @@ use openvm_circuit::arch::{
             GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
             RvrCheckpointAccessRegistry, RvrCheckpointOpcodeBases,
         },
-        RvrCheckpointPreflightExecution,
+        PreflightExecution,
     },
     GenerationError, VirtualMachine,
 };
@@ -96,11 +96,11 @@ impl SdkVmGpuBuilder {
     ///
     /// This layer deliberately does not guess executor buffer limits. The
     /// segment's metered instruction and residual counts must be used when
-    /// constructing `RvrCheckpointPreflightLimits`.
+    /// constructing `PreflightLimits`.
     pub fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &GpuRvrProgram,
-        execution: &RvrCheckpointPreflightExecution,
+        execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
         let result = vm.postflight(

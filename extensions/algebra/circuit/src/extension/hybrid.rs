@@ -41,7 +41,7 @@ use {
         GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
         RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
     },
-    openvm_circuit::arch::rvr::RvrCheckpointPreflightExecution,
+    openvm_circuit::arch::rvr::PreflightExecution,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_instructions::program::Program,
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
@@ -888,7 +888,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
     pub fn expand_checkpoint_replay<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,
-        execution: &RvrCheckpointPreflightExecution,
+        execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
     where

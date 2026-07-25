@@ -35,8 +35,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -386,9 +386,9 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 32))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 32))
         .unwrap();
 
     let mut tester =
@@ -489,16 +489,16 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(single_program.clone()).with_init_memory(init_memory.clone()),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
     let d_single_program =
         GpuRvrProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
-    let mut corrupt_result = RvrPreflightTranscript {
+    let mut corrupt_result = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -511,7 +511,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
         .unwrap()
         .value[0] ^= 1;
     let (d_corrupt, d_corrupt_plan) = d_single_program
-        .upload_transcript(&corrupt_result, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_result, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_range = Arc::new(VariableRangeCheckerChipGPU::new(
         default_var_range_checker_bus(),
@@ -543,7 +543,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
 
     // The executor accepts the largest u32 byte address even when the configured byte-pointer
     // width is 33. Replay must preserve that boundary without truncating larger effective values.
-    let mut max_address_transcript = RvrPreflightTranscript {
+    let mut max_address_transcript = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -559,7 +559,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
     let d_wide_single_program =
         GpuRvrProgram::upload(&single_program, &wide_memory_config, &device_ctx).unwrap();
     let (d_max_address, d_max_address_plan) = d_wide_single_program
-        .upload_transcript(&max_address_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&max_address_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let max_address_chip = Rv64LoadByteChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(
@@ -582,7 +582,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
     let d_overflow_program =
         GpuRvrProgram::upload(&overflow_program, &wide_memory_config, &device_ctx).unwrap();
     let (d_overflow, d_overflow_plan) = d_overflow_program
-        .upload_transcript(&max_address_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&max_address_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let overflow_range = Arc::new(VariableRangeCheckerChipGPU::new(
         default_var_range_checker_bus(),
@@ -621,14 +621,14 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(x0_program.clone()).with_init_memory(init_memory.clone()),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
-    let mut corrupt_gap = RvrPreflightTranscript {
+    let mut corrupt_gap = FullLogPreflightTranscript {
         program_log: x0_execution.transcript.program_log.clone(),
         memory_log: x0_execution.transcript.memory_log.clone(),
         initial_write_log: x0_execution.transcript.initial_write_log.clone(),
@@ -637,7 +637,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
     corrupt_gap.program_log.truncate(2);
     corrupt_gap.program_log[1].timestamp -= 1;
     let d_x0_program = GpuRvrProgram::upload(&x0_program, &memory_config, &device_ctx).unwrap();
-    let gap_endpoint = RvrPreflightEndpoint::Suspended {
+    let gap_endpoint = PreflightEndpoint::Suspended {
         resume_pc: corrupt_gap.program_log[1].pc,
         final_timestamp: corrupt_gap.program_log[1].timestamp,
     };
@@ -677,7 +677,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
         load(2, 1, u16::MAX as usize, 1),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ]);
-    let mut underflow_transcript = RvrPreflightTranscript {
+    let mut underflow_transcript = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -686,7 +686,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
     let d_underflow_program =
         GpuRvrProgram::upload(&underflow_program, &memory_config, &device_ctx).unwrap();
     let (d_underflow, d_underflow_plan) = d_underflow_program
-        .upload_transcript(&underflow_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&underflow_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let underflow_range = Arc::new(VariableRangeCheckerChipGPU::new(
         default_var_range_checker_bus(),

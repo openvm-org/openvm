@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        deferral::DeferralState, rvr::RvrCheckpointPreflightLimits, Streams, VirtualMachine,
-        VmExecutor, BLOCK_FE_WIDTH,
+        deferral::DeferralState, rvr::PreflightLimits, Streams, VirtualMachine, VmExecutor,
+        BLOCK_FE_WIDTH,
     },
     system::memory::online::LinearMemory,
     utils::{test_gpu_engine, test_system_config},
@@ -123,7 +123,7 @@ fn deferral_output_coordinator_proves_without_record_arenas() {
     };
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Streams {
         deferrals: vec![DeferralState::new(vec![result])],
         ..Default::default()
@@ -135,7 +135,7 @@ fn deferral_output_coordinator_proves_without_record_arenas() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&initial_state.memory);
     let mut execution = checkpoint
-        .execute_from_state(initial_state, RvrCheckpointPreflightLimits::new(2, 3, 1))
+        .execute_from_state(initial_state, PreflightLimits::new(2, 3, 1))
         .unwrap();
     assert_eq!(execution.retired, 2);
     assert_eq!(execution.to_state.timestamp, 10);
@@ -266,7 +266,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(streams);
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())
@@ -275,7 +275,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let mut execution = checkpoint
-        .execute_from_state(state, RvrCheckpointPreflightLimits::new(2, 13, 1))
+        .execute_from_state(state, PreflightLimits::new(2, 13, 1))
         .unwrap();
     assert_eq!(execution.retired, 2);
     assert_eq!(execution.to_state.timestamp, 20);

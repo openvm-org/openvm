@@ -4,10 +4,8 @@ use getset::Getters;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
-    rvr::{cuda::GpuRvrProgram, RvrCheckpointPreflightInstance, RvrMeteredInstance},
+    rvr::{cuda::GpuRvrProgram, PreflightInstance, RvrMeteredInstance},
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_circuit::system::memory::merkle::MerkleTree;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
@@ -30,20 +28,23 @@ use openvm_stark_backend::{
     StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_verify_stark_host::{vk::VerificationBaseline, VmStarkProof};
-use tracing::instrument;
+use tracing::info_span;
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::{stark::aggregate_app_proof, AggProver, InternalLayerMetadata};
 use crate::{
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
     util::check_max_constraint_degrees,
     SdkError, StdIn, F, SC,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::{DeferralInput, DeferralSetup};
+type ProveAppFn<E, VB> = Box<
+    dyn FnMut(
+            &mut VmInstance<E, VB>,
+            StdIn,
+        ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>
+        + Send,
+>;
+type PrepareAppFn<E, VB> =
+    Box<dyn FnOnce(&mut AppProver<E, VB>) -> Result<(), VirtualMachineError> + Send>;
 
 #[derive(Getters)]
 pub struct AppProver<E, VB>
@@ -57,6 +58,8 @@ where
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     app_exe_commit: OnceLock<Digest>,
+    prepare_app: Option<PrepareAppFn<E, VB>>,
+    prove_app: Option<ProveAppFn<E, VB>>,
 }
 
 impl<E, VB> AppProver<E, VB>
@@ -90,6 +93,8 @@ where
             instance,
             app_vm_vk,
             app_exe_commit: OnceLock::new(),
+            prepare_app: None,
+            prove_app: None,
         }
     }
 
@@ -131,12 +136,7 @@ where
         self.instance.vm.config().as_ref().num_public_values
     }
 
-    /// Generates proof for every continuation segment
-    #[instrument(
-        name = "app_prove",
-        skip_all,
-        fields(group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
-    )]
+    /// Generates proof for every continuation segment.
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
@@ -147,7 +147,18 @@ where
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),
         );
-        let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
+        if let Some(prepare) = self.prepare_app.take() {
+            prepare(self)?;
+        }
+        let group = self
+            .program_name
+            .clone()
+            .unwrap_or_else(|| "app_proof".to_string());
+        let _prove_span = info_span!("app_prove", group).entered();
+        let proof = match self.prove_app.as_mut() {
+            Some(prove) => prove(&mut self.instance, input)?,
+            None => ContinuationVmProver::prove(&mut self.instance, input)?,
+        };
         #[cfg(debug_assertions)]
         let _ = verify_app_proof_inner::<E>(
             &self.app_vm_vk,
@@ -173,172 +184,34 @@ where
     pub fn vm_config(&self) -> &VB::VmConfig {
         self.instance.vm.config()
     }
-}
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-pub struct PreflightAppProver<'a> {
-    app: AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
-    runtime: super::rvr::RvrCheckpointRuntime<'a>,
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-impl<'a> PreflightAppProver<'a> {
-    pub(crate) fn new(
-        app: AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
-        metered: RvrMeteredInstance<'a>,
-        metered_ctx: MeteredCtx,
-        checkpoint: RvrCheckpointPreflightInstance<'a>,
-        gpu_program: GpuRvrProgram,
-    ) -> Self {
-        Self {
-            app,
-            runtime: super::rvr::RvrCheckpointRuntime::new(
-                metered,
-                metered_ctx,
-                checkpoint,
-                gpu_program,
-            ),
-        }
-    }
-
-    pub fn vm(&self) -> &VirtualMachine<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
-        self.app.vm()
-    }
-
-    /// Proves every continuation segment through the prepared compact RVR
-    /// checkpoint executor and record-free GPU trace generation.
-    ///
-    /// The prepared prover remains reusable after successful proofs and
-    /// execution errors that occur before RVR trace generation begins. An
-    /// error from an active RVR trace-generation session is terminal: lookup
-    /// counts are not transactional, so retries fail closed and callers must
-    /// prepare a new prover.
-    #[instrument(
-        name = "app_prove",
-        skip_all,
-        fields(
-            group = self.app.program_name.as_ref().unwrap_or(&"app_proof".to_string()),
-            backend = "rvr"
-        )
-    )]
-    pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
-        check_max_constraint_degrees(
-            self.app.vm_config().as_ref(),
-            self.app.app_vm_vk.inner.max_constraint_degree(),
-        );
-        let proof = super::rvr::prove(&mut self.app.instance, input, &self.runtime)?;
-        #[cfg(debug_assertions)]
-        let _ = verify_app_proof_inner::<BabyBearPoseidon2GpuEngine>(
-            &self.app.app_vm_vk,
-            self.app.memory_dimensions(),
-            self.app.num_user_pvs(),
-            &proof,
-        )
-        .expect("app proof verification failed");
-        Ok(proof)
-    }
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-pub struct PreflightStarkProver<'a> {
-    app: PreflightAppProver<'a>,
-    agg_prover: Arc<AggProver>,
-    deferral_setup: DeferralSetup,
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-impl<'a> PreflightStarkProver<'a> {
-    pub(crate) fn new(
-        app: PreflightAppProver<'a>,
-        agg_prover: Arc<AggProver>,
-        deferral_setup: DeferralSetup,
-    ) -> Self {
-        Self {
-            app,
-            agg_prover,
-            deferral_setup,
-        }
-    }
-
-    /// Generates the app proof through compiled preflight and then runs
-    /// the ordinary recursive aggregation pipeline.
-    pub fn prove(
+    pub(crate) fn prepare_with(
         &mut self,
-        input: StdIn,
-        def_inputs: &[DeferralInput],
-    ) -> eyre::Result<(VmStarkProof, InternalLayerMetadata)> {
-        let has_deferrals = self.deferral_setup.hook_commit().is_some();
-        let memory_dimensions = self.app.app.memory_dimensions();
-        let initial_merkle_tree = if has_deferrals {
-            let memory = &self
-                .app
-                .app
-                .instance()
-                .state()
-                .as_ref()
-                .expect("initial state should exist before proving")
-                .memory
-                .memory;
-            Some(MerkleTree::from_memory(
-                memory,
-                &memory_dimensions,
-                &vm_poseidon2_hasher(),
-            ))
-        } else {
-            None
-        };
-
-        let app_proof = self.app.prove(input)?;
-        let final_merkle_tree = if has_deferrals {
-            let memory = &self
-                .app
-                .app
-                .instance()
-                .state()
-                .as_ref()
-                .expect("final state should exist after proving")
-                .memory
-                .memory;
-            Some(MerkleTree::from_memory(
-                memory,
-                &memory_dimensions,
-                &vm_poseidon2_hasher(),
-            ))
-        } else {
-            None
-        };
-
-        aggregate_app_proof(
-            &self.agg_prover,
-            &self.deferral_setup,
-            app_proof,
-            def_inputs,
-            memory_dimensions,
-            initial_merkle_tree.as_ref(),
-            final_merkle_tree.as_ref(),
-        )
+        prepare: impl FnOnce(&mut Self) -> Result<(), VirtualMachineError> + Send + 'static,
+    ) {
+        self.prepare_app = Some(Box::new(prepare));
     }
+}
 
-    pub fn generate_baseline(&self) -> VerificationBaseline {
-        VerificationBaseline {
-            app_exe_commit: self.app.app.app_exe_commit(),
-            memory_dimensions: self.app.app.memory_dimensions(),
-            num_user_pvs: self.app.app.num_user_pvs(),
-            app_vk_commit: self.agg_prover.leaf_prover.get_vk_commit(false),
-            leaf_vk_commit: self
-                .agg_prover
-                .internal_for_leaf_prover
-                .get_vk_commit(false),
-            internal_for_leaf_vk_commit: self
-                .agg_prover
-                .internal_recursive_prover
-                .get_vk_commit(false),
-            internal_recursive_vk_commit: self
-                .agg_prover
-                .internal_recursive_prover
-                .get_vk_commit(true),
-            expected_def_hook_commit: self.deferral_setup.hook_commit(),
-        }
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
+    pub(crate) fn use_compiled_preflight(
+        &mut self,
+        metered: RvrMeteredInstance<'static>,
+        metered_ctx: MeteredCtx,
+        preflight: PreflightInstance<'static>,
+        gpu_program: GpuRvrProgram,
+    ) {
+        self.prove_app = Some(Box::new(move |instance, input| {
+            super::preflight::prove(
+                instance,
+                input,
+                &metered,
+                &metered_ctx,
+                &preflight,
+                &gpu_program,
+            )
+        }));
     }
 }
 

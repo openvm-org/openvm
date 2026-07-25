@@ -3,7 +3,8 @@ use std::{borrow::Borrow, sync::Arc};
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
+            cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+            PreflightEndpoint,
         },
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -134,12 +135,12 @@ macro_rules! store_replay_test {
             let memory_config = config.system.memory_config.clone();
             let execution = VmExecutor::new(config)
                 .unwrap()
-                .rvr_preflight_instance(
+                .full_log_preflight_instance(
                     &VmExe::new(program.clone()).with_init_memory(init_memory.clone()),
                     None,
                 )
                 .unwrap()
-                .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 64))
+                .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 64))
                 .unwrap();
 
             let mut tester =
@@ -289,14 +290,14 @@ macro_rules! store_replay_test {
                 ..Default::default()
             })
             .unwrap()
-            .rvr_preflight_instance(
+            .full_log_preflight_instance(
                 &VmExe::new(crossing_program.clone()).with_init_memory(init_memory.clone()),
                 None,
             )
             .unwrap()
-            .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+            .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
             .unwrap();
-            let mut corrupt_crossing = RvrPreflightTranscript {
+            let mut corrupt_crossing = FullLogPreflightTranscript {
                 program_log: crossing_execution.transcript.program_log.clone(),
                 memory_log: crossing_execution.transcript.memory_log.clone(),
                 initial_write_log: crossing_execution.transcript.initial_write_log.clone(),
@@ -311,7 +312,7 @@ macro_rules! store_replay_test {
             let d_crossing_program =
                 GpuRvrProgram::upload(&crossing_program, &memory_config, &device_ctx).unwrap();
             let (d_corrupt_crossing, d_corrupt_crossing_plan) = d_crossing_program
-                .upload_transcript(&corrupt_crossing, RvrPreflightEndpoint::Terminated)
+                .upload_transcript(&corrupt_crossing, PreflightEndpoint::Terminated)
                 .unwrap();
             let corrupt_range = Arc::new(VariableRangeCheckerChipGPU::new(
                 default_var_range_checker_bus(),
@@ -355,14 +356,14 @@ macro_rules! store_replay_test {
                 ..Default::default()
             })
             .unwrap()
-            .rvr_preflight_instance(
+            .full_log_preflight_instance(
                 &VmExe::new(noncross_program.clone()).with_init_memory(init_memory.clone()),
                 None,
             )
             .unwrap()
-            .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+            .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
             .unwrap();
-            let mut corrupt_gap = RvrPreflightTranscript {
+            let mut corrupt_gap = FullLogPreflightTranscript {
                 program_log: noncross_execution.transcript.program_log.clone(),
                 memory_log: noncross_execution.transcript.memory_log.clone(),
                 initial_write_log: noncross_execution.transcript.initial_write_log.clone(),
@@ -373,7 +374,7 @@ macro_rules! store_replay_test {
             let d_noncross_program =
                 GpuRvrProgram::upload(&noncross_program, &memory_config, &device_ctx).unwrap();
             let (d_corrupt_gap, d_corrupt_gap_plan) = d_noncross_program
-                .upload_transcript(&corrupt_gap, RvrPreflightEndpoint::Terminated)
+                .upload_transcript(&corrupt_gap, PreflightEndpoint::Terminated)
                 .unwrap();
             let gap_range = Arc::new(VariableRangeCheckerChipGPU::new(
                 default_var_range_checker_bus(),
@@ -434,12 +435,12 @@ macro_rules! store_replay_test {
                 ..Default::default()
             })
             .unwrap()
-            .rvr_preflight_instance(
+            .full_log_preflight_instance(
                 &VmExe::new(public_program.clone()).with_init_memory(public_init),
                 None,
             )
             .unwrap()
-            .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+            .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
             .unwrap();
             assert_eq!(
                 public_execution.transcript.memory_log[2].address_space(),
@@ -530,7 +531,7 @@ macro_rules! store_replay_test {
 
             // Address arithmetic uses a u64 end bound. A transcript that would wrap the final
             // byte past the RV64 u32 memory domain must fail before pointer or lookup processing.
-            let mut overflow = RvrPreflightTranscript {
+            let mut overflow = FullLogPreflightTranscript {
                 program_log: noncross_execution.transcript.program_log,
                 memory_log: noncross_execution.transcript.memory_log,
                 initial_write_log: noncross_execution.transcript.initial_write_log,
@@ -549,7 +550,7 @@ macro_rules! store_replay_test {
             let d_wide_program =
                 GpuRvrProgram::upload(&noncross_program, &wide_memory_config, &device_ctx).unwrap();
             let (d_overflow, d_overflow_plan) = d_wide_program
-                .upload_transcript(&overflow, RvrPreflightEndpoint::Terminated)
+                .upload_transcript(&overflow, PreflightEndpoint::Terminated)
                 .unwrap();
             let overflow_range = Arc::new(VariableRangeCheckerChipGPU::new(
                 default_var_range_checker_bus(),

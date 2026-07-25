@@ -27,7 +27,7 @@ use {
             GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
             RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
         },
-        rvr::RvrCheckpointPreflightExecution,
+        rvr::PreflightExecution,
         GenerationError, MemoryConfig, VirtualMachine, MEMORY_BLOCK_BYTES,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
@@ -179,7 +179,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
     pub fn expand_checkpoint_replay<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,
-        execution: &RvrCheckpointPreflightExecution,
+        execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
     where

@@ -36,8 +36,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -749,9 +749,9 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config.clone())
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 16))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 16))
         .unwrap();
 
     let mut tester = GpuChipTestBuilder::default();
@@ -831,7 +831,7 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
     let mut negative_terminate = execution.transcript.program_log[0];
     negative_terminate.pc = 0;
     negative_terminate.timestamp = 2;
-    let negative_transcript = RvrPreflightTranscript {
+    let negative_transcript = FullLogPreflightTranscript {
         program_log: vec![negative_from, negative_terminate, negative_terminate],
         memory_log: Vec::new(),
         initial_write_log: Vec::new(),
@@ -839,7 +839,7 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
     let d_negative_program =
         GpuRvrProgram::upload(&negative_program, &memory_config, device_ctx).unwrap();
     let (d_negative, d_negative_plan) = d_negative_program
-        .upload_transcript(&negative_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&negative_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let negative_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
@@ -863,7 +863,7 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
     );
 
     let run_corrupt = |corrupt_program: &Program<F>,
-                       transcript: RvrPreflightTranscript,
+                       transcript: FullLogPreflightTranscript,
                        expected_error: u32,
                        expected_lookup_count: u32| {
         let corrupt_range_checker = Arc::new(
@@ -875,7 +875,7 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
         let d_corrupt_program =
             GpuRvrProgram::upload(corrupt_program, &memory_config, device_ctx).unwrap();
         let (d_corrupt, d_corrupt_plan) = d_corrupt_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         Rv64JalLuiChipGpu::new(corrupt_range_checker.clone(), tester.timestamp_max_bits())
             .generate_proving_ctx_from_rvr(&d_corrupt_program, &d_corrupt, &d_corrupt_plan)
@@ -893,7 +893,7 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
             "a rejected row must not update the shared lookup histogram"
         );
     };
-    let transcript = || RvrPreflightTranscript {
+    let transcript = || FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),

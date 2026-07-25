@@ -383,7 +383,7 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
 }
 
 /// Compile a VmExe for append-only RVR preflight execution.
-pub fn compile_preflight<F: PrimeField32>(
+pub fn compile_full_log_preflight<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
     guest_debug_map: Option<&GuestDebugMap>,
@@ -404,7 +404,7 @@ pub fn compile_preflight<F: PrimeField32>(
 }
 
 /// Compile a VmExe for the checkpoint-and-residual preflight executor.
-pub fn compile_checkpoint_preflight<F: PrimeField32>(
+pub fn compile_preflight<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
     guest_debug_map: Option<&GuestDebugMap>,

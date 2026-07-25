@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             cuda::{RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
-            RvrCheckpointPreflightLimits, RvrPreflightEndpoint, RvrPreflightTranscript,
+            FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
     },
@@ -282,7 +282,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
@@ -291,10 +291,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state(
-            state,
-            RvrCheckpointPreflightLimits::new(cases.len() + 1, 50, 1),
-        )
+        .execute_from_state(state, PreflightLimits::new(cases.len() + 1, 50, 1))
         .unwrap();
 
     assert_eq!(execution.to_state.pc, (cases.len() * 4) as u32);
@@ -320,7 +317,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     for case in &cases {
         assert_eq!(replay_plan.opcode_range(case.opcode).len(), 1);
     }
-    let host_transcript = RvrPreflightTranscript {
+    let host_transcript = FullLogPreflightTranscript {
         program_log: transcript.program_log_host().unwrap(),
         memory_log: transcript.memory_log_host().unwrap(),
         initial_write_log: transcript.initial_write_log_host().unwrap(),
@@ -363,7 +360,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         "fixture must reuse the destination pointer"
     );
     let (invalid_transcript, invalid_plan) = invalid_gpu_program
-        .upload_transcript(&invalid_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&invalid_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let error = Int256RvrGpuTracegen::new(&invalid_gpu_program, &invalid_transcript, &invalid_plan)
         .generate_proving_ctx(&mut invalid_vm)
@@ -416,7 +413,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut source_vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
@@ -425,12 +422,12 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
     source_vm.load_program(cached_program);
     source_vm.transport_init_memory_to_device(&initial_state.memory);
     let execution = checkpoint
-        .execute_from_state_for(initial_state, RvrCheckpointPreflightLimits::new(1, 1, 1))
+        .execute_from_state_for(initial_state, PreflightLimits::new(1, 1, 1))
         .unwrap();
     assert_eq!(execution.transcript.residuals.len(), 1);
     assert_eq!(
         execution.endpoint,
-        RvrPreflightEndpoint::Suspended {
+        PreflightEndpoint::Suspended {
             resume_pc: 4,
             final_timestamp: 11,
         }
@@ -448,7 +445,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         execution.retired,
     )
     .unwrap();
-    let host_transcript = RvrPreflightTranscript {
+    let host_transcript = FullLogPreflightTranscript {
         program_log: transcript.program_log_host().unwrap(),
         memory_log: transcript.memory_log_host().unwrap(),
         initial_write_log: transcript.initial_write_log_host().unwrap(),
@@ -511,7 +508,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             ..Default::default()
         };
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+        let checkpoint = executor.preflight_instance(&exe, None).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
@@ -523,7 +520,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
         let mut execution = checkpoint
-            .execute_from_state(state, RvrCheckpointPreflightLimits::new(4, 5, 1))
+            .execute_from_state(state, PreflightLimits::new(4, 5, 1))
             .unwrap();
 
         assert_eq!(execution.to_state.pc, expected_pc);

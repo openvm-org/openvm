@@ -53,8 +53,6 @@ pub use types::{ExecutableFormat, ExecutableInput};
 
 #[cfg(feature = "rvr")]
 use crate::compiled::load_metered_artifact_metadata;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::prover::{PreflightAppProver, PreflightStarkProver};
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
@@ -229,6 +227,63 @@ pub type CpuSdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder>;
 #[cfg(feature = "cuda")]
 pub type GpuSdk = GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder>;
 
+/// Selects the app-proof execution backend for a [`VmBuilder`].
+///
+/// The default keeps the record-based prover. The standard GPU builder
+/// overrides it when compiled preflight is enabled.
+pub trait AppProverBackend<E>: VmBuilder<E>
+where
+    E: StarkEngine<SC = SC>,
+{
+    fn configure(_sdk: &GenericSdk<E, Self>, _app: &mut AppProver<E, Self>) {}
+}
+
+impl AppProverBackend<BabyBearPoseidon2Engine> for SdkVmCpuBuilder {}
+
+#[cfg(feature = "cuda")]
+impl AppProverBackend<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
+    fn configure(sdk: &GpuSdk, app: &mut AppProver<GpuBabyBearPoseidon2Engine, Self>) {
+        #[cfg(feature = "rvr")]
+        {
+            let executor = sdk.executor.clone();
+            app.prepare_with(move |app| {
+                let _prepare = tracing::info_span!(
+                    "prepare_preflight",
+                    group = app.program_name.as_deref().unwrap_or("app_proof")
+                )
+                .entered();
+                let exe = app.exe();
+                let metered_ctx = app.vm().build_metered_ctx(&exe);
+                let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
+                let metered = executor
+                    .metered_rvr_instance(
+                        &exe,
+                        &executor_idx_to_air_idx,
+                        metered_ctx.trace_heights.len(),
+                        None,
+                    )
+                    .map_err(VirtualMachineError::from)?
+                    .into_owned();
+                let preflight = executor
+                    .preflight_instance(&exe, None)
+                    .map_err(VirtualMachineError::from)?
+                    .into_owned();
+                let gpu_program = tracing::info_span!("upload_preflight_program")
+                    .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(app.vm(), &exe.program))
+                    .map_err(|error| {
+                        VirtualMachineError::Generation(
+                            openvm_circuit::arch::GenerationError::ExtensionTracegen(
+                                error.to_string(),
+                            ),
+                        )
+                    })?;
+                app.use_compiled_preflight(metered, metered_ctx, preflight, gpu_program);
+                Ok(())
+            });
+        }
+    }
+}
+
 impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
@@ -257,71 +312,6 @@ where
     /// ```
     pub fn riscv64(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
         GenericSdk::new(AppConfig::riscv64(app_params), agg_params).unwrap()
-    }
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-impl GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder> {
-    /// Prepares the program-specific compiled executors and immutable GPU replay
-    /// data once. Successful [`PreflightAppProver::prove`] calls and
-    /// recoverable execution failures reuse them without generated-code
-    /// compilation or program upload. A failed trace-generation session
-    /// makes that prepared prover terminal because lookup mutations cannot be
-    /// rolled back safely.
-    #[tracing::instrument(
-        name = "prepare_preflight",
-        level = "info",
-        skip_all,
-        fields(group = app.program_name.as_deref().unwrap_or("app_proof"))
-    )]
-    pub fn prepare_preflight_app_prover(
-        &self,
-        app: AppProver<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder>,
-    ) -> Result<PreflightAppProver<'_>, SdkError> {
-        let exe = app.exe();
-        let metered_ctx = app.vm().build_metered_ctx(&exe);
-        let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
-        let metered = self
-            .executor
-            .metered_rvr_instance(
-                &exe,
-                &executor_idx_to_air_idx,
-                metered_ctx.trace_heights.len(),
-                None,
-            )
-            .map_err(VirtualMachineError::from)?;
-        let checkpoint = self
-            .executor
-            .checkpoint_preflight_instance(&exe, None)
-            .map_err(VirtualMachineError::from)?;
-        let gpu_program = tracing::info_span!("upload_preflight_program")
-            .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(app.vm(), &exe.program))
-            .map_err(|error| {
-                VirtualMachineError::Generation(
-                    openvm_circuit::arch::GenerationError::ExtensionTracegen(error.to_string()),
-                )
-            })?;
-        Ok(PreflightAppProver::new(
-            app,
-            metered,
-            metered_ctx,
-            checkpoint,
-            gpu_program,
-        ))
-    }
-
-    /// Prepares reusable compiled preflight executors for the app layer and the
-    /// ordinary recursive aggregation pipeline for the resulting app proof.
-    pub fn prepare_preflight_stark_prover(
-        &self,
-        app: AppProver<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder>,
-    ) -> Result<PreflightStarkProver<'_>, SdkError> {
-        let app = self.prepare_preflight_app_prover(app)?;
-        Ok(PreflightStarkProver::new(
-            app,
-            self.agg_prover(),
-            self.deferral_setup.clone(),
-        ))
     }
 }
 
@@ -515,12 +505,24 @@ where
     /// method rather than by this constructor.
     pub fn app_prover(&self, exe: impl Into<ExecutableFormat>) -> Result<AppProver<E, VB>, SdkError>
     where
+        VB: Clone + AppProverBackend<E>,
+    {
+        let mut prover = self.app_prover_unconfigured(exe)?;
+        VB::configure(self, &mut prover);
+        Ok(prover)
+    }
+
+    fn app_prover_unconfigured(
+        &self,
+        exe: impl Into<ExecutableFormat>,
+    ) -> Result<AppProver<E, VB>, SdkError>
+    where
         VB: Clone,
     {
         let exe = self.convert_to_exe(exe)?;
         let app_pk = self.app_pk();
-        let prover = AppProver::<E, VB>::new(self.app_vm_builder.clone(), &app_pk.app_vm_pk, exe)?;
-        Ok(prover)
+        AppProver::<E, VB>::new(self.app_vm_builder.clone(), &app_pk.app_vm_pk, exe)
+            .map_err(SdkError::from)
     }
 
     fn compile_input(
@@ -711,7 +713,7 @@ where
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMetered<'_>, SdkError> {
         let input = self.compile_input(app_exe)?;
-        let app_prover = self.app_prover(input.executable)?;
+        let app_prover = self.app_prover_unconfigured(input.executable)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
@@ -811,7 +813,7 @@ where
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
         let input = self.compile_input(app_exe)?;
-        let app_prover = self.app_prover(input.executable)?;
+        let app_prover = self.app_prover_unconfigured(input.executable)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
@@ -850,7 +852,7 @@ where
         lib_path: &Path,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
+        let app_prover = self.app_prover_unconfigured(app_exe)?;
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
@@ -904,7 +906,10 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
         def_inputs: &[DeferralInput],
-    ) -> Result<(VmStarkProof, VerificationBaseline), SdkError> {
+    ) -> Result<(VmStarkProof, VerificationBaseline), SdkError>
+    where
+        VB: AppProverBackend<E>,
+    {
         let mut prover = self.prover(app_exe)?;
         let proof = prover.prove(inputs, def_inputs)?.0;
         let baseline = prover.generate_baseline();
@@ -918,7 +923,10 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
         def_inputs: &[DeferralInput],
-    ) -> Result<types::EvmProof, SdkError> {
+    ) -> Result<types::EvmProof, SdkError>
+    where
+        VB: AppProverBackend<E>,
+    {
         let app_exe = self.convert_to_exe(app_exe)?;
         let mut evm_prover = self.evm_prover(app_exe)?;
         let evm_proof = evm_prover.prove_evm(inputs, def_inputs)?;
@@ -933,13 +941,13 @@ where
     pub fn prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<StarkProver<E, VB>, SdkError> {
-        let app_exe = self.convert_to_exe(app_exe)?;
-        let app_pk = self.app_pk();
-        let stark_prover = StarkProver::<E, _>::new(
-            self.app_vm_builder.clone(),
-            &app_pk.app_vm_pk,
-            app_exe,
+    ) -> Result<StarkProver<E, VB>, SdkError>
+    where
+        VB: AppProverBackend<E>,
+    {
+        let app_prover = self.app_prover(app_exe)?;
+        let stark_prover = StarkProver::<E, _>::from_app_prover(
+            app_prover,
             self.agg_prover(),
             self.deferral_setup.clone(),
         )?;
@@ -952,15 +960,13 @@ where
     pub fn evm_prover_without_halo2(
         &self,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<EvmProver<E, VB>, SdkError> {
-        let app_exe = self.convert_to_exe(app_exe)?;
-        let app_pk = self.app_pk();
-        let evm_prover = EvmProver::<E, _>::new(
-            self.app_vm_builder.clone(),
-            &app_pk.app_vm_pk,
-            app_exe,
-            self.agg_prover(),
-            self.deferral_setup.clone(),
+    ) -> Result<EvmProver<E, VB>, SdkError>
+    where
+        VB: AppProverBackend<E>,
+    {
+        let stark_prover = self.prover(app_exe)?;
+        let evm_prover = EvmProver::<E, _>::from_stark_prover(
+            stark_prover,
             self.root_prover(),
             #[cfg(feature = "evm-prove")]
             None,
@@ -973,7 +979,10 @@ where
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<EvmProver<E, VB>, SdkError> {
+    ) -> Result<EvmProver<E, VB>, SdkError>
+    where
+        VB: AppProverBackend<E>,
+    {
         #[allow(unused_mut)]
         let mut evm_prover = self.evm_prover_without_halo2(app_exe)?;
         #[cfg(feature = "evm-prove")]
@@ -1162,7 +1171,11 @@ where
         &self,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<AppExecutionCommit, SdkError> {
-        let prover = self.prover(app_exe)?;
+        let prover = StarkProver::from_app_prover(
+            self.app_prover_unconfigured(app_exe)?,
+            self.agg_prover(),
+            self.deferral_setup.clone(),
+        )?;
         Ok(AppExecutionCommit {
             app_exe_commit: CommitBytes::from(prover.generate_baseline().app_exe_commit),
             app_vm_commit: CommitBytes::from(prover.app_vm_commit()),

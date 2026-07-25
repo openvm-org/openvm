@@ -28,7 +28,7 @@ use {
         arch::{
             rvr::{
                 cuda::{GpuRvrInputError, GpuRvrProgram},
-                RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
+                FullLogPreflightLimits, FullLogPreflightTranscript, PreflightEndpoint,
             },
             VirtualMachine, VmExecutor,
         },
@@ -592,11 +592,11 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let executor = VmExecutor::new(config).unwrap();
     let execution = executor
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
         .execute(
             Vec::<Vec<u8>>::new(),
-            RvrPreflightLimits::new(3 * ITERATIONS + 10, 6 * ITERATIONS + 18),
+            FullLogPreflightLimits::new(3 * ITERATIONS + 10, 6 * ITERATIONS + 18),
         )
         .unwrap();
     let mut tester = GpuChipTestBuilder::default();
@@ -768,14 +768,14 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let all_replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
 
-    let mut corrupt_transcript = RvrPreflightTranscript {
+    let mut corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
     };
     corrupt_transcript.memory_log[1].value[0] ^= 1;
     let (d_corrupt, d_corrupt_plan) = d_program
-        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
@@ -789,7 +789,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 9);
 
-    let mut corrupt_branch_transcript = RvrPreflightTranscript {
+    let mut corrupt_branch_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -802,7 +802,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     corrupt_branch_transcript.memory_log[beq_read_index].value[0] ^= 1;
     let (d_corrupt_branch, d_corrupt_branch_plan) = d_program
-        .upload_transcript(&corrupt_branch_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_branch_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_branch_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
@@ -817,7 +817,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     assert_eq!(d_corrupt_branch.error_code().unwrap(), 28);
 
-    let mut corrupt_branch_predecessor_transcript = RvrPreflightTranscript {
+    let mut corrupt_branch_predecessor_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -838,7 +838,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     let (d_corrupt_branch_predecessor, d_corrupt_branch_predecessor_plan) = d_program
         .upload_transcript(
             &corrupt_branch_predecessor_transcript,
-            RvrPreflightEndpoint::Terminated,
+            PreflightEndpoint::Terminated,
         )
         .unwrap();
     let corrupt_branch_predecessor_range_checker = Arc::new(
@@ -860,7 +860,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     assert_eq!(d_corrupt_branch_predecessor.error_code().unwrap(), 29);
 
-    let mut corrupt_addiw_transcript = RvrPreflightTranscript {
+    let mut corrupt_addiw_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -878,7 +878,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     corrupt_addiw_transcript.memory_log[addiw_write_index].value[2] ^= 1;
     let (d_corrupt_addiw, d_corrupt_addiw_plan) = d_program
-        .upload_transcript(&corrupt_addiw_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_addiw_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_addiw_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
@@ -1073,8 +1073,8 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
     };
     let memory_config = config.system.memory_config.clone();
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
-    let limits = RvrPreflightLimits::new(2 * ADDI_ROWS + 1, 4 * ADDI_ROWS);
+    let rvr = executor.full_log_preflight_instance(&exe, None).unwrap();
+    let limits = FullLogPreflightLimits::new(2 * ADDI_ROWS + 1, 4 * ADDI_ROWS);
     let execution = rvr.execute(Vec::<Vec<u8>>::new(), limits).unwrap();
     assert_eq!(execution.transcript.program_log.len(), 2 * ADDI_ROWS + 2);
     assert_eq!(execution.transcript.memory_log.len(), 4 * ADDI_ROWS);

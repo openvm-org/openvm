@@ -2,7 +2,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             cuda::{GpuRvrProgram, RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
-            RvrCheckpointPreflightLimits, RvrPreflightEndpoint, RvrPreflightTranscript,
+            FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
     },
@@ -138,7 +138,9 @@ fn sha_results(state: &[u8; 64], input: &[u8; 128]) -> ([u8; 32], [u8; 64]) {
     (result256, result512)
 }
 
-fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, RvrPreflightTranscript) {
+fn fixture(
+    corrupt_sha256_register_event: bool,
+) -> (Program<F>, VmExe<F>, FullLogPreflightTranscript) {
     let instructions = [
         Instruction::<F>::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
@@ -220,7 +222,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, RvrPre
         initial_write_log.push(seed(RV64_MEMORY_AS, DST_PTR + index * 8, &[0; 8]));
     }
 
-    let transcript = RvrPreflightTranscript {
+    let transcript = FullLogPreflightTranscript {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -271,7 +273,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
@@ -280,7 +282,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state(state, RvrCheckpointPreflightLimits::new(4, 12, 1))
+        .execute_from_state(state, PreflightLimits::new(4, 12, 1))
         .unwrap();
     assert_eq!(execution.to_state.timestamp, 57);
     assert_eq!(execution.transcript.residuals.len(), 12);
@@ -330,7 +332,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
     )
     .unwrap();
     let (gpu_corrupt, corrupt_plan) = gpu_program
-        .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
         .unwrap();
     let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .generate_proving_ctx(&mut vm)
@@ -384,7 +386,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         )
         .unwrap();
         let (gpu_corrupt, corrupt_plan) = gpu_program
-            .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
             .unwrap_or_else(|error| panic!("{variant}: {error}"));
         let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
             .generate_proving_ctx(&mut vm)
@@ -409,7 +411,7 @@ fn sha_coordinator_requires_both_producers_per_executed_opcode() {
     )
     .unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan)
         .finish()

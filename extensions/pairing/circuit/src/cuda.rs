@@ -82,7 +82,7 @@ impl VmBuilder<E> for Rv64PairingGpuBuilder {
 mod tests {
     use openvm_circuit::{
         arch::{
-            rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
+            rvr::{cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint},
             VirtualMachine, VmExecutor,
         },
         utils::{test_gpu_engine, test_system_config},
@@ -104,7 +104,7 @@ mod tests {
             SystemOpcode::TERMINATE.global_opcode(),
             [0; 5],
         )]);
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -145,7 +145,7 @@ mod tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_rvr(
             &mut vm,

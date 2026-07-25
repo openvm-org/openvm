@@ -407,8 +407,7 @@ fn test_preflight_app_prover_reuse() -> Result<()> {
         MEM_SIZE as u32,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
-    let app_prover = sdk.app_prover(exe)?;
-    let mut prover = sdk.prepare_preflight_app_prover(app_prover)?;
+    let mut prover = sdk.app_prover(exe)?;
 
     let error = match prover.prove(StdIn::default()) {
         Ok(_) => panic!("missing guest input must fail"),
@@ -444,8 +443,7 @@ fn test_preflight_stark_prover() -> Result<()> {
         MEM_SIZE as u32,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
-    let app_prover = sdk.app_prover(exe)?;
-    let mut prover = sdk.prepare_preflight_stark_prover(app_prover)?;
+    let mut prover = sdk.prover(exe)?;
     let mut stdin = StdIn::default();
     stdin.write(&1000u64);
     let proof = prover.prove(stdin, &[])?.0;

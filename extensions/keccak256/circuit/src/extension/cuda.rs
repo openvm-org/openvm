@@ -21,8 +21,7 @@ use {
         RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
     },
     openvm_circuit::arch::{
-        rvr::RvrCheckpointPreflightExecution, GenerationError, MemoryConfig, VirtualMachine,
-        VmBuilder,
+        rvr::PreflightExecution, GenerationError, MemoryConfig, VirtualMachine, VmBuilder,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::{program::Program, LocalOpcode},
@@ -141,7 +140,7 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
     pub fn expand_checkpoint_replay<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,
-        execution: &RvrCheckpointPreflightExecution,
+        execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
     where

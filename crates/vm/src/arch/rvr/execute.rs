@@ -17,16 +17,14 @@ use super::{
         write_rv64_registers,
     },
     checkpoint_preflight::{
-        CheckpointDirtyPages, CheckpointPreflightBuffers, RvrCheckpointPreflightLimits,
-        RvrCheckpointPreflightTranscript,
+        CheckpointDirtyPages, CheckpointPreflightBuffers, PreflightEndpoint, PreflightLimits,
+        PreflightTranscript,
     },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
-    preflight::{
-        PreflightBuffers, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
-    },
+    preflight::{FullLogPreflightLimits, FullLogPreflightTranscript, PreflightBuffers},
     state::{
         init_rvr_state, CheckpointPreflightRvState, MeteredCostRvState, MeteredRvState,
         PreflightRvState, PureRvState, PureWithInstretTrackingRvState,
@@ -235,15 +233,15 @@ pub(super) fn execute_pure(
 }
 
 /// Execute an append-only preflight artifact until termination.
-pub(super) fn execute_preflight(
+pub(super) fn execute_full_log_preflight(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
-    limits: RvrPreflightLimits,
+    limits: FullLogPreflightLimits,
     timestamp_max_bits: usize,
     allow_suspended: bool,
-    reuse: Option<RvrPreflightTranscript>,
-) -> Result<(RvrPreflightTranscript, RvrPreflightEndpoint), ExecuteError> {
+    reuse: Option<FullLogPreflightTranscript>,
+) -> Result<(FullLogPreflightTranscript, PreflightEndpoint), ExecuteError> {
     require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
     let mut buffers = match reuse {
@@ -275,8 +273,8 @@ pub(super) fn execute_preflight(
         ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
     })?;
     let endpoint = match status {
-        ExecutionStatus::Terminated => RvrPreflightEndpoint::Terminated,
-        ExecutionStatus::Suspended => RvrPreflightEndpoint::Suspended {
+        ExecutionStatus::Terminated => PreflightEndpoint::Terminated,
+        ExecutionStatus::Suspended => PreflightEndpoint::Suspended {
             resume_pc: final_pc,
             final_timestamp: state.mode_state.timestamp,
         },
@@ -291,23 +289,15 @@ pub(super) fn execute_preflight(
 }
 
 /// Execute the checkpoint-and-residual preflight artifact.
-pub(super) fn execute_checkpoint_preflight(
+pub(super) fn execute_preflight(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
-    limits: RvrCheckpointPreflightLimits,
+    limits: PreflightLimits,
     timestamp_max_bits: usize,
     allow_suspended: bool,
-    reuse: Option<RvrCheckpointPreflightTranscript>,
-) -> Result<
-    (
-        RvrCheckpointPreflightTranscript,
-        RvrPreflightEndpoint,
-        u32,
-        u32,
-    ),
-    ExecuteError,
-> {
+    reuse: Option<PreflightTranscript>,
+) -> Result<(PreflightTranscript, PreflightEndpoint, u32, u32), ExecuteError> {
     require_execution_kind(
         compiled,
         "CheckpointPreflight",
@@ -335,23 +325,23 @@ pub(super) fn execute_checkpoint_preflight(
     );
     if state.mode_state.error != 0 {
         return Err(ExecuteError::InvalidPreflightContext(format!(
-            "generated checkpoint-preflight logger failed with code {}",
+            "generated preflight logger failed with code {}",
             state.mode_state.error
         )));
     }
-    let status = execution
-        .inspect_err(|error| tracing::warn!(%error, "rvr checkpoint preflight execution failed"))?;
+    let status =
+        execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
     let final_pc = u32::try_from(state.pc).map_err(|_| {
         ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
     })?;
     let final_timestamp = state.mode_state.timestamp;
     let endpoint = match status {
-        ExecutionStatus::Terminated => RvrPreflightEndpoint::Terminated,
-        ExecutionStatus::Suspended => RvrPreflightEndpoint::Suspended {
+        ExecutionStatus::Terminated => PreflightEndpoint::Terminated,
+        ExecutionStatus::Suspended => PreflightEndpoint::Suspended {
             resume_pc: final_pc,
             final_timestamp,
         },
-        _ => unreachable!("run_and_finalize accepted an invalid checkpoint-preflight status"),
+        _ => unreachable!("run_and_finalize accepted an invalid preflight status"),
     };
     // SAFETY: the raw state was created from `buffers` immediately above and
     // neither vector can reallocate during generated execution.

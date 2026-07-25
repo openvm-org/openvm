@@ -22,7 +22,7 @@ use crate::{
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     arch::{
-        rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
+        rvr::{cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint},
         DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
     },
     system::{
@@ -139,7 +139,7 @@ fn test_cuda_phantom_rvr_replay() {
         0xabcd,
     );
     let program = Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
-    let transcript = RvrPreflightTranscript {
+    let transcript = FullLogPreflightTranscript {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -153,7 +153,7 @@ fn test_cuda_phantom_rvr_replay() {
         memory_log: vec![],
         initial_write_log: vec![],
     };
-    let endpoint = RvrPreflightEndpoint::Suspended {
+    let endpoint = PreflightEndpoint::Suspended {
         resume_pc: 4,
         final_timestamp: 2,
     };
@@ -188,7 +188,7 @@ fn test_cuda_phantom_rvr_replay() {
     .unwrap();
     assert_eq!(replay_trace, legacy_trace);
 
-    let corrupt = RvrPreflightTranscript {
+    let corrupt = FullLogPreflightTranscript {
         program_log: transcript.program_log,
         memory_log: vec![PreflightMemoryEvent {
             timestamp: 1,

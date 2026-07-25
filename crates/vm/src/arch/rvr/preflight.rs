@@ -1,4 +1,4 @@
-//! Direct-event RVR preflight reference implementation.
+//! Full-log preflight oracle for differential testing.
 //!
 //! This executor logs the semantic program and memory events directly. It is a
 //! differential oracle for the selected checkpoint path, not the production
@@ -18,8 +18,8 @@ use rvr_state::{
 };
 
 use super::{
-    bridge::map_rvr_execute_error, compile::CompileError, execute::execute_preflight, RvrCompiled,
-    RvrInitialImage,
+    bridge::map_rvr_execute_error, compile::CompileError, execute::execute_full_log_preflight,
+    PreflightEndpoint, RvrCompiled, RvrInitialImage,
 };
 use crate::{
     arch::{
@@ -38,12 +38,12 @@ const _: () = assert!(BLOCK_FE_WIDTH == 4);
 /// `max_memory_events` remains a hard error boundary and never suspends midway
 /// through a block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RvrPreflightLimits {
+pub struct FullLogPreflightLimits {
     pub max_instructions: usize,
     pub max_memory_events: usize,
 }
 
-impl RvrPreflightLimits {
+impl FullLogPreflightLimits {
     pub const fn new(max_instructions: usize, max_memory_events: usize) -> Self {
         Self {
             max_instructions,
@@ -54,28 +54,17 @@ impl RvrPreflightLimits {
 
 /// Minimal append-only output from one RVR preflight run.
 #[derive(Debug)]
-pub struct RvrPreflightTranscript {
+pub struct FullLogPreflightTranscript {
     pub program_log: Vec<PreflightProgramEvent>,
     pub memory_log: Vec<PreflightMemoryEvent>,
     pub initial_write_log: Vec<PreflightInitialWrite>,
 }
 
-/// Why a complete preflight transcript stopped. This stays beside the
-/// transcript rather than adding another hot-path log field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RvrPreflightEndpoint {
-    Terminated,
-    Suspended {
-        resume_pc: u32,
-        final_timestamp: u32,
-    },
-}
-
 /// State and transcript returned after successful termination or bounded suspension.
-pub struct RvrPreflightExecution {
+pub struct FullLogPreflightExecution {
     pub state: VmState<GuestMemory>,
-    pub transcript: RvrPreflightTranscript,
-    pub endpoint: RvrPreflightEndpoint,
+    pub transcript: FullLogPreflightTranscript,
+    pub endpoint: PreflightEndpoint,
 }
 
 pub(crate) struct PreflightBuffers {
@@ -87,7 +76,7 @@ pub(crate) struct PreflightBuffers {
 }
 
 impl PreflightBuffers {
-    pub(crate) fn new(limits: RvrPreflightLimits) -> Result<Self, String> {
+    pub(crate) fn new(limits: FullLogPreflightLimits) -> Result<Self, String> {
         let program_capacity = limits
             .max_instructions
             .checked_add(1)
@@ -116,14 +105,14 @@ impl PreflightBuffers {
     }
 
     pub(crate) fn reuse(
-        limits: RvrPreflightLimits,
-        transcript: RvrPreflightTranscript,
+        limits: FullLogPreflightLimits,
+        transcript: FullLogPreflightTranscript,
     ) -> Result<Self, String> {
         let program_capacity = limits
             .max_instructions
             .checked_add(1)
             .ok_or_else(|| "preflight program capacity overflow".to_string())?;
-        let RvrPreflightTranscript {
+        let FullLogPreflightTranscript {
             mut program_log,
             mut memory_log,
             initial_write_log: mut initial_write_candidates,
@@ -187,7 +176,7 @@ impl PreflightBuffers {
         final_pc: u32,
         timestamp_max_bits: usize,
         state: &mut VmState<GuestMemory>,
-    ) -> Result<RvrPreflightTranscript, String> {
+    ) -> Result<FullLogPreflightTranscript, String> {
         if ffi.error != 0 {
             return Err(format!(
                 "generated preflight logger failed with code {}",
@@ -258,7 +247,7 @@ impl PreflightBuffers {
             if ffi.wrote_register != 0 {
                 mark_touched_block(state, RV64_REGISTER_AS, 0)?;
             }
-            return Ok(RvrPreflightTranscript {
+            return Ok(FullLogPreflightTranscript {
                 program_log: self.program_log,
                 memory_log: self.memory_log,
                 initial_write_log: self.initial_write_candidates,
@@ -329,7 +318,7 @@ impl PreflightBuffers {
         self.initial_write_candidates
             .truncate(retained_initial_writes);
 
-        Ok(RvrPreflightTranscript {
+        Ok(FullLogPreflightTranscript {
             program_log: self.program_log,
             memory_log: self.memory_log,
             initial_write_log: self.initial_write_candidates,
@@ -403,7 +392,7 @@ fn mark_touched_block(
     Ok(())
 }
 
-struct RvrPreflightInstanceInner<'a> {
+struct FullLogPreflightInstanceInner<'a> {
     system_config: &'a SystemConfig,
     initial_image: RvrInitialImage,
     compiled: RvrCompiled,
@@ -411,13 +400,13 @@ struct RvrPreflightInstanceInner<'a> {
 }
 
 /// Compiled append-only RVR preflight executor.
-pub struct RvrPreflightInstance<'a> {
-    inner: RvrPreflightInstanceInner<'a>,
+pub struct FullLogPreflightInstance<'a> {
+    inner: FullLogPreflightInstanceInner<'a>,
 }
 
-static_assertions::assert_impl_all!(RvrPreflightInstance<'static>: Send, Sync);
+static_assertions::assert_impl_all!(FullLogPreflightInstance<'static>: Send, Sync);
 
-impl<'a> RvrPreflightInstance<'a> {
+impl<'a> FullLogPreflightInstance<'a> {
     pub(crate) fn new(
         system_config: &'a SystemConfig,
         initial_image: RvrInitialImage,
@@ -425,7 +414,7 @@ impl<'a> RvrPreflightInstance<'a> {
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     ) -> Self {
         Self {
-            inner: RvrPreflightInstanceInner {
+            inner: FullLogPreflightInstanceInner {
                 system_config,
                 initial_image,
                 compiled,
@@ -443,8 +432,8 @@ impl<'a> RvrPreflightInstance<'a> {
     pub fn execute(
         &self,
         inputs: impl Into<Streams>,
-        limits: RvrPreflightLimits,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        limits: FullLogPreflightLimits,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
         self.execute_from_state(self.create_initial_vm_state(inputs), limits)
     }
 
@@ -457,8 +446,8 @@ impl<'a> RvrPreflightInstance<'a> {
     pub fn execute_from_state(
         &self,
         state: VmState<GuestMemory>,
-        limits: RvrPreflightLimits,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        limits: FullLogPreflightLimits,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
         self.execute_from_state_inner(state, limits, false, None)
     }
 
@@ -469,9 +458,9 @@ impl<'a> RvrPreflightInstance<'a> {
     pub fn execute_from_state_reusing(
         &self,
         state: VmState<GuestMemory>,
-        limits: RvrPreflightLimits,
-        reuse: RvrPreflightTranscript,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        limits: FullLogPreflightLimits,
+        reuse: FullLogPreflightTranscript,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
         self.execute_from_state_inner(state, limits, false, Some(reuse))
     }
 
@@ -481,8 +470,8 @@ impl<'a> RvrPreflightInstance<'a> {
     pub fn execute_for(
         &self,
         inputs: impl Into<Streams>,
-        limits: RvrPreflightLimits,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        limits: FullLogPreflightLimits,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
         self.execute_from_state_for(self.create_initial_vm_state(inputs), limits)
     }
 
@@ -492,8 +481,8 @@ impl<'a> RvrPreflightInstance<'a> {
     pub fn execute_from_state_for(
         &self,
         state: VmState<GuestMemory>,
-        limits: RvrPreflightLimits,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        limits: FullLogPreflightLimits,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
         self.execute_from_state_inner(state, limits, true, None)
     }
 
@@ -501,20 +490,20 @@ impl<'a> RvrPreflightInstance<'a> {
     pub fn execute_from_state_for_reusing(
         &self,
         state: VmState<GuestMemory>,
-        limits: RvrPreflightLimits,
-        reuse: RvrPreflightTranscript,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        limits: FullLogPreflightLimits,
+        reuse: FullLogPreflightTranscript,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
         self.execute_from_state_inner(state, limits, true, Some(reuse))
     }
 
     fn execute_from_state_inner(
         &self,
         mut state: VmState<GuestMemory>,
-        limits: RvrPreflightLimits,
+        limits: FullLogPreflightLimits,
         allow_suspended: bool,
-        reuse: Option<RvrPreflightTranscript>,
-    ) -> Result<RvrPreflightExecution, ExecutionError> {
-        let (transcript, endpoint) = execute_preflight(
+        reuse: Option<FullLogPreflightTranscript>,
+    ) -> Result<FullLogPreflightExecution, ExecutionError> {
+        let (transcript, endpoint) = execute_full_log_preflight(
             &self.inner.compiled,
             &self.inner.runtime_hooks,
             &mut state,
@@ -524,7 +513,7 @@ impl<'a> RvrPreflightInstance<'a> {
             reuse,
         )
         .map_err(map_rvr_execute_error)?;
-        Ok(RvrPreflightExecution {
+        Ok(FullLogPreflightExecution {
             state,
             transcript,
             endpoint,
@@ -550,14 +539,14 @@ mod tests {
     fn finalization_enforces_the_exact_timestamp_domain_boundary() {
         let config = SystemConfig::default();
         let mut state = VmState::initial(&config, &Default::default(), 0, Vec::<Vec<u8>>::new());
-        let mut accepted = PreflightBuffers::new(RvrPreflightLimits::new(0, 0)).unwrap();
+        let mut accepted = PreflightBuffers::new(FullLogPreflightLimits::new(0, 0)).unwrap();
         let mut accepted_ffi = accepted.ffi_state();
         accepted_ffi.timestamp = 3;
         // SAFETY: `accepted_ffi` was created by `accepted`, and no pointers or
         // capacities were changed.
         unsafe { accepted.finish(&accepted_ffi, 0, 2, &mut state) }.unwrap();
 
-        let mut rejected = PreflightBuffers::new(RvrPreflightLimits::new(0, 0)).unwrap();
+        let mut rejected = PreflightBuffers::new(FullLogPreflightLimits::new(0, 0)).unwrap();
         let mut rejected_ffi = rejected.ffi_state();
         rejected_ffi.timestamp = 4;
         // SAFETY: `rejected_ffi` was created by `rejected`, and no pointers or
@@ -568,15 +557,15 @@ mod tests {
 
     #[test]
     fn reused_buffers_grow_to_the_next_segments_limits() {
-        let initial_limits = RvrPreflightLimits::new(8, 16);
+        let initial_limits = FullLogPreflightLimits::new(8, 16);
         let initial = PreflightBuffers::new(initial_limits).unwrap();
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: initial.program_log,
             memory_log: initial.memory_log,
             initial_write_log: initial.initial_write_candidates,
         };
 
-        let next_limits = RvrPreflightLimits::new(32, 64);
+        let next_limits = FullLogPreflightLimits::new(32, 64);
         let reused = PreflightBuffers::reuse(next_limits, transcript).unwrap();
         assert!(reused.program_log.capacity() > next_limits.max_instructions);
         assert!(reused.memory_log.capacity() >= next_limits.max_memory_events);

@@ -10,9 +10,7 @@ use openvm_algebra_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        rvr::{
-            RvrCheckpointPreflightExecution, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
-        },
+        rvr::{PreflightEndpoint, PreflightExecution, PreflightLimits},
         verify_segments, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
@@ -67,10 +65,7 @@ fn block_contains_pc(block_pc: u32, block_len: u32, pc: u32) -> bool {
         && (pc - block_pc) / DEFAULT_PC_STEP < block_len
 }
 
-fn find_split_after_phantom(
-    execution: &RvrCheckpointPreflightExecution,
-    pairing_pc: u32,
-) -> Option<u32> {
+fn find_split_after_phantom(execution: &PreflightExecution, pairing_pc: u32) -> Option<u32> {
     let mut blocks = Vec::with_capacity(execution.transcript.checkpoints.len() + 2);
     blocks.push((0, execution.from_state.pc));
     blocks.extend(
@@ -91,7 +86,7 @@ fn find_split_after_phantom(
 }
 
 fn discover_pairing_split(
-    checkpoint: &openvm_circuit::arch::rvr::RvrCheckpointPreflightInstance<'_>,
+    checkpoint: &openvm_circuit::arch::rvr::PreflightInstance<'_>,
     pairing_pc: u32,
     input: Vec<Vec<u8>>,
 ) -> Result<Discovery> {
@@ -100,7 +95,7 @@ fn discover_pairing_split(
     loop {
         let execution = checkpoint.execute_from_state_for(
             state,
-            RvrCheckpointPreflightLimits::new(DISCOVERY_INSTRUCTIONS, DISCOVERY_RESIDUALS, 1),
+            PreflightLimits::new(DISCOVERY_INSTRUCTIONS, DISCOVERY_RESIDUALS, 1),
         )?;
         if discovery.split.is_none() {
             discovery.split = find_split_after_phantom(&execution, pairing_pc)
@@ -113,7 +108,7 @@ fn discover_pairing_split(
         let chunk_residuals = execution.transcript.residuals.len();
         discovery.residuals += chunk_residuals;
         state = execution.state;
-        if matches!(execution.endpoint, RvrPreflightEndpoint::Terminated) {
+        if matches!(execution.endpoint, PreflightEndpoint::Terminated) {
             break;
         }
     }
@@ -127,7 +122,7 @@ fn prove_pairing_checkpoint(
 ) -> Result<()> {
     *config.as_mut() = test_system_config();
     let executor = VmExecutor::new(config.clone())?;
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+    let checkpoint = executor.preflight_instance(&exe, None)?;
     let pairing_pcs = exe
         .program
         .enumerate_by_pc()
@@ -181,12 +176,12 @@ fn prove_pairing_checkpoint(
             "checkpoint resume PC is discontinuous"
         );
         vm.transport_init_memory_to_device(&state.memory);
-        let limits = RvrCheckpointPreflightLimits::new(
+        let limits = PreflightLimits::new(
             retired as usize,
             discovery.residuals.max(1),
             PROOF_CHECKPOINT_INTERVAL,
         );
-        let execution = checkpoint.execute_from_state_for_exact(state, limits)?;
+        let execution = checkpoint.execute_from_state_for(state, limits)?;
         ensure!(
             execution.from_state.pc == expected_pc,
             "execution-bus start does not match the prior endpoint"
@@ -194,7 +189,7 @@ fn prove_pairing_checkpoint(
         match (segment_index, execution.endpoint) {
             (
                 0,
-                RvrPreflightEndpoint::Suspended {
+                PreflightEndpoint::Suspended {
                     resume_pc,
                     final_timestamp,
                 },
@@ -205,11 +200,11 @@ fn prove_pairing_checkpoint(
                     "suspended endpoint does not match the execution boundary"
                 );
             }
-            (1, RvrPreflightEndpoint::Terminated) => {}
-            (0, RvrPreflightEndpoint::Terminated) => {
+            (1, PreflightEndpoint::Terminated) => {}
+            (0, PreflightEndpoint::Terminated) => {
                 eyre::bail!("pairing prefix terminated before HintStore")
             }
-            (1, RvrPreflightEndpoint::Suspended { .. }) => {
+            (1, PreflightEndpoint::Suspended { .. }) => {
                 eyre::bail!("final pairing segment did not terminate")
             }
             _ => unreachable!(),
@@ -273,7 +268,7 @@ fn prove_pairing_checkpoint(
             &gpu_transcript,
             &replay_plan,
         )?;
-        let RvrCheckpointPreflightExecution {
+        let PreflightExecution {
             state: next_state,
             to_state,
             ..
