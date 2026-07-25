@@ -118,6 +118,8 @@ fn prove_inner(
     #[cfg(feature = "metrics")]
     let mut checkpoint_retired = 0u64;
     #[cfg(feature = "metrics")]
+    let mut checkpoint_retired_by_segment = Vec::with_capacity(num_segments);
+    #[cfg(feature = "metrics")]
     let mut checkpoint_count = 0u64;
     #[cfg(feature = "metrics")]
     let mut residual_count = 0u64;
@@ -159,6 +161,7 @@ fn prove_inner(
         {
             checkpoint_execution_time += checkpoint_execution_started.elapsed();
             checkpoint_retired += u64::from(execution.retired);
+            checkpoint_retired_by_segment.push(u64::from(execution.retired));
             checkpoint_count += execution.transcript.checkpoints.len() as u64;
             residual_count += execution.transcript.residuals.len() as u64;
             transcript_bytes += std::mem::size_of_val(execution.transcript.checkpoints.as_slice())
@@ -216,14 +219,19 @@ fn prove_inner(
     );
     *instance.state_mut() = Some(state);
 
-    // Only the proof driver knows the complete segment set, so aggregate
-    // checkpoint count and rate here rather than overwriting an absolute
-    // counter once per direct executor call. Emit only after all proof outputs
-    // and final VM state have been produced successfully.
+    // Only the proof driver knows the complete segment set. Emit after all
+    // proof outputs and final VM state have been produced successfully so a
+    // failed proof never leaves a partial segment series.
     #[cfg(feature = "metrics")]
     {
         let elapsed_micros = checkpoint_execution_time.as_secs_f64().max(1e-9) * 1_000_000.0;
-        metrics::counter!("execute_checkpoint_preflight_insns").absolute(checkpoint_retired);
+        for (segment, retired) in checkpoint_retired_by_segment.into_iter().enumerate() {
+            metrics::counter!(
+                "execute_checkpoint_preflight_insns",
+                "segment" => segment.to_string()
+            )
+            .absolute(retired);
+        }
         metrics::counter!("execute_checkpoint_preflight_checkpoints").absolute(checkpoint_count);
         metrics::counter!("execute_checkpoint_preflight_residuals").absolute(residual_count);
         metrics::counter!("execute_checkpoint_preflight_transcript_bytes")

@@ -24,8 +24,9 @@ For a segment proof, the following metrics are collected:
   - The sum `execute_preflight_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.
 - `execute_pure_insns` (counter): The total number of instructions executed in pure execution mode.
 - `execute_metered_insns` (counter): The total number of instructions executed in metered execution mode.
-- `execute_checkpoint_preflight_insns` (counter): The total number of instructions executed by
-  checkpoint preflight across all segments in one prepared RVR proof.
+- `execute_checkpoint_preflight_insns` (counter): The number of instructions executed by
+  checkpoint preflight in each segment of a prepared RVR proof. It carries the `segment` label and
+  is emitted only after the whole proof succeeds; summing the series gives the proof-level total.
 - `execute_checkpoint_preflight_checkpoints`, `execute_checkpoint_preflight_residuals`, and
   `execute_checkpoint_preflight_transcript_bytes` (counters): The compact authoritative transcript
   size across all segments in one prepared RVR proof. Transcript bytes measure the logical
