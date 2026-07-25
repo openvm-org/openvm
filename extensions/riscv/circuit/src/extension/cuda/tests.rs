@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+            cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
             PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
@@ -35,7 +35,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::Rv64ImRvrGpuTracegen;
+use super::Rv64ImPreflightGpuTracegen;
 use crate::{
     adapters::RV64_REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder, Rv64ImConfig,
     Rv64ImGpuBuilder, Rv64MultiplicationChipGpu,
@@ -45,13 +45,13 @@ type F = BabyBear;
 
 #[test]
 fn checkpoint_opcode_families_match_rv64_tracegen_coverage() {
-    let bases = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
+    let bases = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
     let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
 
     for opcode in 0..=u16::MAX as u32 {
         assert_eq!(
             bases.owns(opcode),
-            Rv64ImRvrGpuTracegen::supports_opcode(opcode) || opcode == terminate,
+            Rv64ImPreflightGpuTracegen::supports_opcode(opcode) || opcode == terminate,
             "checkpoint opcode ownership disagrees at {opcode:#x}"
         );
     }
@@ -123,7 +123,7 @@ fn checkpoint_branch(opcode: impl LocalOpcode, rs1: usize, rs2: usize) -> Instru
 }
 
 #[test]
-fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
+fn preflight_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     let register_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -419,11 +419,12 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
         .unwrap();
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
-        GpuRvrProgram::upload(&program, &config.system.memory_config, device_ctx).unwrap();
+        GpuPostflightProgram::upload(&program, &config.system.memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&rvr_execution.transcript, rvr_execution.endpoint)
         .unwrap();
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
 
     // The synchronized replay error read above makes every trace independent
@@ -437,7 +438,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
+fn preflight_gpu_replay_proves_a_suspended_segment() {
     let instructions = [
         checkpoint_ri(BaseAluImmOpcode::ADDI, 1, 0, 7),
         Instruction::from_usize(
@@ -473,7 +474,7 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
     );
     assert_eq!(execution.retired, 2);
 
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
@@ -484,20 +485,16 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
         resume_pc: execution.to_state.pc + 4,
         final_timestamp: execution.to_state.timestamp,
     };
-    let error = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .err()
-    .expect("mismatched suspended endpoint should be rejected");
+    let error =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .err()
+            .expect("mismatched suspended endpoint should be rejected");
     assert!(error
         .to_string()
         .contains("suspended endpoint does not match"));
     execution.endpoint = endpoint;
 
-    let error = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+    let error = Rv64ImPreflightGpuTracegen::postflight(
         &vm,
         &gpu_program,
         &execution,
@@ -509,14 +506,11 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
         .to_string()
         .contains("retired 2 instructions, expected 3"));
 
-    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let (transcript, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -525,7 +519,7 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
+fn preflight_gpu_replay_expands_more_than_one_launch_block() {
     const RETIRED: usize = 1025;
 
     let program = Program::from_instructions(&[Instruction::from_usize(
@@ -554,24 +548,20 @@ fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
     // the launcher's former 1024-thread threshold.
     assert_eq!(execution.transcript.checkpoints.len(), RETIRED - 1);
 
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (_, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
+    let (_, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
     assert_eq!(replay_plan.steps_host().unwrap().len(), RETIRED);
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
+fn preflight_gpu_replay_launches_high_register_m_kernels() {
     const REPETITIONS: usize = 513;
     const LOOP_INSNS: usize = 4;
     const RETIRED: usize = REPETITIONS * LOOP_INSNS;
@@ -614,27 +604,23 @@ fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
         .unwrap();
     assert_eq!(execution.retired as usize, RETIRED);
 
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.rv64i.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
-    Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
+    let (transcript, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
+    Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
         .unwrap()
         .generate_proving_ctx(&mut vm)
         .unwrap();
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
+fn preflight_gpu_replay_carries_a_register_across_segments() {
     let instructions = [
         checkpoint_ri(BaseAluImmOpcode::ADDI, 1, 0, 7),
         Instruction::from_usize(
@@ -671,20 +657,17 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
     );
     assert_eq!(execution.retired, 2);
 
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let (transcript, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -704,14 +687,11 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
     };
     assert_eq!(x2, [12, 0, 0, 0]);
 
-    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let (transcript, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -720,7 +700,7 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
+fn preflight_gpu_replay_proves_an_empty_suspended_segment() {
     let instructions = [Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, 0, 0, 0],
@@ -753,20 +733,17 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
     assert_eq!(execution.retired, 0);
     assert!(execution.transcript.checkpoints.is_empty());
 
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let (transcript, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -775,7 +752,7 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_rejects_terminate_in_a_suspended_segment() {
+fn preflight_gpu_replay_rejects_terminate_in_a_suspended_segment() {
     let instructions: [Instruction<F>; 1] = [Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, 0, 0, 0],
@@ -800,25 +777,21 @@ fn rvr_checkpoint_gpu_replay_rejects_terminate_in_a_suspended_segment() {
         resume_pc: execution.to_state.pc,
         final_timestamp: execution.to_state.timestamp,
     };
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let error = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .err()
-    .expect("TERMINATE should be rejected for a suspended endpoint");
+    let error =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .err()
+            .expect("TERMINATE should be rejected for a suspended endpoint");
     assert!(error.to_string().contains("code 308"));
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
+fn preflight_gpu_replay_proves_bounded_rv64i_slice_differentially() {
     let jal = |rd| {
         Instruction::from_usize(
             Rv64JalLuiOpcode::JAL.global_opcode(),
@@ -1028,20 +1001,20 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
         assert_eq!(checkpoint_value, full_value);
     }
 
-    let checkpoint_program = GpuRvrProgram::upload(
+    let checkpoint_program = GpuPostflightProgram::upload(
         &program,
         &config.rv64i.system.memory_config,
         &checkpoint_vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (checkpoint_transcript, checkpoint_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+    let (checkpoint_transcript, checkpoint_plan) = Rv64ImPreflightGpuTracegen::postflight(
         &checkpoint_vm,
         &checkpoint_program,
         &checkpoint_execution,
         checkpoint_execution.retired,
     )
     .unwrap();
-    let checkpoint_tracegen = Rv64ImRvrGpuTracegen::new(
+    let checkpoint_tracegen = Rv64ImPreflightGpuTracegen::new(
         &checkpoint_program,
         &checkpoint_transcript,
         &checkpoint_plan,
@@ -1074,7 +1047,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
             FullLogPreflightLimits::new(max_instructions, max_memory_events),
         )
         .unwrap();
-    let legacy_program = GpuRvrProgram::upload(
+    let legacy_program = GpuPostflightProgram::upload(
         &program,
         &config.rv64i.system.memory_config,
         &legacy_vm.engine.device().device_ctx,
@@ -1084,7 +1057,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
         .upload_transcript(&legacy_execution.transcript, legacy_execution.endpoint)
         .unwrap();
     let legacy_tracegen =
-        Rv64ImRvrGpuTracegen::new(&legacy_program, &legacy_transcript, &legacy_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(&legacy_program, &legacy_transcript, &legacy_plan).unwrap();
     let legacy_ctx = legacy_tracegen
         .generate_proving_ctx(&mut legacy_vm)
         .unwrap();
@@ -1098,7 +1071,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
+fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
     let memory_instruction = |opcode: Rv64LoadStoreOpcode,
                               reg_operand: usize,
                               offset: u16,
@@ -1237,20 +1210,20 @@ fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
             0x4433_2288,
         ]
     );
-    let checkpoint_program = GpuRvrProgram::upload(
+    let checkpoint_program = GpuPostflightProgram::upload(
         &program,
         &config.rv64i.system.memory_config,
         &checkpoint_vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (checkpoint_transcript, checkpoint_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+    let (checkpoint_transcript, checkpoint_plan) = Rv64ImPreflightGpuTracegen::postflight(
         &checkpoint_vm,
         &checkpoint_program,
         &checkpoint_execution,
         checkpoint_execution.retired,
     )
     .unwrap();
-    let checkpoint_tracegen = Rv64ImRvrGpuTracegen::new(
+    let checkpoint_tracegen = Rv64ImPreflightGpuTracegen::new(
         &checkpoint_program,
         &checkpoint_transcript,
         &checkpoint_plan,
@@ -1272,7 +1245,7 @@ fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
 }
 
 #[test]
-fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
+fn preflight_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
     let m_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -1348,11 +1321,13 @@ fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
 
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
-        GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
+        GpuPostflightProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx)
+            .unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(gpu_transcript);
@@ -1361,7 +1336,7 @@ fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
 }
 
 #[test]
-fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
+fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
     let instructions = [
         instruction(
             MulOpcode::MUL,
@@ -1400,7 +1375,8 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
     let engine = test_gpu_engine();
     let device_ctx = &engine.device().device_ctx;
     let gpu_program =
-        GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
+        GpuPostflightProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx)
+            .unwrap();
 
     let reject = |transcript: &FullLogPreflightTranscript, expected_code| {
         let (gpu_transcript, replay_plan) = gpu_program
@@ -1421,7 +1397,7 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
             range_tuple.clone(),
             config.rv64i.system.memory_config.timestamp_max_bits,
         );
-        chip.generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+        chip.generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
         assert_eq!(gpu_transcript.error_code().unwrap(), expected_code);
         for count in [
@@ -1452,7 +1428,7 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
 }
 
 #[test]
-fn rvr_mul_replay_rejects_raw_x0_destination_without_lookups() {
+fn preflight_mul_replay_rejects_raw_x0_destination_without_lookups() {
     let instructions = [
         instruction(
             MulOpcode::MUL,
@@ -1498,7 +1474,8 @@ fn rvr_mul_replay_rejects_raw_x0_destination_without_lookups() {
     let engine = test_gpu_engine();
     let device_ctx = &engine.device().device_ctx;
     let gpu_program =
-        GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
+        GpuPostflightProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx)
+            .unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -1517,7 +1494,7 @@ fn rvr_mul_replay_rejects_raw_x0_destination_without_lookups() {
         range_tuple.clone(),
         config.rv64i.system.memory_config.timestamp_max_bits,
     );
-    chip.generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+    chip.generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 604);
     for count in [
@@ -1530,7 +1507,7 @@ fn rvr_mul_replay_rejects_raw_x0_destination_without_lookups() {
 }
 
 #[test]
-fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
+fn preflight_gpu_replay_proves_hint_store_without_record_arenas() {
     let instructions = [
         Instruction::<F>::from_usize(
             Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
@@ -1609,31 +1586,23 @@ fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
     assert_eq!(execution.transcript.residuals, hint_words);
     assert_eq!(execution.to_state.timestamp, 13);
 
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
     let missing = execution.transcript.residuals.pop().unwrap();
-    let error = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .err()
-    .expect("missing hint residual must fail checkpoint replay");
+    let error =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .err()
+            .expect("missing hint residual must fail checkpoint replay");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals.push(missing);
 
-    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
+    let (transcript, replay_plan) =
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
     assert_eq!(
         replay_plan
             .opcode_range(Rv64HintStoreOpcode::HINT_STORED.global_opcode())
@@ -1646,7 +1615,8 @@ fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
             .len(),
         1
     );
-    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     assert_eq!(transcript.error_code().unwrap(), 0);
     drop(replay_plan);

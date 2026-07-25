@@ -256,10 +256,10 @@ impl DeferralPoseidon2ChipGpu {
     pub fn generate_proving_ctx_direct(
         &self,
         max_trace_height: usize,
-    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
+    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuPostflightError>
     {
         self.generate_proving_ctx_checked(max_trace_height)
-            .map_err(openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript)
+            .map_err(openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript)
     }
 }
 

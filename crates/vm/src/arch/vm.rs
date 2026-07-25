@@ -48,7 +48,7 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 #[cfg(all(feature = "cuda", feature = "metrics", feature = "rvr"))]
-use super::rvr::cuda::GpuRvrReplayPlan;
+use super::rvr::cuda::GpuPostflightPlan;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_full_log_preflight,
@@ -711,10 +711,10 @@ pub enum VirtualMachineError {
 }
 
 #[cfg(any(test, all(feature = "cuda", feature = "rvr")))]
-fn begin_rvr_tracegen_session(poisoned: &mut bool) -> Result<(), GenerationError> {
+fn begin_preflight_tracegen_session(poisoned: &mut bool) -> Result<(), GenerationError> {
     if *poisoned {
         return Err(GenerationError::ExtensionTracegen(
-            "VM is poisoned by an incomplete or failed RVR tracegen session".to_string(),
+            "VM is poisoned by an incomplete or failed preflight tracegen session".to_string(),
         ));
     }
     *poisoned = true;
@@ -742,11 +742,11 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
-    /// RVR trace generation mutates shared lookup histograms. Once a segment
+    /// Preflight trace generation mutates shared lookup histograms. Once a segment
     /// starts, the VM remains poisoned until its outermost coordinator has
     /// validated every producer and explicitly completes the session.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    rvr_tracegen_poisoned: bool,
+    preflight_tracegen_poisoned: bool,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -770,7 +770,7 @@ where
             pk: d_pk,
             chip_complex,
             #[cfg(all(feature = "cuda", feature = "rvr"))]
-            rvr_tracegen_poisoned: false,
+            preflight_tracegen_poisoned: false,
         })
     }
 
@@ -1199,9 +1199,9 @@ where
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
         #[cfg(all(feature = "cuda", feature = "rvr"))]
-        if self.rvr_tracegen_poisoned {
+        if self.preflight_tracegen_poisoned {
             return Err(GenerationError::ExtensionTracegen(
-                "VM is poisoned by an incomplete or failed RVR tracegen session".to_string(),
+                "VM is poisoned by an incomplete or failed preflight tracegen session".to_string(),
             ));
         }
         // main tracegen call:
@@ -1482,31 +1482,31 @@ where
     #[instrument(name = "postflight", skip_all)]
     pub fn postflight(
         &self,
-        program: &crate::arch::rvr::cuda::GpuRvrProgram,
+        program: &crate::arch::rvr::cuda::GpuPostflightProgram,
         execution: &crate::arch::rvr::PreflightExecution,
         expected_retired: u32,
-        opcodes: crate::arch::rvr::cuda::RvrCheckpointOpcodeBases,
+        opcodes: crate::arch::rvr::cuda::PostflightOpcodeBases,
     ) -> Result<
         (
-            crate::arch::rvr::cuda::GpuRvrTranscript,
-            crate::arch::rvr::cuda::GpuRvrReplayPlan,
+            crate::arch::rvr::cuda::GpuPostflightTranscript,
+            crate::arch::rvr::cuda::GpuPostflightPlan,
         ),
-        crate::arch::rvr::cuda::GpuRvrInputError,
+        crate::arch::rvr::cuda::GpuPostflightError,
     > {
-        let memory = MemTracker::start_and_reset_peak("tracegen.rvr_checkpoint_expand");
+        let memory = MemTracker::start_and_reset_peak("postflight");
         let result = (|| {
             let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
             let initial_registers =
                 initial_memory
                     .get(RV64_REGISTER_AS as usize)
                     .ok_or_else(|| {
-                        crate::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+                        crate::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                             "initial register image was not transported to the GPU".to_string(),
                         )
                     })?;
             let initial_main_memory =
                 initial_memory.get(RV64_MEMORY_AS as usize).ok_or_else(|| {
-                    crate::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+                    crate::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                         "initial main-memory image was not transported to the GPU".to_string(),
                     )
                 })?;
@@ -1516,7 +1516,7 @@ where
                 .iter()
                 .map(|image| image.view())
                 .collect::<Vec<_>>();
-            program.expand_checkpoint_replay(
+            program.postflight(
                 execution,
                 expected_retired,
                 initial_registers.view(),
@@ -1531,7 +1531,7 @@ where
 
     #[cfg(feature = "metrics")]
     #[doc(hidden)]
-    pub fn emit_preflight_opcode_counts(&self, replay_plan: &GpuRvrReplayPlan)
+    pub fn emit_preflight_opcode_counts(&self, replay_plan: &GpuPostflightPlan)
     where
         <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
             PreflightExecutor<BabyBear, crate::arch::DenseRecordArena>,
@@ -1566,7 +1566,7 @@ where
         }
     }
 
-    /// Low-level RVR trace-generation seam used by a concrete extension
+    /// Low-level preflight trace-generation seam used by a concrete extension
     /// coordinator. It fences borrowed GPU inputs and validates trace heights,
     /// but does not know whether the callback visited every executed opcode.
     /// Callers should expose a coverage-checked extension entry point instead.
@@ -1574,9 +1574,9 @@ where
     #[instrument(name = "trace_gen", skip_all)]
     pub fn generate_preflight_proving_ctx_unchecked_coverage(
         &mut self,
-        program: &crate::arch::rvr::cuda::GpuRvrProgram,
-        transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,
-        replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
+        program: &crate::arch::rvr::cuda::GpuPostflightProgram,
+        transcript: &crate::arch::rvr::cuda::GpuPostflightTranscript,
+        replay_plan: &crate::arch::rvr::cuda::GpuPostflightPlan,
         generate_extension: impl FnMut(
             usize,
             &dyn Any,
@@ -1585,15 +1585,15 @@ where
             GenerationError,
         >,
     ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
-        begin_rvr_tracegen_session(&mut self.rvr_tracegen_poisoned)?;
+        begin_preflight_tracegen_session(&mut self.preflight_tracegen_poisoned)?;
         // Reset once around the complete segment tracegen phase. Nested CUDA
         // components may report their own deltas, but must not reset this
         // phase-wide high-water mark. The allocator's logical peak is the
         // source of truth for live buffers; reserved pool pages are reported
         // separately and may remain mapped after a correct drop.
-        let memory = MemTracker::start_and_reset_peak("tracegen.rvr_segment");
+        let memory = MemTracker::start_and_reset_peak("tracegen");
         let result = (|| {
-            let ctx = self.chip_complex.generate_proving_ctx_from_rvr(
+            let ctx = self.chip_complex.generate_proving_ctx_from_postflight(
                 program,
                 transcript,
                 replay_plan,
@@ -1624,7 +1624,7 @@ where
                 .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
             if replay_error != 0 {
                 return Err(GenerationError::ExtensionTracegen(format!(
-                    "RVR GPU trace generation rejected transcript with code {replay_error}"
+                    "preflight GPU trace generation rejected transcript with code {replay_error}"
                 )));
             }
             self.validate_proving_ctx(ctx)
@@ -1633,29 +1633,30 @@ where
         result
     }
 
-    /// Clears the RVR poison only after the outermost extension coordinator has
+    /// Clears the preflight poison only after the outermost extension coordinator has
     /// checked complete opcode ownership. Errors deliberately leave the VM
     /// poisoned because per-producer lookup counts are not rolled back.
     #[doc(hidden)]
-    pub fn complete_rvr_tracegen_session(&mut self) {
-        debug_assert!(self.rvr_tracegen_poisoned);
-        self.rvr_tracegen_poisoned = false;
+    pub fn complete_preflight_tracegen_session(&mut self) {
+        debug_assert!(self.preflight_tracegen_poisoned);
+        self.preflight_tracegen_poisoned = false;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        begin_rvr_tracegen_session, SystemConfig, VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        begin_preflight_tracegen_session, SystemConfig, VirtualMachine, CONNECTOR_AIR_ID,
+        PROGRAM_AIR_ID,
     };
     use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
 
     #[test]
-    fn late_rvr_coverage_failure_poison_rejects_retry() {
+    fn late_preflight_coverage_failure_poison_rejects_retry() {
         let mut poisoned = false;
-        begin_rvr_tracegen_session(&mut poisoned).unwrap();
+        begin_preflight_tracegen_session(&mut poisoned).unwrap();
         // A late coverage failure deliberately does not complete the session.
-        let retry = begin_rvr_tracegen_session(&mut poisoned).unwrap_err();
+        let retry = begin_preflight_tracegen_session(&mut poisoned).unwrap_err();
         assert!(retry.to_string().contains("poisoned"));
     }
 

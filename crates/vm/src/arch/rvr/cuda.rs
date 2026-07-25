@@ -49,7 +49,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RvrReplayInstruction {
+pub struct PostflightInstruction {
     /// Global opcode followed by the seven canonical instruction operands.
     pub words: [u32; 8],
 }
@@ -63,24 +63,24 @@ pub(crate) struct RvrReplayStep {
     pub memory_start: u32,
 }
 
-const _: () = assert!(size_of::<RvrReplayInstruction>() == 32);
+const _: () = assert!(size_of::<PostflightInstruction>() == 32);
 const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == 8 * size_of::<u32>());
 
 /// Four native field cells in the raw Montgomery representation used by CUDA.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RvrFieldBlock {
+pub struct PostflightFieldBlock {
     pub values: [u32; BLOCK_FE_WIDTH],
 }
 
-const _: () = assert!(size_of::<RvrFieldBlock>() == 4 * size_of::<u32>());
+const _: () = assert!(size_of::<PostflightFieldBlock>() == 4 * size_of::<u32>());
 
 /// Compact opcode-family ABI for checkpoint replay. One base identifies each
 /// supported contiguous family; this is passed by value and never uploaded as
 /// a per-segment opcode table.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct RvrCheckpointOpcodeBases {
+pub struct PostflightOpcodeBases {
     pub base_alu: u32,
     pub shift: u32,
     pub less_than: u32,
@@ -107,9 +107,9 @@ pub struct RvrCheckpointOpcodeBases {
     pub terminate: u32,
 }
 
-const _: () = assert!(size_of::<RvrCheckpointOpcodeBases>() == 24 * size_of::<u32>());
+const _: () = assert!(size_of::<PostflightOpcodeBases>() == 24 * size_of::<u32>());
 
-impl RvrCheckpointOpcodeBases {
+impl PostflightOpcodeBases {
     #[doc(hidden)]
     pub fn owns(self, opcode: u32) -> bool {
         let family =
@@ -172,7 +172,7 @@ const RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS: u32 = 2;
 #[doc(hidden)]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RvrCheckpointAccessSpan {
+pub struct PostflightAccessSpan {
     address_space: u32,
     count: u32,
     base_index: u8,
@@ -184,14 +184,14 @@ pub struct RvrCheckpointAccessSpan {
     value_index: u16,
 }
 
-const _: () = assert!(size_of::<RvrCheckpointAccessSpan>() == 16);
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, address_space) == 0);
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, count) == 4);
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, base_index) == 8);
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, value_source) == 13);
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, value_index) == 14);
+const _: () = assert!(size_of::<PostflightAccessSpan>() == 16);
+const _: () = assert!(std::mem::offset_of!(PostflightAccessSpan, address_space) == 0);
+const _: () = assert!(std::mem::offset_of!(PostflightAccessSpan, count) == 4);
+const _: () = assert!(std::mem::offset_of!(PostflightAccessSpan, base_index) == 8);
+const _: () = assert!(std::mem::offset_of!(PostflightAccessSpan, value_source) == 13);
+const _: () = assert!(std::mem::offset_of!(PostflightAccessSpan, value_index) == 14);
 
-impl RvrCheckpointAccessSpan {
+impl PostflightAccessSpan {
     pub const fn read_fixed(address_space: u32, base_register: u8, count: u32) -> Self {
         Self {
             address_space,
@@ -339,14 +339,14 @@ impl RvrCheckpointAccessSpan {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct RvrCheckpointEventCount {
+pub(crate) struct PostflightEventCount {
     pub(crate) memory: u32,
     pub(crate) field: u32,
 }
 
-const _: () = assert!(size_of::<RvrCheckpointEventCount>() == 2 * size_of::<u32>());
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointEventCount, memory) == 0);
-const _: () = assert!(std::mem::offset_of!(RvrCheckpointEventCount, field) == 4);
+const _: () = assert!(size_of::<PostflightEventCount>() == 2 * size_of::<u32>());
+const _: () = assert!(std::mem::offset_of!(PostflightEventCount, memory) == 0);
+const _: () = assert!(std::mem::offset_of!(PostflightEventCount, field) == 4);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -378,15 +378,15 @@ struct RvrCheckpointInstructionLayout {
 /// constants, and Deferral's field accumulator blocks.
 #[doc(hidden)]
 #[derive(Clone, Debug, Default)]
-pub struct RvrCheckpointAccessRegistry {
+pub struct PostflightAccessRegistry {
     dispatch: Vec<u32>,
     schedules: Vec<RvrCheckpointAccessSchedule>,
     instruction_layouts: Vec<RvrCheckpointInstructionLayout>,
-    spans: Vec<RvrCheckpointAccessSpan>,
+    spans: Vec<PostflightAccessSpan>,
     static_values: Vec<u64>,
 }
 
-impl RvrCheckpointAccessRegistry {
+impl PostflightAccessRegistry {
     /// Adds one fixed sequence of eight-byte write values to the program-owned
     /// replay data and returns the span that consumes it. This is used for
     /// setup instructions whose postimage depends only on VM configuration.
@@ -396,17 +396,17 @@ impl RvrCheckpointAccessRegistry {
         address_space: u32,
         base_register: u8,
         values: &[u64],
-    ) -> Result<RvrCheckpointAccessSpan, GpuRvrInputError> {
+    ) -> Result<PostflightAccessSpan, GpuPostflightError> {
         let count = u32::try_from(values.len()).map_err(|_| {
-            GpuRvrInputError::InvalidAccessSchedule("static write span is too large".to_string())
+            GpuPostflightError::InvalidAccessSchedule("static write span is too large".to_string())
         })?;
         if count == 0 {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(
+            return Err(GpuPostflightError::InvalidAccessSchedule(
                 "static write span must not be empty".to_string(),
             ));
         }
         let value_index = u16::try_from(self.static_values.len()).map_err(|_| {
-            GpuRvrInputError::InvalidAccessSchedule(
+            GpuPostflightError::InvalidAccessSchedule(
                 "static write table exceeds its u16 index domain".to_string(),
             )
         })?;
@@ -415,15 +415,15 @@ impl RvrCheckpointAccessRegistry {
             .checked_add(values.len())
             .filter(|&end| end <= usize::from(u16::MAX) + 1)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidAccessSchedule(
+                GpuPostflightError::InvalidAccessSchedule(
                     "static write table exceeds its u16 index domain".to_string(),
                 )
             })?;
         self.static_values.extend_from_slice(values);
-        Ok(RvrCheckpointAccessSpan {
+        Ok(PostflightAccessSpan {
             value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC,
             value_index,
-            ..RvrCheckpointAccessSpan::read_fixed(address_space, base_register, count)
+            ..PostflightAccessSpan::read_fixed(address_space, base_register, count)
         })
     }
 
@@ -436,8 +436,8 @@ impl RvrCheckpointAccessRegistry {
         zero_operand_mask: u32,
         register_as_operand: u8,
         memory_as_operand: u8,
-        spans: &[RvrCheckpointAccessSpan],
-    ) -> Result<(), GpuRvrInputError> {
+        spans: &[PostflightAccessSpan],
+    ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
             register_operands,
@@ -463,9 +463,9 @@ impl RvrCheckpointAccessRegistry {
         zero_operand_mask: u32,
         register_as_operand: u8,
         memory_as_operand: u8,
-        spans: &[RvrCheckpointAccessSpan],
+        spans: &[PostflightAccessSpan],
         write_operand: u8,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
             register_operands,
@@ -492,9 +492,9 @@ impl RvrCheckpointAccessRegistry {
         zero_operand_mask: u32,
         register_as_operand: u8,
         memory_as_operand: u8,
-        spans: &[RvrCheckpointAccessSpan],
+        spans: &[PostflightAccessSpan],
         write_operand: u8,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
             register_operands,
@@ -518,9 +518,9 @@ impl RvrCheckpointAccessRegistry {
         zero_operand_mask: u32,
         register_as_operand: u8,
         memory_as_operand: u8,
-        spans: &[RvrCheckpointAccessSpan],
+        spans: &[PostflightAccessSpan],
         branch_operand: u8,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
             register_operands,
@@ -543,12 +543,12 @@ impl RvrCheckpointAccessRegistry {
         zero_operand_mask: u32,
         register_as_operand: u8,
         memory_as_operand: u8,
-        spans: &[RvrCheckpointAccessSpan],
+        spans: &[PostflightAccessSpan],
         effect: u8,
         effect_operand: u8,
         register_write_source: u8,
         register_write_operand: u8,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         if register_operands.len() > 3
             || register_operands
                 .iter()
@@ -591,12 +591,12 @@ impl RvrCheckpointAccessRegistry {
                     || zero_operand_mask & (1 << register_write_operand) != 0))
             || spans.is_empty()
         {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(
+            return Err(GpuPostflightError::InvalidAccessSchedule(
                 "invalid operand layout".to_string(),
             ));
         }
         if opcode > RVR_CHECKPOINT_MAX_DENSE_OPCODE {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+            return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "opcode {opcode} exceeds the dense checkpoint dispatch bound"
             )));
         }
@@ -604,7 +604,7 @@ impl RvrCheckpointAccessRegistry {
             .ok()
             .and_then(|opcode| opcode.checked_add(1))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidAccessSchedule(
+                GpuPostflightError::InvalidAccessSchedule(
                     "opcode dispatch length overflow".to_string(),
                 )
             })?;
@@ -613,7 +613,7 @@ impl RvrCheckpointAccessRegistry {
                 .resize(dispatch_len, RVR_CHECKPOINT_NO_SCHEDULE);
         }
         if self.dispatch[opcode as usize] != RVR_CHECKPOINT_NO_SCHEDULE {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+            return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "duplicate checkpoint access schedule for opcode {opcode}"
             )));
         }
@@ -682,19 +682,19 @@ impl RvrCheckpointAccessRegistry {
                 || (span.value_source != RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
                     && span.value_index != 0)
             {
-                return Err(GpuRvrInputError::InvalidAccessSchedule(
+                return Err(GpuPostflightError::InvalidAccessSchedule(
                     "invalid access span".to_string(),
                 ));
             }
         }
         let first_span = u32::try_from(self.spans.len()).map_err(|_| {
-            GpuRvrInputError::InvalidAccessSchedule("too many access spans".to_string())
+            GpuPostflightError::InvalidAccessSchedule("too many access spans".to_string())
         })?;
         let num_spans = u32::try_from(spans.len()).map_err(|_| {
-            GpuRvrInputError::InvalidAccessSchedule("too many spans in schedule".to_string())
+            GpuPostflightError::InvalidAccessSchedule("too many spans in schedule".to_string())
         })?;
         let schedule_index = u32::try_from(self.schedules.len()).map_err(|_| {
-            GpuRvrInputError::InvalidAccessSchedule("too many access schedules".to_string())
+            GpuPostflightError::InvalidAccessSchedule("too many access schedules".to_string())
         })?;
         let mut operand_words = [0u8; 3];
         operand_words[..register_operands.len()].copy_from_slice(register_operands);
@@ -722,8 +722,8 @@ impl RvrCheckpointAccessRegistry {
     #[doc(hidden)]
     pub fn validate_no_native_collisions(
         &self,
-        opcodes: RvrCheckpointOpcodeBases,
-    ) -> Result<(), GpuRvrInputError> {
+        opcodes: PostflightOpcodeBases,
+    ) -> Result<(), GpuPostflightError> {
         if let Some(opcode) = self
             .dispatch
             .iter()
@@ -733,7 +733,7 @@ impl RvrCheckpointAccessRegistry {
                     .then_some(opcode)
             })
         {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+            return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "opcode {opcode} is owned by both native replay and an extension schedule"
             )));
         }
@@ -742,10 +742,10 @@ impl RvrCheckpointAccessRegistry {
 
     fn validate_instruction(
         &self,
-        instruction: &RvrReplayInstruction,
+        instruction: &PostflightInstruction,
         cell_pointer_max_bits: usize,
         deferral_num_cells: usize,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         let opcode = instruction.words[0] as usize;
         let Some(&schedule_index) = self.dispatch.get(opcode) else {
             return Ok(());
@@ -754,7 +754,7 @@ impl RvrCheckpointAccessRegistry {
             return Ok(());
         }
         let schedule = self.schedules.get(schedule_index as usize).ok_or_else(|| {
-            GpuRvrInputError::InvalidAccessSchedule(
+            GpuPostflightError::InvalidAccessSchedule(
                 "dispatch references a missing schedule".to_string(),
             )
         })?;
@@ -762,7 +762,7 @@ impl RvrCheckpointAccessRegistry {
             .instruction_layouts
             .get(schedule_index as usize)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidAccessSchedule(
+                GpuPostflightError::InvalidAccessSchedule(
                     "schedule is missing its host instruction layout".to_string(),
                 )
             })?;
@@ -772,12 +772,12 @@ impl RvrCheckpointAccessRegistry {
             .checked_add(schedule.num_spans)
             .map(|end| end as usize)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidAccessSchedule(
+                GpuPostflightError::InvalidAccessSchedule(
                     "schedule span range exceeds the u32 index domain".to_string(),
                 )
             })?;
         let schedule_spans = self.spans.get(span_start..span_end).ok_or_else(|| {
-            GpuRvrInputError::InvalidAccessSchedule(
+            GpuPostflightError::InvalidAccessSchedule(
                 "schedule references a missing access span".to_string(),
             )
         })?;
@@ -819,7 +819,7 @@ impl RvrCheckpointAccessRegistry {
                 && instruction.words[schedule.effect_operand as usize] >= BabyBear::ORDER_U32)
             || invalid_deferral_span
         {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+            return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "opcode {} has an instruction incompatible with its access schedule",
                 instruction.words[0]
             )));
@@ -851,20 +851,20 @@ fn rvr_memory_cell_kind(layout: MemoryCellType) -> u32 {
 }
 
 #[derive(Debug, Error)]
-pub enum GpuRvrInputError {
+pub enum GpuPostflightError {
     #[error("program opcode {0} does not fit the GPU replay ABI")]
     OpcodeTooLarge(usize),
-    #[error("invalid RVR GPU memory configuration: {0}")]
+    #[error("invalid GPU postflight memory configuration: {0}")]
     InvalidMemoryConfig(String),
-    #[error("invalid RVR checkpoint access schedule: {0}")]
+    #[error("invalid GPU postflight access schedule: {0}")]
     InvalidAccessSchedule(String),
     #[error("{0}")]
     InvalidTranscript(String),
-    #[error("RVR replay input belongs to another CUDA device or stream")]
+    #[error("GPU postflight input belongs to another CUDA device or stream")]
     ContextMismatch,
-    #[error("RVR replay transcript belongs to another uploaded program")]
+    #[error("GPU postflight transcript belongs to another uploaded program")]
     ProgramMismatch,
-    #[error("RVR replay plan belongs to another transcript segment")]
+    #[error("GPU postflight plan belongs to another transcript segment")]
     SegmentMismatch,
     #[error(transparent)]
     Cuda(#[from] CudaError),
@@ -885,9 +885,9 @@ pub(crate) type ConnectorBoundary = (ExecutionState<u32>, ExecutionState<u32>, O
 fn replay_boundary(
     transcript: &FullLogPreflightTranscript,
     endpoint: PreflightEndpoint,
-) -> Result<ConnectorBoundary, GpuRvrInputError> {
+) -> Result<ConnectorBoundary, GpuPostflightError> {
     let first = transcript.program_log.first().ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript(
+        GpuPostflightError::InvalidTranscript(
             "transcript must contain an initial event and final sentinel".to_string(),
         )
     })?;
@@ -900,8 +900,8 @@ fn replay_boundary(
 }
 
 /// Static program data uploaded once and shared by every replayed segment.
-pub struct GpuRvrProgram {
-    instructions: DeviceBuffer<RvrReplayInstruction>,
+pub struct GpuPostflightProgram {
+    instructions: DeviceBuffer<PostflightInstruction>,
     dense_program_rows: DeviceBuffer<u32>,
     num_program_rows: usize,
     #[cfg(feature = "test-utils")]
@@ -910,7 +910,7 @@ pub struct GpuRvrProgram {
     d_active_opcodes: DeviceBuffer<u32>,
     checkpoint_schedule_dispatch: DeviceBuffer<u32>,
     checkpoint_schedules: DeviceBuffer<RvrCheckpointAccessSchedule>,
-    checkpoint_spans: DeviceBuffer<RvrCheckpointAccessSpan>,
+    checkpoint_spans: DeviceBuffer<PostflightAccessSpan>,
     checkpoint_static_values: DeviceBuffer<u64>,
     checkpoint_schedule_opcodes: Vec<u32>,
     memory_address_spaces: DeviceBuffer<RvrMemoryAddressSpace>,
@@ -926,52 +926,52 @@ pub struct GpuRvrProgram {
     identity: Arc<()>,
 }
 
-impl GpuRvrProgram {
+impl GpuPostflightProgram {
     pub fn upload<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<Self, GpuRvrInputError> {
-        Self::upload_with_checkpoint_access_registry(
+    ) -> Result<Self, GpuPostflightError> {
+        Self::upload_with_postflight_access_registry(
             program,
             memory_config,
-            &RvrCheckpointAccessRegistry::default(),
+            &PostflightAccessRegistry::default(),
             device_ctx,
         )
     }
 
     #[doc(hidden)]
-    pub fn upload_with_checkpoint_access_registry<F: PrimeField32>(
+    pub fn upload_with_postflight_access_registry<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
-        registry: &RvrCheckpointAccessRegistry,
+        registry: &PostflightAccessRegistry,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         if F::ORDER_U32 != BabyBear::ORDER_U32 || size_of::<F>() != size_of::<BabyBear>() {
-            return Err(GpuRvrInputError::InvalidMemoryConfig(
-                "RVR GPU postflight currently requires the BabyBear proof field".to_string(),
+            return Err(GpuPostflightError::InvalidMemoryConfig(
+                "GPU postflight currently requires the BabyBear proof field".to_string(),
             ));
         }
         if memory_config.pointer_max_bits > u32::BITS as usize
             || memory_config.addr_space_height >= u32::BITS as usize
             || memory_config.timestamp_max_bits >= u32::BITS as usize
         {
-            return Err(GpuRvrInputError::InvalidMemoryConfig(
+            return Err(GpuPostflightError::InvalidMemoryConfig(
                 "address-space height, pointer width, and timestamp width must fit u32".to_string(),
             ));
         }
         let address_space_count = 1usize
             .checked_shl(memory_config.addr_space_height as u32)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidMemoryConfig("address-space count overflow".to_string())
+                GpuPostflightError::InvalidMemoryConfig("address-space count overflow".to_string())
             })?;
         let expected_address_spaces = (ADDR_SPACE_OFFSET as usize)
             .checked_add(address_space_count)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidMemoryConfig("address-space count overflow".to_string())
+                GpuPostflightError::InvalidMemoryConfig("address-space count overflow".to_string())
             })?;
         if memory_config.addr_spaces.len() != expected_address_spaces {
-            return Err(GpuRvrInputError::InvalidMemoryConfig(format!(
+            return Err(GpuPostflightError::InvalidMemoryConfig(format!(
                 "expected {expected_address_spaces} address-space layouts, found {}",
                 memory_config.addr_spaces.len()
             )));
@@ -989,7 +989,7 @@ impl GpuRvrProgram {
             .pointer_max_bits
             .checked_sub(BLOCK_FE_WIDTH.ilog2() as usize)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidMemoryConfig(
+                GpuPostflightError::InvalidMemoryConfig(
                     "pointer width is smaller than one memory block".to_string(),
                 )
             })?;
@@ -997,12 +997,12 @@ impl GpuRvrProgram {
             .addr_space_height
             .checked_add(block_pointer_bits)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidMemoryConfig(
+                GpuPostflightError::InvalidMemoryConfig(
                     "address-space and block-pointer label width overflow".to_string(),
                 )
             })?;
         if label_bits > u32::BITS as usize {
-            return Err(GpuRvrInputError::InvalidMemoryConfig(
+            return Err(GpuPostflightError::InvalidMemoryConfig(
                 "address-space and block-pointer label does not fit u32".to_string(),
             ));
         }
@@ -1011,7 +1011,7 @@ impl GpuRvrProgram {
             .iter()
             .map(|entry| match entry {
                 Some((instruction, _)) => instruction_to_replay(instruction),
-                None => Ok(RvrReplayInstruction {
+                None => Ok(PostflightInstruction {
                     words: [u32::MAX, 0, 0, 0, 0, 0, 0, 0],
                 }),
             })
@@ -1097,10 +1097,10 @@ impl GpuRvrProgram {
         &self,
         transcript: &FullLogPreflightTranscript,
         endpoint: PreflightEndpoint,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
-        let gpu = GpuRvrTranscript::upload(
+        let gpu = GpuPostflightTranscript::upload(
             transcript,
             self.address_space_height,
             self.cell_pointer_max_bits,
@@ -1109,7 +1109,7 @@ impl GpuRvrProgram {
             self.identity.clone(),
             segment_identity.clone(),
         )?;
-        let plan = GpuRvrReplayPlan::build(
+        let plan = GpuPostflightPlan::build(
             self,
             &gpu,
             endpoint,
@@ -1125,17 +1125,17 @@ impl GpuRvrProgram {
     /// chronology pass resolves them against the segment-start memory image.
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
-    pub fn expand_checkpoint_replay(
+    pub fn postflight(
         &self,
         execution: &PreflightExecution,
         expected_retired: u32,
         initial_registers: DeviceBufferView,
         initial_memory: DeviceBufferView,
         initial_memory_images: &[DeviceBufferView],
-        opcodes: RvrCheckpointOpcodeBases,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
+        opcodes: PostflightOpcodeBases,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         if execution.retired != expected_retired {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "preflight retired {} instructions, expected {expected_retired}",
                 execution.retired
             )));
@@ -1146,7 +1146,7 @@ impl GpuRvrProgram {
             .copied()
             .find(|&opcode| opcodes.owns(opcode))
         {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+            return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "opcode {opcode} is owned by both native replay and an extension schedule"
             )));
         }
@@ -1161,7 +1161,7 @@ impl GpuRvrProgram {
                 (1, None)
             }
             PreflightEndpoint::Suspended { .. } => {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "checkpoint suspended endpoint does not match its final boundary".to_string(),
                 ));
             }
@@ -1170,13 +1170,13 @@ impl GpuRvrProgram {
             || execution.to_state.pc != execution.state.pc()
             || execution.to_state.timestamp >= (1u32 << self.timestamp_max_bits)
         {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "preflight has an invalid boundary".to_string(),
             ));
         }
         let residual_cursor =
             u32::try_from(execution.transcript.residuals.len()).map_err(|_| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "checkpoint residual stream exceeds the u32 cursor domain".to_string(),
                 )
             })?;
@@ -1194,7 +1194,7 @@ impl GpuRvrProgram {
         let anchors = upload(&anchors, &self.device_ctx)?;
         let residuals = upload(&execution.transcript.residuals, &self.device_ctx)?;
         let error = [0u32].to_device_on(&self.device_ctx)?;
-        let event_counts = gpu_buffer::<RvrCheckpointEventCount>(anchors.len(), &self.device_ctx);
+        let event_counts = gpu_buffer::<PostflightEventCount>(anchors.len(), &self.device_ctx);
         event_counts.fill_zero_on(&self.device_ctx)?;
         let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS, DEFERRAL_AS];
         let count_span = tracing::info_span!("postflight_replay_count").entered();
@@ -1224,7 +1224,7 @@ impl GpuRvrProgram {
         }
         let count_error = error.to_host_on(&self.device_ctx)?[0];
         if count_error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "checkpoint GPU count replay rejected execution with code {count_error}"
             )));
         }
@@ -1233,23 +1233,23 @@ impl GpuRvrProgram {
         let mut total_fields = 0u32;
         let mut offsets = Vec::with_capacity(counts.len());
         for count in counts {
-            offsets.push(RvrCheckpointEventCount {
+            offsets.push(PostflightEventCount {
                 memory: total_memory,
                 field: total_fields,
             });
             total_memory = total_memory.checked_add(count.memory).ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "checkpoint replay memory-event count exceeds u32".to_string(),
                 )
             })?;
             total_fields = total_fields.checked_add(count.field).ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "checkpoint replay field-event count exceeds u32".to_string(),
                 )
             })?;
         }
         if total_memory >= (1u32 << 31) {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "checkpoint replay memory log exceeds packed predecessor indexes".to_string(),
             ));
         }
@@ -1258,14 +1258,15 @@ impl GpuRvrProgram {
             .ok()
             .and_then(|retired| retired.checked_add(1))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "checkpoint replay program-log length overflow".to_string(),
                 )
             })?;
         let program_log = gpu_buffer::<PreflightProgramEvent>(program_len, &self.device_ctx);
         let memory_log =
             gpu_buffer::<PreflightMemoryEvent>(total_memory as usize, &self.device_ctx);
-        let field_values = gpu_buffer::<RvrFieldBlock>(total_fields as usize, &self.device_ctx);
+        let field_values =
+            gpu_buffer::<PostflightFieldBlock>(total_fields as usize, &self.device_ctx);
         // One transient byte per event is enough to distinguish reads, full
         // writes, and partial block writes. The chronology pass consumes and
         // releases this before opcode trace generation.
@@ -1302,7 +1303,7 @@ impl GpuRvrProgram {
         }
         let emit_error = error.to_host_on(&self.device_ctx)?[0];
         if emit_error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "checkpoint GPU emit replay rejected execution with code {emit_error}"
             )));
         }
@@ -1330,7 +1331,7 @@ impl GpuRvrProgram {
         drop(write_masks);
 
         let segment_identity = Arc::new(());
-        let transcript = GpuRvrTranscript {
+        let transcript = GpuPostflightTranscript {
             program_log,
             memory_log,
             initial_write_log,
@@ -1346,7 +1347,7 @@ impl GpuRvrProgram {
         };
         let boundary = (execution.from_state, execution.to_state, exit_code);
         let plan = tracing::info_span!("postflight_program_index").in_scope(|| {
-            GpuRvrReplayPlan::build(
+            GpuPostflightPlan::build(
                 self,
                 &transcript,
                 execution.endpoint,
@@ -1366,12 +1367,20 @@ impl GpuRvrProgram {
         &self,
         transcript: &FullLogPreflightTranscript,
         endpoint: PreflightEndpoint,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan, Duration, Duration), GpuRvrInputError> {
+    ) -> Result<
+        (
+            GpuPostflightTranscript,
+            GpuPostflightPlan,
+            Duration,
+            Duration,
+        ),
+        GpuPostflightError,
+    > {
         let boundary = replay_boundary(transcript, endpoint)?;
         self.device_ctx.stream.synchronize()?;
         let started = Instant::now();
         let segment_identity = Arc::new(());
-        let transcript = GpuRvrTranscript::upload(
+        let transcript = GpuPostflightTranscript::upload(
             transcript,
             self.address_space_height,
             self.cell_pointer_max_bits,
@@ -1384,7 +1393,7 @@ impl GpuRvrProgram {
         let upload_time = started.elapsed();
 
         let started = Instant::now();
-        let plan = GpuRvrReplayPlan::build(
+        let plan = GpuPostflightPlan::build(
             self,
             &transcript,
             endpoint,
@@ -1398,20 +1407,20 @@ impl GpuRvrProgram {
 
     pub fn ensure_replay_inputs(
         &self,
-        transcript: &GpuRvrTranscript,
-        plan: &GpuRvrReplayPlan,
+        transcript: &GpuPostflightTranscript,
+        plan: &GpuPostflightPlan,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         ensure_same_context(&self.device_ctx, device_ctx)?;
         ensure_same_context(&transcript.device_ctx, device_ctx)?;
         ensure_same_context(&plan.device_ctx, device_ctx)?;
         if !Arc::ptr_eq(&self.identity, &transcript.program_identity)
             || !Arc::ptr_eq(&self.identity, &plan.program_identity)
         {
-            return Err(GpuRvrInputError::ProgramMismatch);
+            return Err(GpuPostflightError::ProgramMismatch);
         }
         if !Arc::ptr_eq(&transcript.segment_identity, &plan.segment_identity) {
-            return Err(GpuRvrInputError::SegmentMismatch);
+            return Err(GpuPostflightError::SegmentMismatch);
         }
         Ok(())
     }
@@ -1420,12 +1429,12 @@ impl GpuRvrProgram {
     #[doc(hidden)]
     pub fn cpu_memory_predecessors(
         transcript: &FullLogPreflightTranscript,
-    ) -> Result<Vec<u32>, GpuRvrInputError> {
+    ) -> Result<Vec<u32>, GpuPostflightError> {
         super::postflight::build_memory_predecessors(
             &transcript.memory_log,
             &transcript.initial_write_log,
         )
-        .map_err(|error| GpuRvrInputError::InvalidTranscript(error.to_string()))
+        .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))
     }
 
     #[cfg(feature = "test-utils")]
@@ -1440,10 +1449,10 @@ impl GpuRvrProgram {
             Vec<[u32; 2]>,
             std::collections::BTreeMap<u32, std::ops::Range<usize>>,
         ),
-        GpuRvrInputError,
+        GpuPostflightError,
     > {
         let replay = RvrReplayData::build(self.pc_base, &self.opcodes, transcript, endpoint)
-            .map_err(|error| GpuRvrInputError::InvalidTranscript(error.to_string()))?;
+            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         Ok((
             replay
                 .steps()
@@ -1461,7 +1470,7 @@ impl GpuRvrProgram {
     pub fn gpu_index_memory_bytes(
         &self,
         transcript: &FullLogPreflightTranscript,
-    ) -> Result<(usize, usize), GpuRvrInputError> {
+    ) -> Result<(usize, usize), GpuPostflightError> {
         let num_memory = transcript.memory_log.len();
         let num_entries = num_memory + transcript.initial_write_log.len();
         let num_steps = transcript.program_log.len().saturating_sub(1);
@@ -1529,20 +1538,20 @@ impl GpuRvrProgram {
 fn ensure_same_context(
     expected: &GpuDeviceCtx,
     actual: &GpuDeviceCtx,
-) -> Result<(), GpuRvrInputError> {
+) -> Result<(), GpuPostflightError> {
     if expected.device_id == actual.device_id && expected.stream == actual.stream {
         Ok(())
     } else {
-        Err(GpuRvrInputError::ContextMismatch)
+        Err(GpuPostflightError::ContextMismatch)
     }
 }
 
 fn instruction_to_replay<F: PrimeField32>(
     instruction: &Instruction<F>,
-) -> Result<RvrReplayInstruction, GpuRvrInputError> {
+) -> Result<PostflightInstruction, GpuPostflightError> {
     let opcode = u32::try_from(instruction.opcode.as_usize())
-        .map_err(|_| GpuRvrInputError::OpcodeTooLarge(instruction.opcode.as_usize()))?;
-    Ok(RvrReplayInstruction {
+        .map_err(|_| GpuPostflightError::OpcodeTooLarge(instruction.opcode.as_usize()))?;
+    Ok(PostflightInstruction {
         words: [
             opcode,
             instruction.a.as_canonical_u32(),
@@ -1573,7 +1582,7 @@ struct GpuMemoryIndex {
 fn build_gpu_memory_chronology(
     memory: &DeviceBuffer<PreflightMemoryEvent>,
     write_masks: &DeviceBuffer<u8>,
-    field_values: &DeviceBuffer<RvrFieldBlock>,
+    field_values: &DeviceBuffer<PostflightFieldBlock>,
     initial_memory: &[DeviceBufferView],
     address_space_height: u32,
     pointer_max_bits: u32,
@@ -1583,10 +1592,10 @@ fn build_gpu_memory_chronology(
 ) -> Result<
     (
         DeviceBuffer<PreflightInitialWrite>,
-        DeviceBuffer<RvrFieldBlock>,
+        DeviceBuffer<PostflightFieldBlock>,
         GpuMemoryIndex,
     ),
-    GpuRvrInputError,
+    GpuPostflightError,
 > {
     // Trusted count/emit expansion assigns the k-th FIELD32 event in memory-log
     // order reference k and allocates exactly one sidecar entry per such event.
@@ -1594,13 +1603,13 @@ fn build_gpu_memory_chronology(
     // resolution; chronology range-checks references but deliberately does not
     // allocate a claimed bitmap or perform another full-log scan to re-prove it.
     if memory.len() != write_masks.len() {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "checkpoint memory intent and mask lengths differ".to_string(),
         ));
     }
     if memory.is_empty() {
         if !field_values.is_empty() {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "field values exist without memory events".to_string(),
             ));
         }
@@ -1664,7 +1673,7 @@ fn build_gpu_memory_chronology(
     };
     let sort_error = error.to_host_on(device_ctx)?[0];
     if sort_error != 0 {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "checkpoint GPU memory chronology rejected intents with code {sort_error}"
         )));
     }
@@ -1679,12 +1688,12 @@ fn build_gpu_memory_chronology(
         || field_seed_base as usize > num_seeds
         || num_field_seeds > num_seeds - field_seed_base as usize
     {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "checkpoint GPU memory chronology produced invalid counts".to_string(),
         ));
     }
     let seeds = gpu_buffer::<PreflightInitialWrite>(num_seeds, device_ctx);
-    let field_seeds = gpu_buffer::<RvrFieldBlock>(num_field_seeds, device_ctx);
+    let field_seeds = gpu_buffer::<PostflightFieldBlock>(num_field_seeds, device_ctx);
     let touched_blocks = gpu_buffer::<TouchedBlock<BabyBear>>(num_touched, device_ctx);
     unsafe {
         rvr_postflight::memory_chronology_resolve(
@@ -1710,7 +1719,7 @@ fn build_gpu_memory_chronology(
     }
     let resolve_error = error.to_host_on(device_ctx)?[0];
     if resolve_error != 0 {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "checkpoint GPU memory chronology failed with code {resolve_error}"
         )));
     }
@@ -1733,9 +1742,9 @@ fn build_gpu_memory_index(
     address_spaces: DeviceBufferView,
     error: &DeviceBuffer<u32>,
     device_ctx: &GpuDeviceCtx,
-) -> Result<GpuMemoryIndex, GpuRvrInputError> {
+) -> Result<GpuMemoryIndex, GpuPostflightError> {
     let num_entries = memory.len().checked_add(seeds.len()).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript(
+        GpuPostflightError::InvalidTranscript(
             "memory index entry count exceeds the host index domain".to_string(),
         )
     })?;
@@ -1794,7 +1803,7 @@ fn build_gpu_memory_index(
     }
     let num_touched_blocks = num_touched_blocks_device.to_host_on(device_ctx)?[0] as usize;
     if num_touched_blocks > memory.len() {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "GPU touched-block count exceeds the memory log".to_string(),
         ));
     }
@@ -1844,12 +1853,12 @@ fn build_gpu_memory_index(
 /// Read it once after all replay kernels. A nonzero result is terminal for that
 /// proving attempt because threads from other rows may already have updated
 /// shared lookup histograms.
-pub struct GpuRvrTranscript {
+pub struct GpuPostflightTranscript {
     program_log: DeviceBuffer<PreflightProgramEvent>,
     memory_log: DeviceBuffer<PreflightMemoryEvent>,
     initial_write_log: DeviceBuffer<PreflightInitialWrite>,
-    field_values: DeviceBuffer<RvrFieldBlock>,
-    field_initial_values: DeviceBuffer<RvrFieldBlock>,
+    field_values: DeviceBuffer<PostflightFieldBlock>,
+    field_initial_values: DeviceBuffer<PostflightFieldBlock>,
     memory_predecessors: DeviceBuffer<u32>,
     touched_blocks: DeviceBuffer<TouchedBlock<BabyBear>>,
     num_touched_blocks: usize,
@@ -1859,7 +1868,7 @@ pub struct GpuRvrTranscript {
     segment_identity: Arc<()>,
 }
 
-impl GpuRvrTranscript {
+impl GpuPostflightTranscript {
     fn upload(
         transcript: &FullLogPreflightTranscript,
         address_space_height: u32,
@@ -1868,12 +1877,12 @@ impl GpuRvrTranscript {
         device_ctx: &GpuDeviceCtx,
         program_identity: Arc<()>,
         segment_identity: Arc<()>,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         let packed_index_limit = (1usize << 31) - 1;
         if transcript.memory_log.len() >= packed_index_limit
             || transcript.initial_write_log.len() >= packed_index_limit
         {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "memory or initial-write log is too large for packed predecessor indexes"
                     .to_string(),
             ));
@@ -2001,13 +2010,13 @@ impl GpuRvrTranscript {
 
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
-    pub fn field_values_host(&self) -> Result<Vec<RvrFieldBlock>, MemCopyError> {
+    pub fn field_values_host(&self) -> Result<Vec<PostflightFieldBlock>, MemCopyError> {
         self.field_values.to_host_on(&self.device_ctx)
     }
 
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
-    pub fn field_initial_values_host(&self) -> Result<Vec<RvrFieldBlock>, MemCopyError> {
+    pub fn field_initial_values_host(&self) -> Result<Vec<PostflightFieldBlock>, MemCopyError> {
         self.field_initial_values.to_host_on(&self.device_ctx)
     }
 
@@ -2025,7 +2034,7 @@ impl GpuRvrTranscript {
 }
 
 /// The opcode-partitioned replay work list, uploaded once per segment.
-pub struct GpuRvrReplayPlan {
+pub struct GpuPostflightPlan {
     steps: DeviceBuffer<RvrReplayStep>,
     program_frequencies: DeviceBuffer<u32>,
     opcode_ranges: std::collections::BTreeMap<u32, std::ops::Range<usize>>,
@@ -2037,24 +2046,24 @@ pub struct GpuRvrReplayPlan {
     segment_identity: Arc<()>,
 }
 
-impl GpuRvrReplayPlan {
+impl GpuPostflightPlan {
     fn build(
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
         endpoint: PreflightEndpoint,
         boundary: ConnectorBoundary,
         program_identity: Arc<()>,
         segment_identity: Arc<()>,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         let num_program_events = transcript.program_log.len();
         if num_program_events == 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "transcript must contain a final sentinel".to_string(),
             ));
         }
         let num_steps = num_program_events - 1;
         if num_steps >= u32::MAX as usize {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "program log has more than u32::MAX entries".to_string(),
             ));
         }
@@ -2109,7 +2118,7 @@ impl GpuRvrReplayPlan {
         let ranges = ranges.to_host_on(&program.device_ctx)?;
         let error = transcript.error.to_host_on(&program.device_ctx)?[0];
         if error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "GPU postflight rejected transcript with code {error}"
             )));
         }
@@ -2119,7 +2128,7 @@ impl GpuRvrReplayPlan {
             let start = range[0] as usize;
             let end = range[1] as usize;
             if start != covered || start > end || end > num_steps {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "GPU opcode ranges do not form a complete partition".to_string(),
                 ));
             }
@@ -2129,7 +2138,7 @@ impl GpuRvrReplayPlan {
             covered = end;
         }
         if covered != num_steps {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "GPU opcode ranges do not cover every execution step".to_string(),
             ));
         }
@@ -2270,19 +2279,19 @@ mod tests {
     fn gpu_chronology_with_fields(
         memory: &[PreflightMemoryEvent],
         write_masks: &[u8],
-        field_values: &[RvrFieldBlock],
+        field_values: &[PostflightFieldBlock],
         initial_memory: &[Vec<u8>],
         config: &MemoryConfig,
     ) -> Result<
         (
             Vec<PreflightMemoryEvent>,
             Vec<PreflightInitialWrite>,
-            Vec<RvrFieldBlock>,
-            Vec<RvrFieldBlock>,
+            Vec<PostflightFieldBlock>,
+            Vec<PostflightFieldBlock>,
             Vec<u32>,
             Vec<TouchedBlock<BabyBear>>,
         ),
-        GpuRvrInputError,
+        GpuPostflightError,
     > {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let memory = upload(memory, &device_ctx).unwrap();
@@ -2431,10 +2440,10 @@ mod tests {
         )
     }
 
-    fn gpu_program(opcodes: &[u32], device_ctx: &GpuDeviceCtx) -> GpuRvrProgram {
+    fn gpu_program(opcodes: &[u32], device_ctx: &GpuDeviceCtx) -> GpuPostflightProgram {
         let instructions = opcodes
             .iter()
-            .map(|&opcode| RvrReplayInstruction {
+            .map(|&opcode| PostflightInstruction {
                 words: [opcode, 0, 0, 0, 0, 0, 0, 0],
             })
             .collect::<Vec<_>>();
@@ -2465,7 +2474,7 @@ mod tests {
                 _padding: 0,
             })
             .collect::<Vec<_>>();
-        GpuRvrProgram {
+        GpuPostflightProgram {
             instructions: upload(&instructions, device_ctx).unwrap(),
             dense_program_rows: upload(&dense_program_rows, device_ctx).unwrap(),
             num_program_rows: next_program_row as usize,
@@ -2490,13 +2499,13 @@ mod tests {
     }
 
     fn gpu_plan(
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         transcript: &FullLogPreflightTranscript,
         endpoint: PreflightEndpoint,
-    ) -> Result<GpuRvrReplayPlan, GpuRvrInputError> {
+    ) -> Result<GpuPostflightPlan, GpuPostflightError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
-        let gpu_transcript = GpuRvrTranscript::upload(
+        let gpu_transcript = GpuPostflightTranscript::upload(
             transcript,
             program.address_space_height,
             program.cell_pointer_max_bits,
@@ -2505,7 +2514,7 @@ mod tests {
             program.identity.clone(),
             segment_identity.clone(),
         )?;
-        GpuRvrReplayPlan::build(
+        GpuPostflightPlan::build(
             program,
             &gpu_transcript,
             endpoint,
@@ -2772,18 +2781,18 @@ mod tests {
             field_event(6, 4, true, 3),
             field_event(7, 4, false, 4),
         ];
-        let first_write = RvrFieldBlock {
+        let first_write = PostflightFieldBlock {
             values: [31, 32, 33, 34],
         };
-        let second_write = RvrFieldBlock {
+        let second_write = PostflightFieldBlock {
             values: [41, 42, 43, 44],
         };
         let field_values = [
-            RvrFieldBlock::default(),
+            PostflightFieldBlock::default(),
             first_write,
-            RvrFieldBlock::default(),
+            PostflightFieldBlock::default(),
             second_write,
-            RvrFieldBlock::default(),
+            PostflightFieldBlock::default(),
         ];
         let (resolved, seeds, resolved_fields, field_seeds, predecessors, touched) =
             gpu_chronology_with_fields(
@@ -2811,7 +2820,7 @@ mod tests {
         assert_eq!(seeds[1].initial_value, [0, 0, 0, 0]);
         assert_eq!(
             field_seeds,
-            [RvrFieldBlock {
+            [PostflightFieldBlock {
                 values: [21, 22, 23, 24]
             }]
         );
@@ -2880,7 +2889,7 @@ mod tests {
     fn gpu_chronology_rejects_partial_or_noncanonical_field_values() {
         let (config, initial_memory) = mixed_chronology_fixture();
         let write = field_event(1, 0, true, 0);
-        let valid = [RvrFieldBlock {
+        let valid = [PostflightFieldBlock {
             values: [1, 2, 3, 4],
         }];
 
@@ -2889,7 +2898,7 @@ mod tests {
                 .is_err()
         );
 
-        let invalid = [RvrFieldBlock {
+        let invalid = [PostflightFieldBlock {
             values: [BabyBear::ORDER_U32, 2, 3, 4],
         }];
         assert!(
@@ -2978,13 +2987,13 @@ mod tests {
         let program = Program::<BabyBear>::from_instructions(&[]);
         let assert_invalid = |config: &MemoryConfig| {
             assert!(matches!(
-                GpuRvrProgram::upload(&program, config, &device_ctx),
-                Err(GpuRvrInputError::InvalidMemoryConfig(_))
+                GpuPostflightProgram::upload(&program, config, &device_ctx),
+                Err(GpuPostflightError::InvalidMemoryConfig(_))
             ));
         };
 
         let ordinary = MemoryConfig::default();
-        let uploaded = GpuRvrProgram::upload(&program, &ordinary, &device_ctx).unwrap();
+        let uploaded = GpuPostflightProgram::upload(&program, &ordinary, &device_ctx).unwrap();
         assert_eq!(
             uploaded.byte_pointer_max_bits,
             to_byte_ptr_bits(ordinary.pointer_max_bits).min(u32::BITS as usize) as u32
@@ -3026,7 +3035,7 @@ mod tests {
         maximum
             .addr_spaces
             .truncate(ADDR_SPACE_OFFSET as usize + (1 << maximum.addr_space_height));
-        GpuRvrProgram::upload(&program, &maximum, &device_ctx).unwrap();
+        GpuPostflightProgram::upload(&program, &maximum, &device_ctx).unwrap();
     }
 
     #[test]

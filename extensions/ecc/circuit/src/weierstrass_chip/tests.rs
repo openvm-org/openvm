@@ -34,7 +34,7 @@ use {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{
-        cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
+        cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
     },
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
@@ -762,7 +762,7 @@ mod ec_addne_tests {
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_rvr_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn run_preflight_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
         modulus: BigUint,
         is_setup: bool,
     ) {
@@ -846,7 +846,7 @@ mod ec_addne_tests {
             &input_bytes,
             &output_bytes,
         );
-        let gpu_program = GpuRvrProgram::upload(
+        let gpu_program = GpuPostflightProgram::upload(
             &program,
             &openvm_circuit::arch::MemoryConfig::default(),
             &device_ctx,
@@ -857,7 +857,7 @@ mod ec_addne_tests {
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
         assert_eq!(
             legacy_ctx.common_main.height(),
@@ -893,7 +893,7 @@ mod ec_addne_tests {
             .unwrap();
         assert!(harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &corrupt_transcript, &corrupt_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &corrupt_transcript, &corrupt_plan)
             .is_err());
         assert_eq!(replay_counts, gpu_range_counts(&tester));
 
@@ -907,10 +907,16 @@ mod ec_addne_tests {
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
-    fn weierstrass_add_rvr_rows_counts_setup_and_corruption_32_48() {
+    fn weierstrass_add_preflight_rows_counts_setup_and_corruption_32_48() {
         for is_setup in [false, true] {
-            run_rvr_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(secp256k1_coord_prime(), is_setup);
-            run_rvr_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(BLS12_381_MODULUS.clone(), is_setup);
+            run_preflight_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(
+                secp256k1_coord_prime(),
+                is_setup,
+            );
+            run_preflight_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(
+                BLS12_381_MODULUS.clone(),
+                is_setup,
+            );
         }
     }
 
@@ -994,7 +1000,7 @@ mod ec_addne_tests {
             second_transcript,
         );
         let device_ctx = tester.range_checker().device_ctx.clone();
-        let gpu_program = GpuRvrProgram::upload(
+        let gpu_program = GpuPostflightProgram::upload(
             &program,
             &openvm_circuit::arch::MemoryConfig::default(),
             &device_ctx,
@@ -1007,7 +1013,7 @@ mod ec_addne_tests {
             crate::SECP256K1_CONFIG.clone(),
             crate::SECP256K1_CONFIG.clone(),
         ]);
-        let mut incomplete = crate::WeierstrassRvrGpuTracegen::new(
+        let mut incomplete = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
             &gpu_program,
             &gpu_transcript,
@@ -1031,7 +1037,7 @@ mod ec_addne_tests {
             .to_string()
             .contains(&(second_base as u32).to_string()));
 
-        let mut complete = crate::WeierstrassRvrGpuTracegen::new(
+        let mut complete = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
             &gpu_program,
             &gpu_transcript,
@@ -1110,7 +1116,7 @@ mod ec_addne_tests {
         let cached_program = poisoned_vm.commit_program_on_device(&program);
         poisoned_vm.load_program(cached_program);
         poisoned_vm.transport_init_memory_to_device(&state.memory);
-        let poisoned_gpu_program = GpuRvrProgram::upload(
+        let poisoned_gpu_program = GpuPostflightProgram::upload(
             &program,
             &incomplete_config.modular.system.memory_config,
             &poisoned_vm.engine.device().device_ctx,
@@ -1119,7 +1125,7 @@ mod ec_addne_tests {
         let (poisoned_transcript, poisoned_plan) = poisoned_gpu_program
             .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
-        let late_coverage_error = crate::WeierstrassRvrGpuTracegen::new(
+        let late_coverage_error = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
             &poisoned_gpu_program,
             &poisoned_transcript,
@@ -1131,7 +1137,7 @@ mod ec_addne_tests {
         assert!(late_coverage_error
             .to_string()
             .contains(&(second_base as u32).to_string()));
-        let retry_error = crate::WeierstrassRvrGpuTracegen::new(
+        let retry_error = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
             &poisoned_gpu_program,
             &poisoned_transcript,
@@ -1139,7 +1145,7 @@ mod ec_addne_tests {
         )
         .generate_proving_ctx(&mut poisoned_vm, &incomplete_config.modular.modular, None)
         .err()
-        .expect("a failed RVR tracegen session must poison retries");
+        .expect("a failed preflight tracegen session must poison retries");
         assert!(retry_error.to_string().contains("poisoned"));
 
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
@@ -1151,7 +1157,7 @@ mod ec_addne_tests {
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
-        let vm_gpu_program = GpuRvrProgram::upload(
+        let vm_gpu_program = GpuPostflightProgram::upload(
             &program,
             &vm_config.modular.system.memory_config,
             &vm.engine.device().device_ctx,
@@ -1160,7 +1166,7 @@ mod ec_addne_tests {
         let (vm_transcript, vm_plan) = vm_gpu_program
             .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
-        let proving_ctx = crate::WeierstrassRvrGpuTracegen::new(
+        let proving_ctx = crate::WeierstrassPreflightGpuTracegen::new(
             &vm_config.weierstrass,
             &vm_gpu_program,
             &vm_transcript,
@@ -1179,14 +1185,14 @@ mod ec_addne_tests {
         let (retry_transcript, retry_plan) = vm_gpu_program
             .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
-        let retry_ctx = crate::WeierstrassRvrGpuTracegen::new(
+        let retry_ctx = crate::WeierstrassPreflightGpuTracegen::new(
             &vm_config.weierstrass,
             &vm_gpu_program,
             &retry_transcript,
             &retry_plan,
         )
         .generate_proving_ctx(&mut vm, &vm_config.modular.modular, None)
-        .expect("successful outer coordination must permit another RVR tracegen session");
+        .expect("successful outer coordination must permit another preflight tracegen session");
         drop(retry_ctx);
     }
 
@@ -1693,7 +1699,7 @@ mod ec_double_tests {
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_rvr_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn run_preflight_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize>(
         modulus: BigUint,
         a: BigUint,
         is_setup: bool,
@@ -1773,7 +1779,7 @@ mod ec_double_tests {
             &input_bytes,
             &output_bytes,
         );
-        let gpu_program = GpuRvrProgram::upload(
+        let gpu_program = GpuPostflightProgram::upload(
             &program,
             &openvm_circuit::arch::MemoryConfig::default(),
             &device_ctx,
@@ -1784,7 +1790,7 @@ mod ec_double_tests {
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
         assert_eq!(
             legacy_ctx.common_main.height(),
@@ -1820,7 +1826,7 @@ mod ec_double_tests {
             .unwrap();
         assert!(harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &corrupt_transcript, &corrupt_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &corrupt_transcript, &corrupt_plan)
             .is_err());
         assert_eq!(replay_counts, gpu_range_counts(&tester));
 
@@ -1834,14 +1840,14 @@ mod ec_double_tests {
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
-    fn weierstrass_double_rvr_rows_counts_setup_and_corruption_32_48() {
+    fn weierstrass_double_preflight_rows_counts_setup_and_corruption_32_48() {
         for is_setup in [false, true] {
-            run_rvr_ec_double::<ECC_BLOCKS_32, NUM_LIMBS_32>(
+            run_preflight_ec_double::<ECC_BLOCKS_32, NUM_LIMBS_32>(
                 secp256k1_coord_prime(),
                 BigUint::zero(),
                 is_setup,
             );
-            run_rvr_ec_double::<ECC_BLOCKS_48, NUM_LIMBS_48>(
+            run_preflight_ec_double::<ECC_BLOCKS_48, NUM_LIMBS_48>(
                 BLS12_381_MODULUS.clone(),
                 BigUint::zero(),
                 is_setup,

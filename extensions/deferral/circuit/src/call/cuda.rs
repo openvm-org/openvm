@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_deferral_transpiler::DeferralOpcode,
     openvm_instructions::{
@@ -43,13 +43,13 @@ pub struct DeferralCallChipGpu {
 
 #[cfg(feature = "rvr")]
 impl DeferralCallChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
         max_trace_height: usize,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let step_range = replay_plan.opcode_range(DeferralOpcode::CALL.global_opcode());
@@ -60,12 +60,12 @@ impl DeferralCallChipGpu {
             .len()
             .checked_next_power_of_two()
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "Deferral CALL trace height overflow".to_string(),
                 )
             })?;
         if trace_height > max_trace_height {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "Deferral CALL padded trace height {trace_height} exceeds segment limit {max_trace_height}"
             )));
         }
@@ -75,12 +75,12 @@ impl DeferralCallChipGpu {
             .checked_mul(trace_width)
             .and_then(|elements| elements.checked_mul(size_of::<F>()))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "Deferral CALL trace allocation overflow".to_string(),
                 )
             })?;
         let poseidon_records = step_range.len().checked_mul(2).ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "Deferral CALL Poseidon producer allocation overflow".to_string(),
             )
         })?;
@@ -124,7 +124,7 @@ impl DeferralCallChipGpu {
         transcript.synchronize()?;
         let replay_error = transcript.error_code()?;
         if replay_error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "Deferral CALL tracegen rejected replay with code {replay_error}"
             )));
         }

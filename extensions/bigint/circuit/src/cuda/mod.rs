@@ -28,7 +28,7 @@ use {
         Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
     },
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -481,9 +481,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
 
 #[cfg(feature = "rvr")]
 fn int256_family_range<const N: usize>(
-    replay_plan: &GpuRvrReplayPlan,
+    replay_plan: &GpuPostflightPlan,
     opcodes: [openvm_instructions::VmOpcode; N],
-) -> Result<std::ops::Range<usize>, GpuRvrInputError> {
+) -> Result<std::ops::Range<usize>, GpuPostflightError> {
     let ranges = opcodes.map(|opcode| replay_plan.opcode_range(opcode));
     let Some(start) = ranges
         .iter()
@@ -501,7 +501,7 @@ fn int256_family_range<const N: usize>(
         .unwrap();
     let count = ranges.iter().map(std::ops::Range::len).sum::<usize>();
     if end - start != count {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "Int256 opcode ranges are not contiguous".to_string(),
         ));
     }
@@ -528,12 +528,12 @@ macro_rules! int256_replay_common_args {
 
 #[cfg(feature = "rvr")]
 impl AddSub256ChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let range = int256_family_range(
@@ -585,12 +585,12 @@ impl AddSub256ChipGpu {
 
 #[cfg(feature = "rvr")]
 impl BitwiseLogic256ChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let range = int256_family_range(
@@ -646,12 +646,12 @@ impl BitwiseLogic256ChipGpu {
 macro_rules! impl_int256_u16_replay {
     ($chip:ty, $width:expr, $opcodes:expr, $base:expr, $kind:expr) => {
         impl $chip {
-            pub fn generate_proving_ctx_from_rvr(
+            pub fn generate_proving_ctx_from_postflight(
                 &self,
-                program: &GpuRvrProgram,
-                transcript: &GpuRvrTranscript,
-                replay_plan: &GpuRvrReplayPlan,
-            ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+                program: &GpuPostflightProgram,
+                transcript: &GpuPostflightTranscript,
+                replay_plan: &GpuPostflightPlan,
+            ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
                 let device_ctx = &self.range_checker.device_ctx;
                 program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
                 let range = int256_family_range(replay_plan, $opcodes)?;
@@ -773,12 +773,12 @@ impl_int256_u16_replay!(
 
 #[cfg(feature = "rvr")]
 impl Multiplication256ChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let range = int256_family_range(

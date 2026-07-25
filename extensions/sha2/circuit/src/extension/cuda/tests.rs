@@ -1,7 +1,7 @@
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::{GpuRvrProgram, RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
+            cuda::{GpuPostflightProgram, PostflightAccessRegistry, PostflightAccessSpan},
             FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
@@ -15,7 +15,7 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, SystemOpcode,
 };
-use openvm_riscv_circuit::Rv64ImRvrGpuTracegen;
+use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::StarkEngine;
@@ -25,7 +25,7 @@ use rvr_state::{
 };
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
-use super::{Sha2Rv64GpuBuilder, Sha2RvrGpuTracegen};
+use super::{Sha2PreflightGpuTracegen, Sha2Rv64GpuBuilder};
 use crate::Sha2Rv64Config;
 
 type F = BabyBear;
@@ -254,13 +254,13 @@ fn fixture(
 #[test]
 fn sha_checkpoint_registry_rejects_native_opcode_collision() {
     let native_opcode = BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32;
-    let span = RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 1);
-    let mut registry = RvrCheckpointAccessRegistry::default();
+    let span = PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 1);
+    let mut registry = PostflightAccessRegistry::default();
     registry
         .register(native_opcode, &[1], 0, 4, 5, &[span])
         .unwrap();
     let error = registry
-        .validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())
+        .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())
         .unwrap_err();
     assert!(error.to_string().contains("both native"), "{error}");
 }
@@ -286,20 +286,16 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
         .unwrap();
     assert_eq!(execution.to_state.timestamp, 57);
     assert_eq!(execution.transcript.residuals.len(), 12);
-    let gpu_program = Sha2RvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = Sha2PreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (gpu_transcript, replay_plan) = Sha2RvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
-    let tracegen = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan);
+    let (gpu_transcript, replay_plan) =
+        Sha2PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
+    let tracegen = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan);
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(gpu_transcript);
@@ -325,7 +321,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
@@ -334,13 +330,13 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
     let (gpu_corrupt, corrupt_plan) = gpu_program
         .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
         .unwrap();
-    let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
+    let error = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .generate_proving_ctx(&mut vm)
         .err()
         .expect("corrupt SHA register event must fail closed");
     assert!(error.to_string().contains("code 901"), "{error}");
 
-    let retry = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
+    let retry = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .generate_proving_ctx(&mut vm)
         .err()
         .expect("a VM with partially updated lookup counts must reject retry");
@@ -379,7 +375,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
-        let gpu_program = GpuRvrProgram::upload(
+        let gpu_program = GpuPostflightProgram::upload(
             &program,
             &config.system.memory_config,
             &vm.engine.device().device_ctx,
@@ -388,7 +384,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         let (gpu_corrupt, corrupt_plan) = gpu_program
             .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
             .unwrap_or_else(|error| panic!("{variant}: {error}"));
-        let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
+        let error = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
             .generate_proving_ctx(&mut vm)
             .err()
             .unwrap_or_else(|| panic!("{variant} corrupt output must fail closed"));
@@ -404,7 +400,7 @@ fn sha_coordinator_requires_both_producers_per_executed_opcode() {
         ..Default::default()
     };
     let engine = test_gpu_engine();
-    let gpu_program = GpuRvrProgram::upload(
+    let gpu_program = GpuPostflightProgram::upload(
         &program,
         &config.system.memory_config,
         &engine.device().device_ctx,
@@ -413,7 +409,7 @@ fn sha_coordinator_requires_both_producers_per_executed_opcode() {
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
-    let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan)
+    let error = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan)
         .finish()
         .expect_err("unvisited SHA producers must fail closed");
     let message = error.to_string();

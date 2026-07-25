@@ -28,7 +28,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
                 PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
@@ -936,7 +936,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
+fn test_cuda_shift_w_logical_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let instruction = |opcode: ShiftWOpcode, rd: usize, rs1: usize, rs2: usize| {
         Instruction::<F>::from_usize(
@@ -1040,7 +1040,7 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -1058,7 +1058,7 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
     );
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
@@ -1087,7 +1087,7 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 168);
 
@@ -1119,7 +1119,7 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     predecessor_corrupt_chip
-        .generate_proving_ctx_from_rvr(
+        .generate_proving_ctx_from_postflight(
             &d_program,
             &d_predecessor_corrupt,
             &d_predecessor_corrupt_plan,
@@ -1131,7 +1131,8 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
     let mut x0_instructions = instructions;
     x0_instructions[0] = instruction(SLLW, 0, 1, 2);
     let x0_program = Program::from_instructions(&x0_instructions);
-    let d_x0_program = GpuRvrProgram::upload(&x0_program, &memory_config, device_ctx).unwrap();
+    let d_x0_program =
+        GpuPostflightProgram::upload(&x0_program, &memory_config, device_ctx).unwrap();
     let (d_x0, d_x0_plan) = d_x0_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -1143,7 +1144,7 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     x0_chip
-        .generate_proving_ctx_from_rvr(&d_x0_program, &d_x0, &d_x0_plan)
+        .generate_proving_ctx_from_postflight(&d_x0_program, &d_x0, &d_x0_plan)
         .unwrap();
     assert_eq!(d_x0.error_code().unwrap(), 164);
 
@@ -1190,7 +1191,7 @@ fn test_cuda_shift_w_logical_tracegen_from_rvr_transcript() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
+fn test_cuda_shift_w_right_arithmetic_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let instruction = |rd: usize, rs1: usize, rs2: usize| {
         Instruction::<F>::from_usize(
@@ -1306,7 +1307,7 @@ fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -1318,7 +1319,7 @@ fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
     );
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
@@ -1347,7 +1348,7 @@ fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 178);
 
@@ -1379,7 +1380,7 @@ fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     predecessor_corrupt_chip
-        .generate_proving_ctx_from_rvr(
+        .generate_proving_ctx_from_postflight(
             &d_program,
             &d_predecessor_corrupt,
             &d_predecessor_corrupt_plan,
@@ -1391,7 +1392,8 @@ fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
     let mut x0_instructions = instructions;
     x0_instructions[0] = instruction(0, 1, 2);
     let x0_program = Program::from_instructions(&x0_instructions);
-    let d_x0_program = GpuRvrProgram::upload(&x0_program, &memory_config, device_ctx).unwrap();
+    let d_x0_program =
+        GpuPostflightProgram::upload(&x0_program, &memory_config, device_ctx).unwrap();
     let (d_x0, d_x0_plan) = d_x0_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -1403,7 +1405,7 @@ fn test_cuda_shift_w_right_arithmetic_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     x0_chip
-        .generate_proving_ctx_from_rvr(&d_x0_program, &d_x0, &d_x0_plan)
+        .generate_proving_ctx_from_postflight(&d_x0_program, &d_x0, &d_x0_plan)
         .unwrap();
     assert_eq!(d_x0.error_code().unwrap(), 174);
 

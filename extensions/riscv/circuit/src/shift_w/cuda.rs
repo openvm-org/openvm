@@ -13,7 +13,7 @@ use {
         replay_tracegen_right_arithmetic as rv64_shift_w_right_arithmetic_replay_tracegen,
     },
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
     openvm_riscv_transpiler::ShiftWOpcode,
@@ -46,12 +46,12 @@ pub struct Rv64ShiftWRightArithmeticChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftWLogicalChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let sllw_range = replay_plan.opcode_range(ShiftWOpcode::SLLW.global_opcode());
@@ -60,7 +60,7 @@ impl Rv64ShiftWLogicalChipGpu {
             .len()
             .checked_add(srlw_range.len())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "word-logical-shift-register replay row count overflow".to_string(),
                 )
             })?;
@@ -102,12 +102,12 @@ impl Rv64ShiftWLogicalChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftWRightArithmeticChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let range = replay_plan.opcode_range(ShiftWOpcode::SRAW.global_opcode());

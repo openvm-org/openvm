@@ -34,7 +34,7 @@ pub mod deferral;
 use deferral::DeferralConfig;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-mod rvr_cuda;
+mod preflight;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {

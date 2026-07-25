@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_cuda_common::copy::MemCopyD2H,
     openvm_instructions::{
@@ -44,12 +44,12 @@ pub struct OffsetInfo {
 
 #[cfg(feature = "rvr")]
 impl Rv64HintStoreChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let stored_range = replay_plan.opcode_range(HINT_STORED.global_opcode());
@@ -60,7 +60,7 @@ impl Rv64HintStoreChipGpu {
             stored_range
         } else {
             if stored_range.end != buffer_range.start {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "hint-store opcode ranges are not contiguous".to_string(),
                 ));
             }
@@ -100,7 +100,7 @@ impl Rv64HintStoreChipGpu {
         let counts = d_counts.to_host_on(device_ctx)?;
         let error = transcript.error_code()?;
         if error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "hint-store replay validation failed with code {error}"
             )));
         }
@@ -114,7 +114,7 @@ impl Rv64HintStoreChipGpu {
                 .unwrap()
                 .checked_add(count)
                 .ok_or_else(|| {
-                    GpuRvrInputError::InvalidTranscript(
+                    GpuPostflightError::InvalidTranscript(
                         "hint-store replay row count exceeds u32".to_string(),
                     )
                 })?;

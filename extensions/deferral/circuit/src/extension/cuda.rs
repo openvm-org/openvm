@@ -24,8 +24,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use {
     openvm_circuit::arch::{
         rvr::cuda::{
-            GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-            RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+            PostflightAccessRegistry, PostflightAccessSpan,
         },
         rvr::PreflightExecution,
         GenerationError, MemoryConfig, VirtualMachine, MEMORY_BLOCK_BYTES,
@@ -33,7 +33,7 @@ use {
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_deferral_transpiler::DeferralOpcode,
     openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
-    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
 };
@@ -53,16 +53,16 @@ pub struct DeferralGpuProverExt;
 /// CALL expands its typed AS4 chronology. OUTPUT consumes its dynamic write
 /// count and postimages directly from the checkpoint residual stream.
 #[cfg(feature = "rvr")]
-pub struct DeferralRvrGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
+pub struct DeferralPreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
     max_trace_height: usize,
-    coverage: DeferralRvrCoverage,
+    coverage: DeferralPreflightCoverage,
 }
 
 #[cfg(feature = "rvr")]
-struct DeferralRvrCoverage {
+struct DeferralPreflightCoverage {
     pending_output: bool,
     pending_call: bool,
     pending_poseidon2: bool,
@@ -70,7 +70,7 @@ struct DeferralRvrCoverage {
 }
 
 #[cfg(feature = "rvr")]
-impl DeferralRvrCoverage {
+impl DeferralPreflightCoverage {
     fn new() -> Self {
         Self {
             pending_output: true,
@@ -80,16 +80,16 @@ impl DeferralRvrCoverage {
         }
     }
 
-    fn claim(pending: &mut bool, name: &str) -> Result<(), GpuRvrInputError> {
+    fn claim(pending: &mut bool, name: &str) -> Result<(), GpuPostflightError> {
         if !std::mem::replace(pending, false) {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "Deferral RVR GPU tracegen visited duplicate {name} producer"
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "Deferral preflight GPU tracegen visited duplicate {name} producer"
             )));
         }
         Ok(())
     }
 
-    fn finish(self) -> Result<(), GpuRvrInputError> {
+    fn finish(self) -> Result<(), GpuPostflightError> {
         let mut missing = Vec::new();
         if self.pending_output {
             missing.push("Output");
@@ -106,15 +106,15 @@ impl DeferralRvrCoverage {
         if missing.is_empty() {
             Ok(())
         } else {
-            Err(GpuRvrInputError::InvalidTranscript(format!(
-                "Deferral RVR GPU tracegen did not visit producers {missing:?}"
+            Err(GpuPostflightError::InvalidTranscript(format!(
+                "Deferral preflight GPU tracegen did not visit producers {missing:?}"
             )))
         }
     }
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> DeferralRvrGpuTracegen<'a> {
+impl<'a> DeferralPreflightGpuTracegen<'a> {
     #[doc(hidden)]
     pub fn extension_opcodes() -> [u32; 2] {
         [
@@ -124,9 +124,9 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
-    pub fn register_checkpoint_access_schedules(
-        registry: &mut RvrCheckpointAccessRegistry,
-    ) -> Result<(), GpuRvrInputError> {
+    pub fn register_postflight_access_schedules(
+        registry: &mut PostflightAccessRegistry,
+    ) -> Result<(), GpuPostflightError> {
         registry.register(
             DeferralOpcode::CALL.global_opcode().as_usize() as u32,
             // CALL first reads the output and input heap pointers from rd/rs.
@@ -135,12 +135,12 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
             4,
             5,
             &[
-                RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
-                RvrCheckpointAccessSpan::read_deferral_input_accumulator(3),
-                RvrCheckpointAccessSpan::read_deferral_output_accumulator(3),
-                RvrCheckpointAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
-                RvrCheckpointAccessSpan::write_deferral_input_accumulator(3),
-                RvrCheckpointAccessSpan::write_deferral_output_accumulator(3),
+                PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+                PostflightAccessSpan::read_deferral_input_accumulator(3),
+                PostflightAccessSpan::read_deferral_output_accumulator(3),
+                PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
+                PostflightAccessSpan::write_deferral_input_accumulator(3),
+                PostflightAccessSpan::write_deferral_output_accumulator(3),
             ],
         )?;
         registry.register(
@@ -150,8 +150,8 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
             4,
             5,
             &[
-                RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
-                RvrCheckpointAccessSpan::write_count_from_residual_from_residuals(
+                PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
+                PostflightAccessSpan::write_count_from_residual_from_residuals(
                     RV64_MEMORY_AS,
                     0,
                     u32::MAX / MEMORY_BLOCK_BYTES as u32,
@@ -160,15 +160,16 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
         )
     }
 
-    pub fn upload_checkpoint_program<T: PrimeField32>(
+    pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
-        let mut registry = RvrCheckpointAccessRegistry::default();
-        Self::register_checkpoint_access_schedules(&mut registry)?;
-        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
-        GpuRvrProgram::upload_with_checkpoint_access_registry(
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        let mut registry = PostflightAccessRegistry::default();
+        Self::register_postflight_access_schedules(&mut registry)?;
+        registry
+            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
+        GpuPostflightProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -176,12 +177,12 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
         )
     }
 
-    pub fn expand_checkpoint_replay<VB>(
+    pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<
             GpuBabyBearPoseidon2Engine,
@@ -193,22 +194,22 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
             program,
             execution,
             expected_retired,
-            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         )
     }
 
     pub fn new(
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
         max_trace_height: usize,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         Ok(Self {
             program,
             transcript,
             replay_plan,
             max_trace_height,
-            coverage: DeferralRvrCoverage::new(),
+            coverage: DeferralPreflightCoverage::new(),
         })
     }
 
@@ -217,11 +218,11 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
-    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         if let Some(chip) = chip.downcast_ref::<DeferralOutputChipGpu>() {
-            DeferralRvrCoverage::claim(&mut self.coverage.pending_output, "Output")?;
+            DeferralPreflightCoverage::claim(&mut self.coverage.pending_output, "Output")?;
             return chip
-                .generate_proving_ctx_from_rvr(
+                .generate_proving_ctx_from_postflight(
                     self.program,
                     self.transcript,
                     self.replay_plan,
@@ -230,9 +231,9 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 .map(Some);
         }
         if let Some(chip) = chip.downcast_ref::<DeferralCallChipGpu>() {
-            DeferralRvrCoverage::claim(&mut self.coverage.pending_call, "Call")?;
+            DeferralPreflightCoverage::claim(&mut self.coverage.pending_call, "Call")?;
             return chip
-                .generate_proving_ctx_from_rvr(
+                .generate_proving_ctx_from_postflight(
                     self.program,
                     self.transcript,
                     self.replay_plan,
@@ -242,11 +243,11 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
         }
         if let Some(chip) = chip.downcast_ref::<Arc<DeferralPoseidon2ChipGpu>>() {
             if self.coverage.pending_output || self.coverage.pending_call {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "Deferral Poseidon2 producer was visited before executor producers".to_string(),
                 ));
             }
-            DeferralRvrCoverage::claim(&mut self.coverage.pending_poseidon2, "Poseidon2")?;
+            DeferralPreflightCoverage::claim(&mut self.coverage.pending_poseidon2, "Poseidon2")?;
             return chip
                 .generate_proving_ctx_direct(self.max_trace_height)
                 .map(Some);
@@ -256,11 +257,11 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 || self.coverage.pending_call
                 || self.coverage.pending_poseidon2
             {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "Deferral Count producer was visited before dependent producers".to_string(),
                 ));
             }
-            DeferralRvrCoverage::claim(&mut self.coverage.pending_count, "Count")?;
+            DeferralPreflightCoverage::claim(&mut self.coverage.pending_count, "Count")?;
             return chip
                 .generate_proving_ctx_direct(self.max_trace_height)
                 .map(Some);
@@ -268,7 +269,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
         Ok(None)
     }
 
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
         self.coverage.finish()
     }
 
@@ -286,7 +287,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -313,7 +314,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         rv64.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 }

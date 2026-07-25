@@ -807,13 +807,13 @@ impl<SC>
 where
     SC: StarkProtocolConfig,
 {
-    /// Generates a complete GPU proving context from one RVR segment without
+    /// Generates a complete GPU proving context from one preflight segment without
     /// constructing any system or extension record arenas.
-    pub(crate) fn generate_proving_ctx_from_rvr(
+    pub(crate) fn generate_proving_ctx_from_postflight(
         &mut self,
-        program: &crate::arch::rvr::cuda::GpuRvrProgram,
-        transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,
-        replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
+        program: &crate::arch::rvr::cuda::GpuPostflightProgram,
+        transcript: &crate::arch::rvr::cuda::GpuPostflightTranscript,
+        replay_plan: &crate::arch::rvr::cuda::GpuPostflightPlan,
         mut generate_extension: impl FnMut(
             usize,
             &dyn Any,
@@ -839,7 +839,7 @@ where
         let sys_ctxs = {
             let _span = info_span!("system_trace_gen").entered();
             self.system
-                .generate_proving_ctx_from_rvr(program, transcript, replay_plan)
+                .generate_proving_ctx_from_postflight(program, transcript, replay_plan)
                 .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
         };
         debug_assert_eq!(sys_ctxs.len(), self.system_config().num_airs());

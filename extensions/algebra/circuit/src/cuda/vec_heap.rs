@@ -5,7 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+        rvr::cuda::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
         TraceFiller, VmChipWrapper,
     },
     system::memory::SharedMemoryHelper,
@@ -43,28 +45,28 @@ pub(crate) fn checked_trace_shape(
     num_rows: usize,
     width: usize,
     timestamp_max_bits: usize,
-) -> Result<(usize, usize), GpuRvrInputError> {
+) -> Result<(usize, usize), GpuPostflightError> {
     let timestamp_bits = u32::try_from(timestamp_max_bits).map_err(|_| {
-        GpuRvrInputError::InvalidTranscript(
+        GpuPostflightError::InvalidTranscript(
             "timestamp width cannot be represented as a host trace height".to_string(),
         )
     })?;
     let timestamp_row_limit = 1usize.checked_shl(timestamp_bits).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript(
+        GpuPostflightError::InvalidTranscript(
             "timestamp width cannot be represented as a host trace height".to_string(),
         )
     })?;
     let max_height = timestamp_row_limit.min(MAX_ALGEBRA_TRACE_HEIGHT);
     let height = num_rows.checked_next_power_of_two().ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript("field-expression trace height overflow".to_string())
+        GpuPostflightError::InvalidTranscript("field-expression trace height overflow".to_string())
     })?;
     if height > max_height {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "field-expression trace height {height} exceeds maximum {max_height}"
         )));
     }
     let cells = height.checked_mul(width).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript("field-expression trace size overflow".to_string())
+        GpuPostflightError::InvalidTranscript("field-expression trace size overflow".to_string())
     })?;
     Ok((height, cells))
 }
@@ -90,26 +92,26 @@ impl<const NUM_READS: usize, const BLOCKS: usize> DeviceVecHeapProjection<NUM_RE
 /// host. Direct GPU trace generators consume this allocation and drop it before
 /// proving starts.
 pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS: usize>(
-    program: &GpuRvrProgram,
-    transcript: &GpuRvrTranscript,
-    replay_plan: &GpuRvrReplayPlan,
+    program: &GpuPostflightProgram,
+    transcript: &GpuPostflightTranscript,
+    replay_plan: &GpuPostflightPlan,
     opcode_base: usize,
     local_opcodes: &[usize],
     pointer_max_bits: usize,
     device_ctx: &GpuDeviceCtx,
-) -> Result<DeviceVecHeapProjection<NUM_READS, BLOCKS>, GpuRvrInputError> {
+) -> Result<DeviceVecHeapProjection<NUM_READS, BLOCKS>, GpuPostflightError> {
     program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
     if !matches!(
         (NUM_READS, BLOCKS),
         (2, 4) | (2, 6) | (2, 8) | (2, 12) | (1, 8) | (1, 12)
     ) {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "unsupported VecHeap replay shape ({NUM_READS}, {BLOCKS})"
         )));
     }
     let expected_size = 24 + 12 * NUM_READS + 12 * NUM_READS * BLOCKS + 20 * BLOCKS;
     if size_of::<VecHeapTraceInput<NUM_READS, BLOCKS>>() != expected_size {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "VecHeap replay projection ABI size mismatch".to_string(),
         ));
     }
@@ -118,7 +120,7 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
         .enumerate()
         .any(|(i, opcode)| local_opcodes[..i].contains(opcode))
     {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "duplicate VecHeap opcode ownership".to_string(),
         ));
     }
@@ -127,20 +129,20 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
         .iter()
         .map(|&local| {
             let opcode = opcode_base.checked_add(local).ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript("VecHeap opcode overflow".to_string())
+                GpuPostflightError::InvalidTranscript("VecHeap opcode overflow".to_string())
             })?;
-            u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))?;
-            u32::try_from(local).map_err(|_| GpuRvrInputError::OpcodeTooLarge(local))?;
+            u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
+            u32::try_from(local).map_err(|_| GpuPostflightError::OpcodeTooLarge(local))?;
             Ok((
                 local,
                 opcode,
                 replay_plan.opcode_range(VmOpcode::from_usize(opcode)),
             ))
         })
-        .collect::<Result<Vec<_>, GpuRvrInputError>>()?;
+        .collect::<Result<Vec<_>, GpuPostflightError>>()?;
     let num_rows = ranges.iter().try_fold(0usize, |total, (_, _, range)| {
         total.checked_add(range.len()).ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript("VecHeap projection length overflow".to_string())
+            GpuPostflightError::InvalidTranscript("VecHeap projection length overflow".to_string())
         })
     })?;
     if num_rows == 0 {
@@ -153,7 +155,7 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
             .checked_mul(size_of::<VecHeapTraceInput<NUM_READS, BLOCKS>>())
             .is_none()
     {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "VecHeap projection exceeds the algebra replay allocation limit".to_string(),
         ));
     }
@@ -176,13 +178,13 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
                 replay_plan.steps(),
                 range.start,
                 range.len(),
-                u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))?,
+                u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?,
                 u32::try_from(local_opcode)
-                    .map_err(|_| GpuRvrInputError::OpcodeTooLarge(local_opcode))?,
+                    .map_err(|_| GpuPostflightError::OpcodeTooLarge(local_opcode))?,
                 RV64_REGISTER_AS,
                 RV64_MEMORY_AS,
                 u32::try_from(pointer_max_bits).map_err(|_| {
-                    GpuRvrInputError::InvalidTranscript(
+                    GpuPostflightError::InvalidTranscript(
                         "VecHeap pointer width does not fit u32".to_string(),
                     )
                 })?,
@@ -196,7 +198,7 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
     transcript.synchronize()?;
     let error = transcript.error_code()?;
     if error != 0 {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "VecHeap projection rejected transcript with code {error}"
         )));
     }
@@ -204,14 +206,14 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
 }
 
 pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>(
-    program: &GpuRvrProgram,
-    transcript: &GpuRvrTranscript,
-    replay_plan: &GpuRvrReplayPlan,
+    program: &GpuPostflightProgram,
+    transcript: &GpuPostflightTranscript,
+    replay_plan: &GpuPostflightPlan,
     opcode_base: usize,
     local_opcodes: &[usize],
     pointer_max_bits: usize,
     device_ctx: &GpuDeviceCtx,
-) -> Result<Vec<VecHeapTraceInput<NUM_READS, BLOCKS>>, GpuRvrInputError> {
+) -> Result<Vec<VecHeapTraceInput<NUM_READS, BLOCKS>>, GpuPostflightError> {
     gather_vec_heap_trace_inputs_device(
         program,
         transcript,
@@ -250,7 +252,7 @@ pub fn generate_field_expression_ctx_from_projection<
     projection: Vec<VecHeapTraceInput<NUM_READS, BLOCKS>>,
     timestamp_max_bits: usize,
     device_ctx: &GpuDeviceCtx,
-) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
     if projection.is_empty() {
         return Ok(AirProvingContext::simple_no_pis(
             openvm_cuda_backend::base::DeviceMatrix::dummy(),
@@ -260,7 +262,9 @@ pub fn generate_field_expression_ctx_from_projection<
     let width = adapter_width
         .checked_add(BaseAir::<F>::width(&chip.inner.expr))
         .ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript("field-expression trace width overflow".to_string())
+            GpuPostflightError::InvalidTranscript(
+                "field-expression trace width overflow".to_string(),
+            )
         })?;
     let (height, cells) = checked_trace_shape(projection.len(), width, timestamp_max_bits)?;
     let mut values = F::zero_vec(cells);
@@ -287,7 +291,7 @@ pub fn generate_field_expression_ctx_from_projection<
                     core_row,
                 )
                 .map_err(|error| {
-                    GpuRvrInputError::InvalidTranscript(format!(
+                    GpuPostflightError::InvalidTranscript(format!(
                         "field-expression projection failed validation: {error:?}"
                     ))
                 })?;
@@ -297,7 +301,7 @@ pub fn generate_field_expression_ctx_from_projection<
                 adapter_row,
                 input,
             );
-            Ok::<(), GpuRvrInputError>(())
+            Ok::<(), GpuPostflightError>(())
         })?;
     if projection.len() < height {
         let mut dummy_row = F::zero_vec(width);
@@ -313,7 +317,7 @@ pub fn generate_field_expression_ctx_from_projection<
         AirProvingContext::<CpuBackend<SC>>::simple_no_pis(RowMajorMatrix::new(values, width));
     let gpu_ctx = cpu_proving_ctx_to_gpu(cpu_ctx, device_ctx);
     if chip.inner.range_checker.count.len() != temporary_range_checker.count.len() {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "field-expression range-count shape mismatch".to_string(),
         ));
     }

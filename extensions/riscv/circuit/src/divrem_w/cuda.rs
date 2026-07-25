@@ -13,7 +13,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
     openvm_riscv_transpiler::DivRemWOpcode,
@@ -36,12 +36,12 @@ pub struct Rv64DivRemWChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64DivRemWChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let div = replay_plan.opcode_range(DivRemWOpcode::DIVW.global_opcode());
@@ -52,7 +52,7 @@ impl Rv64DivRemWChipGpu {
             .into_iter()
             .try_fold(0usize, usize::checked_add)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript("div/rem-w replay row count overflow".into())
+                GpuPostflightError::InvalidTranscript("div/rem-w replay row count overflow".into())
             })?;
         if rows == 0 {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));

@@ -76,7 +76,7 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
 mod addsub_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use openvm_circuit::arch::{
-        rvr::{cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint},
+        rvr::{cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint},
         DenseRecordArena,
     };
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -420,7 +420,7 @@ mod addsub_tests {
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_cuda_rvr_modular_addsub_projection_test(
+    fn run_cuda_preflight_modular_addsub_projection_test(
         modulus: BigUint,
         local_opcode: Rv64ModularArithmeticOpcode,
         b: BigUint,
@@ -593,14 +593,15 @@ mod addsub_tests {
                 .collect(),
         };
         let memory_config = openvm_circuit::arch::MemoryConfig::default();
-        let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+        let gpu_program =
+            GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
             .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let gpu_counts_before = tester.range_checker().count.to_host_on(device_ctx).unwrap();
         let replay_ctx = harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
         let replay_trace = replay_ctx
             .common_main
@@ -630,7 +631,7 @@ mod addsub_tests {
             .unwrap();
         assert!(harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_corrupt, &corrupt_plan)
             .is_err());
         assert_eq!(
             tester.range_checker().count.to_host_on(device_ctx).unwrap(),
@@ -647,34 +648,34 @@ mod addsub_tests {
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
-    fn cuda_rvr_modular_addsub_projection_matches_legacy_and_rejects_corrupt_output() {
-        run_cuda_rvr_modular_addsub_projection_test(
+    fn cuda_preflight_modular_addsub_projection_matches_legacy_and_rejects_corrupt_output() {
+        run_cuda_preflight_modular_addsub_projection_test(
             secp256k1_coord_prime(),
             Rv64ModularArithmeticOpcode::ADD,
             BigUint::from(0x0102_abcdu32),
             BigUint::from(17u32),
         );
         let modulus = secp256k1_coord_prime();
-        run_cuda_rvr_modular_addsub_projection_test(
+        run_cuda_preflight_modular_addsub_projection_test(
             modulus.clone(),
             Rv64ModularArithmeticOpcode::ADD,
             &modulus - BigUint::one(),
             &modulus - BigUint::one(),
         );
         let max_u256 = (BigUint::one() << 256usize) - BigUint::one();
-        run_cuda_rvr_modular_addsub_projection_test(
+        run_cuda_preflight_modular_addsub_projection_test(
             modulus.clone(),
             Rv64ModularArithmeticOpcode::ADD,
             max_u256.clone(),
             max_u256,
         );
-        run_cuda_rvr_modular_addsub_projection_test(
+        run_cuda_preflight_modular_addsub_projection_test(
             modulus.clone(),
             Rv64ModularArithmeticOpcode::SUB,
             BigUint::from(5u32),
             BigUint::from(17u32),
         );
-        run_cuda_rvr_modular_addsub_projection_test(
+        run_cuda_preflight_modular_addsub_projection_test(
             modulus.clone(),
             Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
             modulus,
@@ -1035,7 +1036,7 @@ mod is_equal_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
         openvm_circuit::arch::rvr::{
-            cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
+            cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
         },
         openvm_instructions::{program::Program, SystemOpcode},
         rvr_state::{
@@ -1358,7 +1359,9 @@ mod is_equal_tests {
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_rvr_replay_is_equal_test<const BLOCKS: usize, const LIMBS: usize>(modulus: BigUint) {
+    fn run_preflight_replay_is_equal_test<const BLOCKS: usize, const LIMBS: usize>(
+        modulus: BigUint,
+    ) {
         let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
         let modulus_limbs =
             biguint_to_limbs::<LIMBS>(modulus.clone(), U16_BITS).map(|limb| limb as u16);
@@ -1533,13 +1536,14 @@ mod is_equal_tests {
 
         let memory_config = openvm_circuit::arch::MemoryConfig::default();
         let device_ctx = &tester.range_checker().device_ctx;
-        let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+        let gpu_program =
+            GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
             .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
         assert_eq!(gpu_transcript.error_code().unwrap(), 0);
         let committed_counts = tester.range_checker().count.to_host_on(device_ctx).unwrap();
@@ -1551,7 +1555,7 @@ mod is_equal_tests {
             .unwrap();
         assert!(harness
             .gpu_chip
-            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_corrupt, &corrupt_plan)
             .is_err());
         assert_ne!(gpu_corrupt.error_code().unwrap(), 0);
         assert_eq!(
@@ -1569,9 +1573,11 @@ mod is_equal_tests {
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
-    fn cuda_rvr_replay_modular_is_equal_proves_without_records_and_rejects_odd_pointer() {
-        run_rvr_replay_is_equal_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(secp256k1_coord_prime());
-        run_rvr_replay_is_equal_test::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>(
+    fn cuda_preflight_replay_modular_is_equal_proves_without_records_and_rejects_odd_pointer() {
+        run_preflight_replay_is_equal_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(
+            secp256k1_coord_prime(),
+        );
+        run_preflight_replay_is_equal_test::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>(
             BLS12_381_MODULUS.clone(),
         );
     }

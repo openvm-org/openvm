@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
     openvm_riscv_transpiler::ShiftOpcode,
@@ -32,12 +32,12 @@ pub struct Rv64ShiftLogicalChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftLogicalChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let sll_range = replay_plan.opcode_range(ShiftOpcode::SLL.global_opcode());
@@ -46,7 +46,7 @@ impl Rv64ShiftLogicalChipGpu {
             .len()
             .checked_add(srl_range.len())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "logical-shift-register replay row count overflow".to_string(),
                 )
             })?;

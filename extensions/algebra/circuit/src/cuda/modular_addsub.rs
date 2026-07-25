@@ -3,7 +3,7 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::rvr::cuda::{
-    GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
@@ -35,16 +35,16 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
         pointer_max_bits: usize,
         timestamp_max_bits: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Result<Option<Self>, GpuRvrInputError> {
+    ) -> Result<Option<Self>, GpuPostflightError> {
         if !matches!(BLOCKS, 4 | 6) {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "unsupported modular add/sub block count {BLOCKS}"
             )));
         }
         let num_bytes = BLOCKS * openvm_circuit::arch::MEMORY_BLOCK_BYTES;
         let mut modulus_bytes = modulus.to_bytes_le();
         if modulus_bytes.is_empty() || modulus_bytes.len() > num_bytes {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "modular add/sub replay requires a nonzero modulus fitting its heap layout"
                     .to_string(),
             ));
@@ -57,7 +57,7 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
             .checked_mul(num_bytes)
             .and_then(|width| width.checked_add(4))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "modular add/sub replay trace width overflow".to_string(),
                 )
             })?;
@@ -65,7 +65,7 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
             return Ok(None);
         }
         let width = adapter_width.checked_add(core_width).ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "modular add/sub replay trace width overflow".to_string(),
             )
         })?;
@@ -84,10 +84,10 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
 
     pub fn generate_proving_ctx(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let local_opcodes = [
             Rv64ModularArithmeticOpcode::ADD as usize,
             Rv64ModularArithmeticOpcode::SUB as usize,
@@ -122,12 +122,12 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
                 Rv64ModularArithmeticOpcode::SETUP_ADDSUB as u32,
                 &delta,
                 u32::try_from(self.pointer_max_bits).map_err(|_| {
-                    GpuRvrInputError::InvalidTranscript(
+                    GpuPostflightError::InvalidTranscript(
                         "modular add/sub pointer width does not fit u32".to_string(),
                     )
                 })?,
                 u32::try_from(self.timestamp_max_bits).map_err(|_| {
-                    GpuRvrInputError::InvalidTranscript(
+                    GpuPostflightError::InvalidTranscript(
                         "modular add/sub timestamp width does not fit u32".to_string(),
                     )
                 })?,
@@ -138,7 +138,7 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
         transcript.synchronize()?;
         let error = transcript.error_code()?;
         if error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "modular add/sub replay rejected transcript with code {error}"
             )));
         }

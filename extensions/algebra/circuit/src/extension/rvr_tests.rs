@@ -25,7 +25,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use super::{modular_is_eq_x0_destination, Rv64ModularConfig, Rv64ModularCpuBuilder};
 #[cfg(feature = "cuda")]
 use super::{
-    AlgebraRvrGpuTracegen, Rv64ModularHybridBuilder, Rv64ModularWithFp2Config,
+    AlgebraPreflightGpuTracegen, Rv64ModularHybridBuilder, Rv64ModularWithFp2Config,
     Rv64ModularWithFp2HybridBuilder,
 };
 
@@ -321,7 +321,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
         .unwrap();
     assert_eq!(execution.retired, 10);
 
-    let gpu_program = AlgebraRvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = AlgebraPreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.modular.system.memory_config,
         &config.modular.modular,
@@ -329,13 +329,9 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (transcript, replay_plan) = AlgebraRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
+    let (transcript, replay_plan) =
+        AlgebraPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
     assert_eq!(transcript.error_code().unwrap(), 0);
     for opcode in [
         Rv64ModularArithmeticOpcode::SETUP_MULDIV.global_opcode(),
@@ -351,7 +347,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
         assert_eq!(replay_plan.opcode_range(opcode).len(), 1);
     }
 
-    let tracegen = AlgebraRvrGpuTracegen::new(
+    let tracegen = AlgebraPreflightGpuTracegen::new(
         &gpu_program,
         &transcript,
         &replay_plan,
@@ -484,7 +480,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
     assert_eq!(execution.to_state.timestamp, 53);
     assert_eq!(execution.transcript.residuals, [12, 0, 0, 0, 1]);
 
-    let gpu_program = AlgebraRvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = AlgebraPreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &config.modular,
@@ -494,24 +490,16 @@ fn modular_checkpoint_expansion_proves_without_records() {
     .unwrap();
 
     let missing = execution.transcript.residuals.pop().unwrap();
-    let error = AlgebraRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .err()
-    .expect("missing Algebra residual must fail checkpoint replay");
+    let error =
+        AlgebraPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .err()
+            .expect("missing Algebra residual must fail checkpoint replay");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals.push(missing);
 
-    let (transcript, replay_plan) = AlgebraRvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
+    let (transcript, replay_plan) =
+        AlgebraPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
     assert_eq!(transcript.error_code().unwrap(), 0);
     assert_eq!(transcript.memory_log_host().unwrap().len(), 52);
     for opcode in [
@@ -523,7 +511,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
         assert_eq!(replay_plan.opcode_range(opcode.global_opcode()).len(), 1);
     }
 
-    let tracegen = AlgebraRvrGpuTracegen::new(
+    let tracegen = AlgebraPreflightGpuTracegen::new(
         &gpu_program,
         &transcript,
         &replay_plan,

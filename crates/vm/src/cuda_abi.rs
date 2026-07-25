@@ -487,7 +487,7 @@ pub mod rvr_postflight {
 #[cfg(feature = "rvr")]
 pub mod rvr_checkpoint_replay {
     use super::*;
-    use crate::arch::rvr::cuda::{RvrCheckpointEventCount, RvrCheckpointOpcodeBases};
+    use crate::arch::rvr::cuda::{PostflightEventCount, PostflightOpcodeBases};
 
     extern "C" {
         fn _rvr_checkpoint_count(
@@ -501,7 +501,7 @@ pub mod rvr_checkpoint_replay {
             schedules: DeviceBufferView,
             spans: DeviceBufferView,
             static_values: DeviceBufferView,
-            opcodes: RvrCheckpointOpcodeBases,
+            opcodes: PostflightOpcodeBases,
             register_as: u32,
             memory_as: u32,
             immediate_as: u32,
@@ -511,7 +511,7 @@ pub mod rvr_checkpoint_replay {
             initial_pc: u32,
             initial_timestamp: u32,
             endpoint_kind: u32,
-            event_counts: *mut RvrCheckpointEventCount,
+            event_counts: *mut PostflightEventCount,
             error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -528,7 +528,7 @@ pub mod rvr_checkpoint_replay {
             schedules: DeviceBufferView,
             spans: DeviceBufferView,
             static_values: DeviceBufferView,
-            opcodes: RvrCheckpointOpcodeBases,
+            opcodes: PostflightOpcodeBases,
             register_as: u32,
             memory_as: u32,
             immediate_as: u32,
@@ -560,14 +560,14 @@ pub mod rvr_checkpoint_replay {
         schedules: DeviceBufferView,
         spans: DeviceBufferView,
         static_values: DeviceBufferView,
-        opcodes: RvrCheckpointOpcodeBases,
+        opcodes: PostflightOpcodeBases,
         address_spaces: [u32; 4],
         byte_pointer_max_bits: u32,
         cell_pointer_max_bits: u32,
         initial_pc: u32,
         initial_timestamp: u32,
         endpoint_kind: u32,
-        event_counts: &DeviceBuffer<RvrCheckpointEventCount>,
+        event_counts: &DeviceBuffer<PostflightEventCount>,
         error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -611,7 +611,7 @@ pub mod rvr_checkpoint_replay {
         schedules: DeviceBufferView,
         spans: DeviceBufferView,
         static_values: DeviceBufferView,
-        opcodes: RvrCheckpointOpcodeBases,
+        opcodes: PostflightOpcodeBases,
         address_spaces: [u32; 4],
         byte_pointer_max_bits: u32,
         cell_pointer_max_bits: u32,

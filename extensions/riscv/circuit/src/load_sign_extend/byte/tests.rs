@@ -28,7 +28,7 @@ use {
     crate::Rv64IConfig,
     openvm_circuit::{
         arch::{
-            rvr::{cuda::GpuRvrProgram, FullLogPreflightLimits},
+            rvr::{cuda::GpuPostflightProgram, FullLogPreflightLimits},
             MatrixRecordArena, VmExecutor,
         },
         system::{
@@ -289,7 +289,7 @@ fn test_cuda_rand_load_sign_extend_byte_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_loadb_tracegen_from_rvr_transcript() {
+fn test_cuda_loadb_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let load = |rd: usize, rs1: usize, imm: usize, imm_sign: usize| {
         Instruction::<F>::from_usize(
@@ -381,14 +381,14 @@ fn test_cuda_loadb_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let bitwise_lookup = tester.bitwise_op_lookup();
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, &device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
     assert_eq!(d_replay_plan.opcode_range(LOADB.global_opcode()).len(), 8);
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_range_counts = range_checker.count.to_host_on(&device_ctx).unwrap();

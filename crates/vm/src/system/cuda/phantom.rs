@@ -12,7 +12,9 @@ use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 #[cfg(feature = "rvr")]
 use {
-    crate::arch::rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+    crate::arch::rvr::cuda::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
     openvm_instructions::{LocalOpcode, SystemOpcode},
 };
 
@@ -36,12 +38,12 @@ impl PhantomChipGPU {
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         program.ensure_replay_inputs(transcript, replay_plan, &self.device_ctx)?;
         let step_range = replay_plan.opcode_range(SystemOpcode::PHANTOM.global_opcode());
         if step_range.is_empty() {

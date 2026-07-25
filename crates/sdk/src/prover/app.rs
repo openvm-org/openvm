@@ -4,7 +4,8 @@ use getset::Getters;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
-    rvr::{cuda::GpuRvrProgram, PreflightInstance, RvrMeteredInstance},
+    rvr::{cuda::GpuPostflightProgram, RvrMeteredInstance},
+    PreflightInstance,
 };
 use openvm_circuit::{
     arch::{
@@ -200,7 +201,7 @@ impl AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
         metered: RvrMeteredInstance<'static>,
         metered_ctx: MeteredCtx,
         preflight: PreflightInstance<'static>,
-        gpu_program: GpuRvrProgram,
+        gpu_program: GpuPostflightProgram,
     ) {
         self.prove_app = Some(Box::new(move |instance, input| {
             super::preflight::prove(

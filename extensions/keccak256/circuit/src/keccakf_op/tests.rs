@@ -41,7 +41,7 @@ use tiny_keccak::keccakf;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{
-        cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
+        cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
     },
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{
@@ -458,7 +458,7 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
+fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption() {
     let buffer_reg = 8usize;
     let buffer_ptr = 0x100u32;
     let keccakf_instruction = Instruction::<F>::from_usize(
@@ -544,15 +544,15 @@ fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
         KeccakfPermChipGpu::new(shared_records, tester.range_checker().device_ctx.clone());
 
     let device_ctx = &tester.range_checker().device_ctx;
-    let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let _op_ctx = op_chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     let _perm_ctx = perm_chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);
 
@@ -569,7 +569,7 @@ fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
         corrupt_shared,
     );
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .unwrap();
     assert_eq!(gpu_corrupt.error_code().unwrap(), 811);
 }

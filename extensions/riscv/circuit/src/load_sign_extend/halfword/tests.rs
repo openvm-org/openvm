@@ -29,7 +29,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
                 PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
@@ -301,7 +301,7 @@ fn test_cuda_rand_load_sign_extend_halfword_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_loadh_tracegen_from_rvr_transcript() {
+fn test_cuda_loadh_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let load = |rd: usize, rs1: usize, imm: usize, imm_sign: usize| {
         Instruction::<F>::from_usize(
@@ -405,14 +405,14 @@ fn test_cuda_loadh_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let bitwise_lookup = tester.bitwise_op_lookup();
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, &device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
     assert_eq!(d_replay_plan.opcode_range(LOADH.global_opcode()).len(), 9);
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_range_counts = range_checker.count.to_host_on(&device_ctx).unwrap();
@@ -489,7 +489,7 @@ fn test_cuda_loadh_tracegen_from_rvr_transcript() {
         .unwrap()
         .value[1] ^= 1;
     let d_single_program =
-        GpuRvrProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
+        GpuPostflightProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
     let (d_corrupt, d_corrupt_plan) = d_single_program
         .upload_transcript(&corrupt_result, PreflightEndpoint::Terminated)
         .unwrap();
@@ -505,7 +505,7 @@ fn test_cuda_loadh_tracegen_from_rvr_transcript() {
         timestamp_max_bits,
     );
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&d_single_program, &d_corrupt, &d_corrupt_plan)
+        .generate_proving_ctx_from_postflight(&d_single_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 239);
     assert!(corrupt_range

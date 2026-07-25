@@ -35,7 +35,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
                 PreflightEndpoint,
             },
             testing::default_var_range_checker_bus,
@@ -579,7 +579,7 @@ fn test_cuda_rand_auipc_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_auipc_tracegen_from_rvr_transcript() {
+fn test_cuda_auipc_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let auipc = |rd: usize, immediate: usize| {
         Instruction::<F>::from_usize(
@@ -658,14 +658,14 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
     assert_eq!(d_replay_plan.opcode_range(AUIPC.global_opcode()).len(), 7);
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
@@ -688,12 +688,12 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
             ),
         );
         let d_corrupt_program =
-            GpuRvrProgram::upload(corrupt_program, &memory_config, device_ctx).unwrap();
+            GpuPostflightProgram::upload(corrupt_program, &memory_config, device_ctx).unwrap();
         let (d_corrupt, d_corrupt_plan) = d_corrupt_program
             .upload_transcript(&transcript, endpoint)
             .unwrap();
         Rv64AuipcChipGpu::new(corrupt_range_checker.clone(), tester.timestamp_max_bits())
-            .generate_proving_ctx_from_rvr(&d_corrupt_program, &d_corrupt, &d_corrupt_plan)
+            .generate_proving_ctx_from_postflight(&d_corrupt_program, &d_corrupt, &d_corrupt_plan)
             .unwrap();
         assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
         assert_eq!(

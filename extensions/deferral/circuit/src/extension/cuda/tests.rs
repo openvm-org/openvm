@@ -20,7 +20,7 @@ use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear};
 
-use super::{DeferralRvrCoverage, DeferralRvrGpuTracegen, Rv64DeferralGpuBuilder};
+use super::{DeferralPreflightCoverage, DeferralPreflightGpuTracegen, Rv64DeferralGpuBuilder};
 use crate::{
     generate_deferral_results,
     poseidon2::deferral_poseidon2_chip,
@@ -42,21 +42,22 @@ fn insert_bytes(memory: &mut SparseMemoryImage, address_space: u32, pointer: u32
 
 #[test]
 fn deferral_coverage_rejects_missing_and_duplicate_producers() {
-    let missing = DeferralRvrCoverage::new().finish().unwrap_err();
+    let missing = DeferralPreflightCoverage::new().finish().unwrap_err();
     assert!(missing.to_string().contains("Output"), "{missing}");
     assert!(missing.to_string().contains("Count"), "{missing}");
 
-    let mut coverage = DeferralRvrCoverage::new();
-    DeferralRvrCoverage::claim(&mut coverage.pending_output, "Output").unwrap();
-    let duplicate = DeferralRvrCoverage::claim(&mut coverage.pending_output, "Output").unwrap_err();
+    let mut coverage = DeferralPreflightCoverage::new();
+    DeferralPreflightCoverage::claim(&mut coverage.pending_output, "Output").unwrap();
+    let duplicate =
+        DeferralPreflightCoverage::claim(&mut coverage.pending_output, "Output").unwrap_err();
     assert!(
         duplicate.to_string().contains("duplicate Output"),
         "{duplicate}"
     );
 
-    DeferralRvrCoverage::claim(&mut coverage.pending_call, "Call").unwrap();
-    DeferralRvrCoverage::claim(&mut coverage.pending_poseidon2, "Poseidon2").unwrap();
-    DeferralRvrCoverage::claim(&mut coverage.pending_count, "Count").unwrap();
+    DeferralPreflightCoverage::claim(&mut coverage.pending_call, "Call").unwrap();
+    DeferralPreflightCoverage::claim(&mut coverage.pending_poseidon2, "Poseidon2").unwrap();
+    DeferralPreflightCoverage::claim(&mut coverage.pending_count, "Count").unwrap();
     coverage.finish().unwrap();
 }
 
@@ -153,21 +154,21 @@ fn deferral_output_coordinator_proves_without_record_arenas() {
         output_raw
     );
 
-    let gpu_program = DeferralRvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = DeferralPreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
     let missing = execution.transcript.residuals.pop().unwrap();
-    let error = DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2)
+    let error = DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2)
         .err()
         .expect("missing OUTPUT residual must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals.push(missing);
 
     let (gpu_transcript, replay_plan) =
-        DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2).unwrap();
+        DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2).unwrap();
     assert_eq!(
         gpu_transcript
             .program_log_host()
@@ -198,7 +199,7 @@ fn deferral_output_coordinator_proves_without_record_arenas() {
     }
 
     let proving_ctx =
-        DeferralRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan, 1 << 20)
+        DeferralPreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan, 1 << 20)
             .unwrap()
             .generate_proving_ctx(&mut vm)
             .unwrap();
@@ -281,7 +282,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     assert_eq!(execution.to_state.timestamp, 20);
     assert_eq!(execution.transcript.residuals.len(), 13);
 
-    let gpu_program = DeferralRvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = DeferralPreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
@@ -290,21 +291,21 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
 
     let original = execution.transcript.residuals[5];
     execution.transcript.residuals[5] = u64::from(F::ORDER_U32) << 32;
-    let error = DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2)
+    let error = DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2)
         .err()
         .expect("non-canonical CALL residual must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals[5] = original;
 
     let missing = execution.transcript.residuals.pop().unwrap();
-    let error = DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2)
+    let error = DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2)
         .err()
         .expect("missing CALL residual must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals.push(missing);
 
     let (transcript, replay_plan) =
-        DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2).unwrap();
+        DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2).unwrap();
     let program_log = transcript.program_log_host().unwrap();
     assert_eq!(
         program_log
@@ -363,10 +364,11 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         1
     );
 
-    let proving_ctx = DeferralRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan, 1 << 20)
-        .unwrap()
-        .generate_proving_ctx(&mut vm)
-        .unwrap();
+    let proving_ctx =
+        DeferralPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan, 1 << 20)
+            .unwrap()
+            .generate_proving_ctx(&mut vm)
+            .unwrap();
     drop(replay_plan);
     drop(transcript);
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();

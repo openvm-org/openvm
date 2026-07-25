@@ -22,7 +22,7 @@ use crate::{
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     arch::{
-        rvr::{cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint},
+        rvr::{cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint},
         DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
     },
     system::{
@@ -128,7 +128,7 @@ fn test_cuda_phantom_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_phantom_rvr_replay() {
+fn test_cuda_phantom_preflight_replay() {
     let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
     // This discriminant is deliberately not registered with the RV64 executor.
     // GPU replay must treat it as an execution-bus operand and never invoke a callback.
@@ -158,11 +158,11 @@ fn test_cuda_phantom_rvr_replay() {
         final_timestamp: 2,
     };
     let memory_config = MemoryConfig::default();
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, &device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program.upload_transcript(&transcript, endpoint).unwrap();
     let chip = PhantomChipGPU::new(device_ctx.clone());
     let replay_ctx = chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
 
@@ -199,7 +199,7 @@ fn test_cuda_phantom_rvr_replay() {
         initial_write_log: vec![],
     };
     let (d_corrupt, d_corrupt_plan) = d_program.upload_transcript(&corrupt, endpoint).unwrap();
-    chip.generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+    chip.generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 855);
 }

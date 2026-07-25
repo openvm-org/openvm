@@ -5,7 +5,7 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::{RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
+            cuda::{PostflightAccessRegistry, PostflightAccessSpan},
             FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
@@ -19,7 +19,7 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_riscv_circuit::Rv64ImRvrGpuTracegen;
+use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode,
     MulOpcode, ShiftOpcode,
@@ -27,7 +27,7 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{Int256Rv64GpuBuilder, Int256RvrGpuTracegen};
+use super::{Int256PreflightGpuTracegen, Int256Rv64GpuBuilder};
 use crate::Int256Rv64Config;
 
 type F = BabyBear;
@@ -115,13 +115,13 @@ fn fixture(equal: bool) -> (Program<F>, VmExe<F>) {
 #[test]
 fn int256_checkpoint_registry_rejects_native_opcode_collision() {
     let native_opcode = BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32;
-    let span = RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 1);
-    let mut registry = RvrCheckpointAccessRegistry::default();
+    let span = PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 1);
+    let mut registry = PostflightAccessRegistry::default();
     registry
         .register(native_opcode, &[1], 0, 4, 5, &[span])
         .unwrap();
     let error = registry
-        .validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())
+        .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())
         .unwrap_err();
     assert!(error.to_string().contains("both native"), "{error}");
 }
@@ -299,19 +299,15 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     assert_eq!(execution.transcript.residuals.len(), 50);
     assert_eq!(&execution.transcript.residuals[44..], &[0, 1, 1, 0, 0, 1]);
 
-    let gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (transcript, replay_plan) = Int256RvrGpuTracegen::expand_checkpoint_replay(
-        &vm,
-        &gpu_program,
-        &execution,
-        execution.retired,
-    )
-    .unwrap();
+    let (transcript, replay_plan) =
+        Int256PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+            .unwrap();
     assert_eq!(transcript.error_code().unwrap(), 0);
     assert_eq!(transcript.memory_log_host().unwrap().len(), 225);
     for case in &cases {
@@ -323,7 +319,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         initial_write_log: transcript.initial_write_log_host().unwrap(),
     };
 
-    let tracegen = Int256RvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
+    let tracegen = Int256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -337,7 +333,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let cached_program = invalid_vm.commit_program_on_device(&program);
     invalid_vm.load_program(cached_program);
     invalid_vm.transport_init_memory_to_device(&invalid_state.memory);
-    let invalid_gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+    let invalid_gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &invalid_vm.engine.device().device_ctx,
@@ -362,10 +358,11 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let (invalid_transcript, invalid_plan) = invalid_gpu_program
         .upload_transcript(&invalid_transcript, PreflightEndpoint::Terminated)
         .unwrap();
-    let error = Int256RvrGpuTracegen::new(&invalid_gpu_program, &invalid_transcript, &invalid_plan)
-        .generate_proving_ctx(&mut invalid_vm)
-        .err()
-        .expect("Int256 GPU replay must reject a two-byte-aligned heap pointer");
+    let error =
+        Int256PreflightGpuTracegen::new(&invalid_gpu_program, &invalid_transcript, &invalid_plan)
+            .generate_proving_ctx(&mut invalid_vm)
+            .err()
+            .expect("Int256 GPU replay must reject a two-byte-aligned heap pointer");
     assert!(error.to_string().contains("code 403"), "{error}");
 }
 
@@ -432,13 +429,13 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
             final_timestamp: 11,
         }
     );
-    let gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+    let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
         &source_vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (transcript, replay_plan) = Int256RvrGpuTracegen::expand_checkpoint_replay(
+    let (transcript, replay_plan) = Int256PreflightGpuTracegen::postflight(
         &source_vm,
         &gpu_program,
         &execution,
@@ -464,7 +461,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
-        let gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+        let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
             &program,
             &config.system.memory_config,
             &vm.engine.device().device_ctx,
@@ -487,7 +484,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         transcript
             .replace_program_log_for_test(&program_log)
             .unwrap();
-        let error = Int256RvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
+        let error = Int256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
             .generate_proving_ctx(&mut vm)
             .err()
             .expect("Int256 GPU replay must reject a wrapping transition");
@@ -528,7 +525,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
         assert_eq!(execution.transcript.residuals.len(), 5);
         assert_eq!(execution.transcript.residuals[4], expected_branch_residual);
 
-        let gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+        let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
             &program,
             &config.system.memory_config,
             &vm.engine.device().device_ctx,
@@ -536,7 +533,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
         .unwrap();
 
         execution.transcript.residuals[4] = 2;
-        let error = Int256RvrGpuTracegen::expand_checkpoint_replay(
+        let error = Int256PreflightGpuTracegen::postflight(
             &vm,
             &gpu_program,
             &execution,
@@ -547,7 +544,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
         assert!(error.to_string().contains("code 306"), "{error}");
 
         execution.transcript.residuals[4] = expected_branch_residual ^ 1;
-        let error = Int256RvrGpuTracegen::expand_checkpoint_replay(
+        let error = Int256PreflightGpuTracegen::postflight(
             &vm,
             &gpu_program,
             &execution,
@@ -558,7 +555,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
         assert!(error.to_string().contains("code 307"), "{error}");
 
         execution.transcript.residuals[4] = expected_branch_residual;
-        let (transcript, replay_plan) = Int256RvrGpuTracegen::expand_checkpoint_replay(
+        let (transcript, replay_plan) = Int256PreflightGpuTracegen::postflight(
             &vm,
             &gpu_program,
             &execution,
@@ -583,7 +580,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             ]
         );
 
-        let tracegen = Int256RvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
+        let tracegen = Int256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
         let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
         drop(replay_plan);
         drop(transcript);

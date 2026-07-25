@@ -31,7 +31,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
                 PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
@@ -318,7 +318,7 @@ fn test_cuda_rand_load_halfword_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
+fn test_cuda_loadhu_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let load = |rd: usize, rs1: usize, imm: usize, imm_sign: usize| {
         Instruction::<F>::from_usize(
@@ -423,14 +423,14 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let bitwise_lookup = tester.bitwise_op_lookup();
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, &device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
     assert_eq!(d_replay_plan.opcode_range(LOADHU.global_opcode()).len(), 9);
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_range_counts = range_checker.count.to_host_on(&device_ctx).unwrap();
@@ -496,7 +496,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
     .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
     let d_single_program =
-        GpuRvrProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
+        GpuPostflightProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
 
     let mut corrupt_result = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
@@ -525,7 +525,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         timestamp_max_bits,
     );
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&d_single_program, &d_corrupt, &d_corrupt_plan)
+        .generate_proving_ctx_from_postflight(&d_single_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 239);
     assert!(corrupt_range
@@ -556,7 +556,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
     let wide_byte_ptr_bits =
         openvm_circuit::arch::to_byte_ptr_bits(wide_memory_config.pointer_max_bits);
     let d_wide_single_program =
-        GpuRvrProgram::upload(&single_program, &wide_memory_config, &device_ctx).unwrap();
+        GpuPostflightProgram::upload(&single_program, &wide_memory_config, &device_ctx).unwrap();
     let (d_max_address, d_max_address_plan) = d_wide_single_program
         .upload_transcript(&max_address_transcript, PreflightEndpoint::Terminated)
         .unwrap();
@@ -570,7 +570,11 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         timestamp_max_bits,
     );
     max_address_chip
-        .generate_proving_ctx_from_rvr(&d_wide_single_program, &d_max_address, &d_max_address_plan)
+        .generate_proving_ctx_from_postflight(
+            &d_wide_single_program,
+            &d_max_address,
+            &d_max_address_plan,
+        )
         .unwrap();
     assert_eq!(d_max_address.error_code().unwrap(), 0);
 
@@ -581,7 +585,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         openvm_circuit::arch::to_byte_ptr_bits(narrow_memory_config.pointer_max_bits);
     let narrow_limit = 1u32 << narrow_byte_ptr_bits;
     let d_narrow_single_program =
-        GpuRvrProgram::upload(&single_program, &narrow_memory_config, &device_ctx).unwrap();
+        GpuPostflightProgram::upload(&single_program, &narrow_memory_config, &device_ctx).unwrap();
     let mut narrow_boundary_transcript = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
@@ -609,7 +613,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         timestamp_max_bits,
     );
     narrow_boundary_chip
-        .generate_proving_ctx_from_rvr(
+        .generate_proving_ctx_from_postflight(
             &d_narrow_single_program,
             &d_narrow_boundary,
             &d_narrow_boundary_plan,
@@ -634,7 +638,8 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         ),
     ] {
         let d_boundary_program =
-            GpuRvrProgram::upload(&boundary_program, &narrow_memory_config, &device_ctx).unwrap();
+            GpuPostflightProgram::upload(&boundary_program, &narrow_memory_config, &device_ctx)
+                .unwrap();
         let (d_boundary, d_boundary_plan) = d_boundary_program
             .upload_transcript(&narrow_boundary_transcript, PreflightEndpoint::Terminated)
             .unwrap();
@@ -650,7 +655,11 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
             timestamp_max_bits,
         );
         boundary_chip
-            .generate_proving_ctx_from_rvr(&d_boundary_program, &d_boundary, &d_boundary_plan)
+            .generate_proving_ctx_from_postflight(
+                &d_boundary_program,
+                &d_boundary,
+                &d_boundary_plan,
+            )
             .unwrap();
         assert_eq!(d_boundary.error_code().unwrap(), expected_error);
         assert!(boundary_range
@@ -684,7 +693,8 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         ),
     ] {
         let d_overflow_program =
-            GpuRvrProgram::upload(&overflow_program, &wide_memory_config, &device_ctx).unwrap();
+            GpuPostflightProgram::upload(&overflow_program, &wide_memory_config, &device_ctx)
+                .unwrap();
         let (d_overflow, d_overflow_plan) = d_overflow_program
             .upload_transcript(&max_address_transcript, PreflightEndpoint::Terminated)
             .unwrap();
@@ -700,7 +710,11 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
             timestamp_max_bits,
         );
         overflow_chip
-            .generate_proving_ctx_from_rvr(&d_overflow_program, &d_overflow, &d_overflow_plan)
+            .generate_proving_ctx_from_postflight(
+                &d_overflow_program,
+                &d_overflow,
+                &d_overflow_plan,
+            )
             .unwrap();
         assert_eq!(d_overflow.error_code().unwrap(), expected_error);
         assert!(overflow_range
@@ -741,7 +755,8 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
     let mut event_in_gap = corrupt_gap.memory_log[1];
     event_in_gap.timestamp = corrupt_gap.program_log[0].timestamp + 3;
     corrupt_gap.memory_log.push(event_in_gap);
-    let d_x0_program = GpuRvrProgram::upload(&x0_program, &memory_config, &device_ctx).unwrap();
+    let d_x0_program =
+        GpuPostflightProgram::upload(&x0_program, &memory_config, &device_ctx).unwrap();
     let (d_corrupt_gap, d_corrupt_gap_plan) = d_x0_program
         .upload_transcript(&corrupt_gap, PreflightEndpoint::Terminated)
         .unwrap();
@@ -757,7 +772,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         timestamp_max_bits,
     );
     gap_chip
-        .generate_proving_ctx_from_rvr(&d_x0_program, &d_corrupt_gap, &d_corrupt_gap_plan)
+        .generate_proving_ctx_from_postflight(&d_x0_program, &d_corrupt_gap, &d_corrupt_gap_plan)
         .unwrap();
     assert_eq!(d_corrupt_gap.error_code().unwrap(), 235);
     assert!(gap_range

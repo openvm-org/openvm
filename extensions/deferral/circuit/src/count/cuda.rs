@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use derive_new::new;
 #[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::cuda::GpuRvrInputError;
+use openvm_circuit::arch::rvr::cuda::GpuPostflightError;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
@@ -28,7 +28,7 @@ impl DeferralCircuitCountChipGpu {
     pub fn generate_proving_ctx_direct(
         &self,
         max_trace_height: usize,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         if self.num_deferral_circuits == 0 {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
@@ -38,12 +38,12 @@ impl DeferralCircuitCountChipGpu {
             .num_deferral_circuits
             .checked_next_power_of_two()
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "Deferral Count trace height overflow".to_string(),
                 )
             })?;
         if trace_height > max_trace_height {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "Deferral Count padded trace height {trace_height} exceeds segment limit {max_trace_height}"
             )));
         }
@@ -51,7 +51,7 @@ impl DeferralCircuitCountChipGpu {
             .checked_mul(trace_width)
             .and_then(|elements| elements.checked_mul(size_of::<F>()))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "Deferral Count trace allocation overflow".to_string(),
                 )
             })?;
