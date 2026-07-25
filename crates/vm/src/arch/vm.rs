@@ -320,7 +320,7 @@ where
     /// Compile the append-only full-log RVR preflight oracle.
     ///
     /// This path supports differential testing and direct transcript
-    /// validation. Production checkpoint proving uses
+    /// validation. Production preflight proving uses
     /// [`Self::preflight_instance`] and derives the full logs
     /// by GPU replay.
     pub fn full_log_preflight_instance(
@@ -342,7 +342,7 @@ where
         ))
     }
 
-    /// Compile the compact checkpoint-and-residual preflight executor.
+    /// Compile the compact preflight executor.
     ///
     /// The compact transcript is the serial input to record-free GPU replay.
     pub fn preflight_instance(
@@ -1474,7 +1474,7 @@ where
         SystemChipInventory = crate::system::cuda::SystemChipInventoryGPU,
     >,
 {
-    /// Expands one compact RV64 checkpoint execution against the segment's
+    /// Expands one compact preflight execution against the segment's
     /// already-uploaded immutable memory image into the read-only replay data
     /// consumed by system and instruction trace generation.
     #[doc(hidden)]

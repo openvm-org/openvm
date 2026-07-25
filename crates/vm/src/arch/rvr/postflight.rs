@@ -1,4 +1,4 @@
-//! Small derived indexes for replaying an RVR preflight transcript.
+//! Small derived indexes for replaying a preflight transcript.
 
 use std::{
     collections::{hash_map::Entry, BTreeMap},
