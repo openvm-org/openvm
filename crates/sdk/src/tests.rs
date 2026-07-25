@@ -2,6 +2,8 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::arch::verify_segments;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
@@ -393,6 +395,35 @@ fn test_sdk_fibonacci() -> Result<()> {
     stdin.write(&n);
 
     prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_rvr_checkpoint_prover_reuse() -> Result<()> {
+    setup_tracing();
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut app_prover = sdk.app_prover(exe)?;
+    app_prover.set_program_name("fibonacci_rvr_checkpoint");
+    let mut prover = sdk.prepare_rvr_checkpoint_app_prover(app_prover)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&1000u64);
+    let first = prover.prove(stdin.clone())?;
+    let second = prover.prove(stdin)?;
+
+    let (_, app_vk) = sdk.app_keygen();
+    verify_segments(&prover.vm().engine, &app_vk.vk, &first.per_segment)?;
+    verify_segments(&prover.vm().engine, &app_vk.vk, &second.per_segment)?;
+    assert_eq!(
+        first.user_public_values.public_values,
+        second.user_public_values.public_values
+    );
+    Ok(())
 }
 
 #[test]

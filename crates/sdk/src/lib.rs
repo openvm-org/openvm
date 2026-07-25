@@ -53,6 +53,8 @@ pub use types::{ExecutableFormat, ExecutableInput};
 
 #[cfg(feature = "rvr")]
 use crate::compiled::load_metered_artifact_metadata;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::prover::RvrCheckpointAppProver;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
@@ -255,6 +257,54 @@ where
     /// ```
     pub fn riscv64(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
         GenericSdk::new(AppConfig::riscv64(app_params), agg_params).unwrap()
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder> {
+    /// Prepares the program-specific RVR executors and immutable GPU replay
+    /// data once. Every subsequent [`RvrCheckpointAppProver::prove`] call
+    /// reuses them without generated-code compilation or program upload.
+    #[tracing::instrument(
+        name = "prepare_rvr_checkpoint",
+        level = "info",
+        skip_all,
+        fields(group = app.program_name.as_deref().unwrap_or("app_proof"))
+    )]
+    pub fn prepare_rvr_checkpoint_app_prover(
+        &self,
+        app: AppProver<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder>,
+    ) -> Result<RvrCheckpointAppProver<'_>, SdkError> {
+        let exe = app.exe();
+        let metered_ctx = app.vm().build_metered_ctx(&exe);
+        let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
+        let metered = self
+            .executor
+            .metered_rvr_instance(
+                &exe,
+                &executor_idx_to_air_idx,
+                metered_ctx.trace_heights.len(),
+                None,
+            )
+            .map_err(VirtualMachineError::from)?;
+        let checkpoint = self
+            .executor
+            .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+            .map_err(VirtualMachineError::from)?;
+        let gpu_program = tracing::info_span!("upload_checkpoint_program")
+            .in_scope(|| SdkVmGpuBuilder::upload_checkpoint_program(app.vm(), &exe.program))
+            .map_err(|error| {
+                VirtualMachineError::Generation(
+                    openvm_circuit::arch::GenerationError::ExtensionTracegen(error.to_string()),
+                )
+            })?;
+        Ok(RvrCheckpointAppProver::new(
+            app,
+            metered,
+            metered_ctx,
+            checkpoint,
+            gpu_program,
+        ))
     }
 }
 

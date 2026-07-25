@@ -1,9 +1,7 @@
 # RVR checkpoint preflight
 
-This document describes the current design. The implementation diary, rejected
-encodings, benchmark history, and milestone-by-milestone notes are preserved in
-[`rvr-preflight-progress.md`](rvr-preflight-progress.md). The original problem
-statement is preserved in [`context.md`](context.md).
+This document describes the current design. The original problem statement and
+review context are preserved in [`context.md`](context.md).
 
 ## Objective
 
@@ -86,6 +84,30 @@ over-retirement, or wrong suspended endpoint is an error.
 The first GPU pass is sometimes called expansion or postflight. It is not a
 second authoritative record format. It is a derived, device-resident view whose
 lifetime ends before the proving/GKR memory peak.
+
+### Prepared prover lifecycle
+
+Generated executors and immutable program data belong to the fixed program, not
+to one proof input. The SDK therefore exposes an explicit prepared checkpoint
+prover:
+
+```text
+prepare once
+    compile metered executor
+    compile checkpoint executor
+    upload immutable replay program
+             |
+             v
+prove(input) repeatedly
+    metered execution -> checkpoint execution -> GPU replay -> prove
+```
+
+Preparation and proof execution have separate metric scopes. A warm proof does
+not compile generated C or upload the program again. The prepared prover borrows
+the SDK's existing executor, following the same ownership model as the compiled
+pure and metered SDK executors; it does not add a generic artifact framework or
+store proof records. The caller names the ordinary app prover before preparing
+it, so setup and proof metrics share the same low-cardinality app group.
 
 ## Authoritative serial output
 
@@ -308,64 +330,68 @@ The pinned full-workload execution comparison currently reports:
 
 ```text
 mode        median execution   generated-C compilation
-pure          737.651 ms              90.383 s
-metered      1584.676 ms             161.171 s
-checkpoint   1507.680 ms             205.543 s
+pure          766.924 ms              88.986 s
+metered      1610.067 ms             166.172 s
+checkpoint   1567.966 ms             154.334 s
 ```
 
 Metered and checkpoint execution both retired 620,281,236 guest instructions
 with the same 63 segment boundaries and output hash. Checkpoint execution was
-4.86% faster than metered and about 2.04 times pure execution. The generated-C
-compile cost remains a concern and is part of the acceptance gate.
+2.6% faster than metered and about 2.04 times pure execution. Generated-C
+compilation is one-time fixed-program preparation and remains reported
+separately from proof execution.
 
 Focused pairing tests kept proving as the peak phase: BN254 used about 355 MiB
 during trace generation versus 1.5 GiB during proving, and BLS12-381 used about
 560 MiB versus 2.2 GiB. These small tests validate lifetimes but do not replace
 the full-workload GPU-memory gate.
 
-The first exact-source 63-segment Reth proof also completed and verified:
+The exact-source legacy and checkpoint 63-segment Reth proofs both completed:
 
 ```text
-620,281,236 guest instructions
-metered generated-C compile       279.268 s
-checkpoint generated-C compile    236.624 s
-checkpoint prove path             601.260 s
-trace generation, all segments      3.065 s
-proving excluding tracegen         71.896 s
+phase                              legacy records   checkpoint replay
+guest instructions / segments     620,281,236 / 63 620,281,236 / 63
+serial preflight                       38.202 s          1.654 s
+GPU replay expansion                        -           3.517 s
+trace generation                        6.596 s          3.023 s
+proving excluding tracegen              74.672 s         71.790 s
+total segment work                     121.893 s         82.488 s
+estimated warm runner wall             148.121 s        105.446 s
 
-expansion allocation peak           2.613 GiB
-tracegen allocation peak            5.901 GiB
-proving allocation peak            14.882 GiB
-sampled process peak                15.482 GiB
+checkpoint expansion allocation peak                      2.613 GiB
+checkpoint tracegen allocation peak                       5.901 GiB
+checkpoint proving allocation peak                       14.882 GiB
+checkpoint sampled process peak                          15.482 GiB
 ```
 
 Expansion and trace generation remain well below proving, and replay buffers
-are not retained at the proving peak. Trace generation improved by about 14%
-against the recorded run. Generated-C compilation regressed materially:
-metered compilation was about 73% slower and checkpoint compilation about 36%
-slower. That regression must be reproduced and understood before the cutover is
-accepted.
+are not retained at the proving peak. Serial preflight is 23.1 times faster,
+trace generation is 54.2% faster, and total segment work is 32.3% faster. The
+warm runner values are currently derived by subtracting generated compilation
+from otherwise exact runs. The prepared-prover acceptance run replaces that
+estimate with a direct measurement.
+
+One-time preparation remains visible: legacy metered compilation took 138.596
+seconds; the checkpoint path took 167.763 seconds for metered compilation and
+198.883 seconds for checkpoint compilation. The host fat-LTO build increased
+from 10m34.35s to 11m22.62s. These are setup and build costs, not per-proof
+costs, but both remain compile-time acceptance metrics.
 
 ## Remaining acceptance work
 
 Before calling the cutover complete:
 
-1. Finish the full diff review against `origin/develop-v2.1.0`: remove replay
-   prologue duplication, keep overflow and pointer bounds consistent, retain
-   typed malformed-input errors, keep imports module-scoped, and remove only
-   abstractions that do not clarify the pipeline.
-2. Run the targeted CPU and CUDA correctness matrix after that cleanup.
-3. Re-run the exact-source pure, metered, and checkpoint comparison. Confirm
-   equal output hashes, retired instructions, and segment boundaries, and
-   investigate the generated-C compilation regression.
-4. Rebuild the current Reth binary with the historical fat-LTO profile and run
-   the final 63-segment proof. Verify segment and continuation proofs, public
-   values, output hash, endpoint continuity, and the metrics below.
-5. Compare generated-code and Cargo compilation, execution, expansion,
-   tracegen, proving, end-to-end time, and phase-specific GPU memory against the
-   recorded baseline. Expansion and tracegen must stay below proving/GKR and
-   preserve the operational budget of about 15 GiB.
-6. Decide separately whether legacy CPU/interpreter support is migrated far
+1. Run the prepared 63-segment Reth mode and verify that the prepared-proof
+   metric contains no generated compilation or immutable program upload.
+   Re-check proofs, public values, output hash, endpoint continuity, and
+   phase-specific GPU memory.
+2. Repeat cold generated-code compilation enough to separate stable source-size
+   cost from machine noise. Keep runtime optimization unchanged unless a
+   full-workload comparison justifies a mode-specific alternative.
+3. Rebase on the latest `origin/develop-v2.1.0` and finish the aggregate diff
+   review for simple ownership, module-scoped imports, shared replay helpers,
+   typed malformed-input errors, and consistent pointer bounds.
+4. Decide separately whether legacy CPU/interpreter support is migrated far
    enough to remove `RecordArena` from shared builder traits.
 
 ## Performance and maintainability gates
@@ -385,7 +411,11 @@ Track at least:
 
 The metrics surface stays phase-level and low-cardinality:
 
-- `compile_checkpoint_preflight_time_ms`;
+- `prepare_rvr_checkpoint_time_ms`, containing the one-time preparation only;
+- the existing `compile_metered_time_ms` plus
+  `compile_checkpoint_preflight_time_ms`, both attributed to preparation;
+- `upload_checkpoint_program_time_ms`, attributed to preparation;
+- `app_prove_rvr_checkpoint_time_ms`, excluding preparation;
 - `execute_checkpoint_preflight_time_ms`, attributed only by the existing
   segment scope;
 - `execute_checkpoint_preflight_insns` and

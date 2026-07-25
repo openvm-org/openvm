@@ -28,14 +28,14 @@ use std::time::{Duration, Instant};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::Segment,
+        execution_mode::{MeteredCtx, Segment},
         hasher::poseidon2::vm_poseidon2_hasher,
-        instructions::exe::VmExe,
         rvr::{
-            RvrCheckpointPreflightExecution, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
+            cuda::GpuRvrProgram, RvrCheckpointPreflightExecution, RvrCheckpointPreflightInstance,
+            RvrCheckpointPreflightLimits, RvrMeteredInstance, RvrPreflightEndpoint,
         },
         ContinuationVmProof, ExecutionError, GenerationError, Streams, VirtualMachineError,
-        VmExecutor, VmInstance,
+        VmInstance,
     },
     system::memory::merkle::public_values::UserPublicValuesProof,
 };
@@ -44,21 +44,47 @@ use openvm_sdk_config::SdkVmGpuBuilder;
 use openvm_stark_backend::StarkEngine;
 use tracing::info_span;
 
-use crate::{StdIn, F, SC};
+use crate::{StdIn, SC};
 
 const CHECKPOINT_INTERVAL: usize = 512;
+
+/// Program-specific executors and device data prepared once and reused by
+/// every checkpoint proof.
+pub(super) struct RvrCheckpointRuntime<'a> {
+    metered: RvrMeteredInstance<'a>,
+    metered_ctx: MeteredCtx,
+    checkpoint: RvrCheckpointPreflightInstance<'a>,
+    gpu_program: GpuRvrProgram,
+}
+
+impl<'a> RvrCheckpointRuntime<'a> {
+    pub(crate) fn new(
+        metered: RvrMeteredInstance<'a>,
+        metered_ctx: MeteredCtx,
+        checkpoint: RvrCheckpointPreflightInstance<'a>,
+        gpu_program: GpuRvrProgram,
+    ) -> Self {
+        Self {
+            metered,
+            metered_ctx,
+            checkpoint,
+            gpu_program,
+        }
+    }
+}
 
 /// Explicit continuation driver for compact RVR checkpoint preflight and
 /// record-free GPU trace generation.
 pub(super) fn prove(
     instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     input: StdIn,
+    runtime: &RvrCheckpointRuntime<'_>,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     let input: Streams = input.into();
     instance.reset_state(input.clone());
     let exe = instance.exe().clone();
 
-    let result = prove_inner(instance, input, &exe);
+    let result = prove_inner(instance, input, runtime);
     if result.is_err() && instance.state().is_none() {
         // Checkpoint execution consumes the segment state. If it fails before
         // returning that state, restore an allocated initial state so the
@@ -72,23 +98,13 @@ pub(super) fn prove(
 fn prove_inner(
     instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     input: Streams,
-    exe: &VmExe<F>,
+    runtime: &RvrCheckpointRuntime<'_>,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     // Meter once. Its exact instruction and residual counts are the only
     // capacities supplied to checkpoint preflight for each segment.
-    let (segments, _) = {
-        let metered_ctx = instance.vm.build_metered_ctx(exe);
-        let metered = instance.vm.metered_instance(exe)?;
-        metered.execute_metered(input, metered_ctx)?
-    };
-
-    // Keep checkpoint compilation independent of the prover VM's executor so
-    // the compiled instance can live across all mutable tracegen/prove calls.
-    let checkpoint_executor = VmExecutor::new(instance.vm.config().clone())?;
-    let checkpoint =
-        checkpoint_executor.rvr_experimental_checkpoint_preflight_instance(exe, None)?;
-    let gpu_program = SdkVmGpuBuilder::upload_checkpoint_program(&instance.vm, &exe.program)
-        .map_err(generation_error)?;
+    let (segments, _) = runtime
+        .metered
+        .execute_metered(input, runtime.metered_ctx.clone())?;
 
     let num_segments = segments.len();
     let mut proofs = Vec::with_capacity(num_segments);
@@ -126,10 +142,12 @@ fn prove_inner(
         #[cfg(feature = "metrics")]
         let checkpoint_execution_started = Instant::now();
         let execution = match reuse.take() {
-            Some(transcript) => {
-                checkpoint.execute_from_state_for_exact_reusing(state, limits, transcript)?
-            }
-            None => checkpoint.execute_from_state_for_exact(state, limits)?,
+            Some(transcript) => runtime
+                .checkpoint
+                .execute_from_state_for_exact_reusing(state, limits, transcript)?,
+            None => runtime
+                .checkpoint
+                .execute_from_state_for_exact(state, limits)?,
         };
         #[cfg(feature = "metrics")]
         {
@@ -140,14 +158,14 @@ fn prove_inner(
 
         let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::expand_checkpoint_replay(
             &instance.vm,
-            &gpu_program,
+            &runtime.gpu_program,
             &execution,
             expected_retired,
         )
         .map_err(generation_error)?;
         let ctx = SdkVmGpuBuilder::generate_proving_ctx_from_rvr(
             &mut instance.vm,
-            &gpu_program,
+            &runtime.gpu_program,
             &gpu_transcript,
             &replay_plan,
         )?;
