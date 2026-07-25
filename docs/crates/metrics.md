@@ -45,7 +45,8 @@ As mentioned above, different proofs must be scoped for metrics post-processing.
 
 The `openvm-sdk` crate applies the following additional labeling conventions:
 
-- For App proofs, the `group` label is set to `app_proof` or the `program_name: String` set in the `AppProver`.
+- App proofs always use `group = app_proof`. `program_name` identifies the
+  program to the application, but does not create a separate proof group.
   - App proofs are distinguished by the `segment` label, which is set to the segment index.
 - The leaf aggregation layer has `group = leaf`.
   - Leaf proofs (each without continuations) are distinguished by the `idx` label, which is set to the leaf node index.

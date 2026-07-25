@@ -247,11 +247,8 @@ impl AppProverBackend<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
         {
             let executor = sdk.executor.clone();
             app.prepare_with(move |app| {
-                let _prepare = tracing::info_span!(
-                    "prepare_preflight",
-                    group = app.program_name.as_deref().unwrap_or("app_proof")
-                )
-                .entered();
+                let _prepare =
+                    tracing::info_span!("prepare_preflight", group = "app_proof").entered();
                 let exe = app.exe();
                 let metered_ctx = app.vm().build_metered_ctx(&exe);
                 let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
