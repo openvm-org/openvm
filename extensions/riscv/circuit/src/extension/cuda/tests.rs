@@ -513,6 +513,119 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
 }
 
 #[test]
+fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
+    const RETIRED: usize = 1025;
+
+    let program = Program::from_instructions(&[Instruction::from_usize(
+        Rv64JalLuiOpcode::JAL.global_opcode(),
+        [0, 0, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
+    )]);
+    let exe = VmExe::new(program.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+    let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut vm, _) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = vm.commit_program_on_device(&program);
+    vm.load_program(cached_program);
+    vm.transport_init_memory_to_device(&state.memory);
+    let execution = checkpoint
+        .execute_from_state_for_exact(state, RvrCheckpointPreflightLimits::new(RETIRED, 0, 1))
+        .unwrap();
+    assert_eq!(execution.retired as usize, RETIRED);
+    // The suspended endpoint becomes one additional replay anchor, crossing
+    // the launcher's former 1024-thread threshold.
+    assert_eq!(execution.transcript.checkpoints.len(), RETIRED - 1);
+
+    let gpu_program = GpuRvrProgram::upload(
+        &program,
+        &config.system.memory_config,
+        &vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (_, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+        &vm,
+        &gpu_program,
+        &execution,
+        execution.retired,
+    )
+    .unwrap();
+    assert_eq!(replay_plan.steps_host().unwrap().len(), RETIRED);
+}
+
+#[test]
+fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
+    const REPETITIONS: usize = 513;
+    const LOOP_INSNS: usize = 4;
+    const RETIRED: usize = REPETITIONS * LOOP_INSNS;
+
+    let instructions = [
+        checkpoint_m(MulHOpcode::MULH, 1, 0, 0),
+        checkpoint_m(DivRemOpcode::DIV, 1, 0, 0),
+        checkpoint_m(DivRemWOpcode::DIVW, 1, 0, 0),
+        Instruction::large_from_isize(
+            Rv64JalLuiOpcode::JAL.global_opcode(),
+            0,
+            0,
+            -(LOOP_INSNS as isize - 1) * 4,
+            RV64_REGISTER_AS as isize,
+            0,
+            0,
+            0,
+        ),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program.clone());
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
+            system: test_system_config(),
+            ..Default::default()
+        },
+        mul: Default::default(),
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+    let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut vm, _) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = vm.commit_program_on_device(&program);
+    vm.load_program(cached_program);
+    vm.transport_init_memory_to_device(&state.memory);
+    let execution = checkpoint
+        .execute_from_state_for_exact(state, RvrCheckpointPreflightLimits::new(RETIRED, 0, 512))
+        .unwrap();
+    assert_eq!(execution.retired as usize, RETIRED);
+
+    let gpu_program = GpuRvrProgram::upload(
+        &program,
+        &config.rv64i.system.memory_config,
+        &vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+        &vm,
+        &gpu_program,
+        &execution,
+        execution.retired,
+    )
+    .unwrap();
+    Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
+        .unwrap()
+        .generate_proving_ctx(&mut vm)
+        .unwrap();
+}
+
+#[test]
 fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
     let instructions = [
         checkpoint_ri(BaseAluImmOpcode::ADDI, 1, 0, 7),

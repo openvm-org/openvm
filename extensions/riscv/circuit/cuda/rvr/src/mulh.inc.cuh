@@ -134,7 +134,7 @@ extern "C" int _mulh_replay_tracegen(
     assert(mulh_count <= SIZE_MAX - mulhsu_count);
     assert(mulh_count + mulhsu_count <= SIZE_MAX - mulhu_count);
     assert(height >= mulh_count + mulhsu_count + mulhu_count);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, 256);
     mulh_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         mulh_start, mulh_count, mulhsu_start, mulhsu_count, mulhu_start, mulhu_count, error,

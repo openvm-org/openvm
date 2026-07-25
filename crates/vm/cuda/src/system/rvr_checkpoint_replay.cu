@@ -21,6 +21,7 @@ static constexpr uint32_t BABY_BEAR_ORDER = 2013265921u;
 static constexpr uint32_t REGISTER_BYTES = 8;
 static constexpr uint32_t NUM_REGISTERS = 32;
 static constexpr uint32_t MAX_HINT_WORDS = 1023;
+static constexpr uint32_t REPLAY_THREADS = 256;
 
 static constexpr uint32_t ERROR_BAD_CHUNK = 301;
 static constexpr uint32_t ERROR_BAD_PC = 302;
@@ -1599,7 +1600,7 @@ extern "C" int _rvr_checkpoint_count(
     cudaStream_t stream
 ) {
     if (anchors.len() == 0) return int(cudaErrorInvalidValue);
-    auto [grid, block] = kernel_launch_params(anchors.len());
+    auto [grid, block] = kernel_launch_params(anchors.len(), REPLAY_THREADS);
     checkpoint_count<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
         schedule_dispatch, schedules, spans, static_values, opcodes, register_as,
@@ -1642,7 +1643,7 @@ extern "C" int _rvr_checkpoint_emit(
     if (event_offsets.len() != anchors.len() || write_masks.len() != memory.len()) {
         return int(cudaErrorInvalidValue);
     }
-    auto [grid, block] = kernel_launch_params(anchors.len());
+    auto [grid, block] = kernel_launch_params(anchors.len(), REPLAY_THREADS);
     checkpoint_emit<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
         event_offsets, schedule_dispatch, schedules, spans, static_values, opcodes,
