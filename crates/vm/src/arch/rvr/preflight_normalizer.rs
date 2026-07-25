@@ -25,6 +25,8 @@ use crate::{
 /// `block_addr / WORD_BYTES`. All rvr-traced address spaces (register, memory,
 /// public values) use U16 cells, so this equals `BLOCK_FE_WIDTH` cells.
 pub(crate) const WORD_BYTES: usize = 8;
+const SHADOW_DIRTY: u32 = 1 << 31;
+const SHADOW_TIMESTAMP_MASK: u32 = !SHADOW_DIRTY;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreflightMemoryAccessAux<F> {
@@ -99,7 +101,21 @@ impl PreflightShadowsView<'_> {
         } else {
             self.memory
         };
-        shadow.get(block_idx).copied().unwrap_or(0)
+        shadow.get(block_idx).copied().unwrap_or(0) & SHADOW_TIMESTAMP_MASK
+    }
+
+    #[inline]
+    fn is_dirty(&self, addr_space: u32, block_idx: usize) -> bool {
+        let shadow = if addr_space == RV64_REGISTER_AS {
+            self.register
+        } else if addr_space == PUBLIC_VALUES_AS {
+            self.public_values
+        } else {
+            self.memory
+        };
+        shadow
+            .get(block_idx)
+            .is_some_and(|&entry| entry & SHADOW_DIRTY != 0)
     }
 }
 
@@ -307,6 +323,7 @@ fn touched_memory_entry<F: Field>(
     SystemTouchedBlock {
         address_space: addr_space,
         ptr: block_ptr,
+        is_dirty: u32::from(shadows.is_dirty(addr_space, block_idx)),
         timestamp,
         values,
     }
@@ -369,7 +386,7 @@ mod tests {
         let mut register_shadow = vec![0; 64];
         let mut memory_shadow = vec![0; 64];
         let mut public_values_shadow = vec![0; 64];
-        register_shadow[1] = 11;
+        register_shadow[1] = 11 | SHADOW_DIRTY;
         memory_shadow[0] = 22;
         memory_shadow[4] = 33;
         public_values_shadow[0] = 44;
@@ -419,6 +436,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(candidate, baseline);
+        let dirty_register = candidate
+            .touched_memory
+            .iter()
+            .find(|block| (block.address_space, block.ptr) == (RV64_REGISTER_AS, 4))
+            .expect("missing register block");
+        assert_eq!(dirty_register.timestamp, 11);
+        assert_eq!(dirty_register.is_dirty, 1);
+        assert!(candidate
+            .touched_memory
+            .iter()
+            .filter(|block| block.address_space != RV64_REGISTER_AS)
+            .all(|block| block.is_dirty == 0));
         assert!(scratch.register.iter().all(|&word| word == 0));
         assert!(scratch.memory.iter().all(|&word| word == 0));
         assert!(scratch.public_values.iter().all(|&word| word == 0));

@@ -484,6 +484,10 @@ _Static_assert(offsetof(PreflightAddSubRecord, c) == 36,
 
 /* ── Timestamp shadow ─────────────────────────────────────────────── */
 
+static constexpr uint32_t PREFLIGHT_SHADOW_DIRTY = UINT32_C(1) << 31;
+static constexpr uint32_t PREFLIGHT_SHADOW_TIMESTAMP_MASK =
+    ~PREFLIGHT_SHADOW_DIRTY;
+
 /* The traced address spaces all use WORD_SIZE-byte blocks; select the shadow
  * array for `addr_space`. Only register / main-memory / public-values reach
  * this tracer (deferral stores are routed to the interpreter upstream). */
@@ -1032,7 +1036,8 @@ static __attribute__((always_inline)) inline void trace_block(
  * finalization byte-identical across a mixed-mode segment. */
 static __attribute__((always_inline)) inline uint32_t preflight_touch(
     Tracer* restrict t, uint8_t addr_space, uint64_t address,
-    uint64_t initial_value, uint32_t* restrict out_timestamp) {
+    uint64_t initial_value, bool is_write,
+    uint32_t* restrict out_timestamp) {
   uint64_t detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
@@ -1055,8 +1060,13 @@ static __attribute__((always_inline)) inline uint32_t preflight_touch(
 
   detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  uint32_t prev_timestamp = shadow[block_idx];
-  shadow[block_idx] = timestamp;
+  uint32_t prev_shadow = shadow[block_idx];
+  uint32_t prev_timestamp = prev_shadow & PREFLIGHT_SHADOW_TIMESTAMP_MASK;
+  uint32_t dirty = prev_shadow & PREFLIGHT_SHADOW_DIRTY;
+  if (is_write) {
+    dirty = PREFLIGHT_SHADOW_DIRTY;
+  }
+  shadow[block_idx] = timestamp | dirty;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   if (prev_timestamp == 0u) {
@@ -1103,7 +1113,8 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
 
   detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  uint32_t prev_timestamp = shadow[block_idx];
+  uint32_t prev_shadow = shadow[block_idx];
+  uint32_t prev_timestamp = prev_shadow & PREFLIGHT_SHADOW_TIMESTAMP_MASK;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   uint64_t initial_value = 0u;
@@ -1119,7 +1130,8 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
   }
   uint64_t aux_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  shadow[block_idx] = timestamp;
+  shadow[block_idx] =
+      timestamp | (prev_shadow & PREFLIGHT_SHADOW_DIRTY);
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              aux_started);
   if (prev_timestamp == 0u) {
@@ -1309,7 +1321,11 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
   }
   uint32_t timestamp;
   uint32_t prev_timestamp =
-      preflight_touch(t, addr_space, address, prev_value, &timestamp);
+      preflight_touch(
+          t, addr_space, address, prev_value,
+          kind == PREFLIGHT_MEMORY_KIND_WRITE &&
+              !(addr_space == AS_REGISTER && address == 0u),
+          &timestamp);
   if (kind == PREFLIGHT_MEMORY_KIND_WRITE && addr_space == AS_MEMORY) {
     preflight_mark_dirty_memory_page(t, address);
   }
@@ -1340,36 +1356,47 @@ static __attribute__((always_inline)) inline void trace_timestamp(
  * using the trace_* helpers below because their events are residual-native. */
 static __attribute__((always_inline)) inline void preflight_g2_shadow_touch(
     Tracer* restrict t, uint8_t addr_space, uint64_t address,
-    uint64_t current_value) {
+    uint64_t current_value, bool is_write) {
   uint32_t timestamp;
-  preflight_touch(t, addr_space, address, current_value, &timestamp);
+  preflight_touch(
+      t, addr_space, address, current_value, is_write, &timestamp);
 }
 
 static __attribute__((always_inline)) inline void
 preflight_g2_shadow_reg_touch(RvState* restrict state, uint8_t idx) {
   uint64_t value = idx == 0 ? 0u : state->regs[idx];
   preflight_g2_shadow_touch(state->tracer, AS_REGISTER,
-                            (uint32_t)idx * WORD_SIZE, value);
+                            (uint32_t)idx * WORD_SIZE, value, false);
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_shadow_reg_write_touch(RvState* restrict state, uint8_t idx) {
+  uint64_t value = idx == 0 ? 0u : state->regs[idx];
+  preflight_g2_shadow_touch(state->tracer, AS_REGISTER,
+                            (uint32_t)idx * WORD_SIZE, value, idx != 0);
 }
 
 static __attribute__((always_inline)) inline void
 preflight_g2_shadow_mem_touch(RvState* restrict state, uint64_t block_addr,
                               uint64_t block_value) {
-  preflight_g2_shadow_touch(state->tracer, AS_MEMORY, block_addr, block_value);
+  preflight_g2_shadow_touch(
+      state->tracer, AS_MEMORY, block_addr, block_value, false);
 }
 
 static __attribute__((always_inline)) inline void
 preflight_g2_shadow_mem_store_touch(RvState* restrict state,
                                     uint64_t block_addr) {
-  preflight_g2_shadow_touch(state->tracer, AS_MEMORY, block_addr,
-                            preflight_read_mem_block(state, block_addr));
+  preflight_g2_shadow_touch(
+      state->tracer, AS_MEMORY, block_addr,
+      preflight_read_mem_block(state, block_addr), true);
   preflight_mark_dirty_memory_page(state->tracer, block_addr);
 }
 
 static __attribute__((always_inline)) inline void
 preflight_g2_shadow_pv_touch(RvState* restrict state, uint64_t block_addr) {
-  preflight_g2_shadow_touch(state->tracer, AS_PUBLIC_VALUES, block_addr,
-                            preflight_read_pv_block(state->tracer, block_addr));
+  preflight_g2_shadow_touch(
+      state->tracer, AS_PUBLIC_VALUES, block_addr,
+      preflight_read_pv_block(state->tracer, block_addr), true);
 }
 
 /* ── Trace-only register access ──────────────────────────────────── */
@@ -1402,12 +1429,16 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
  * identical timestamp/shadow/touched bookkeeping to the logging trace_rd/wr
  * helpers, no MemoryLogEntry. `block_addr` must be block-aligned. Returns the
  * block's previous-access timestamp. */
-static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
-    RvState* restrict state, uint64_t block_addr, uint64_t block_value) {
+static __attribute__((always_inline)) inline uint32_t trace_mem_touch_kind(
+    RvState* restrict state, uint64_t block_addr, uint64_t block_value,
+    bool is_write) {
   Tracer* restrict t = state->tracer;
   if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
              t->g2 == NULL)) {
     t->timestamp++;
+    if (is_write) {
+      preflight_mark_dirty_memory_page(t, block_addr);
+    }
     return 0u;
   }
   uint64_t detail_started = preflight_detail_phase_begin(
@@ -1422,8 +1453,13 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
                              detail_started);
   detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  uint32_t prev_timestamp = t->shadow_memory[block_idx];
-  t->shadow_memory[block_idx] = timestamp;
+  uint32_t prev_shadow = t->shadow_memory[block_idx];
+  uint32_t prev_timestamp = prev_shadow & PREFLIGHT_SHADOW_TIMESTAMP_MASK;
+  uint32_t dirty = prev_shadow & PREFLIGHT_SHADOW_DIRTY;
+  if (is_write) {
+    dirty = PREFLIGHT_SHADOW_DIRTY;
+  }
+  t->shadow_memory[block_idx] = timestamp | dirty;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   if (prev_timestamp == 0u) {
@@ -1433,7 +1469,20 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
     preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
                                detail_started);
   }
+  if (is_write) {
+    preflight_mark_dirty_memory_page(t, block_addr);
+  }
   return prev_timestamp;
+}
+
+static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
+    RvState* restrict state, uint64_t block_addr, uint64_t block_value) {
+  return trace_mem_touch_kind(state, block_addr, block_value, false);
+}
+
+static __attribute__((always_inline)) inline uint32_t trace_mem_write_touch(
+    RvState* restrict state, uint64_t block_addr, uint64_t block_value) {
+  return trace_mem_touch_kind(state, block_addr, block_value, true);
 }
 
 /* Store-side variant: only read the pre-write block when it is the seed for
@@ -1459,7 +1508,8 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
                              detail_started);
   detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  uint32_t prev_timestamp = t->shadow_memory[block_idx];
+  uint32_t prev_shadow = t->shadow_memory[block_idx];
+  uint32_t prev_timestamp = prev_shadow & PREFLIGHT_SHADOW_TIMESTAMP_MASK;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   uint64_t initial_value = 0u;
@@ -1470,7 +1520,7 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
   }
   uint64_t aux_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  t->shadow_memory[block_idx] = timestamp;
+  t->shadow_memory[block_idx] = timestamp | PREFLIGHT_SHADOW_DIRTY;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              aux_started);
   if (prev_timestamp == 0u) {
@@ -1505,7 +1555,8 @@ static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
                              detail_started);
   detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  uint32_t prev_timestamp = t->shadow_public_values[block_idx];
+  uint32_t prev_shadow = t->shadow_public_values[block_idx];
+  uint32_t prev_timestamp = prev_shadow & PREFLIGHT_SHADOW_TIMESTAMP_MASK;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   uint64_t initial_value = 0u;
@@ -1516,7 +1567,8 @@ static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
   }
   uint64_t aux_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  t->shadow_public_values[block_idx] = timestamp;
+  t->shadow_public_values[block_idx] =
+      timestamp | PREFLIGHT_SHADOW_DIRTY;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              aux_started);
   if (prev_timestamp == 0u) {
@@ -1533,8 +1585,8 @@ static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
  * `MemoryLogEntry` — the compact record carries the aux data instead. The tick
  * model must stay byte-identical to the logging variants. Returns the register
  * block's previous-access timestamp. */
-static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
-    RvState* restrict state, uint8_t idx) {
+static __attribute__((always_inline)) inline uint32_t trace_reg_touch_kind(
+    RvState* restrict state, uint8_t idx, bool is_write) {
   Tracer* restrict t = state->tracer;
   if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
              t->g2 == NULL)) {
@@ -1553,7 +1605,8 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
                              detail_started);
   detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  uint32_t prev_timestamp = t->shadow_register[block_idx];
+  uint32_t prev_shadow = t->shadow_register[block_idx];
+  uint32_t prev_timestamp = prev_shadow & PREFLIGHT_SHADOW_TIMESTAMP_MASK;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   uint64_t initial_value = 0u;
@@ -1564,7 +1617,11 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
   }
   uint64_t aux_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
-  t->shadow_register[block_idx] = timestamp;
+  uint32_t dirty = prev_shadow & PREFLIGHT_SHADOW_DIRTY;
+  if (is_write && idx != 0) {
+    dirty = PREFLIGHT_SHADOW_DIRTY;
+  }
+  t->shadow_register[block_idx] = timestamp | dirty;
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              aux_started);
   if (prev_timestamp == 0u) {
@@ -1574,6 +1631,16 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
                                detail_started);
   }
   return prev_timestamp;
+}
+
+static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
+    RvState* restrict state, uint8_t idx) {
+  return trace_reg_touch_kind(state, idx, false);
+}
+
+static __attribute__((always_inline)) inline uint32_t trace_reg_write_touch(
+    RvState* restrict state, uint8_t idx) {
+  return trace_reg_touch_kind(state, idx, true);
 }
 
 static __attribute__((always_inline)) inline void

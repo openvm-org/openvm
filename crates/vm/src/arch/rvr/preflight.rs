@@ -2548,6 +2548,7 @@ mod tests {
             .map(|block| crate::system::TouchedBlock {
                 address_space: block.addr_space,
                 ptr: block.block_addr / 2,
+                is_dirty: 0,
                 timestamp: 1,
                 values: [BabyBear::default(); BLOCK_FE_WIDTH],
             })

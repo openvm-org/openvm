@@ -617,12 +617,12 @@ impl<'a> EmitContext<'a> {
 
     fn reg_touch_capture(&mut self, idx: u8) -> String {
         if self.delta_records && !self.arena_native_airs.contains_key(&self.current_chip_idx) {
-            self.write_line(&format!("(void)trace_reg_touch(state, {idx});"));
+            self.write_line(&format!("(void)trace_reg_write_touch(state, {idx});"));
             "0u".to_string()
         } else {
             let prev_timestamp = self.next_var();
             self.write_line(&format!(
-                "uint32_t {prev_timestamp} = trace_reg_touch(state, {idx});"
+                "uint32_t {prev_timestamp} = trace_reg_write_touch(state, {idx});"
             ));
             prev_timestamp
         }
@@ -663,7 +663,9 @@ impl<'a> EmitContext<'a> {
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
-                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                self.write_line(&format!(
+                    "preflight_g2_shadow_reg_write_touch(state, {rd});"
+                ));
             } else {
                 self.g2_floor_timestamp(3);
             }
@@ -1028,7 +1030,9 @@ impl<'a> EmitContext<'a> {
             self.g2_store_u64(rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT, &result);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                self.write_line(&format!(
+                    "preflight_g2_shadow_reg_write_touch(state, {rd});"
+                ));
             } else {
                 self.g2_floor_timestamp(2);
             }
@@ -1173,7 +1177,9 @@ impl<'a> EmitContext<'a> {
             self.g2_store_u64(slot, &res);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                self.write_line(&format!(
+                    "preflight_g2_shadow_reg_write_touch(state, {rd});"
+                ));
             } else {
                 self.g2_floor_timestamp(2);
             }
@@ -1253,7 +1259,7 @@ impl<'a> EmitContext<'a> {
             if self.g2_checked {
                 if self.current_g2_kind == 14 || rd.is_some_and(|rd| rd != 0) {
                     self.write_line(&format!(
-                        "preflight_g2_shadow_reg_touch(state, {});",
+                        "preflight_g2_shadow_reg_write_touch(state, {});",
                         rd.unwrap_or(0)
                     ));
                 } else {
@@ -1506,7 +1512,9 @@ impl<'a> EmitContext<'a> {
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
-                    self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_reg_write_touch(state, {rd});"
+                    ));
                 } else {
                     self.write_line("trace_timestamp(state);");
                 }
@@ -1735,7 +1743,9 @@ impl<'a> EmitContext<'a> {
                 if rd == 0 {
                     self.write_line("trace_timestamp(state);");
                 } else {
-                    self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_reg_write_touch(state, {rd});"
+                    ));
                 }
             } else if width == 1 {
                 self.g2_floor_timestamp(3);
@@ -2056,7 +2066,7 @@ impl<'a> EmitContext<'a> {
         if width == 1 {
             if let Some(prev) = prev.as_deref() {
                 self.write_line(&format!(
-                    "uint32_t {pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+                    "uint32_t {pw} = trace_mem_write_touch(state, {blockaddr}, {prev});"
                 ));
             } else {
                 self.write_line(&format!(
@@ -2096,7 +2106,7 @@ impl<'a> EmitContext<'a> {
                 ));
             } else {
                 self.write_line(&format!(
-                    "{pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+                    "{pw} = trace_mem_write_touch(state, {blockaddr}, {prev});"
                 ));
             }
             self.write_line("trace_timestamp(state);");
