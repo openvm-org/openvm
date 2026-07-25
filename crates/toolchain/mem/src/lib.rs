@@ -115,6 +115,46 @@ pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut
     dest
 }
 
+/// Copies high addresses first.
+///
+/// # Safety
+///
+/// `src` must be valid for reads of `n` bytes and `dest` valid for writes of `n` bytes. The
+/// ranges may overlap only when `dest >= src`; use [`copy_forward`] otherwise.
+#[inline(always)]
+pub unsafe fn copy_backward(dest: *mut u8, src: *const u8, n: usize) {
+    let mut rem = n;
+    while rem >= BLOCK {
+        rem -= BLOCK;
+        store::<BLOCK>(dest.add(rem), load::<BLOCK>(src.add(rem)));
+    }
+    // Everything still unwritten lives below `rem`, and `copy_tail` loads before it stores.
+    copy_tail(dest, src, rem);
+}
+
+/// Copies `n` bytes, choosing a direction that tolerates overlap.
+///
+/// # Safety
+///
+/// `src` must be valid for reads of `n` bytes and `dest` valid for writes of `n` bytes.
+#[inline(always)]
+pub unsafe fn move_bytes(dest: *mut u8, src: *const u8, n: usize) {
+    // Copying upwards is safe unless `dest` starts inside the source range. The wrapping
+    // subtraction folds `dest < src` into the same comparison: it underflows past any real `n`.
+    if (dest as usize).wrapping_sub(src as usize) >= n {
+        copy_forward(dest, src, n);
+    } else {
+        copy_backward(dest, src, n);
+    }
+}
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[no_mangle]
+pub unsafe extern "C" fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+    move_bytes(dest, src, n);
+    dest
+}
+
 /// Writes `WORDS` words at `dest` and `WORDS` more ending at `dest + n`.
 #[inline(always)]
 unsafe fn set_overlapping<const WORDS: usize>(dest: *mut u8, word: u64, n: usize) {

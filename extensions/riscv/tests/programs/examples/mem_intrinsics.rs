@@ -70,6 +70,32 @@ fn check_memset(dest: &mut [u8; CAP]) {
     }
 }
 
+/// Overlap distances straddling the bulk-loop stride, exercising both copy directions.
+const DELTAS: [usize; 7] = [0, 1, 7, 8, 33, 64, 65];
+
+fn check_memmove(src: &[u8; CAP], buf: &mut [u8; CAP]) {
+    for n in LENS {
+        for delta in DELTAS {
+            for (src_off, dest_off) in [(0, delta), (delta, 0)] {
+                if src_off + n > CAP || dest_off + n > CAP {
+                    continue;
+                }
+                *buf = *src;
+                unsafe {
+                    core::ptr::copy(
+                        black_box(buf.as_ptr().add(src_off)),
+                        black_box(buf.as_mut_ptr().add(dest_off)),
+                        black_box(n),
+                    );
+                }
+                for k in 0..n {
+                    assert_eq!(buf[dest_off + k], src[src_off + k]);
+                }
+            }
+        }
+    }
+}
+
 pub fn main() {
     let mut src = [0u8; CAP];
     for (i, b) in src.iter_mut().enumerate() {
@@ -79,4 +105,5 @@ pub fn main() {
 
     check_memcpy(&src, &mut dest);
     check_memset(&mut dest);
+    check_memmove(&src, &mut dest);
 }

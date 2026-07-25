@@ -16,6 +16,31 @@ fn pattern(len: usize) -> Vec<u8> {
         .collect()
 }
 
+/// Overlap distances that straddle the bulk-loop stride in both copy directions.
+const MAX_DELTA: usize = BLOCK + OFFSETS;
+
+#[test]
+fn move_bytes_matches_copy_within() {
+    let base = pattern(MAX_LEN + 2 * MAX_DELTA);
+    let mut buf = base.clone();
+    let mut expected = base.clone();
+    for n in 0..=MAX_LEN {
+        for delta in 0..=MAX_DELTA {
+            // `dest` above `src` forces the backward copy, below it the forward one.
+            for (src_off, dest_off) in [
+                (MAX_DELTA, MAX_DELTA + delta),
+                (MAX_DELTA + delta, MAX_DELTA),
+            ] {
+                buf.copy_from_slice(&base);
+                expected.copy_from_slice(&base);
+                expected.copy_within(src_off..src_off + n, dest_off);
+                unsafe { move_bytes(buf.as_mut_ptr().add(dest_off), buf.as_ptr().add(src_off), n) };
+                assert_eq!(buf, expected, "n={n} delta={delta} dest_off={dest_off}");
+            }
+        }
+    }
+}
+
 #[test]
 fn set_bytes_matches_fill() {
     for n in 0..=MAX_LEN {
