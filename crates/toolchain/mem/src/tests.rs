@@ -16,6 +16,40 @@ fn pattern(len: usize) -> Vec<u8> {
         .collect()
 }
 
+#[test]
+fn compare_bytes_matches_slice_cmp() {
+    let a = pattern(MAX_LEN + 2 * OFFSETS);
+    for n in 0..=MAX_LEN {
+        for a_off in 0..OFFSETS {
+            for b_off in 0..OFFSETS {
+                // Flip one byte at a time so every position is the first difference in turn,
+                // including positions only the overlapping final word can reach.
+                for flip in (0..n).chain([usize::MAX]) {
+                    let mut b = a.clone();
+                    if flip != usize::MAX {
+                        b[b_off + flip] ^= 0x80;
+                    }
+                    let got =
+                        unsafe { compare_bytes(a.as_ptr().add(a_off), b.as_ptr().add(b_off), n) };
+                    let want = a[a_off..a_off + n].cmp(&b[b_off..b_off + n]);
+                    assert_eq!(
+                        got.signum(),
+                        match want {
+                            std::cmp::Ordering::Less => -1,
+                            std::cmp::Ordering::Equal => 0,
+                            std::cmp::Ordering::Greater => 1,
+                        },
+                        "n={n} a_off={a_off} b_off={b_off} flip={flip}"
+                    );
+                    let differ =
+                        unsafe { bytes_differ(a.as_ptr().add(a_off), b.as_ptr().add(b_off), n) };
+                    assert_eq!(differ, want != std::cmp::Ordering::Equal);
+                }
+            }
+        }
+    }
+}
+
 /// Overlap distances that straddle the bulk-loop stride in both copy directions.
 const MAX_DELTA: usize = BLOCK + OFFSETS;
 

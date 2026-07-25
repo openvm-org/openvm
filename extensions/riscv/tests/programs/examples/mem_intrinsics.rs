@@ -96,6 +96,37 @@ fn check_memmove(src: &[u8; CAP], buf: &mut [u8; CAP]) {
     }
 }
 
+/// Byte-at-a-time reference for the ordering `memcmp` must agree with.
+fn reference_cmp(a: &[u8], b: &[u8]) -> i32 {
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return a[i] as i32 - b[i] as i32;
+        }
+        i += 1;
+    }
+    0
+}
+
+fn check_memcmp(src: &[u8; CAP], other: &mut [u8; CAP]) {
+    for n in LENS {
+        for off in 0..OFFSETS {
+            // `usize::MAX` leaves the buffers identical; the rest make each end and the middle
+            // the first differing byte in turn.
+            for flip in [usize::MAX, 0, n / 2, n.saturating_sub(1)] {
+                *other = *src;
+                if flip < n {
+                    other[off + flip] ^= 0x80;
+                }
+                let a = black_box(&src[off..off + n]);
+                let b = black_box(&other[off..off + n]);
+                assert_eq!(a.cmp(b) as i32, reference_cmp(a, b).signum());
+                assert_eq!(a == b, reference_cmp(a, b) == 0);
+            }
+        }
+    }
+}
+
 pub fn main() {
     let mut src = [0u8; CAP];
     for (i, b) in src.iter_mut().enumerate() {
@@ -106,4 +137,5 @@ pub fn main() {
     check_memcpy(&src, &mut dest);
     check_memset(&mut dest);
     check_memmove(&src, &mut dest);
+    check_memcmp(&src, &mut dest);
 }

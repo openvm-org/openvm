@@ -217,5 +217,95 @@ pub unsafe extern "C" fn memset(dest: *mut u8, val: core::ffi::c_int, n: usize) 
     dest
 }
 
+const WORD: usize = core::mem::size_of::<u64>();
+
+/// Reads a word with byte 0 in the low bits, so bit order matches address order.
+#[inline(always)]
+unsafe fn read_word(src: *const u8) -> u64 {
+    u64::from_le_bytes(load::<WORD>(src))
+}
+
+/// Difference of the lowest-addressed byte on which `a` and `b` disagree. `a != b` required.
+#[inline(always)]
+fn byte_ordering(a: u64, b: u64) -> i32 {
+    let shift = (a ^ b).trailing_zeros() & !7;
+    (((a >> shift) & 0xff) as i32) - (((b >> shift) & 0xff) as i32)
+}
+
+/// Compares `n` bytes, returning a value whose sign matches the first differing byte.
+///
+/// # Safety
+///
+/// `a` and `b` must be valid for reads of `n` bytes.
+#[inline(always)]
+pub unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
+    let mut i = 0;
+    if n >= WORD {
+        while i + WORD <= n {
+            let (x, y) = (read_word(a.add(i)), read_word(b.add(i)));
+            if x != y {
+                return byte_ordering(x, y);
+            }
+            i += WORD;
+        }
+        if i < n {
+            // Overlapping final word. Everything below `i` already matched, so the first
+            // difference within it is also the first difference overall.
+            let (x, y) = (read_word(a.add(n - WORD)), read_word(b.add(n - WORD)));
+            if x != y {
+                return byte_ordering(x, y);
+            }
+        }
+        return 0;
+    }
+    // Under a word there is nothing to widen into; at most seven iterations.
+    while i < n {
+        let (x, y) = (*a.add(i), *b.add(i));
+        if x != y {
+            return x as i32 - y as i32;
+        }
+        i += 1;
+    }
+    0
+}
+
+/// Reports whether `n` bytes differ, without ordering them.
+///
+/// # Safety
+///
+/// `a` and `b` must be valid for reads of `n` bytes.
+#[inline(always)]
+pub unsafe fn bytes_differ(a: *const u8, b: *const u8, n: usize) -> bool {
+    let mut i = 0;
+    if n >= WORD {
+        while i + WORD <= n {
+            if read_word(a.add(i)) != read_word(b.add(i)) {
+                return true;
+            }
+            i += WORD;
+        }
+        return i < n && read_word(a.add(n - WORD)) != read_word(b.add(n - WORD));
+    }
+    while i < n {
+        if *a.add(i) != *b.add(i) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[no_mangle]
+pub unsafe extern "C" fn memcmp(a: *const u8, b: *const u8, n: usize) -> core::ffi::c_int {
+    compare_bytes(a, b, n)
+}
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[no_mangle]
+pub unsafe extern "C" fn bcmp(a: *const u8, b: *const u8, n: usize) -> core::ffi::c_int {
+    bytes_differ(a, b, n) as core::ffi::c_int
+}
+
 #[cfg(test)]
 mod tests;
