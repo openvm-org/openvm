@@ -607,6 +607,7 @@ mod tests {
     #[test_case("misaligned_load", 1)]
     #[test_case("misaligned_signed_load", 1)]
     #[test_case("misaligned_store", 1)]
+    #[test_case("mem_intrinsics", 1)]
     fn test_misaligned_mem_access(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
