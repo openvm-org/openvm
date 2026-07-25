@@ -17,7 +17,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -60,12 +60,12 @@ impl<C: Sha2Config> Sha2MainChipGpu<C> {
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let step_range = replay_plan.opcode_range(C::OPCODE.global_opcode());
@@ -384,12 +384,12 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.bitwise_lookup.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let step_range = replay_plan.opcode_range(C::OPCODE.global_opcode());
@@ -400,7 +400,7 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
             .len()
             .checked_mul(C::ROWS_PER_BLOCK)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "SHA-2 block-hasher replay row count overflow".to_string(),
                 )
             })?;
@@ -408,12 +408,12 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, C::BLOCK_HASHER_WIDTH, device_ctx);
         u32::try_from(step_range.len()).map_err(|_| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "SHA-2 block-hasher replay block count exceeds u32".to_string(),
             )
         })?;
         let prev_hash_words = step_range.len().checked_mul(C::HASH_WORDS).ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "SHA-2 block-hasher replay hash scratch size overflow".to_string(),
             )
         })?;
@@ -422,7 +422,7 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
             .checked_mul(C::ROWS_PER_BLOCK)
             .and_then(|words| words.checked_mul(8 + C::BLOCK_WORDS))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "SHA-2 block-hasher replay scratch size overflow".to_string(),
                 )
             })?;

@@ -1,29 +1,26 @@
 use std::collections::BTreeMap;
 
-use openvm_algebra_circuit::AlgebraRvrGpuTracegen;
-use openvm_bigint_circuit::Int256RvrGpuTracegen;
+use openvm_algebra_circuit::AlgebraPreflightGpuTracegen;
+use openvm_bigint_circuit::Int256PreflightGpuTracegen;
 use openvm_circuit::arch::{
     instructions::program::Program,
-    rvr::{
-        cuda::{
-            GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-            RvrCheckpointAccessRegistry, RvrCheckpointOpcodeBases,
-        },
-        PreflightExecution,
+    rvr::cuda::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        PostflightAccessRegistry, PostflightOpcodeBases,
     },
-    GenerationError, VirtualMachine,
+    GenerationError, PreflightExecution, VirtualMachine,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-use openvm_deferral_circuit::DeferralRvrGpuTracegen;
-use openvm_ecc_circuit::WeierstrassRvrGpuTracegen;
-use openvm_keccak256_circuit::Keccak256RvrGpuTracegen;
-use openvm_riscv_circuit::Rv64ImRvrGpuTracegen;
-use openvm_sha2_circuit::Sha2RvrGpuTracegen;
+use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
+use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
+use openvm_keccak256_circuit::Keccak256PreflightGpuTracegen;
+use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
+use openvm_sha2_circuit::Sha2PreflightGpuTracegen;
 use openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext, StarkEngine};
 
 use crate::{SdkVmConfig, SdkVmGpuBuilder};
 
-/// One standard-SDK checkpoint tracegen pass.
+/// One standard-SDK preflight GPU tracegen pass.
 ///
 /// Extension producers remain concrete and finite. This coordinator only
 /// installs their access schedules once, checks disjoint opcode ownership, and
@@ -31,58 +28,61 @@ use crate::{SdkVmConfig, SdkVmGpuBuilder};
 /// PHANTOM instructions, so their program row remains owned by the system
 /// Phantom chip rather than by a pairing-specific producer.
 struct SdkPreflightGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
-    rv64: Rv64ImRvrGpuTracegen<'a>,
-    keccak: Option<Keccak256RvrGpuTracegen<'a>>,
-    sha2: Option<Sha2RvrGpuTracegen<'a>>,
-    bigint: Option<Int256RvrGpuTracegen<'a>>,
-    algebra: Option<AlgebraRvrGpuTracegen<'a>>,
-    ecc: Option<WeierstrassRvrGpuTracegen<'a>>,
-    deferral: Option<DeferralRvrGpuTracegen<'a>>,
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
+    rv64: Rv64ImPreflightGpuTracegen<'a>,
+    keccak: Option<Keccak256PreflightGpuTracegen<'a>>,
+    sha2: Option<Sha2PreflightGpuTracegen<'a>>,
+    bigint: Option<Int256PreflightGpuTracegen<'a>>,
+    algebra: Option<AlgebraPreflightGpuTracegen<'a>>,
+    ecc: Option<WeierstrassPreflightGpuTracegen<'a>>,
+    deferral: Option<DeferralPreflightGpuTracegen<'a>>,
 }
 
 impl SdkVmGpuBuilder {
-    /// Uploads one immutable program together with all checkpoint access
+    /// Uploads one immutable program together with all postflight access
     /// schedules enabled by this SDK configuration.
     pub fn upload_preflight_program<F: PrimeField32>(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
-    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
         let config = vm.config().to_inner();
-        validate_checkpoint_config(
+        validate_preflight_config(
             config.modular.is_some(),
             config.fp2.is_some(),
             config.ecc.is_some(),
         )?;
-        let mut registry = RvrCheckpointAccessRegistry::default();
+        let mut registry = PostflightAccessRegistry::default();
         if config.keccak.is_some() {
-            Keccak256RvrGpuTracegen::register_checkpoint_access_schedules(&mut registry)?;
+            Keccak256PreflightGpuTracegen::register_postflight_access_schedules(&mut registry)?;
         }
         if config.sha2.is_some() {
-            Sha2RvrGpuTracegen::register_checkpoint_access_schedules(&mut registry)?;
+            Sha2PreflightGpuTracegen::register_postflight_access_schedules(&mut registry)?;
         }
         if config.bigint.is_some() {
-            Int256RvrGpuTracegen::register_checkpoint_access_schedules(&mut registry)?;
+            Int256PreflightGpuTracegen::register_postflight_access_schedules(&mut registry)?;
         }
         if let Some(modular) = &config.modular {
-            AlgebraRvrGpuTracegen::validate_checkpoint_program(program, modular)?;
-            AlgebraRvrGpuTracegen::register_checkpoint_access_schedules(
+            AlgebraPreflightGpuTracegen::validate_postflight_program(program, modular)?;
+            AlgebraPreflightGpuTracegen::register_postflight_access_schedules(
                 &mut registry,
                 modular,
                 config.fp2.as_ref(),
             )?;
         }
         if let Some(ecc) = &config.ecc {
-            WeierstrassRvrGpuTracegen::register_checkpoint_access_schedules(&mut registry, ecc)?;
+            WeierstrassPreflightGpuTracegen::register_postflight_access_schedules(
+                &mut registry,
+                ecc,
+            )?;
         }
         if config.deferral.is_some() {
-            DeferralRvrGpuTracegen::register_checkpoint_access_schedules(&mut registry)?;
+            DeferralPreflightGpuTracegen::register_postflight_access_schedules(&mut registry)?;
         }
-        let native = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
+        let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
         registry.validate_no_native_collisions(native)?;
-        GpuRvrProgram::upload_with_checkpoint_access_registry(
+        GpuPostflightProgram::upload_with_postflight_access_registry(
             program,
             &config.system.memory_config,
             &registry,
@@ -90,8 +90,8 @@ impl SdkVmGpuBuilder {
         )
     }
 
-    /// Expands one exact checkpoint segment using the standard RV64/system
-    /// chronology. The executor must already have enforced the segment's exact
+    /// Expands one metered preflight segment using the standard RV64/system
+    /// chronology. The executor must already have enforced the segment's
     /// retired-instruction boundary.
     ///
     /// This layer deliberately does not guess executor buffer limits. The
@@ -99,15 +99,15 @@ impl SdkVmGpuBuilder {
     /// constructing `PreflightLimits`.
     pub fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let result = vm.postflight(
             program,
             execution,
             expected_retired,
-            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         );
         #[cfg(feature = "metrics")]
         if let Ok((_, replay_plan)) = &result {
@@ -116,13 +116,13 @@ impl SdkVmGpuBuilder {
         result
     }
 
-    /// Generates the standard SDK proving context from one expanded checkpoint
-    /// segment without constructing a `RecordArena`.
+    /// Generates the standard SDK proving context from one postflight segment
+    /// without constructing a `RecordArena`.
     pub fn generate_preflight_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let max_trace_height = 1usize << vm.engine.params().log_stacked_height();
         SdkPreflightGpuTracegen::new(
@@ -140,12 +140,12 @@ impl SdkVmGpuBuilder {
 impl<'a> SdkPreflightGpuTracegen<'a> {
     fn new(
         config: &SdkVmConfig,
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
         max_trace_height: usize,
-    ) -> Result<Self, GpuRvrInputError> {
-        validate_checkpoint_config(
+    ) -> Result<Self, GpuPostflightError> {
+        validate_preflight_config(
             config.modular.is_some(),
             config.fp2.is_some(),
             config.ecc.is_some(),
@@ -153,20 +153,20 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         let keccak = config
             .keccak
             .as_ref()
-            .map(|_| Keccak256RvrGpuTracegen::new(program, transcript, replay_plan));
+            .map(|_| Keccak256PreflightGpuTracegen::new(program, transcript, replay_plan));
         let sha2 = config
             .sha2
             .as_ref()
-            .map(|_| Sha2RvrGpuTracegen::new(program, transcript, replay_plan));
+            .map(|_| Sha2PreflightGpuTracegen::new(program, transcript, replay_plan));
         let bigint = config
             .bigint
             .as_ref()
-            .map(|_| Int256RvrGpuTracegen::new(program, transcript, replay_plan));
+            .map(|_| Int256PreflightGpuTracegen::new(program, transcript, replay_plan));
         let algebra = config
             .modular
             .as_ref()
             .map(|modular| {
-                AlgebraRvrGpuTracegen::new(
+                AlgebraPreflightGpuTracegen::new(
                     program,
                     transcript,
                     replay_plan,
@@ -178,25 +178,30 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         let ecc = config
             .ecc
             .as_ref()
-            .map(|ecc| WeierstrassRvrGpuTracegen::new(ecc, program, transcript, replay_plan));
+            .map(|ecc| WeierstrassPreflightGpuTracegen::new(ecc, program, transcript, replay_plan));
         let deferral = config
             .deferral
             .as_ref()
             .map(|_| {
-                DeferralRvrGpuTracegen::new(program, transcript, replay_plan, max_trace_height)
+                DeferralPreflightGpuTracegen::new(
+                    program,
+                    transcript,
+                    replay_plan,
+                    max_trace_height,
+                )
             })
             .transpose()?;
 
-        let native = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
+        let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
         let mut ownership = OpcodeOwnership::new(native);
         if keccak.is_some() {
-            ownership.claim("Keccak", Keccak256RvrGpuTracegen::extension_opcodes())?;
+            ownership.claim("Keccak", Keccak256PreflightGpuTracegen::extension_opcodes())?;
         }
         if sha2.is_some() {
-            ownership.claim("SHA-2", Sha2RvrGpuTracegen::extension_opcodes())?;
+            ownership.claim("SHA-2", Sha2PreflightGpuTracegen::extension_opcodes())?;
         }
         if bigint.is_some() {
-            ownership.claim("Int256", Int256RvrGpuTracegen::extension_opcodes())?;
+            ownership.claim("Int256", Int256PreflightGpuTracegen::extension_opcodes())?;
         }
         if let Some(algebra) = &algebra {
             ownership.claim("Algebra", algebra.extension_opcodes().iter().copied())?;
@@ -205,11 +210,14 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
             ownership.claim("Weierstrass", ecc.claimed_opcodes().iter().copied())?;
         }
         if deferral.is_some() {
-            ownership.claim("Deferral", DeferralRvrGpuTracegen::extension_opcodes())?;
+            ownership.claim(
+                "Deferral",
+                DeferralPreflightGpuTracegen::extension_opcodes(),
+            )?;
         }
         ownership.validate_executed(replay_plan.executed_opcodes())?;
         let extension_opcodes = ownership.extension_opcodes();
-        let rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             program,
             transcript,
             replay_plan,
@@ -294,40 +302,40 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
             tracegen.finish().map_err(extension_error)?;
         }
         self.rv64.finish().map_err(extension_error)?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 }
 
-fn extension_error(error: GpuRvrInputError) -> GenerationError {
+fn extension_error(error: GpuPostflightError) -> GenerationError {
     GenerationError::ExtensionTracegen(error.to_string())
 }
 
-fn validate_checkpoint_config(
+fn validate_preflight_config(
     has_modular: bool,
     has_fp2: bool,
     has_ecc: bool,
-) -> Result<(), GpuRvrInputError> {
+) -> Result<(), GpuPostflightError> {
     if !has_modular && has_fp2 {
-        return Err(GpuRvrInputError::InvalidAccessSchedule(
-            "Fp2 checkpoint replay requires the Modular extension".to_string(),
+        return Err(GpuPostflightError::InvalidAccessSchedule(
+            "Fp2 preflight replay requires the Modular extension".to_string(),
         ));
     }
     if !has_modular && has_ecc {
-        return Err(GpuRvrInputError::InvalidAccessSchedule(
-            "Weierstrass checkpoint replay requires the Modular extension".to_string(),
+        return Err(GpuPostflightError::InvalidAccessSchedule(
+            "Weierstrass preflight replay requires the Modular extension".to_string(),
         ));
     }
     Ok(())
 }
 
 struct OpcodeOwnership {
-    native: RvrCheckpointOpcodeBases,
+    native: PostflightOpcodeBases,
     extensions: BTreeMap<u32, &'static str>,
 }
 
 impl OpcodeOwnership {
-    fn new(native: RvrCheckpointOpcodeBases) -> Self {
+    fn new(native: PostflightOpcodeBases) -> Self {
         Self {
             native,
             extensions: BTreeMap::new(),
@@ -338,15 +346,15 @@ impl OpcodeOwnership {
         &mut self,
         owner: &'static str,
         opcodes: impl IntoIterator<Item = u32>,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         for opcode in opcodes {
             if self.native.owns(opcode) {
-                return Err(GpuRvrInputError::InvalidTranscript(format!(
+                return Err(GpuPostflightError::InvalidTranscript(format!(
                     "{owner} opcode {opcode:#x} collides with RV64/system"
                 )));
             }
             if let Some(previous) = self.extensions.get(&opcode) {
-                return Err(GpuRvrInputError::InvalidTranscript(format!(
+                return Err(GpuPostflightError::InvalidTranscript(format!(
                     "opcode {opcode:#x} is owned by both {previous} and {owner}"
                 )));
             }
@@ -358,13 +366,13 @@ impl OpcodeOwnership {
     fn validate_executed(
         &self,
         executed: impl IntoIterator<Item = u32>,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         if let Some(opcode) = executed
             .into_iter()
             .find(|opcode| !self.native.owns(*opcode) && !self.extensions.contains_key(opcode))
         {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "executed opcode {opcode:#x} has no standard SDK RVR trace producer"
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "executed opcode {opcode:#x} has no standard SDK preflight trace producer"
             )));
         }
         Ok(())
@@ -377,11 +385,76 @@ impl OpcodeOwnership {
 
 #[cfg(test)]
 mod tests {
+    use openvm_circuit::arch::{
+        MemoryConfig, PreflightEndpoint, PreflightLimits, SystemConfig, VmExecutor,
+    };
+    use openvm_instructions::{
+        exe::VmExe,
+        instruction::Instruction,
+        program::Program,
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
+    };
+    use openvm_stark_backend::SystemParams;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
     use super::*;
+
+    fn small_system_config() -> SystemConfig {
+        let mut address_spaces = MemoryConfig::empty_address_space_configs(5);
+        address_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 12;
+        address_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 22;
+        address_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 12;
+        SystemConfig::new(3, MemoryConfig::new(2, address_spaces, 29, 29, 17), 32)
+    }
+
+    #[test]
+    fn standard_sdk_inventory_proves_from_record_free_preflight() {
+        let program = Program::from_instructions(&[Instruction::<BabyBear>::from_usize(
+            SystemOpcode::TERMINATE.global_opcode(),
+            [0; 7],
+        )]);
+        let exe = VmExe::new(program.clone());
+        let mut config = SdkVmConfig::standard();
+        config.system.config = small_system_config();
+        let executor = VmExecutor::new(config.clone()).unwrap();
+        let preflight = executor.preflight_instance(&exe, None).unwrap();
+        let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
+
+        let mut params = SystemParams::new_for_testing(21);
+        params.max_constraint_degree = 3;
+        let (mut vm, pk) = VirtualMachine::new_with_keygen(
+            BabyBearPoseidon2GpuEngine::new(params),
+            SdkVmGpuBuilder,
+            config,
+        )
+        .unwrap();
+        let cached_program = vm.commit_program_on_device(&program);
+        vm.load_program(cached_program);
+        vm.transport_init_memory_to_device(&state.memory);
+        let gpu_program = SdkVmGpuBuilder::upload_preflight_program(&vm, &program).unwrap();
+        let execution = preflight
+            .execute_from_state(state, PreflightLimits::new(1, 0, 1))
+            .unwrap();
+        assert_eq!(execution.endpoint, PreflightEndpoint::Terminated);
+        let (transcript, replay_plan) =
+            SdkVmGpuBuilder::postflight(&vm, &gpu_program, &execution, execution.retired).unwrap();
+        let proving_ctx = SdkVmGpuBuilder::generate_preflight_proving_ctx(
+            &mut vm,
+            &gpu_program,
+            &transcript,
+            &replay_plan,
+        )
+        .unwrap();
+        drop(replay_plan);
+        drop(transcript);
+        let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
+        vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+    }
 
     #[test]
     fn opcode_ownership_rejects_duplicates_and_missing_producers() {
-        let native = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
+        let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
         let mut free_opcodes = (0..=u16::MAX as u32).filter(|opcode| !native.owns(*opcode));
         let claimed_opcode = free_opcodes.next().unwrap();
         let missing_opcode = free_opcodes.next().unwrap();
@@ -397,7 +470,7 @@ mod tests {
         let missing = ownership.validate_executed([missing_opcode]).unwrap_err();
         assert!(missing
             .to_string()
-            .contains("has no standard SDK RVR trace producer"));
+            .contains("has no standard SDK preflight trace producer"));
 
         ownership
             .validate_executed([native.terminate, claimed_opcode])

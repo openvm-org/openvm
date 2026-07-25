@@ -33,7 +33,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
                 PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
@@ -740,7 +740,7 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
+fn test_cuda_branch_lt_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let branch = |opcode: BranchLessThanOpcode, rs1: usize, rs2: usize, immediate: isize| {
         Instruction::<F>::from_isize(
@@ -834,7 +834,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -864,7 +864,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     );
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
@@ -911,7 +911,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
         initial_write_log: Vec::new(),
     };
     let d_negative_program =
-        GpuRvrProgram::upload(&negative_program, &memory_config, device_ctx).unwrap();
+        GpuPostflightProgram::upload(&negative_program, &memory_config, device_ctx).unwrap();
     let (d_negative, d_negative_plan) = d_negative_program
         .upload_transcript(&negative_transcript, PreflightEndpoint::Terminated)
         .unwrap();
@@ -922,7 +922,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
         ),
     );
     Rv64BranchLessThanChipGpu::new(negative_range_checker.clone(), tester.timestamp_max_bits())
-        .generate_proving_ctx_from_rvr(&d_negative_program, &d_negative, &d_negative_plan)
+        .generate_proving_ctx_from_postflight(&d_negative_program, &d_negative, &d_negative_plan)
         .unwrap();
     assert_eq!(d_negative.error_code().unwrap(), 0);
     assert_eq!(
@@ -953,7 +953,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
             .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         corrupt_chip
-            .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+            .generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
             .unwrap();
         assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
         assert_eq!(

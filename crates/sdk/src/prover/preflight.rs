@@ -30,11 +30,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{MeteredCtx, Segment},
         hasher::poseidon2::vm_poseidon2_hasher,
-        rvr::{
-            cuda::GpuRvrProgram, PreflightEndpoint, PreflightExecution, PreflightInstance,
-            PreflightLimits, RvrMeteredInstance,
-        },
-        ContinuationVmProof, ExecutionError, GenerationError, Streams, VirtualMachineError,
+        rvr::{cuda::GpuPostflightProgram, RvrMeteredInstance},
+        ContinuationVmProof, ExecutionError, GenerationError, PreflightEndpoint,
+        PreflightExecution, PreflightInstance, PreflightLimits, Streams, VirtualMachineError,
         VmInstance,
     },
     system::memory::merkle::public_values::UserPublicValuesProof,
@@ -55,7 +53,7 @@ pub(super) fn prove(
     metered: &RvrMeteredInstance<'_>,
     metered_ctx: &MeteredCtx,
     preflight: &PreflightInstance<'_>,
-    gpu_program: &GpuRvrProgram,
+    gpu_program: &GpuPostflightProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     let input: Streams = input.into();
     instance.reset_state(input.clone());
@@ -85,7 +83,7 @@ fn prove_inner(
     metered: &RvrMeteredInstance<'_>,
     metered_ctx: &MeteredCtx,
     preflight: &PreflightInstance<'_>,
-    gpu_program: &GpuRvrProgram,
+    gpu_program: &GpuPostflightProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     // Meter once. Its exact instruction and residual counts are the only
     // capacities supplied to preflight for each segment.

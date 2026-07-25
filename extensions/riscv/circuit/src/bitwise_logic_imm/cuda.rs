@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{
         riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
@@ -38,12 +38,12 @@ pub struct Rv64BitwiseLogicImmChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64BitwiseLogicImmChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let xori_range = replay_plan.opcode_range(BaseAluImmOpcode::XORI.global_opcode());
@@ -54,7 +54,7 @@ impl Rv64BitwiseLogicImmChipGpu {
             .checked_add(ori_range.len())
             .and_then(|count| count.checked_add(andi_range.len()))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "bitwise-immediate replay row count overflow".to_string(),
                 )
             })?;

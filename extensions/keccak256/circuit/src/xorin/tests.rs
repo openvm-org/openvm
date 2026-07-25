@@ -34,7 +34,7 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{
-        cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
+        cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
     },
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
@@ -480,7 +480,7 @@ fn test_xorin_cuda_tracegen_single() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_xorin_rvr_replay_accepts_valid_transcript_and_rejects_unaligned_len() {
+fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_len() {
     let buffer_reg = 8usize;
     let input_reg = 16usize;
     let len_reg = 24usize;
@@ -588,12 +588,12 @@ fn test_xorin_rvr_replay_accepts_valid_transcript_and_rejects_unaligned_len() {
     );
 
     let device_ctx = &tester.range_checker().device_ctx;
-    let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let _replay_ctx = chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);
 
@@ -609,7 +609,7 @@ fn test_xorin_rvr_replay_accepts_valid_transcript_and_rejects_unaligned_len() {
         tester.timestamp_max_bits() as u32,
     );
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .unwrap();
     assert_eq!(gpu_corrupt.error_code().unwrap(), 801);
 }

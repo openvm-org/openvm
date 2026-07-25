@@ -3,7 +3,7 @@ use std::{borrow::Borrow, sync::Arc};
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+            cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
             PreflightEndpoint,
         },
         testing::{
@@ -215,7 +215,8 @@ macro_rules! store_replay_test {
 
             let range_checker = tester.range_checker();
             let bitwise_lookup = tester.bitwise_op_lookup();
-            let d_program = GpuRvrProgram::upload(&program, &memory_config, &device_ctx).unwrap();
+            let d_program =
+                GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
             let (d_transcript, d_replay_plan) = d_program
                 .upload_transcript(&execution.transcript, execution.endpoint)
                 .unwrap();
@@ -225,7 +226,7 @@ macro_rules! store_replay_test {
             );
             let replay_ctx = harness
                 .gpu_chip
-                .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+                .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
                 .unwrap();
             assert_eq!(d_transcript.error_code().unwrap(), 0);
             let replay_range_counts = range_checker.count.to_host_on(&device_ctx).unwrap();
@@ -310,7 +311,8 @@ macro_rules! store_replay_test {
                 .unwrap()
                 .value[0] ^= 1;
             let d_crossing_program =
-                GpuRvrProgram::upload(&crossing_program, &memory_config, &device_ctx).unwrap();
+                GpuPostflightProgram::upload(&crossing_program, &memory_config, &device_ctx)
+                    .unwrap();
             let (d_corrupt_crossing, d_corrupt_crossing_plan) = d_crossing_program
                 .upload_transcript(&corrupt_crossing, PreflightEndpoint::Terminated)
                 .unwrap();
@@ -326,7 +328,7 @@ macro_rules! store_replay_test {
                 timestamp_max_bits,
             );
             corrupt_chip
-                .generate_proving_ctx_from_rvr(
+                .generate_proving_ctx_from_postflight(
                     &d_crossing_program,
                     &d_corrupt_crossing,
                     &d_corrupt_crossing_plan,
@@ -372,7 +374,8 @@ macro_rules! store_replay_test {
             event_in_gap.timestamp = corrupt_gap.program_log[0].timestamp + 3;
             corrupt_gap.memory_log.push(event_in_gap);
             let d_noncross_program =
-                GpuRvrProgram::upload(&noncross_program, &memory_config, &device_ctx).unwrap();
+                GpuPostflightProgram::upload(&noncross_program, &memory_config, &device_ctx)
+                    .unwrap();
             let (d_corrupt_gap, d_corrupt_gap_plan) = d_noncross_program
                 .upload_transcript(&corrupt_gap, PreflightEndpoint::Terminated)
                 .unwrap();
@@ -388,7 +391,7 @@ macro_rules! store_replay_test {
                 timestamp_max_bits,
             );
             gap_chip
-                .generate_proving_ctx_from_rvr(
+                .generate_proving_ctx_from_postflight(
                     &d_noncross_program,
                     &d_corrupt_gap,
                     &d_corrupt_gap_plan,
@@ -447,7 +450,7 @@ macro_rules! store_replay_test {
                 PUBLIC_VALUES_AS
             );
             let d_public_program =
-                GpuRvrProgram::upload(&public_program, &memory_config, &device_ctx).unwrap();
+                GpuPostflightProgram::upload(&public_program, &memory_config, &device_ctx).unwrap();
             let (d_public, d_public_plan) = d_public_program
                 .upload_transcript(&public_execution.transcript, public_execution.endpoint)
                 .unwrap();
@@ -463,7 +466,7 @@ macro_rules! store_replay_test {
                 timestamp_max_bits,
             );
             let public_ctx = public_chip
-                .generate_proving_ctx_from_rvr(&d_public_program, &d_public, &d_public_plan)
+                .generate_proving_ctx_from_postflight(&d_public_program, &d_public, &d_public_plan)
                 .unwrap();
             assert_eq!(d_public.error_code().unwrap(), 0);
             let public_trace =
@@ -492,7 +495,8 @@ macro_rules! store_replay_test {
                 Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
             ]);
             let d_unsupported_program =
-                GpuRvrProgram::upload(&unsupported_program, &memory_config, &device_ctx).unwrap();
+                GpuPostflightProgram::upload(&unsupported_program, &memory_config, &device_ctx)
+                    .unwrap();
             let (d_unsupported, d_unsupported_plan) = d_unsupported_program
                 .upload_transcript(&public_execution.transcript, public_execution.endpoint)
                 .unwrap();
@@ -509,7 +513,7 @@ macro_rules! store_replay_test {
                 timestamp_max_bits,
             );
             unsupported_chip
-                .generate_proving_ctx_from_rvr(
+                .generate_proving_ctx_from_postflight(
                     &d_unsupported_program,
                     &d_unsupported,
                     &d_unsupported_plan,
@@ -548,7 +552,8 @@ macro_rules! store_replay_test {
             wide_memory_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1usize << 31;
             let wide_byte_ptr_bits = to_byte_ptr_bits(wide_memory_config.pointer_max_bits);
             let d_wide_program =
-                GpuRvrProgram::upload(&noncross_program, &wide_memory_config, &device_ctx).unwrap();
+                GpuPostflightProgram::upload(&noncross_program, &wide_memory_config, &device_ctx)
+                    .unwrap();
             let (d_overflow, d_overflow_plan) = d_wide_program
                 .upload_transcript(&overflow, PreflightEndpoint::Terminated)
                 .unwrap();
@@ -564,7 +569,11 @@ macro_rules! store_replay_test {
                 timestamp_max_bits,
             );
             overflow_chip
-                .generate_proving_ctx_from_rvr(&d_wide_program, &d_overflow, &d_overflow_plan)
+                .generate_proving_ctx_from_postflight(
+                    &d_wide_program,
+                    &d_overflow,
+                    &d_overflow_plan,
+                )
                 .unwrap();
             assert_eq!(d_overflow.error_code().unwrap(), 267);
             assert!(overflow_range
@@ -584,7 +593,7 @@ macro_rules! store_replay_test {
 }
 
 store_replay_test!(
-    test_cuda_storeh_tracegen_from_rvr_transcript,
+    test_cuda_storeh_tracegen_from_preflight_transcript,
     STOREH,
     2,
     Rv64StoreHalfwordAir,
@@ -595,7 +604,7 @@ store_replay_test!(
     StoreHalfwordFiller
 );
 store_replay_test!(
-    test_cuda_storew_tracegen_from_rvr_transcript,
+    test_cuda_storew_tracegen_from_preflight_transcript,
     STOREW,
     4,
     Rv64StoreWordAir,
@@ -606,7 +615,7 @@ store_replay_test!(
     StoreWordFiller
 );
 store_replay_test!(
-    test_cuda_stored_tracegen_from_rvr_transcript,
+    test_cuda_stored_tracegen_from_preflight_transcript,
     STORED,
     8,
     Rv64StoreDoublewordAir,

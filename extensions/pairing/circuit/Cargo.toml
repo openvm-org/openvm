@@ -57,6 +57,7 @@ openvm-pairing-guest = { path = "../guest", default-features = false, features =
     "bls12_381",
     "bn254",
 ] }
+openvm-riscv-transpiler.workspace = true
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]

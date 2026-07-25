@@ -13,7 +13,7 @@ pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
-    /// Residual values required to replay this segment from checkpoint preflight.
+    /// Residual values required to replay this segment from preflight.
     pub num_checkpoint_residuals: u32,
     pub trace_heights: Vec<u32>,
 }

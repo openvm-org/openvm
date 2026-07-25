@@ -17,8 +17,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-        RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        PostflightAccessRegistry, PostflightAccessSpan,
     },
     openvm_circuit::arch::{
         rvr::PreflightExecution, GenerationError, MemoryConfig, VirtualMachine, VmBuilder,
@@ -26,7 +26,7 @@ use {
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::{program::Program, LocalOpcode},
     openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode},
-    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
     openvm_stark_backend::{
         p3_field::PrimeField32,
         prover::{AirProvingContext, ProvingContext},
@@ -48,17 +48,17 @@ pub struct Keccak256GpuProverExt;
 /// inventory walk, then calls [`Self::finish`] to fail closed if either the op AIR or
 /// its permutation AIR was skipped.
 #[cfg(feature = "rvr")]
-pub struct Keccak256RvrGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
+pub struct Keccak256PreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
     pending_xorin: bool,
     pending_keccakf_op: bool,
     pending_keccakf_perm: bool,
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> Keccak256RvrGpuTracegen<'a> {
+impl<'a> Keccak256PreflightGpuTracegen<'a> {
     #[doc(hidden)]
     pub fn extension_opcodes() -> [u32; 2] {
         [
@@ -68,16 +68,16 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
-    pub fn register_checkpoint_access_schedules(
-        registry: &mut RvrCheckpointAccessRegistry,
-    ) -> Result<(), GpuRvrInputError> {
+    pub fn register_postflight_access_schedules(
+        registry: &mut PostflightAccessRegistry,
+    ) -> Result<(), GpuPostflightError> {
         registry.register(
             KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
             &[1],
             (1 << 2) | (1 << 3) | (1 << 6) | (1 << 7),
             4,
             5,
-            &[RvrCheckpointAccessSpan::write_fixed_from_residuals(
+            &[PostflightAccessSpan::write_fixed_from_residuals(
                 openvm_instructions::riscv::RV64_MEMORY_AS,
                 0,
                 25,
@@ -92,21 +92,21 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
             4,
             5,
             &[
-                RvrCheckpointAccessSpan::read_count_from_register(
+                PostflightAccessSpan::read_count_from_register(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     2,
                     count_shift,
                     max_words,
                 ),
-                RvrCheckpointAccessSpan::read_count_from_register(
+                PostflightAccessSpan::read_count_from_register(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     1,
                     2,
                     count_shift,
                     max_words,
                 ),
-                RvrCheckpointAccessSpan::write_count_from_register_from_residuals(
+                PostflightAccessSpan::write_count_from_register_from_residuals(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     2,
@@ -121,15 +121,16 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
     /// Uploads a program with the concrete RV64+Keccak checkpoint replay
     /// schedules installed once. Callers do not need to construct or merge the
     /// experimental registry themselves.
-    pub fn upload_checkpoint_program<F: PrimeField32>(
+    pub fn upload_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
-        let mut registry = RvrCheckpointAccessRegistry::default();
-        Self::register_checkpoint_access_schedules(&mut registry)?;
-        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
-        GpuRvrProgram::upload_with_checkpoint_access_registry(
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        let mut registry = PostflightAccessRegistry::default();
+        Self::register_postflight_access_schedules(&mut registry)?;
+        registry
+            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
+        GpuPostflightProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -137,12 +138,12 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
         )
     }
 
-    pub fn expand_checkpoint_replay<VB>(
+    pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<
             GpuBabyBearPoseidon2Engine,
@@ -150,14 +151,14 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        let opcodes = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
+        let opcodes = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
         vm.postflight(program, execution, expected_retired, opcodes)
     }
 
     pub fn new(
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
     ) -> Self {
         let pending_xorin = !replay_plan
             .opcode_range(XorinOpcode::XORIN.global_opcode())
@@ -181,29 +182,41 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
-    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         if let Some(chip) = chip.downcast_ref::<XorinVmChipGpu>() {
             self.pending_xorin = false;
             return chip
-                .generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)
+                .generate_proving_ctx_from_postflight(
+                    self.program,
+                    self.transcript,
+                    self.replay_plan,
+                )
                 .map(Some);
         }
         if let Some(chip) = chip.downcast_ref::<KeccakfOpChipGpu>() {
             self.pending_keccakf_op = false;
             return chip
-                .generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)
+                .generate_proving_ctx_from_postflight(
+                    self.program,
+                    self.transcript,
+                    self.replay_plan,
+                )
                 .map(Some);
         }
         if let Some(chip) = chip.downcast_ref::<KeccakfPermChipGpu>() {
             self.pending_keccakf_perm = false;
             return chip
-                .generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)
+                .generate_proving_ctx_from_postflight(
+                    self.program,
+                    self.transcript,
+                    self.replay_plan,
+                )
                 .map(Some);
         }
         Ok(None)
     }
 
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
         let mut missing = Vec::new();
         if self.pending_xorin {
             missing.push("Xorin");
@@ -217,8 +230,8 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
         if missing.is_empty() {
             Ok(())
         } else {
-            Err(GpuRvrInputError::InvalidTranscript(format!(
-                "Keccak RVR GPU tracegen did not visit producers {missing:?}"
+            Err(GpuPostflightError::InvalidTranscript(format!(
+                "Keccak preflight GPU tracegen did not visit producers {missing:?}"
             )))
         }
     }
@@ -237,7 +250,7 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -264,7 +277,7 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         rv64.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 }

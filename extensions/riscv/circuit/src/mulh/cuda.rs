@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
     openvm_riscv_transpiler::MulHOpcode,
@@ -36,12 +36,12 @@ pub struct Rv64MulHChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64MulHChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let mulh = replay_plan.opcode_range(MulHOpcode::MULH.global_opcode());
@@ -52,7 +52,7 @@ impl Rv64MulHChipGpu {
             .checked_add(mulhsu.len())
             .and_then(|n| n.checked_add(mulhu.len()))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript("mulh replay row count overflow".into())
+                GpuPostflightError::InvalidTranscript("mulh replay row count overflow".into())
             })?;
         if rows == 0 {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));

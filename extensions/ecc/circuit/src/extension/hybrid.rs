@@ -1,4 +1,4 @@
-//! GPU prover extension. Record-based trace generation uses the CPU fallback. RVR checkpoint
+//! GPU prover extension. Record-based trace generation uses the CPU fallback. Preflight
 //! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
 //! projection for other field expressions.
 
@@ -24,14 +24,14 @@ use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 #[cfg(feature = "rvr")]
 use {
     openvm_algebra_circuit::{
-        cuda::field_expr::FieldExprReplayChip, AlgebraRvrGpuTracegen, Fp2Extension,
+        cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
         ModularExtension,
     },
     openvm_circuit::arch::{
         rvr::{
             cuda::{
-                GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-                RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+                GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
+                GpuPostflightTranscript, PostflightAccessRegistry, PostflightAccessSpan,
             },
             PreflightExecution,
         },
@@ -40,7 +40,7 @@ use {
     openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_ecc_transpiler::Rv64WeierstrassOpcode,
     openvm_instructions::{program::Program, LocalOpcode},
-    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
     openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
     std::{any::Any, collections::BTreeSet, sync::Arc},
     strum::EnumCount,
@@ -58,13 +58,13 @@ use crate::{
 fn ec_double_setup_words(
     curve: &CurveConfig,
     coordinate_bytes: usize,
-) -> Result<Vec<u64>, GpuRvrInputError> {
+) -> Result<Vec<u64>, GpuPostflightError> {
     if curve.modulus == Default::default()
         || curve.a >= curve.modulus
         || curve.modulus.bits().div_ceil(8) as usize > coordinate_bytes
         || coordinate_bytes % std::mem::size_of::<u64>() != 0
     {
-        return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+        return Err(GpuPostflightError::InvalidAccessSchedule(format!(
             "invalid setup constants for curve {}",
             curve.struct_name
         )));
@@ -142,7 +142,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
     }
 
     #[cfg(feature = "rvr")]
-    fn local_opcodes() -> Result<[usize; 2], GpuRvrInputError> {
+    fn local_opcodes() -> Result<[usize; 2], GpuPostflightError> {
         match NUM_READS {
             2 => Ok([
                 Rv64WeierstrassOpcode::EC_ADD_NE as usize,
@@ -152,7 +152,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
                 Rv64WeierstrassOpcode::EC_DOUBLE as usize,
                 Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
             ]),
-            _ => Err(GpuRvrInputError::InvalidTranscript(format!(
+            _ => Err(GpuPostflightError::InvalidTranscript(format!(
                 "unsupported Weierstrass replay read count {NUM_READS}"
             ))),
         }
@@ -164,14 +164,14 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let replay = self.replay.as_ref().ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "Weierstrass chip was constructed without checkpoint replay".to_string(),
             )
         })?;
@@ -226,21 +226,21 @@ pub struct EccHybridProverExt;
 /// Multiple configured curves may have the same Rust chip type, so coverage is
 /// tracked by each chip's concrete opcode base rather than by downcast type.
 #[cfg(feature = "rvr")]
-pub struct WeierstrassRvrGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
+pub struct WeierstrassPreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
     claimed_opcodes: Vec<u32>,
     pending_opcodes: BTreeSet<u32>,
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> WeierstrassRvrGpuTracegen<'a> {
+impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     #[doc(hidden)]
-    pub fn register_checkpoint_access_schedules(
-        registry: &mut RvrCheckpointAccessRegistry,
+    pub fn register_postflight_access_schedules(
+        registry: &mut PostflightAccessRegistry,
         extension: &WeierstrassExtension,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         for (curve_idx, curve) in extension.supported_curves.iter().enumerate() {
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
             let blocks = if bytes <= NUM_LIMBS_32 {
@@ -248,7 +248,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
             } else if bytes <= NUM_LIMBS_48 {
                 ECC_BLOCKS_48
             } else {
-                return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+                return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                     "Weierstrass curve {curve_idx} exceeds the supported 48-byte layout"
                 )));
             };
@@ -257,36 +257,36 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
                     curve_idx
                         .checked_mul(Rv64WeierstrassOpcode::COUNT)
                         .ok_or_else(|| {
-                            GpuRvrInputError::InvalidAccessSchedule(
+                            GpuPostflightError::InvalidAccessSchedule(
                                 "Weierstrass opcode range overflow".to_string(),
                             )
                         })?,
                 )
                 .ok_or_else(|| {
-                    GpuRvrInputError::InvalidAccessSchedule(
+                    GpuPostflightError::InvalidAccessSchedule(
                         "Weierstrass opcode range overflow".to_string(),
                     )
                 })?;
             let opcode = |local: Rv64WeierstrassOpcode| {
                 let opcode = opcode_base.checked_add(local as usize).ok_or_else(|| {
-                    GpuRvrInputError::InvalidAccessSchedule(
+                    GpuPostflightError::InvalidAccessSchedule(
                         "Weierstrass opcode range overflow".to_string(),
                     )
                 })?;
-                u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))
+                u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))
             };
             let add_spans = [
-                RvrCheckpointAccessSpan::read_fixed(
+                PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     blocks as u32,
                 ),
-                RvrCheckpointAccessSpan::read_fixed(
+                PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     1,
                     blocks as u32,
                 ),
-                RvrCheckpointAccessSpan::write_fixed_from_residuals(
+                PostflightAccessSpan::write_fixed_from_residuals(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     2,
                     blocks as u32,
@@ -306,12 +306,12 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
                 )?;
             }
             let double_spans = [
-                RvrCheckpointAccessSpan::read_fixed(
+                PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     blocks as u32,
                 ),
-                RvrCheckpointAccessSpan::write_fixed_from_residuals(
+                PostflightAccessSpan::write_fixed_from_residuals(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     1,
                     blocks as u32,
@@ -330,7 +330,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
                 blocks * openvm_circuit::arch::MEMORY_BLOCK_BYTES / 2,
             )?;
             let setup_double_spans = [
-                RvrCheckpointAccessSpan::read_fixed(
+                PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     blocks as u32,
@@ -354,19 +354,24 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
     }
 
     /// Uploads one concrete RV64+Algebra+Weierstrass checkpoint program.
-    pub fn upload_checkpoint_program<T: PrimeField32>(
+    pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
         weierstrass: &WeierstrassExtension,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
-        let mut registry = RvrCheckpointAccessRegistry::default();
-        AlgebraRvrGpuTracegen::register_checkpoint_access_schedules(&mut registry, modular, fp2)?;
-        Self::register_checkpoint_access_schedules(&mut registry, weierstrass)?;
-        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
-        GpuRvrProgram::upload_with_checkpoint_access_registry(
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        let mut registry = PostflightAccessRegistry::default();
+        AlgebraPreflightGpuTracegen::register_postflight_access_schedules(
+            &mut registry,
+            modular,
+            fp2,
+        )?;
+        Self::register_postflight_access_schedules(&mut registry, weierstrass)?;
+        registry
+            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
+        GpuPostflightProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -374,12 +379,12 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
         )
     }
 
-    pub fn expand_checkpoint_replay<VB>(
+    pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<
             GpuBabyBearPoseidon2Engine,
@@ -391,15 +396,15 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
             program,
             execution,
             expected_retired,
-            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         )
     }
 
     pub fn new(
         extension: &WeierstrassExtension,
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
     ) -> Self {
         let claimed_opcodes = (0..extension.supported_curves.len())
             .flat_map(|curve_idx| {
@@ -433,18 +438,18 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
     fn generate_for_weierstrass_chip<const NUM_READS: usize, const BLOCKS: usize>(
         &mut self,
         chip: &HybridWeierstrassChip<F, NUM_READS, BLOCKS>,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let base = chip.opcode_base().ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "Weierstrass inventory chip has no checkpoint replay configuration".to_string(),
             )
         })?;
         for local in HybridWeierstrassChip::<F, NUM_READS, BLOCKS>::local_opcodes()? {
             let opcode = u32::try_from(base + local)
-                .map_err(|_| GpuRvrInputError::OpcodeTooLarge(base + local))?;
+                .map_err(|_| GpuPostflightError::OpcodeTooLarge(base + local))?;
             self.pending_opcodes.remove(&opcode);
         }
-        chip.generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)
+        chip.generate_proving_ctx_from_postflight(self.program, self.transcript, self.replay_plan)
     }
 
     /// Returns `Some` only for a Weierstrass-owned AIR, allowing a concrete
@@ -452,7 +457,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
-    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         if let Some(chip) = chip.downcast_ref::<HybridWeierstrassChip<F, 2, ECC_BLOCKS_32>>() {
             return self.generate_for_weierstrass_chip(chip).map(Some);
         }
@@ -468,12 +473,12 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
         Ok(None)
     }
 
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
         if self.pending_opcodes.is_empty() {
             Ok(())
         } else {
-            Err(GpuRvrInputError::InvalidTranscript(format!(
-                "Weierstrass RVR GPU tracegen did not visit opcodes {:?}",
+            Err(GpuPostflightError::InvalidTranscript(format!(
+                "Weierstrass preflight GPU tracegen did not visit opcodes {:?}",
                 self.pending_opcodes
             )))
         }
@@ -494,7 +499,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        let mut algebra = AlgebraRvrGpuTracegen::new(
+        let mut algebra = AlgebraPreflightGpuTracegen::new(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -504,7 +509,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         let mut extension_opcodes = self.claimed_opcodes.clone();
         extension_opcodes.extend_from_slice(algebra.extension_opcodes());
-        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -539,7 +544,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         self.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 }

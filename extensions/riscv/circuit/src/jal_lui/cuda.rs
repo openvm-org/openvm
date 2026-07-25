@@ -9,7 +9,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
     openvm_riscv_transpiler::Rv64JalLuiOpcode,
@@ -29,12 +29,12 @@ pub struct Rv64JalLuiChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64JalLuiChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let jal_range = replay_plan.opcode_range(Rv64JalLuiOpcode::JAL.global_opcode());
@@ -43,7 +43,9 @@ impl Rv64JalLuiChipGpu {
             .len()
             .checked_add(lui_range.len())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript("JAL/LUI replay row count overflow".to_string())
+                GpuPostflightError::InvalidTranscript(
+                    "JAL/LUI replay row count overflow".to_string(),
+                )
             })?;
         if num_steps == 0 {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));

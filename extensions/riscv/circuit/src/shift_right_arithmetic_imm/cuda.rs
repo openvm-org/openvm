@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{
         riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
@@ -46,12 +46,12 @@ pub struct Rv64ShiftRightArithmeticImmChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftRightArithmeticImmChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let range = replay_plan.opcode_range(ShiftImmOpcode::SRAI.global_opcode());
@@ -97,12 +97,12 @@ pub struct Rv64ShiftWRightArithmeticImmChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftWRightArithmeticImmChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let range = replay_plan.opcode_range(ShiftWImmOpcode::SRAIW.global_opcode());

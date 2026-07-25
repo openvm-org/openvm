@@ -20,8 +20,8 @@ use {
     openvm_circuit::arch::{
         rvr::{
             cuda::{
-                GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-                RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+                GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
+                GpuPostflightTranscript, PostflightAccessRegistry, PostflightAccessSpan,
             },
             PreflightExecution,
         },
@@ -29,7 +29,7 @@ use {
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
-    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
     openvm_stark_backend::{
         p3_field::PrimeField32,
         prover::{AirProvingContext, ProvingContext},
@@ -42,10 +42,10 @@ use super::*;
 pub struct Int256GpuProverExt;
 
 #[cfg(feature = "rvr")]
-pub struct Int256RvrGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
+pub struct Int256PreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
     pending_add_sub: bool,
     pending_bitwise: bool,
     pending_less_than: bool,
@@ -57,7 +57,7 @@ pub struct Int256RvrGpuTracegen<'a> {
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> Int256RvrGpuTracegen<'a> {
+impl<'a> Int256PreflightGpuTracegen<'a> {
     fn opcodes<T: LocalOpcode>(opcodes: impl IntoIterator<Item = T>) -> Vec<u32> {
         opcodes
             .into_iter()
@@ -78,13 +78,13 @@ impl<'a> Int256RvrGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
-    pub fn register_checkpoint_access_schedules(
-        registry: &mut RvrCheckpointAccessRegistry,
-    ) -> Result<(), GpuRvrInputError> {
+    pub fn register_postflight_access_schedules(
+        registry: &mut PostflightAccessRegistry,
+    ) -> Result<(), GpuPostflightError> {
         let alu_spans = [
-            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
-            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
-            RvrCheckpointAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 2, 4),
+            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
+            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+            PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 2, 4),
         ];
         for opcode in Self::opcodes(Rv64BaseAlu256Opcode::iter())
             .into_iter()
@@ -95,8 +95,8 @@ impl<'a> Int256RvrGpuTracegen<'a> {
             registry.register(opcode, &[2, 3, 1], (1 << 6) | (1 << 7), 4, 5, &alu_spans)?;
         }
         let branch_spans = [
-            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
-            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
+            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
         ];
         for opcode in Self::opcodes(Rv64BranchEqual256Opcode::iter())
             .into_iter()
@@ -115,15 +115,16 @@ impl<'a> Int256RvrGpuTracegen<'a> {
         Ok(())
     }
 
-    pub fn upload_checkpoint_program<F: PrimeField32>(
+    pub fn upload_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
-        let mut registry = RvrCheckpointAccessRegistry::default();
-        Self::register_checkpoint_access_schedules(&mut registry)?;
-        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
-        GpuRvrProgram::upload_with_checkpoint_access_registry(
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        let mut registry = PostflightAccessRegistry::default();
+        Self::register_postflight_access_schedules(&mut registry)?;
+        registry
+            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
+        GpuPostflightProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -131,12 +132,12 @@ impl<'a> Int256RvrGpuTracegen<'a> {
         )
     }
 
-    pub fn expand_checkpoint_replay<VB>(
+    pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<
             GpuBabyBearPoseidon2Engine,
@@ -148,14 +149,14 @@ impl<'a> Int256RvrGpuTracegen<'a> {
             program,
             execution,
             expected_retired,
-            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         )
     }
 
     pub fn new(
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
     ) -> Self {
         let has_any = |opcodes: Vec<u32>| {
             opcodes.into_iter().any(|opcode| {
@@ -202,13 +203,13 @@ impl<'a> Int256RvrGpuTracegen<'a> {
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
-    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         macro_rules! generate {
             ($chip_ty:ty, $pending:ident) => {
                 if let Some(chip) = chip.downcast_ref::<$chip_ty>() {
                     self.$pending = false;
                     return chip
-                        .generate_proving_ctx_from_rvr(
+                        .generate_proving_ctx_from_postflight(
                             self.program,
                             self.transcript,
                             self.replay_plan,
@@ -228,7 +229,7 @@ impl<'a> Int256RvrGpuTracegen<'a> {
         Ok(None)
     }
 
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
         let pending = [
             (self.pending_add_sub, "AddSub256"),
             (self.pending_bitwise, "BitwiseLogic256"),
@@ -245,8 +246,8 @@ impl<'a> Int256RvrGpuTracegen<'a> {
         if pending.is_empty() {
             Ok(())
         } else {
-            Err(GpuRvrInputError::InvalidTranscript(format!(
-                "Int256 RVR GPU tracegen did not visit producers {pending:?}"
+            Err(GpuPostflightError::InvalidTranscript(format!(
+                "Int256 preflight GPU tracegen did not visit producers {pending:?}"
             )))
         }
     }
@@ -263,7 +264,7 @@ impl<'a> Int256RvrGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -290,7 +291,7 @@ impl<'a> Int256RvrGpuTracegen<'a> {
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         rv64.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 }

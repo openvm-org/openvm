@@ -42,6 +42,10 @@ bon.workspace = true
 derive_more.workspace = true
 cfg-if.workspace = true
 
+[dev-dependencies]
+openvm-instructions.workspace = true
+openvm-stark-backend = { workspace = true, features = ["test-utils"] }
+
 [features]
 cuda = [
     "dep:openvm-cuda-backend",

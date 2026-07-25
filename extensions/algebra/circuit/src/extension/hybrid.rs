@@ -1,4 +1,4 @@
-//! GPU prover extension. Record-based trace generation uses the CPU fallback. RVR checkpoint
+//! GPU prover extension. Record-based trace generation uses the CPU fallback. Preflight
 //! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
 //! projection for other field expressions.
 
@@ -38,13 +38,13 @@ use strum::EnumCount;
 use {
     crate::cuda::field_expr::FieldExprReplayChip,
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-        RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        PostflightAccessRegistry, PostflightAccessSpan,
     },
     openvm_circuit::arch::rvr::PreflightExecution,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_instructions::program::Program,
-    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
     openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
     std::{any::Any, collections::BTreeSet, sync::Arc},
 };
@@ -74,9 +74,9 @@ enum ModularReplay<const BLOCKS: usize> {
 fn validate_modular_is_eq_destinations<F: PrimeField32>(
     program: &Program<F>,
     num_moduli: usize,
-) -> Result<(), GpuRvrInputError> {
+) -> Result<(), GpuPostflightError> {
     if let Some(slot) = super::modular_is_eq_x0_destination(program, num_moduli) {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "modular is-equal destination is x0 at program slot {slot}"
         )));
     }
@@ -87,11 +87,11 @@ fn validate_modular_is_eq_destinations<F: PrimeField32>(
 fn checked_replay_opcode(
     base: usize,
     local: usize,
-) -> Result<openvm_instructions::VmOpcode, GpuRvrInputError> {
+) -> Result<openvm_instructions::VmOpcode, GpuPostflightError> {
     let opcode = base.checked_add(local).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript("field-expression opcode overflow".to_string())
+        GpuPostflightError::InvalidTranscript("field-expression opcode overflow".to_string())
     })?;
-    u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))?;
+    u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
     Ok(openvm_instructions::VmOpcode::from_usize(opcode))
 }
 
@@ -158,15 +158,15 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &openvm_circuit::arch::rvr::cuda::GpuRvrProgram,
-        transcript: &openvm_circuit::arch::rvr::cuda::GpuRvrTranscript,
-        replay_plan: &openvm_circuit::arch::rvr::cuda::GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
+        program: &openvm_circuit::arch::rvr::cuda::GpuPostflightProgram,
+        transcript: &openvm_circuit::arch::rvr::cuda::GpuPostflightTranscript,
+        replay_plan: &openvm_circuit::arch::rvr::cuda::GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuPostflightError>
     {
         let replay = self.replay.as_ref().ok_or_else(|| {
-            openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+            openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                 "Modular chip was constructed without checkpoint replay".to_string(),
             )
         })?;
@@ -186,12 +186,14 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
     }
 
     #[cfg(feature = "rvr")]
-    fn checkpoint_opcodes(
+    fn postflight_opcodes(
         &self,
-    ) -> Result<Vec<openvm_instructions::VmOpcode>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
-    {
+    ) -> Result<
+        Vec<openvm_instructions::VmOpcode>,
+        openvm_circuit::arch::rvr::cuda::GpuPostflightError,
+    > {
         let replay = self.replay.as_ref().ok_or_else(|| {
-            openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+            openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                 "Modular chip was constructed without checkpoint replay".to_string(),
             )
         })?;
@@ -294,36 +296,38 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &openvm_circuit::arch::rvr::cuda::GpuRvrProgram,
-        transcript: &openvm_circuit::arch::rvr::cuda::GpuRvrTranscript,
-        replay_plan: &openvm_circuit::arch::rvr::cuda::GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
+        program: &openvm_circuit::arch::rvr::cuda::GpuPostflightProgram,
+        transcript: &openvm_circuit::arch::rvr::cuda::GpuPostflightTranscript,
+        replay_plan: &openvm_circuit::arch::rvr::cuda::GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuPostflightError>
     {
         self.replay
             .as_ref()
             .ok_or_else(|| {
-                openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+                openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                     "ModularIsEqual chip was constructed without checkpoint replay".to_string(),
                 )
             })?
-            .generate_proving_ctx_from_rvr(program, transcript, replay_plan)
+            .generate_proving_ctx_from_postflight(program, transcript, replay_plan)
     }
 
     #[cfg(feature = "rvr")]
-    fn checkpoint_opcodes(
+    fn postflight_opcodes(
         &self,
-    ) -> Result<[openvm_instructions::VmOpcode; 2], openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
-    {
+    ) -> Result<
+        [openvm_instructions::VmOpcode; 2],
+        openvm_circuit::arch::rvr::cuda::GpuPostflightError,
+    > {
         self.replay
             .as_ref()
             .ok_or_else(|| {
-                openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+                openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                     "ModularIsEqual chip was constructed without checkpoint replay".to_string(),
                 )
             })?
-            .checkpoint_opcodes()
+            .postflight_opcodes()
     }
 }
 
@@ -588,15 +592,15 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
     }
 
     #[cfg(feature = "rvr")]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &openvm_circuit::arch::rvr::cuda::GpuRvrProgram,
-        transcript: &openvm_circuit::arch::rvr::cuda::GpuRvrTranscript,
-        replay_plan: &openvm_circuit::arch::rvr::cuda::GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
+        program: &openvm_circuit::arch::rvr::cuda::GpuPostflightProgram,
+        transcript: &openvm_circuit::arch::rvr::cuda::GpuPostflightTranscript,
+        replay_plan: &openvm_circuit::arch::rvr::cuda::GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuPostflightError>
     {
         let replay = self.replay.as_ref().ok_or_else(|| {
-            openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+            openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                 "Fp2 chip was constructed without checkpoint replay".to_string(),
             )
         })?;
@@ -604,12 +608,14 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
     }
 
     #[cfg(feature = "rvr")]
-    fn checkpoint_opcodes(
+    fn postflight_opcodes(
         &self,
-    ) -> Result<Vec<openvm_instructions::VmOpcode>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
-    {
+    ) -> Result<
+        Vec<openvm_instructions::VmOpcode>,
+        openvm_circuit::arch::rvr::cuda::GpuPostflightError,
+    > {
         let replay = self.replay.as_ref().ok_or_else(|| {
-            openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+            openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
                 "Fp2 chip was constructed without checkpoint replay".to_string(),
             )
         })?;
@@ -658,30 +664,30 @@ impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridFp2Chip<F
 /// Concrete algebra checkpoint producers for the existing reverse inventory
 /// walk. Coverage is derived from configured opcode ranges and fails closed.
 #[cfg(feature = "rvr")]
-pub struct AlgebraRvrGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
+pub struct AlgebraPreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
     configured_opcodes: Vec<u32>,
     unclaimed: BTreeSet<u32>,
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> AlgebraRvrGpuTracegen<'a> {
+impl<'a> AlgebraPreflightGpuTracegen<'a> {
     #[doc(hidden)]
-    pub fn validate_checkpoint_program<F: PrimeField32>(
+    pub fn validate_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         modular: &ModularExtension,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         validate_modular_is_eq_destinations(program, modular.supported_moduli.len())
     }
 
     #[doc(hidden)]
-    pub fn register_checkpoint_access_schedules(
-        registry: &mut RvrCheckpointAccessRegistry,
+    pub fn register_postflight_access_schedules(
+        registry: &mut PostflightAccessRegistry,
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
-    ) -> Result<(), GpuRvrInputError> {
+    ) -> Result<(), GpuPostflightError> {
         for (index, modulus) in modular.supported_moduli.iter().enumerate() {
             let bytes = modulus.bits().div_ceil(8) as usize;
             let blocks = if bytes <= NUM_LIMBS_32 {
@@ -689,7 +695,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             } else if bytes <= NUM_LIMBS_48 {
                 MODULAR_BLOCKS_48
             } else {
-                return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+                return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                     "modulus {index} exceeds the supported 48-byte layout"
                 )));
             };
@@ -698,31 +704,31 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
                     index
                         .checked_mul(Rv64ModularArithmeticOpcode::COUNT)
                         .ok_or_else(|| {
-                            GpuRvrInputError::InvalidAccessSchedule(
+                            GpuPostflightError::InvalidAccessSchedule(
                                 "Modular opcode range overflow".to_string(),
                             )
                         })?,
                 )
                 .ok_or_else(|| {
-                    GpuRvrInputError::InvalidAccessSchedule(
+                    GpuPostflightError::InvalidAccessSchedule(
                         "Modular opcode range overflow".to_string(),
                     )
                 })?;
             let opcode = |local: Rv64ModularArithmeticOpcode| {
                 let opcode = opcode_base.checked_add(local as usize).ok_or_else(|| {
-                    GpuRvrInputError::InvalidAccessSchedule(
+                    GpuPostflightError::InvalidAccessSchedule(
                         "Modular opcode range overflow".to_string(),
                     )
                 })?;
-                u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))
+                u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))
             };
             let read_spans = [
-                RvrCheckpointAccessSpan::read_fixed(
+                PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     blocks as u32,
                 ),
-                RvrCheckpointAccessSpan::read_fixed(
+                PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     1,
                     blocks as u32,
@@ -731,7 +737,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             let write_spans = [
                 read_spans[0],
                 read_spans[1],
-                RvrCheckpointAccessSpan::write_fixed_from_residuals(
+                PostflightAccessSpan::write_fixed_from_residuals(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     2,
                     blocks as u32,
@@ -740,7 +746,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             let zero_write_spans = [
                 read_spans[0],
                 read_spans[1],
-                RvrCheckpointAccessSpan::write_fixed_zero(
+                PostflightAccessSpan::write_fixed_zero(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     2,
                     blocks as u32,
@@ -801,41 +807,41 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
                 } else if bytes <= NUM_LIMBS_48 {
                     FP2_BLOCKS_48
                 } else {
-                    return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+                    return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                         "Fp2 modulus {index} exceeds the supported 48-byte layout"
                     )));
                 };
                 let opcode_base = Fp2Opcode::CLASS_OFFSET
                     .checked_add(index.checked_mul(Fp2Opcode::COUNT).ok_or_else(|| {
-                        GpuRvrInputError::InvalidAccessSchedule(
+                        GpuPostflightError::InvalidAccessSchedule(
                             "Fp2 opcode range overflow".to_string(),
                         )
                     })?)
                     .ok_or_else(|| {
-                        GpuRvrInputError::InvalidAccessSchedule(
+                        GpuPostflightError::InvalidAccessSchedule(
                             "Fp2 opcode range overflow".to_string(),
                         )
                     })?;
                 let opcode = |local: Fp2Opcode| {
                     let opcode = opcode_base.checked_add(local as usize).ok_or_else(|| {
-                        GpuRvrInputError::InvalidAccessSchedule(
+                        GpuPostflightError::InvalidAccessSchedule(
                             "Fp2 opcode range overflow".to_string(),
                         )
                     })?;
-                    u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))
+                    u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))
                 };
                 let spans = [
-                    RvrCheckpointAccessSpan::read_fixed(
+                    PostflightAccessSpan::read_fixed(
                         openvm_instructions::riscv::RV64_MEMORY_AS,
                         0,
                         blocks as u32,
                     ),
-                    RvrCheckpointAccessSpan::read_fixed(
+                    PostflightAccessSpan::read_fixed(
                         openvm_instructions::riscv::RV64_MEMORY_AS,
                         1,
                         blocks as u32,
                     ),
-                    RvrCheckpointAccessSpan::write_fixed_from_residuals(
+                    PostflightAccessSpan::write_fixed_from_residuals(
                         openvm_instructions::riscv::RV64_MEMORY_AS,
                         2,
                         blocks as u32,
@@ -866,18 +872,19 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
     /// Uploads one concrete RV64+Algebra checkpoint program. The registry is
     /// immutable program metadata; execution still writes only checkpoints and
     /// irreducible postimages.
-    pub fn upload_checkpoint_program<T: PrimeField32>(
+    pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
-        Self::validate_checkpoint_program(program, modular)?;
-        let mut registry = RvrCheckpointAccessRegistry::default();
-        Self::register_checkpoint_access_schedules(&mut registry, modular, fp2)?;
-        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
-        GpuRvrProgram::upload_with_checkpoint_access_registry(
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        Self::validate_postflight_program(program, modular)?;
+        let mut registry = PostflightAccessRegistry::default();
+        Self::register_postflight_access_schedules(&mut registry, modular, fp2)?;
+        registry
+            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
+        GpuPostflightProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -885,12 +892,12 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         )
     }
 
-    pub fn expand_checkpoint_replay<VB>(
+    pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<
             GpuBabyBearPoseidon2Engine,
@@ -902,38 +909,42 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             program,
             execution,
             expected_retired,
-            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         )
     }
 
     pub fn new(
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         let mut configured_opcodes = Vec::new();
         let mut configured = BTreeSet::new();
         for index in 0..modular.supported_moduli.len() {
             let stride = index
                 .checked_mul(Rv64ModularArithmeticOpcode::COUNT)
                 .ok_or_else(|| {
-                    GpuRvrInputError::InvalidTranscript("Modular opcode range overflow".to_string())
+                    GpuPostflightError::InvalidTranscript(
+                        "Modular opcode range overflow".to_string(),
+                    )
                 })?;
             let base = Rv64ModularArithmeticOpcode::CLASS_OFFSET
                 .checked_add(stride)
                 .ok_or_else(|| {
-                    GpuRvrInputError::InvalidTranscript("Modular opcode range overflow".to_string())
+                    GpuPostflightError::InvalidTranscript(
+                        "Modular opcode range overflow".to_string(),
+                    )
                 })?;
             for local in 0..Rv64ModularArithmeticOpcode::COUNT {
                 let opcode = base.checked_add(local).ok_or_else(|| {
-                    GpuRvrInputError::InvalidTranscript("Modular opcode overflow".to_string())
+                    GpuPostflightError::InvalidTranscript("Modular opcode overflow".to_string())
                 })?;
-                let opcode =
-                    u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))?;
+                let opcode = u32::try_from(opcode)
+                    .map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
                 if !configured.insert(opcode) {
-                    return Err(GpuRvrInputError::InvalidTranscript(format!(
+                    return Err(GpuPostflightError::InvalidTranscript(format!(
                         "duplicate Algebra opcode ownership for {opcode}"
                     )));
                 }
@@ -943,19 +954,19 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         if let Some(fp2) = fp2 {
             for index in 0..fp2.supported_moduli.len() {
                 let stride = index.checked_mul(Fp2Opcode::COUNT).ok_or_else(|| {
-                    GpuRvrInputError::InvalidTranscript("Fp2 opcode range overflow".to_string())
+                    GpuPostflightError::InvalidTranscript("Fp2 opcode range overflow".to_string())
                 })?;
                 let base = Fp2Opcode::CLASS_OFFSET.checked_add(stride).ok_or_else(|| {
-                    GpuRvrInputError::InvalidTranscript("Fp2 opcode range overflow".to_string())
+                    GpuPostflightError::InvalidTranscript("Fp2 opcode range overflow".to_string())
                 })?;
                 for local in 0..Fp2Opcode::COUNT {
                     let opcode = base.checked_add(local).ok_or_else(|| {
-                        GpuRvrInputError::InvalidTranscript("Fp2 opcode overflow".to_string())
+                        GpuPostflightError::InvalidTranscript("Fp2 opcode overflow".to_string())
                     })?;
                     let opcode = u32::try_from(opcode)
-                        .map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))?;
+                        .map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
                     if !configured.insert(opcode) {
-                        return Err(GpuRvrInputError::InvalidTranscript(format!(
+                        return Err(GpuPostflightError::InvalidTranscript(format!(
                             "duplicate Algebra opcode ownership for {opcode}"
                         )));
                     }
@@ -989,10 +1000,10 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
-    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         if let Some(chip) = chip.downcast_ref::<HybridModularChip<F, MODULAR_BLOCKS_32>>() {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
+            let opcodes = chip.postflight_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -1001,8 +1012,8 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             return Ok(Some(ctx));
         }
         if let Some(chip) = chip.downcast_ref::<HybridModularChip<F, MODULAR_BLOCKS_48>>() {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
+            let opcodes = chip.postflight_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -1013,8 +1024,8 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         if let Some(chip) =
             chip.downcast_ref::<HybridModularIsEqualChip<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()
         {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
+            let opcodes = chip.postflight_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -1025,8 +1036,8 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         if let Some(chip) =
             chip.downcast_ref::<HybridModularIsEqualChip<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()
         {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
+            let opcodes = chip.postflight_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -1035,8 +1046,8 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             return Ok(Some(ctx));
         }
         if let Some(chip) = chip.downcast_ref::<HybridFp2Chip<F, FP2_BLOCKS_32>>() {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
+            let opcodes = chip.postflight_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -1045,8 +1056,8 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             return Ok(Some(ctx));
         }
         if let Some(chip) = chip.downcast_ref::<HybridFp2Chip<F, FP2_BLOCKS_48>>() {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
+            let opcodes = chip.postflight_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -1057,10 +1068,10 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         Ok(None)
     }
 
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
         if !self.unclaimed.is_empty() {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "Algebra RVR GPU tracegen did not visit opcodes {:?}",
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "Algebra preflight GPU tracegen did not visit opcodes {:?}",
                 self.unclaimed
             )));
         }
@@ -1079,7 +1090,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = self.configured_opcodes.clone();
-        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -1106,7 +1117,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         self.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 }

@@ -27,7 +27,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::{GpuRvrInputError, GpuRvrProgram},
+                cuda::{GpuPostflightError, GpuPostflightProgram},
                 FullLogPreflightLimits, FullLogPreflightTranscript, PreflightEndpoint,
             },
             VirtualMachine, VmExecutor,
@@ -66,7 +66,10 @@ use {
         },
         prelude::SC,
     },
-    openvm_cuda_common::stream::{cudaStream_t, device_synchronize},
+    openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        stream::{cudaStream_t, device_synchronize},
+    },
     openvm_instructions::program::DEFAULT_PC_STEP,
     openvm_riscv_transpiler::BranchEqualOpcode,
     openvm_stark_backend::prover::ColMajorMatrix,
@@ -495,7 +498,7 @@ fn test_cuda_addiw_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_addi_tracegen_from_rvr_transcript() {
+fn test_cuda_addi_tracegen_from_preflight_transcript() {
     const ITERATIONS: usize = 32;
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let addi = |rd: usize, rs1: usize, immediate: usize| {
@@ -694,13 +697,13 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
     assert_eq!(
         d_transcript.memory_predecessors_host().unwrap(),
-        GpuRvrProgram::cpu_memory_predecessors(&execution.transcript).unwrap()
+        GpuPostflightProgram::cpu_memory_predecessors(&execution.transcript).unwrap()
     );
     let (cpu_steps, cpu_ranges) = d_program
         .cpu_replay_plan(&execution.transcript, execution.endpoint)
@@ -731,39 +734,42 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
             .len(),
         4
     );
-    let mismatched_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let mismatched_program =
+        GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     assert!(matches!(
-        harness.gpu_chip.generate_proving_ctx_from_rvr(
+        harness.gpu_chip.generate_proving_ctx_from_postflight(
             &mismatched_program,
             &d_transcript,
             &d_replay_plan,
         ),
-        Err(GpuRvrInputError::ProgramMismatch)
+        Err(GpuPostflightError::ProgramMismatch)
     ));
     let (_other_transcript, other_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
     assert!(matches!(
-        harness
-            .gpu_chip
-            .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &other_plan,),
-        Err(GpuRvrInputError::SegmentMismatch)
+        harness.gpu_chip.generate_proving_ctx_from_postflight(
+            &d_program,
+            &d_transcript,
+            &other_plan,
+        ),
+        Err(GpuPostflightError::SegmentMismatch)
     ));
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
     let branch_replay_ctx = branch_harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let combined_replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
     let addiw_replay_ctx = w_harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let all_replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
@@ -785,7 +791,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     );
     let corrupt_chip = Rv64AddIChipGpu::new(corrupt_range_checker, tester.timestamp_max_bits());
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 9);
 
@@ -813,7 +819,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     let corrupt_branch_chip =
         Rv64BranchEqualChipGpu::new(corrupt_branch_range_checker, tester.timestamp_max_bits());
     corrupt_branch_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt_branch, &d_corrupt_branch_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_corrupt_branch, &d_corrupt_branch_plan)
         .unwrap();
     assert_eq!(d_corrupt_branch.error_code().unwrap(), 28);
 
@@ -852,7 +858,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         tester.timestamp_max_bits(),
     );
     corrupt_branch_predecessor_chip
-        .generate_proving_ctx_from_rvr(
+        .generate_proving_ctx_from_postflight(
             &d_program,
             &d_corrupt_branch_predecessor,
             &d_corrupt_branch_predecessor_plan,
@@ -889,7 +895,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     let corrupt_addiw_chip =
         Rv64AddIWChipGpu::new(corrupt_addiw_range_checker, tester.timestamp_max_bits());
     corrupt_addiw_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt_addiw, &d_corrupt_addiw_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_corrupt_addiw, &d_corrupt_addiw_plan)
         .unwrap();
     assert_eq!(d_corrupt_addiw.error_code().unwrap(), 39);
 
@@ -1026,7 +1032,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .load_air_proving_ctx(Arc::new(w_harness.air), addiw_replay_ctx)
         .finalize()
         .simple_test()
-        .expect("RVR transcript replay proof failed");
+        .expect("preflight replay proof failed");
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -1178,7 +1184,7 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
     let device_ctx = &range_checker.device_ctx;
     device_ctx.stream.synchronize().unwrap();
     let started = std::time::Instant::now();
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     device_ctx.stream.synchronize().unwrap();
     let static_program_upload = started.elapsed();
     let (gpu_index_requested_peak_live_bytes, gpu_index_requested_steady_live_bytes) = d_program

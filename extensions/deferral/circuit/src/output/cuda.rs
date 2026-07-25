@@ -17,7 +17,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use {
     crate::cuda_abi::output::DeferralOutputReplayCall,
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_cuda_common::copy::MemCopyD2H,
     openvm_deferral_transpiler::DeferralOpcode,
@@ -55,23 +55,25 @@ pub(crate) fn checked_replay_trace_shape(
     rows_used: u64,
     trace_width: usize,
     max_trace_height: usize,
-) -> Result<(usize, usize), GpuRvrInputError> {
+) -> Result<(usize, usize), GpuPostflightError> {
     let rows_used = usize::try_from(rows_used).map_err(|_| {
-        GpuRvrInputError::InvalidTranscript("Deferral OUTPUT row count exceeds usize".to_string())
+        GpuPostflightError::InvalidTranscript("Deferral OUTPUT row count exceeds usize".to_string())
     })?;
     let trace_height = rows_used.checked_next_power_of_two().ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript("Deferral OUTPUT trace height overflow".to_string())
+        GpuPostflightError::InvalidTranscript("Deferral OUTPUT trace height overflow".to_string())
     })?;
     if trace_height > max_trace_height {
-        return Err(GpuRvrInputError::InvalidTranscript(format!(
+        return Err(GpuPostflightError::InvalidTranscript(format!(
             "Deferral OUTPUT padded trace height {trace_height} exceeds segment limit {max_trace_height}"
         )));
     }
     let trace_elements = trace_height.checked_mul(trace_width).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript("Deferral OUTPUT trace allocation overflow".to_string())
+        GpuPostflightError::InvalidTranscript(
+            "Deferral OUTPUT trace allocation overflow".to_string(),
+        )
     })?;
     trace_elements.checked_mul(size_of::<F>()).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript(
+        GpuPostflightError::InvalidTranscript(
             "Deferral OUTPUT trace byte allocation overflow".to_string(),
         )
     })?;
@@ -79,7 +81,7 @@ pub(crate) fn checked_replay_trace_shape(
         .checked_mul(2 * DIGEST_SIZE)
         .and_then(|elements| elements.checked_mul(size_of::<F>()))
         .ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "Deferral OUTPUT Poseidon producer allocation overflow".to_string(),
             )
         })?;
@@ -93,13 +95,13 @@ impl DeferralOutputChipGpu {
     /// record or record-shaped byte buffer is materialized. The caller must
     /// pass the VM's existing padded segment trace-height limit; it is checked
     /// before allocating the main trace or Poseidon producer.
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
         max_trace_height: usize,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let step_range = replay_plan.opcode_range(DeferralOpcode::OUTPUT.global_opcode());
@@ -122,7 +124,7 @@ impl DeferralOutputChipGpu {
                 RV64_REGISTER_AS,
                 RV64_MEMORY_AS,
                 u32::try_from(self.num_deferral_circuits).map_err(|_| {
-                    GpuRvrInputError::InvalidTranscript(
+                    GpuPostflightError::InvalidTranscript(
                         "deferral circuit count exceeds u32".to_string(),
                     )
                 })?,
@@ -133,7 +135,7 @@ impl DeferralOutputChipGpu {
         let counts = d_row_counts.to_host_on(device_ctx)?;
         let replay_error = transcript.error_code()?;
         if replay_error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "Deferral OUTPUT row indexing rejected replay with code {replay_error}"
             )));
         }
@@ -142,12 +144,12 @@ impl DeferralOutputChipGpu {
         let mut rows_used = 0u64;
         for num_rows in counts {
             if num_rows == 0 {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "Deferral OUTPUT replay produced an empty call".to_string(),
                 ));
             }
             let row_start = u32::try_from(rows_used).map_err(|_| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "Deferral OUTPUT row count exceeds u32".to_string(),
                 )
             })?;
@@ -156,7 +158,7 @@ impl DeferralOutputChipGpu {
                 num_rows,
             });
             rows_used = rows_used.checked_add(u64::from(num_rows)).ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "Deferral OUTPUT row count overflow".to_string(),
                 )
             })?;
@@ -209,7 +211,7 @@ impl DeferralOutputChipGpu {
         drop(d_calls);
         let replay_error = transcript.error_code()?;
         if replay_error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "Deferral OUTPUT tracegen rejected replay with code {replay_error}"
             )));
         }
@@ -335,7 +337,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
 
 #[cfg(all(test, feature = "rvr"))]
 mod tests {
-    use openvm_circuit::{arch::rvr::cuda::RvrReplayInstruction, utils::test_gpu_engine};
+    use openvm_circuit::{arch::rvr::cuda::PostflightInstruction, utils::test_gpu_engine};
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
@@ -358,7 +360,7 @@ mod tests {
         program_index: u32,
     ) -> u32 {
         let opcode = DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32;
-        let instruction = RvrReplayInstruction {
+        let instruction = PostflightInstruction {
             words: [opcode, 8, 16, 0, RV64_REGISTER_AS, RV64_MEMORY_AS, 0, 0],
         };
         let mut memory = [PreflightMemoryEvent::default(); 11];

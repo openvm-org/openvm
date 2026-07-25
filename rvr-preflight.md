@@ -59,7 +59,7 @@ over-retirement, or wrong suspended endpoint is an error.
               `----> checkpoints + ordered residuals
                               |
                               v
-                         GPU expansion
+                           postflight
                   re-execute checkpoint intervals
                               |
                               v
@@ -92,13 +92,20 @@ to one proof input. Under `cuda + rvr`, the ordinary `app_prover`, `prover`,
 
 ```text
 construct ordinary app prover
-    compile metered executor
-    compile preflight executor
-    upload immutable replay program
              |
              v
-prove(input) repeatedly
-    metered execution -> preflight execution -> postflight -> tracegen -> prove
+first prove(input)
+    one-time preparation:
+        compile metered executor
+        compile preflight executor
+        upload immutable replay program
+    reusable proof:
+        metered -> preflight -> postflight -> tracegen -> prove
+             |
+             v
+later prove(input)
+    reuse preparation:
+        metered -> preflight -> postflight -> tracegen -> prove
 ```
 
 Preparation and proof execution have separate metric scopes. A warm proof does
@@ -108,7 +115,7 @@ program; there is no second public prover type, execution mode, artifact
 framework, or proof-record store.
 
 Successful proofs and failures before a trace-generation session begins
-leave the prepared prover reusable. A failure while that session is active is
+leave the fixed-program prover reusable. A failure while that session is active is
 terminal: producer lookup counts are not transactional, so the VM remains
 poisoned and retries fail closed rather than proving from partially mutated
 state. The caller must prepare a new prover after such an error.
@@ -154,15 +161,16 @@ Capacity is bounded before execution. Arithmetic overflow, exhausted checkpoint
 or residual capacity, a malformed callback result, and a transcript cursor
 mismatch fail the segment rather than returning a partial transcript.
 
-The direct-event RVR preflight implementation remains a differential oracle. It
+The direct full-log preflight implementation remains a differential oracle. It
 logs semantic program and memory events directly and is useful for tests, but it
 is not the production proving architecture.
 
 ## Derived read-only history
 
-GPU expansion performs two passes over the same checkpoint intervals:
+Postflight performs two GPU passes over the same checkpoint intervals:
 
-1. Count the exact number of program, memory, and field-memory events.
+1. Count the exact number of memory and field-memory events. The program-log
+   length is the retired instruction count plus its final boundary.
 2. Allocate exact output sizes and emit those events.
 
 Each interval is sequential internally because instructions share PC,
@@ -203,17 +211,19 @@ another compatibility record.
 
 The authoritative checkpoint format already has the right boundary for
 pipelining. A checkpoint closes an interval only after generated execution has
-flushed its PC, registers, timestamp, retired ordinal, and residual cursor.
+flushed its timestamp, retired ordinal, and residual cursor, then captured its
+PC and registers.
 Together with the preceding checkpoint, or the distinguished segment start,
 that is enough for the GPU to replay the interval. It does not need an
 interval-specific memory snapshot: replay emits ordered memory intents, and the
 later chronology pass resolves them against the immutable segment-start image.
 
 The current implementation is intentionally full-segment. Generated C writes
-into reserved `Vec` capacity, Rust validates the complete result before setting
-the vector lengths, and `expand_checkpoint_replay` performs count, emit,
-chronology, and opcode indexing in one call. Reading those buffers concurrently
-would be a data race, even though their allocations do not move.
+into reserved `Vec` capacity. Rust validates the returned ABI, bounds, and
+timestamp before setting the vector lengths, then validates checkpoint
+semantics. `postflight` performs count, emit, chronology, and
+opcode indexing in one call. Reading those buffers concurrently would be a data
+race, even though their allocations do not move.
 
 The first pipelined version should introduce one concrete internal transport,
 not another transcript or generic producer trait:
@@ -234,10 +244,11 @@ immutable GPU transcript
 ```
 
 A published batch needs only its starting anchor, one or more closing anchors,
-the absolute residual-base cursor, and its immutable residual slice. Publication
-should use owned immutable batches or a small fixed SPSC/double buffer with an
-explicit publish boundary. It must never expose a `Vec` while generated code is
-still appending to it.
+the absolute residual-base cursor, its immutable residual slice, and whether
+the last boundary is interior or the segment endpoint. Publication should use
+owned immutable batches or a small fixed SPSC/double buffer with an explicit
+publish boundary. It must never expose a `Vec` while generated code is still
+appending to it.
 
 Streaming count first preserves the existing exact-allocation discipline. It
 does not retain per-batch event logs, reserve worst-case output, require
@@ -308,6 +319,19 @@ once during serial execution. Trace generation does not repeat host side
 effects. It replays their materialized effects from residuals and timed memory
 writes.
 
+### Hint-store alignment contract
+
+This branch intentionally changes one guest-visible error case. The legacy
+interpreter accepted a hint-store destination as an arbitrary byte address,
+while the AIR exposes each proof-visible hint write as one aligned eight-byte
+memory block. Compiled execution correctly rejected the unaligned form, which
+initially created an executor divergence.
+
+The interpreter and compiled executors now both require eight-byte alignment
+and reject other destinations. This is a contract correction, not a preflight
+optimization, and should be reviewed as such. Differential tests pin the shared
+behavior.
+
 ## Replay ownership
 
 The immutable program upload contains native RV64 opcode metadata and a compact
@@ -366,10 +390,10 @@ completed memory top tree.
 
 ## RecordArena boundary
 
-The active compiled preflight executor, GPU expansion, standard SDK GPU tracegen,
+The active compiled preflight executor, postflight, standard SDK GPU tracegen,
 and continuation proving path do not construct a `RecordArena`.
 
-The direct full-log RVR preflight executor remains available as a correctness
+The direct full-log preflight executor remains available as a correctness
 oracle for differential and negative tests. It is not a second production
 preflight contract. Restricting that oracle to test utilities can happen after
 its integration callers have an appropriate feature boundary; deleting its
@@ -438,7 +462,7 @@ one-time executor preparation          133.576 s          278.097 s
 reusable app proof                     103.075 s           68.695 s
 metered execution                        1.457 s            1.472 s
 serial preflight                        31.287 s            1.385 s
-GPU replay expansion                         -             2.907 s
+postflight                                   -             2.907 s
 trace generation                         5.312 s            2.709 s
 proving excluding tracegen              62.605 s           58.046 s
 sum of the timed phases above          100.661 s           66.519 s
@@ -452,13 +476,13 @@ PID-scoped process peak                 16,428 MiB       16,440 MiB
 PID-scoped process peak delta                                +12 MiB
 ```
 
-Expansion and trace generation remain well below proving, and replay buffers
+Postflight and trace generation remain well below proving, and replay buffers
 are not retained at the proving peak. Serial preflight is 22.6 times faster,
 trace generation is 49.0% faster, the timed phase sum is 33.9% faster, and the
-reusable app proof is 33.4% faster. The prepared app-proof value is a direct
+reusable app proof is 33.4% faster. The reusable app-proof value is a direct
 metric. The legacy reusable proof and both warm process values subtract their
 one-time preparation from otherwise exact runs because the legacy benchmark
-does not expose a prepared prover.
+does not expose a separately reusable prover.
 
 The identical PID-scoped process peak increased by 12 MiB, about 0.07%, and
 remained in proving rather than moving to expansion or trace generation. The
@@ -468,7 +492,7 @@ buffers rather than the CUDA context and allocator pool. Packing that requires
 a lower segmentation limit, but postflight replay is not responsible for the
 existing proving peak.
 
-The definitive prepared run verified every segment, endpoint continuity, the
+The definitive reusable run verified every segment, endpoint continuity, the
 final public-values Merkle proof, and the output
 `b0c6920a15b5f11db176fcd1b22754fe845f9f5b24a245f1c67b997f353f3878`
 followed by the expected zero half. The preparation and proof spans were
@@ -520,12 +544,11 @@ The production metrics surface stays phase-level and low-cardinality:
 - `app_prove_time_ms`, excluding preparation;
 - `execute_preflight_time_ms`, attributed only by the existing
   segment scope;
-- `execute_preflight_insns` and
-  `execute_preflight_insn_mi/s`, emitted once per completed proof;
+- `execute_preflight_insns`, emitted once per completed segment, and
+  `execute_preflight_insn_mi/s`, emitted once for the completed proof;
 - `execute_preflight_checkpoints`,
   `execute_preflight_residuals`, and
-  `execute_preflight_transcript_bytes`, emitted once per completed
-  proof;
+  `execute_preflight_transcript_bytes`, emitted once for the completed proof;
 - `postflight_time_ms` and its four fixed subphases, attributed only by
   segment;
 - the existing `trace_gen`, `system_trace_gen`, `executor_trace_gen`, and

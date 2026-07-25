@@ -843,7 +843,9 @@ fn canonical_metric_name(name: &str) -> &str {
             PREPARE_PREFLIGHT_TIME_LABEL
         }
         "compile_checkpoint_preflight_time_ms" => COMPILE_PREFLIGHT_TIME_LABEL,
-        "upload_checkpoint_program_time_ms" => UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
+        "upload_checkpoint_program_time_ms" | "upload_postflight_program_time_ms" => {
+            UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL
+        }
         "app_prove_rvr_checkpoint_time_ms" => APP_PROVE_TIME_LABEL,
         "expand_checkpoint_replay_time_ms" => POSTFLIGHT_TIME_LABEL,
         "execute_checkpoint_preflight_insns" => EXECUTE_PREFLIGHT_INSNS_LABEL,
@@ -905,6 +907,36 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_reth_app_groups_use_the_canonical_name() {
+        for group in [
+            "reth.prove_app.block_23992138",
+            "reth.prove_app_rvr.block_23992138",
+            "reth.prove_root.block_23992138",
+            "reth.prove_evm.block_23992138",
+        ] {
+            assert_eq!(canonical_group_name(group), "app_proof");
+        }
+        assert_eq!(canonical_group_name("root"), "root");
+        assert_eq!(canonical_group_name("internal_0"), "internal_0");
+    }
+
+    #[test]
+    fn legacy_preflight_metrics_use_canonical_phase_names() {
+        assert_eq!(
+            canonical_metric_name("execute_checkpoint_preflight_time_ms"),
+            EXECUTE_PREFLIGHT_TIME_LABEL
+        );
+        assert_eq!(
+            canonical_metric_name("expand_checkpoint_replay_time_ms"),
+            POSTFLIGHT_TIME_LABEL
+        );
+        assert_eq!(
+            canonical_metric_name("upload_checkpoint_program_time_ms"),
+            UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL
+        );
+    }
 
     fn labels(segment: Option<usize>) -> Labels {
         Labels(

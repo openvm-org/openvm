@@ -536,7 +536,7 @@ fn test_cuda_rand_deferral_output_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_output_rvr_replay_rejects_invalid_trace_shapes() {
+fn test_output_preflight_replay_rejects_invalid_trace_shapes() {
     assert!(super::cuda::checked_replay_trace_shape(u64::MAX, 1, usize::MAX).is_err());
     assert!(super::cuda::checked_replay_trace_shape(3, 1, 2).is_err());
     assert!(super::cuda::checked_replay_trace_shape(2, usize::MAX, 2).is_err());

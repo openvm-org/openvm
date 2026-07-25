@@ -19,7 +19,7 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                cuda::GpuPostflightProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
                 PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
@@ -252,7 +252,7 @@ fn test_cuda_less_than_immediate_boundaries_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_less_than_immediate_tracegen_from_rvr_transcript() {
+fn test_cuda_less_than_immediate_tracegen_from_preflight_transcript() {
     let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
     let instruction = |opcode: LessThanImmOpcode, rd: usize, rs1: usize, imm: i16| {
         Instruction::<F>::from_usize(
@@ -313,7 +313,7 @@ fn test_cuda_less_than_immediate_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let d_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
@@ -331,7 +331,7 @@ fn test_cuda_less_than_immediate_tracegen_from_rvr_transcript() {
     );
     let replay_ctx = harness
         .gpu_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
@@ -354,7 +354,7 @@ fn test_cuda_less_than_immediate_tracegen_from_rvr_transcript() {
     let corrupt_chip =
         Rv64LessThanImmChipGpu::new(corrupt_range_checker, tester.timestamp_max_bits());
     corrupt_chip
-        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 49);
 

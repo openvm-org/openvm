@@ -16,7 +16,7 @@ use p3_keccak_air::NUM_ROUNDS;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -45,12 +45,12 @@ pub struct XorinVmChipGpu {
 
 #[cfg(feature = "rvr")]
 impl XorinVmChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let step_range = replay_plan.opcode_range(XorinOpcode::XORIN.global_opcode());
@@ -153,12 +153,12 @@ pub struct KeccakfOpChipGpu {
 
 #[cfg(feature = "rvr")]
 impl KeccakfOpChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let step_range = replay_plan.opcode_range(KeccakfOpcode::KECCAKF.global_opcode());
@@ -260,12 +260,12 @@ pub struct KeccakfPermChipGpu {
 
 #[cfg(feature = "rvr")]
 impl KeccakfPermChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         program.ensure_replay_inputs(transcript, replay_plan, &self.device_ctx)?;
         let step_range = replay_plan.opcode_range(KeccakfOpcode::KECCAKF.global_opcode());
         let (d_preimages, num_replay_steps) = {
@@ -274,19 +274,19 @@ impl KeccakfPermChipGpu {
         };
         if step_range.is_empty() {
             if d_preimages.is_some() || num_replay_steps != 0 {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "Keccak replay state exists without executed KECCAKF".to_string(),
                 ));
             }
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
         let d_preimages = d_preimages.ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "KeccakfPerm replay ran before KeccakfOp replay".to_string(),
             )
         })?;
         if num_replay_steps != step_range.len() || d_preimages.len() != step_range.len() * 25 {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "Keccak replay preimage handoff has the wrong length".to_string(),
             ));
         }

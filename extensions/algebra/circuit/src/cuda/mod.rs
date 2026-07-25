@@ -4,7 +4,7 @@ use std::{ops::Range, sync::Arc};
 
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::rvr::cuda::{
-    GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
@@ -32,7 +32,7 @@ struct DeferredGpuRangeCheckerCounts {
 }
 
 impl DeferredGpuRangeCheckerCounts {
-    pub fn commit(self) -> Result<(), GpuRvrInputError> {
+    pub fn commit(self) -> Result<(), GpuPostflightError> {
         unsafe {
             cuda_abi::merge_range_counts(
                 self.target.as_ref(),
@@ -44,18 +44,18 @@ impl DeferredGpuRangeCheckerCounts {
     }
 }
 
-fn checked_opcode(base: usize, local: usize) -> Result<VmOpcode, GpuRvrInputError> {
+fn checked_opcode(base: usize, local: usize) -> Result<VmOpcode, GpuPostflightError> {
     let opcode = base.checked_add(local).ok_or_else(|| {
-        GpuRvrInputError::InvalidTranscript("algebra opcode overflow".to_string())
+        GpuPostflightError::InvalidTranscript("algebra opcode overflow".to_string())
     })?;
-    u32::try_from(opcode).map_err(|_| GpuRvrInputError::OpcodeTooLarge(opcode))?;
+    u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
     Ok(VmOpcode::from_usize(opcode))
 }
 
 fn opcode_pair_range(
-    replay_plan: &GpuRvrReplayPlan,
+    replay_plan: &GpuPostflightPlan,
     opcodes: [VmOpcode; 2],
-) -> Result<Range<usize>, GpuRvrInputError> {
+) -> Result<Range<usize>, GpuPostflightError> {
     let ranges = opcodes.map(|opcode| replay_plan.opcode_range(opcode));
     let Some(start) = ranges
         .iter()
@@ -72,7 +72,7 @@ fn opcode_pair_range(
         .max()
         .unwrap();
     if end - start != ranges.iter().map(Range::len).sum::<usize>() {
-        return Err(GpuRvrInputError::InvalidTranscript(
+        return Err(GpuPostflightError::InvalidTranscript(
             "ModularIsEqual opcode ranges are not contiguous".to_string(),
         ));
     }
@@ -110,12 +110,12 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         }
     }
 
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let is_eq_opcode = checked_opcode(
@@ -134,27 +134,29 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         let width = Rv64IsEqualModU16AdapterCols::<F, 2, NUM_LANES>::width()
             .checked_add(ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "ModularIsEqual trace width overflow".to_string(),
                 )
             })?;
         let height = range.len().checked_next_power_of_two().ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript("ModularIsEqual trace height overflow".to_string())
+            GpuPostflightError::InvalidTranscript(
+                "ModularIsEqual trace height overflow".to_string(),
+            )
         })?;
         let timestamp_limit = 1usize
             .checked_shl(u32::try_from(self.timestamp_max_bits).map_err(|_| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "timestamp width cannot be represented as a trace height".to_string(),
                 )
             })?)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "timestamp width cannot be represented as a trace height".to_string(),
                 )
             })?;
         let max_height = timestamp_limit.min(MAX_ALGEBRA_TRACE_HEIGHT);
         if height > max_height || height.checked_mul(width).is_none() {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "ModularIsEqual trace shape {height}x{width} exceeds the replay allocation limit"
             )));
         }
@@ -162,14 +164,14 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         let delta = DeviceBuffer::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
         let opcode_base = u32::try_from(self.opcode_base)
-            .map_err(|_| GpuRvrInputError::OpcodeTooLarge(self.opcode_base))?;
+            .map_err(|_| GpuPostflightError::OpcodeTooLarge(self.opcode_base))?;
         let pointer_max_bits = u32::try_from(self.pointer_max_bits).map_err(|_| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "ModularIsEqual pointer width does not fit u32".to_string(),
             )
         })?;
         let timestamp_max_bits = u32::try_from(self.timestamp_max_bits).map_err(|_| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "ModularIsEqual timestamp width does not fit u32".to_string(),
             )
         })?;
@@ -201,7 +203,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         transcript.synchronize()?;
         let error = transcript.error_code()?;
         if error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "ModularIsEqual replay rejected transcript with code {error}"
             )));
         }
@@ -214,7 +216,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         Ok(AirProvingContext::simple_no_pis(trace))
     }
 
-    pub fn checkpoint_opcodes(&self) -> Result<[VmOpcode; 2], GpuRvrInputError> {
+    pub fn postflight_opcodes(&self) -> Result<[VmOpcode; 2], GpuPostflightError> {
         Ok([
             checked_opcode(
                 self.opcode_base,

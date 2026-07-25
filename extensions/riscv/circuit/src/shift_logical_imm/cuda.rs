@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     openvm_instructions::{
         riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
@@ -46,12 +46,12 @@ pub struct Rv64ShiftLogicalImmChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftLogicalImmChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let slli_range = replay_plan.opcode_range(ShiftImmOpcode::SLLI.global_opcode());
@@ -60,7 +60,7 @@ impl Rv64ShiftLogicalImmChipGpu {
             .len()
             .checked_add(srli_range.len())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "logical-shift-immediate replay row count overflow".to_string(),
                 )
             })?;
@@ -109,12 +109,12 @@ pub struct Rv64ShiftWLogicalImmChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64ShiftWLogicalImmChipGpu {
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_postflight(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
         let slliw_range = replay_plan.opcode_range(ShiftWImmOpcode::SLLIW.global_opcode());
@@ -123,7 +123,7 @@ impl Rv64ShiftWLogicalImmChipGpu {
             .len()
             .checked_add(srliw_range.len())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "word-logical-shift-immediate replay row count overflow".to_string(),
                 )
             })?;

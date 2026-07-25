@@ -16,8 +16,8 @@ use {
     openvm_circuit::arch::{
         rvr::{
             cuda::{
-                GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
-                RvrCheckpointOpcodeBases,
+                GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
+                GpuPostflightTranscript, PostflightOpcodeBases,
             },
             PreflightExecution,
         },
@@ -68,7 +68,7 @@ use crate::{
 
 pub struct Rv64ImGpuProverExt;
 
-/// Segment-wide RV64I GPU trace generation from an immutable RVR transcript.
+/// Segment-wide RV64I GPU trace generation from an immutable postflight transcript.
 ///
 /// Construction rejects an executed opcode unless its trace kernel is present
 /// below (or it is the record-free system `TERMINATE`). Each supported opcode
@@ -76,18 +76,18 @@ pub struct Rv64ImGpuProverExt;
 /// This makes a missing/mismatched chip fail closed instead of silently
 /// producing a dummy trace.
 #[cfg(feature = "rvr")]
-pub struct Rv64ImRvrGpuTracegen<'a> {
-    program: &'a GpuRvrProgram,
-    transcript: &'a GpuRvrTranscript,
-    replay_plan: &'a GpuRvrReplayPlan,
+pub struct Rv64ImPreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
     pending_opcodes: std::collections::BTreeSet<u32>,
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> Rv64ImRvrGpuTracegen<'a> {
+impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     #[doc(hidden)]
-    pub fn checkpoint_opcode_bases() -> RvrCheckpointOpcodeBases {
-        RvrCheckpointOpcodeBases {
+    pub fn postflight_opcode_bases() -> PostflightOpcodeBases {
+        PostflightOpcodeBases {
             base_alu: Self::opcode(BaseAluOpcode::ADD),
             shift: Self::opcode(ShiftOpcode::SLL),
             less_than: Self::opcode(LessThanOpcode::SLT),
@@ -119,12 +119,12 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
     /// first become unresolved block intents; the VM chronology pass resolves
     /// those intents before the ordinary transcript indexes and unchanged
     /// trace generators consume them.
-    pub fn expand_checkpoint_replay<VB>(
+    pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuRvrProgram,
+        program: &GpuPostflightProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
-    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<
             GpuBabyBearPoseidon2Engine,
@@ -136,15 +136,15 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
             program,
             execution,
             expected_retired,
-            Self::checkpoint_opcode_bases(),
+            Self::postflight_opcode_bases(),
         )
     }
 
     pub fn new(
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
-    ) -> Result<Self, GpuRvrInputError> {
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
+    ) -> Result<Self, GpuPostflightError> {
         Self::new_after_claiming_extension_opcodes(program, transcript, replay_plan, &[])
     }
 
@@ -156,11 +156,11 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
     /// against RV64's exact supported set here.
     #[doc(hidden)]
     pub fn new_after_claiming_extension_opcodes(
-        program: &'a GpuRvrProgram,
-        transcript: &'a GpuRvrTranscript,
-        replay_plan: &'a GpuRvrReplayPlan,
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
         extension_opcodes: &[u32],
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let extension_opcodes = extension_opcodes
             .iter()
@@ -174,8 +174,8 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
             .iter()
             .find(|&&opcode| !Self::supports_opcode(opcode))
         {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "RV64IM RVR GPU tracegen does not support executed opcode {opcode:#x}"
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "RV64IM preflight GPU tracegen does not support executed opcode {opcode:#x}"
             )));
         }
         Ok(Self {
@@ -298,7 +298,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         )?;
         self.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_rvr_tracegen_session();
+        vm.complete_preflight_tracegen_session();
         Ok(ctx)
     }
 
@@ -313,10 +313,10 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         &mut self,
         _insertion_idx: usize,
         chip: &dyn Any,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         if let Some(chip) = chip.downcast_ref::<PhantomChipGPU>() {
             self.mark_generated([SystemOpcode::PHANTOM.global_opcode().as_usize() as u32]);
-            return chip.generate_proving_ctx_from_rvr(
+            return chip.generate_proving_ctx_from_postflight(
                 self.program,
                 self.transcript,
                 self.replay_plan,
@@ -329,7 +329,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
                     self.mark_generated([$(
                         Self::opcode($opcode)
                     ),+]);
-                    return chip.generate_proving_ctx_from_rvr(
+                    return chip.generate_proving_ctx_from_postflight(
                         self.program,
                         self.transcript,
                         self.replay_plan,
@@ -493,10 +493,10 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
     /// check only proves that the reverse inventory walk visited a producer for
     /// every executed opcode.
     #[doc(hidden)]
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
         if !self.pending_opcodes.is_empty() {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "RV64IM RVR GPU tracegen did not visit chips for executed opcodes {:?}",
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "RV64IM preflight GPU tracegen did not visit chips for executed opcodes {:?}",
                 self.pending_opcodes
             )));
         }

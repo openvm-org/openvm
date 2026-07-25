@@ -2,7 +2,9 @@ use std::{mem::size_of, sync::Arc};
 
 use num_bigint::BigUint;
 use openvm_circuit::arch::{
-    rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+    rvr::cuda::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
     VmChipWrapper,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
@@ -53,9 +55,9 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
         >,
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         if range_checker.count.len() != chip.inner.range_checker.count.len() {
-            return Err(GpuRvrInputError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidTranscript(
                 "field-expression range-count shape mismatch".to_string(),
             ));
         }
@@ -71,7 +73,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
                 .as_ref()
                 .is_some_and(|cpu_chip| Arc::ptr_eq(cpu_chip, &chip.inner.range_checker))
             {
-                return Err(GpuRvrInputError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidTranscript(
                     "field-expression CPU fallback range checker is not hybrid-wired".to_string(),
                 ));
             }
@@ -86,7 +88,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
             });
         }
         let serialized = serialize_field_expr(&chip.inner).map_err(|error| {
-            GpuRvrInputError::InvalidTranscript(format!(
+            GpuPostflightError::InvalidTranscript(format!(
                 "unsupported device field expression: {error:?}"
             ))
         })?;
@@ -122,10 +124,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
             F,
             FieldExpressionFiller<Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
         >,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         match &self.mode {
             FieldExprReplayMode::Gpu(replay) => {
                 replay.generate_proving_ctx(program, transcript, replay_plan)
@@ -179,13 +181,13 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         pointer_max_bits: usize,
         timestamp_max_bits: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Result<Self, GpuRvrInputError> {
+    ) -> Result<Self, GpuPostflightError> {
         let num_input_bytes = chip
             .inner
             .num_inputs()
             .checked_mul(chip.inner.expr.program().canonical_num_limbs())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "field-expression input width overflow".to_string(),
                 )
             })?;
@@ -193,10 +195,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .checked_mul(BLOCKS)
             .and_then(|blocks| blocks.checked_mul(openvm_circuit::arch::MEMORY_BLOCK_BYTES))
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript("VecHeap input width overflow".to_string())
+                GpuPostflightError::InvalidTranscript("VecHeap input width overflow".to_string())
             })?;
         if num_input_bytes != expected_input_bytes {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "field-expression input width {num_input_bytes} does not match VecHeap width {expected_input_bytes}"
             )));
         }
@@ -208,30 +210,32 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .len()
             .checked_mul(chip.inner.expr.program().canonical_num_limbs())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "field-expression output width overflow".to_string(),
                 )
             })?;
         let expected_output_bytes = BLOCKS
             .checked_mul(openvm_circuit::arch::MEMORY_BLOCK_BYTES)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript("VecHeap output width overflow".to_string())
+                GpuPostflightError::InvalidTranscript("VecHeap output width overflow".to_string())
             })?;
         if num_output_bytes != expected_output_bytes {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "field-expression output width {num_output_bytes} does not match VecHeap width {expected_output_bytes}"
             )));
         }
         let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
         let core_width = BaseAir::<F>::width(&chip.inner.expr);
         if serialized.core_width != core_width {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "serialized field-expression width {} does not match AIR width {core_width}",
                 serialized.core_width
             )));
         }
         let width = adapter_width.checked_add(core_width).ok_or_else(|| {
-            GpuRvrInputError::InvalidTranscript("field-expression trace width overflow".to_string())
+            GpuPostflightError::InvalidTranscript(
+                "field-expression trace width overflow".to_string(),
+            )
         })?;
         let program = serialized
             .blob
@@ -259,10 +263,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
 
     pub fn generate_proving_ctx(
         &self,
-        program: &GpuRvrProgram,
-        transcript: &GpuRvrTranscript,
-        replay_plan: &GpuRvrReplayPlan,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         let projection = gather_vec_heap_trace_inputs_device::<NUM_READS, BLOCKS>(
             program,
@@ -281,17 +285,17 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
 
     fn generate_from_projection(
         &self,
-        transcript: &GpuRvrTranscript,
+        transcript: &GpuPostflightTranscript,
         projection: DeviceVecHeapProjection<NUM_READS, BLOCKS>,
-    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         let pointer_max_bits = u32::try_from(self.pointer_max_bits).map_err(|_| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "field-expression pointer width does not fit u32".to_string(),
             )
         })?;
         let timestamp_max_bits = u32::try_from(self.timestamp_max_bits).map_err(|_| {
-            GpuRvrInputError::InvalidTranscript(
+            GpuPostflightError::InvalidTranscript(
                 "field-expression timestamp width does not fit u32".to_string(),
             )
         })?;
@@ -312,14 +316,14 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .grid_blocks
             .checked_mul(launch.block_threads)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "field-expression launch thread count overflow".to_string(),
                 )
             })?;
         let expected_scratch_words = expected_active_threads
             .checked_mul(self.aux_words_per_thread)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "field-expression launch scratch size overflow".to_string(),
                 )
             })?;
@@ -327,7 +331,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .scratch_words
             .checked_mul(size_of::<u32>())
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "field-expression launch scratch byte size overflow".to_string(),
                 )
             })?;
@@ -335,7 +339,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .active_threads
             .checked_mul(launch.local_bytes_per_thread)
             .ok_or_else(|| {
-                GpuRvrInputError::InvalidTranscript(
+                GpuPostflightError::InvalidTranscript(
                     "field-expression launch local-memory size overflow".to_string(),
                 )
             })?;
@@ -349,7 +353,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             || launch.local_bytes_per_thread > MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD
             || local_bytes > MAX_FIELD_EXPR_LOCAL_BYTES
         {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "invalid field-expression launch: grid={}, block={}, active={}, scratch={} words/{} bytes, local={} bytes/thread/{} bytes total",
                 launch.grid_blocks,
                 launch.block_threads,
@@ -380,7 +384,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         transcript.synchronize()?;
         let error = transcript.error_code()?;
         if error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidTranscript(format!(
                 "field-expression replay rejected transcript with code {error:#010x}"
             )));
         }
