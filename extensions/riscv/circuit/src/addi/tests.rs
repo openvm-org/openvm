@@ -37,32 +37,27 @@ use {
     openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
-        program::{Program, DEFAULT_PC_STEP},
+        program::Program,
         riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
         SystemOpcode,
     },
-    openvm_riscv_transpiler::BranchEqualOpcode,
     openvm_stark_backend::p3_field::PrimeField32,
     std::{ffi::c_void, time::Duration},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     crate::{
         adapters::{
-            Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterRecord,
-            Rv64BaseAluWImmU16AdapterRecord, Rv64BranchAdapterAir, Rv64BranchAdapterCols,
-            Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, Rv64BranchAdapterRecord,
-            RV64_WORD_U16_LIMBS,
+            Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterRecord, Rv64BranchAdapterAir,
+            Rv64BranchAdapterCols, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller,
+            Rv64BranchAdapterRecord,
         },
-        AddICoreRecord, BranchEqualCoreAir, BranchEqualCoreCols, BranchEqualCoreRecord,
-        BranchEqualFiller, Rv64AddIChipGpu, Rv64AddIWChipGpu, Rv64BranchEqualAir,
-        Rv64BranchEqualChip, Rv64BranchEqualChipGpu, Rv64BranchEqualExecutor,
+        BranchEqualCoreAir, BranchEqualCoreCols, BranchEqualCoreRecord, BranchEqualFiller,
+        Rv64AddIChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChip, Rv64BranchEqualChipGpu,
+        Rv64BranchEqualExecutor,
     },
-    openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout, MatrixRecordArena,
-    },
-    openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
+    openvm_circuit::arch::MatrixRecordArena,
+    openvm_circuit_primitives::Chip,
     openvm_cpu_backend::CpuBackend,
     openvm_cuda_backend::{
         base::DeviceMatrix,
@@ -71,11 +66,22 @@ use {
         },
         prelude::SC,
     },
-    openvm_cuda_common::{
-        copy::{MemCopyD2H, MemCopyH2D},
-        stream::{cudaStream_t, device_synchronize},
-    },
+    openvm_cuda_common::stream::{cudaStream_t, device_synchronize},
+    openvm_instructions::program::DEFAULT_PC_STEP,
+    openvm_riscv_transpiler::BranchEqualOpcode,
     openvm_stark_backend::prover::ColMajorMatrix,
+};
+#[cfg(feature = "cuda")]
+use {
+    crate::{
+        adapters::{Rv64BaseAluWImmU16AdapterRecord, RV64_WORD_U16_LIMBS},
+        AddICoreRecord, Rv64AddIWChipGpu,
+    },
+    openvm_circuit::arch::{
+        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
@@ -105,10 +111,10 @@ type WHarness = TestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChi
 #[cfg(feature = "cuda")]
 type GpuWHarness =
     GpuTestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddIWChip<F>>;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64AddIExecutor, Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIChip<F>>;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuBranchHarness = GpuTestChipHarness<
     F,
     Rv64BranchEqualExecutor,
@@ -281,12 +287,12 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     create_cuda_harness_with_capacity(tester, 64)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness_with_capacity(tester: &GpuChipTestBuilder, capacity: usize) -> GpuHarness {
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
@@ -301,7 +307,7 @@ fn create_cuda_harness_with_capacity(tester: &GpuChipTestBuilder, capacity: usiz
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, capacity)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_branch_harness_with_capacity(
     tester: &GpuChipTestBuilder,
     capacity: usize,

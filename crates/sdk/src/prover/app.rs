@@ -199,6 +199,12 @@ impl<'a> RvrCheckpointAppProver<'a> {
 
     /// Proves every continuation segment through the prepared compact RVR
     /// checkpoint executor and record-free GPU trace generation.
+    ///
+    /// The prepared prover remains reusable after successful proofs and
+    /// execution errors that occur before RVR trace generation begins. An
+    /// error from an active RVR trace-generation session is terminal: lookup
+    /// counts are not transactional, so retries fail closed and callers must
+    /// prepare a new prover.
     #[instrument(
         name = "app_prove_rvr_checkpoint",
         skip_all,

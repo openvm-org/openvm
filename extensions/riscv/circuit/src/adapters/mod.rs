@@ -73,25 +73,6 @@ pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, Executio
     Ok(ptr)
 }
 
-#[cfg(test)]
-mod block_pointer_tests {
-    use super::validate_memory_block_byte_ptr;
-
-    #[test]
-    fn memory_block_pointer_uses_the_eight_byte_equipartition() {
-        for pointer in [0, 8] {
-            assert_eq!(
-                validate_memory_block_byte_ptr(12, pointer).unwrap(),
-                pointer
-            );
-        }
-        for pointer in [2, 4, 6] {
-            let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
-            assert!(error.to_string().contains("eight-byte aligned"), "{error}");
-        }
-    }
-}
-
 /// Supported load/store access widths in bytes.
 pub(crate) const BYTE_ACCESS_WIDTH: usize = 1;
 pub(crate) const HALFWORD_ACCESS_WIDTH: usize = 2;
@@ -694,4 +675,23 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
 #[inline(always)]
 pub fn read_rv64_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
     u64_to_u32_checked(read_rv64_register(memory, ptr))
+}
+
+#[cfg(test)]
+mod block_pointer_tests {
+    use super::validate_memory_block_byte_ptr;
+
+    #[test]
+    fn memory_block_pointer_uses_the_eight_byte_equipartition() {
+        for pointer in [0, 8] {
+            assert_eq!(
+                validate_memory_block_byte_ptr(12, pointer).unwrap(),
+                pointer
+            );
+        }
+        for pointer in [2, 4, 6] {
+            let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
+            assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+        }
+    }
 }

@@ -112,17 +112,19 @@ impl<const NUM_READS: usize, const BLOCKS: usize>
             range_checker,
             mem_helper,
             adapter_row,
-            input.from_pc,
-            input.from_timestamp,
-            &input.rs_ptrs,
-            input.rd_ptr,
-            &input.rs_vals,
-            input.rd_val,
-            &input.rs_prev_timestamps,
-            input.rd_prev_timestamp,
-            &input.heap_prev_timestamps,
-            &input.write_prev_timestamps,
-            &input.write_predecessors,
+            VecHeapTraceValues {
+                from_pc: input.from_pc,
+                from_timestamp: input.from_timestamp,
+                rs_ptrs: &input.rs_ptrs,
+                rd_ptr: input.rd_ptr,
+                rs_vals: &input.rs_vals,
+                rd_val: input.rd_val,
+                rs_prev_timestamps: &input.rs_prev_timestamps,
+                rd_prev_timestamp: input.rd_prev_timestamp,
+                heap_prev_timestamps: &input.heap_prev_timestamps,
+                write_prev_timestamps: &input.write_prev_timestamps,
+                write_predecessors: &input.write_predecessors,
+            },
         );
     }
 }
@@ -305,6 +307,25 @@ pub struct VecHeapTraceInput<const NUM_READS: usize, const BLOCKS: usize> {
     pub heap_reads: [[[u16; BLOCK_FE_WIDTH]; BLOCKS]; NUM_READS],
     pub writes: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
     pub write_predecessors: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
+}
+
+struct VecHeapTraceValues<
+    'a,
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+> {
+    from_pc: u32,
+    from_timestamp: u32,
+    rs_ptrs: &'a [u32; NUM_READS],
+    rd_ptr: u32,
+    rs_vals: &'a [u32; NUM_READS],
+    rd_val: u32,
+    rs_prev_timestamps: &'a [u32; NUM_READS],
+    rd_prev_timestamp: u32,
+    heap_prev_timestamps: &'a [[u32; BLOCKS_PER_READ]; NUM_READS],
+    write_prev_timestamps: &'a [u32; BLOCKS_PER_WRITE],
+    write_predecessors: &'a [[u16; BLOCK_FE_WIDTH]; BLOCKS_PER_WRITE],
 }
 
 /// The layout must match `VecHeapTraceInput` in `vec_heap_replay.cuh`, whose
@@ -506,17 +527,19 @@ impl<
             self.range_checker_chip.as_ref(),
             mem_helper,
             adapter_row,
-            from_pc,
-            from_timestamp,
-            &rs_ptrs,
-            rd_ptr,
-            &rs_vals,
-            rd_val,
-            &rs_prev_timestamps,
-            rd_prev_timestamp,
-            &heap_prev_timestamps,
-            &write_prev_timestamps,
-            &write_predecessors,
+            VecHeapTraceValues {
+                from_pc,
+                from_timestamp,
+                rs_ptrs: &rs_ptrs,
+                rd_ptr,
+                rs_vals: &rs_vals,
+                rd_val,
+                rs_prev_timestamps: &rs_prev_timestamps,
+                rd_prev_timestamp,
+                heap_prev_timestamps: &heap_prev_timestamps,
+                write_prev_timestamps: &write_prev_timestamps,
+                write_predecessors: &write_predecessors,
+            },
         );
     }
 }
@@ -525,26 +548,26 @@ impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const BLOCKS_PER_WRIT
     Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     /// Fills adapter columns from semantic replay values rather than a chip record.
-    ///
-    /// `BLOCKS_PER_READ == BLOCKS_PER_WRITE` is encoded by the input type used by
-    /// all current field-expression adapters.
-    pub fn fill_trace_row_from_values<F: PrimeField32>(
+    fn fill_trace_row_from_values<F: PrimeField32>(
         &self,
         range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut [F],
-        from_pc: u32,
-        from_timestamp: u32,
-        rs_ptrs: &[u32; NUM_READS],
-        rd_ptr: u32,
-        rs_vals: &[u32; NUM_READS],
-        rd_val: u32,
-        rs_prev_timestamps: &[u32; NUM_READS],
-        rd_prev_timestamp: u32,
-        heap_prev_timestamps: &[[u32; BLOCKS_PER_READ]; NUM_READS],
-        write_prev_timestamps: &[u32; BLOCKS_PER_WRITE],
-        write_predecessors: &[[u16; BLOCK_FE_WIDTH]; BLOCKS_PER_WRITE],
+        values: VecHeapTraceValues<'_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>,
     ) {
+        let VecHeapTraceValues {
+            from_pc,
+            from_timestamp,
+            rs_ptrs,
+            rd_ptr,
+            rs_vals,
+            rd_val,
+            rs_prev_timestamps,
+            rd_prev_timestamp,
+            heap_prev_timestamps,
+            write_prev_timestamps,
+            write_predecessors,
+        } = values;
         let cols: &mut Rv64VecHeapAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             adapter_row.borrow_mut();
 

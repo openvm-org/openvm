@@ -39,6 +39,7 @@ use {
         },
         utils::test_system_config,
     },
+    openvm_circuit_primitives::Chip,
     openvm_cpu_backend::CpuBackend,
     openvm_cuda_backend::{
         data_transporter::{
@@ -63,7 +64,7 @@ use {
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
-    openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 

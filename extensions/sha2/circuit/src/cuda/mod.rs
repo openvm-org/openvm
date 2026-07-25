@@ -207,6 +207,7 @@ pub struct Sha2BlockHasherChipGpu<C: Sha2Config> {
     bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
     /// Range checker for digest-row `final_hash` limbs.
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    #[cfg(feature = "rvr")]
     pointer_max_bits: u32,
     _marker: PhantomData<C>,
 }
@@ -370,13 +371,14 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
         records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-        pointer_max_bits: u32,
+        _pointer_max_bits: u32,
     ) -> Self {
         Self {
             records,
             bitwise_lookup,
             range_checker,
-            pointer_max_bits,
+            #[cfg(feature = "rvr")]
+            pointer_max_bits: _pointer_max_bits,
             _marker: PhantomData,
         }
     }
