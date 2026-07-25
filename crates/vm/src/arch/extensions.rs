@@ -823,6 +823,13 @@ where
         >,
     ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
         let num_ext_airs = self.inventory.chips.len();
+        let air_names = self
+            .inventory
+            .airs
+            .ext_airs
+            .iter()
+            .map(|air| air.name().to_string())
+            .collect::<Vec<_>>();
         let mut exec_ctxs = Vec::new();
         exec_ctxs.resize_with(num_ext_airs, || None);
 
@@ -841,6 +848,8 @@ where
             for (chain_pos, (insertion_idx, chip)) in
                 self.inventory.chips.iter().enumerate().rev().enumerate()
             {
+                let _air_span =
+                    info_span!("single_trace_gen", air = air_names[insertion_idx]).entered();
                 exec_ctxs[chain_pos] = Some(generate_extension(insertion_idx, chip.as_any())?);
             }
         }

@@ -30,7 +30,7 @@ use crate::{SdkVmConfig, SdkVmGpuBuilder};
 /// visits the existing VM inventory once in reverse order. Pairing hints are
 /// PHANTOM instructions, so their program row remains owned by the system
 /// Phantom chip rather than by a pairing-specific producer.
-struct SdkRvrGpuTracegen<'a> {
+struct SdkPreflightGpuTracegen<'a> {
     program: &'a GpuRvrProgram,
     transcript: &'a GpuRvrTranscript,
     replay_plan: &'a GpuRvrReplayPlan,
@@ -46,7 +46,7 @@ struct SdkRvrGpuTracegen<'a> {
 impl SdkVmGpuBuilder {
     /// Uploads one immutable program together with all checkpoint access
     /// schedules enabled by this SDK configuration.
-    pub fn upload_checkpoint_program<F: PrimeField32>(
+    pub fn upload_preflight_program<F: PrimeField32>(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
     ) -> Result<GpuRvrProgram, GpuRvrInputError> {
@@ -97,30 +97,35 @@ impl SdkVmGpuBuilder {
     /// This layer deliberately does not guess executor buffer limits. The
     /// segment's metered instruction and residual counts must be used when
     /// constructing `RvrCheckpointPreflightLimits`.
-    pub fn expand_checkpoint_replay(
+    pub fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &GpuRvrProgram,
         execution: &RvrCheckpointPreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
-        vm.expand_rvr_checkpoint_replay(
+        let result = vm.postflight(
             program,
             execution,
             expected_retired,
             Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
-        )
+        );
+        #[cfg(feature = "metrics")]
+        if let Ok((_, replay_plan)) = &result {
+            vm.emit_preflight_opcode_counts(replay_plan);
+        }
+        result
     }
 
     /// Generates the standard SDK proving context from one expanded checkpoint
     /// segment without constructing a `RecordArena`.
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_preflight_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &GpuRvrProgram,
         transcript: &GpuRvrTranscript,
         replay_plan: &GpuRvrReplayPlan,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let max_trace_height = 1usize << vm.engine.params().log_stacked_height();
-        SdkRvrGpuTracegen::new(
+        SdkPreflightGpuTracegen::new(
             vm.config(),
             program,
             transcript,
@@ -132,7 +137,7 @@ impl SdkVmGpuBuilder {
     }
 }
 
-impl<'a> SdkRvrGpuTracegen<'a> {
+impl<'a> SdkPreflightGpuTracegen<'a> {
     fn new(
         config: &SdkVmConfig,
         program: &'a GpuRvrProgram,
@@ -230,7 +235,7 @@ impl<'a> SdkRvrGpuTracegen<'a> {
         mut self,
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
-        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
             self.program,
             self.transcript,
             self.replay_plan,

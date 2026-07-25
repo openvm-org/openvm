@@ -54,7 +54,7 @@ pub use types::{ExecutableFormat, ExecutableInput};
 #[cfg(feature = "rvr")]
 use crate::compiled::load_metered_artifact_metadata;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::prover::RvrCheckpointAppProver;
+use crate::prover::{PreflightAppProver, PreflightStarkProver};
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
@@ -262,22 +262,22 @@ where
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 impl GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder> {
-    /// Prepares the program-specific RVR executors and immutable GPU replay
-    /// data once. Successful [`RvrCheckpointAppProver::prove`] calls and
+    /// Prepares the program-specific compiled executors and immutable GPU replay
+    /// data once. Successful [`PreflightAppProver::prove`] calls and
     /// recoverable execution failures reuse them without generated-code
-    /// compilation or program upload. A failed RVR trace-generation session
+    /// compilation or program upload. A failed trace-generation session
     /// makes that prepared prover terminal because lookup mutations cannot be
     /// rolled back safely.
     #[tracing::instrument(
-        name = "prepare_rvr_checkpoint",
+        name = "prepare_preflight",
         level = "info",
         skip_all,
         fields(group = app.program_name.as_deref().unwrap_or("app_proof"))
     )]
-    pub fn prepare_rvr_checkpoint_app_prover(
+    pub fn prepare_preflight_app_prover(
         &self,
         app: AppProver<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder>,
-    ) -> Result<RvrCheckpointAppProver<'_>, SdkError> {
+    ) -> Result<PreflightAppProver<'_>, SdkError> {
         let exe = app.exe();
         let metered_ctx = app.vm().build_metered_ctx(&exe);
         let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
@@ -292,21 +292,35 @@ impl GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder> {
             .map_err(VirtualMachineError::from)?;
         let checkpoint = self
             .executor
-            .rvr_checkpoint_preflight_instance(&exe, None)
+            .checkpoint_preflight_instance(&exe, None)
             .map_err(VirtualMachineError::from)?;
-        let gpu_program = tracing::info_span!("upload_checkpoint_program")
-            .in_scope(|| SdkVmGpuBuilder::upload_checkpoint_program(app.vm(), &exe.program))
+        let gpu_program = tracing::info_span!("upload_preflight_program")
+            .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(app.vm(), &exe.program))
             .map_err(|error| {
                 VirtualMachineError::Generation(
                     openvm_circuit::arch::GenerationError::ExtensionTracegen(error.to_string()),
                 )
             })?;
-        Ok(RvrCheckpointAppProver::new(
+        Ok(PreflightAppProver::new(
             app,
             metered,
             metered_ctx,
             checkpoint,
             gpu_program,
+        ))
+    }
+
+    /// Prepares reusable compiled preflight executors for the app layer and the
+    /// ordinary recursive aggregation pipeline for the resulting app proof.
+    pub fn prepare_preflight_stark_prover(
+        &self,
+        app: AppProver<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder>,
+    ) -> Result<PreflightStarkProver<'_>, SdkError> {
+        let app = self.prepare_preflight_app_prover(app)?;
+        Ok(PreflightStarkProver::new(
+            app,
+            self.agg_prover(),
+            self.deferral_setup.clone(),
         ))
     }
 }

@@ -507,33 +507,35 @@ Track at least:
 
 - checkpoint and residual bytes per guest instruction;
 - native instructions per guest instruction;
-- pure, metered, and checkpoint execution time;
+- pure, metered, and preflight execution time;
 - generated-C and Rust/CUDA compilation time;
-- upload, expansion, sorting/indexing, and trace-kernel time;
+- upload, postflight replay, sorting/indexing, and trace-kernel time;
 - segment proof time and total proof time;
-- live and reserved GPU memory for expansion, tracegen, and proving.
+- live and reserved GPU memory for postflight, tracegen, and proving.
 
 The production metrics surface stays phase-level and low-cardinality:
 
-- `prepare_rvr_checkpoint_time_ms`, containing the one-time preparation only;
+- `prepare_preflight_time_ms`, containing the one-time preparation only;
 - the existing `compile_metered_time_ms` plus
-  `compile_checkpoint_preflight_time_ms`, both attributed to preparation;
-- `upload_checkpoint_program_time_ms`, attributed to preparation;
-- `app_prove_rvr_checkpoint_time_ms`, excluding preparation;
-- `execute_checkpoint_preflight_time_ms`, attributed only by the existing
+  `compile_preflight_time_ms`, both attributed to preparation;
+- `upload_preflight_program_time_ms`, attributed to preparation;
+- `app_prove_time_ms`, excluding preparation;
+- `execute_preflight_time_ms`, attributed only by the existing
   segment scope;
-- `execute_checkpoint_preflight_insns` and
-  `execute_checkpoint_preflight_insn_mi/s`, emitted once per completed proof;
-- `execute_checkpoint_preflight_checkpoints`,
-  `execute_checkpoint_preflight_residuals`, and
-  `execute_checkpoint_preflight_transcript_bytes`, emitted once per completed
+- `execute_preflight_insns` and
+  `execute_preflight_insn_mi/s`, emitted once per completed proof;
+- `execute_preflight_checkpoints`,
+  `execute_preflight_residuals`, and
+  `execute_preflight_transcript_bytes`, emitted once per completed
   proof;
-- `expand_checkpoint_replay_time_ms`, attributed only by segment;
+- `postflight_time_ms` and its four fixed subphases, attributed only by
+  segment;
 - the existing `trace_gen`, `system_trace_gen`, `executor_trace_gen`, and
   proving metrics.
 
-There are no per-opcode, per-kernel, or dynamic instruction labels. The
-profiler checks the proof-level checkpoint instruction total against metered
+The new path reuses the existing low-cardinality `opcode_count` and
+`single_trace_gen` metrics. There are no dynamic-PC or generated-kernel labels.
+The profiler checks the proof-level preflight instruction total against metered
 execution when both metrics are present.
 
 Native instructions per guest instruction, generated source/object size, host

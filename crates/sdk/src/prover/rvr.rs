@@ -170,14 +170,14 @@ fn prove_inner(
         }
         validate_endpoint(&execution, segment_idx + 1 == num_segments)?;
 
-        let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::expand_checkpoint_replay(
+        let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::postflight(
             &instance.vm,
             &runtime.gpu_program,
             &execution,
             expected_retired,
         )
         .map_err(generation_error)?;
-        let ctx = SdkVmGpuBuilder::generate_proving_ctx_from_rvr(
+        let ctx = SdkVmGpuBuilder::generate_preflight_proving_ctx(
             &mut instance.vm,
             &runtime.gpu_program,
             &gpu_transcript,
@@ -226,17 +226,13 @@ fn prove_inner(
     {
         let elapsed_micros = checkpoint_execution_time.as_secs_f64().max(1e-9) * 1_000_000.0;
         for (segment, retired) in checkpoint_retired_by_segment.into_iter().enumerate() {
-            metrics::counter!(
-                "execute_checkpoint_preflight_insns",
-                "segment" => segment.to_string()
-            )
-            .absolute(retired);
+            metrics::counter!("execute_preflight_insns", "segment" => segment.to_string())
+                .absolute(retired);
         }
-        metrics::counter!("execute_checkpoint_preflight_checkpoints").absolute(checkpoint_count);
-        metrics::counter!("execute_checkpoint_preflight_residuals").absolute(residual_count);
-        metrics::counter!("execute_checkpoint_preflight_transcript_bytes")
-            .absolute(transcript_bytes);
-        metrics::gauge!("execute_checkpoint_preflight_insn_mi/s")
+        metrics::counter!("execute_preflight_checkpoints").absolute(checkpoint_count);
+        metrics::counter!("execute_preflight_residuals").absolute(residual_count);
+        metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);
+        metrics::gauge!("execute_preflight_insn_mi/s")
             .set(checkpoint_retired as f64 / elapsed_micros);
     }
 

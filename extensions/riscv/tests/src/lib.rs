@@ -563,7 +563,7 @@ mod tests {
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
         let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.rvr_checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
 
         let exact_error = match checkpoint.execute_from_state_for_exact(
             checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new()),
@@ -663,7 +663,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let checkpoint = executor.rvr_checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
         let address = PAGE_SIZE as u64 + 8;
         let value = 0x0123_4567_89ab_cdef;
         let initial = configure_hint_state(
@@ -747,7 +747,7 @@ mod tests {
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
         let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.rvr_checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
         let loaded = 0x0123_4567_89ab_cdefu64;
         let x0_only = 0xfedc_ba98_7654_3210u64;
         let sign_extended = 0xffff_ffff_8000_0001u64;
@@ -838,7 +838,7 @@ mod tests {
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
         let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.rvr_checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
         let hint_words = [
             0x0123_4567_89ab_cdef,
             0x1111_2222_3333_4444,
@@ -911,7 +911,7 @@ mod tests {
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
         let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.rvr_checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
         let registers = [(1, 0xa5), (2, 2), (3, 0x1122_3344), (4, 7)];
         let initial_public_values = (0u8..16).collect::<Vec<_>>();
         let full_initial = configure_reveal_state(

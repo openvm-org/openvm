@@ -23,6 +23,8 @@ use openvm_instructions::{
     program::Program,
     VM_DIGEST_WIDTH,
 };
+#[cfg(all(feature = "cuda", feature = "metrics", feature = "rvr"))]
+use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode};
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
 use openvm_stark_backend::{
@@ -45,6 +47,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
+#[cfg(all(feature = "cuda", feature = "metrics", feature = "rvr"))]
+use super::rvr::cuda::GpuRvrReplayPlan;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_checkpoint_preflight,
@@ -317,7 +321,7 @@ where
     ///
     /// This path supports differential testing and direct transcript
     /// validation. Production checkpoint proving uses
-    /// [`Self::rvr_checkpoint_preflight_instance`] and derives the full logs
+    /// [`Self::checkpoint_preflight_instance`] and derives the full logs
     /// by GPU replay.
     pub fn rvr_preflight_instance(
         &self,
@@ -340,14 +344,13 @@ where
     /// Compile the compact checkpoint-and-residual preflight executor.
     ///
     /// The compact transcript is the serial input to record-free GPU replay.
-    pub fn rvr_checkpoint_preflight_instance(
+    pub fn checkpoint_preflight_instance(
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrCheckpointPreflightInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span =
-            tracing::info_span!("compile_checkpoint_preflight", backend = "rvr").entered();
+        let _compilation_span = tracing::info_span!("compile_preflight", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(None);
         let compiled = compile_checkpoint_preflight(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
@@ -1475,8 +1478,8 @@ where
     /// consumed by system and instruction trace generation.
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
-    #[instrument(name = "expand_checkpoint_replay", skip_all)]
-    pub fn expand_rvr_checkpoint_replay(
+    #[instrument(name = "postflight", skip_all)]
+    pub fn postflight(
         &self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
         execution: &crate::arch::rvr::RvrCheckpointPreflightExecution,
@@ -1525,13 +1528,50 @@ where
         result
     }
 
+    #[cfg(feature = "metrics")]
+    #[doc(hidden)]
+    pub fn emit_preflight_opcode_counts(&self, replay_plan: &GpuRvrReplayPlan)
+    where
+        <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
+            PreflightExecutor<BabyBear, crate::arch::DenseRecordArena>,
+    {
+        let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
+        for opcode in replay_plan.executed_opcodes() {
+            let opcode = VmOpcode::from_usize(opcode as usize);
+            if opcode == SystemOpcode::TERMINATE.global_opcode() {
+                continue;
+            }
+            let Some(&executor_idx) = self.executor.inventory.instruction_lookup.get(&opcode)
+            else {
+                continue;
+            };
+            let Some(&air_idx) = executor_idx_to_air_idx.get(executor_idx as usize) else {
+                continue;
+            };
+            let Some(executor) = self.executor.inventory.executors.get(executor_idx as usize)
+            else {
+                continue;
+            };
+            let Some(air_name) = self.pk.per_air.get(air_idx).map(|pk| pk.air_name.clone()) else {
+                continue;
+            };
+            let labels = [
+                ("air_name", air_name),
+                ("air_id", air_idx.to_string()),
+                ("opcode", executor.get_opcode_name(opcode.as_usize())),
+            ];
+            metrics::counter!("opcode_count", &labels)
+                .absolute(replay_plan.opcode_range(opcode).len() as u64);
+        }
+    }
+
     /// Low-level RVR trace-generation seam used by a concrete extension
     /// coordinator. It fences borrowed GPU inputs and validates trace heights,
     /// but does not know whether the callback visited every executed opcode.
     /// Callers should expose a coverage-checked extension entry point instead.
     #[doc(hidden)]
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_from_rvr_unchecked_coverage(
+    pub fn generate_preflight_proving_ctx_unchecked_coverage(
         &mut self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
         transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,

@@ -148,9 +148,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Keccak256Rv64GpuBuilder, config.clone())
@@ -325,7 +323,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         .collect();
     let zero_exe = VmExe::new(zero_program.clone()).with_init_memory(zero_memory);
     let zero_checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&zero_exe, None)
+        .checkpoint_preflight_instance(&zero_exe, None)
         .unwrap();
     let zero_state = zero_checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let zero_cached_program = vm.commit_program_on_device(&zero_program);

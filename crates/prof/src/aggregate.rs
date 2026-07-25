@@ -102,19 +102,21 @@ impl GroupedMetrics {
         for (labels, metrics) in db.flat_dict.iter() {
             let group_name = labels.get(group_label_name);
             if let Some(group_name) = group_name {
-                let group_entry = by_group.entry(group_name.to_string()).or_default();
+                let group_entry = by_group
+                    .entry(canonical_group_name(group_name).to_string())
+                    .or_default();
                 let mut labels = labels.clone();
                 labels.remove(group_label_name);
                 for metric in metrics {
                     group_entry
-                        .entry(metric.name.clone())
+                        .entry(canonical_metric_name(&metric.name).to_string())
                         .or_default()
                         .push((metric.value, labels.clone()));
                 }
             } else {
                 for metric in metrics {
                     ungrouped
-                        .entry(metric.name.clone())
+                        .entry(canonical_metric_name(&metric.name).to_string())
                         .or_default()
                         .push((metric.value, labels.clone()));
                 }
@@ -133,7 +135,6 @@ impl GroupedMetrics {
             EXECUTE_METERED_INSNS_LABEL,
             EXECUTE_METERED_COST_INSNS_LABEL,
             EXECUTE_PREFLIGHT_INSNS_LABEL,
-            EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL,
         ]
         .into_iter()
         .filter_map(|name| {
@@ -228,12 +229,12 @@ impl GroupedMetrics {
                 }
             }
 
-            // Checkpoint execution is nested in each segment's total proof span
+            // Preflight execution is nested in each segment's total proof span
             // but remains serial in the driver. Remove it from its paired
             // segment before scheduling, then add its sum once.
             if metrics.contains_key(PROOF_TIME_LABEL) {
-                let (proof_times_ms, serial_checkpoint_ms) = parallel_proof_times_ms(metrics);
-                group_time += serial_checkpoint_ms / 1000.0;
+                let (proof_times_ms, serial_preflight_ms) = parallel_proof_times_ms(metrics);
+                group_time += serial_preflight_ms / 1000.0;
                 let times_s: Vec<f64> = proof_times_ms.into_iter().map(|ms| ms / 1000.0).collect();
                 group_time += schedule_parallel(&times_s, num_parallel);
             }
@@ -259,26 +260,26 @@ fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
     slot_times.iter().cloned().fold(0.0_f64, f64::max)
 }
 
-/// Returns parallelizable proof time per segment and the checkpoint time that
+/// Returns parallelizable proof time per segment and the preflight time that
 /// must remain serial. Samples are paired by their existing segment label.
 fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
     let proof_times = metrics
         .get(PROOF_TIME_LABEL)
         .expect("proof times must exist before parallel projection");
-    let Some(checkpoint_times) = metrics.get(EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL) else {
+    let Some(preflight_times) = metrics.get(EXECUTE_PREFLIGHT_TIME_LABEL) else {
         return (proof_times.iter().map(|(value, _)| *value).collect(), 0.0);
     };
 
-    let mut checkpoint_by_segment = HashMap::with_capacity(checkpoint_times.len());
-    for (value, labels) in checkpoint_times {
+    let mut preflight_by_segment = HashMap::with_capacity(preflight_times.len());
+    for (value, labels) in preflight_times {
         let segment = labels
             .get("segment")
-            .expect("checkpoint execution metric is missing its segment label");
+            .expect("preflight execution metric is missing its segment label");
         assert!(
-            checkpoint_by_segment
+            preflight_by_segment
                 .insert(segment.to_string(), *value)
                 .is_none(),
-            "duplicate checkpoint execution metric for segment {segment}"
+            "duplicate preflight execution metric for segment {segment}"
         );
     }
 
@@ -287,18 +288,18 @@ fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
         let segment = labels
             .get("segment")
             .expect("total proof metric is missing its segment label");
-        let checkpoint_time = checkpoint_by_segment.remove(segment).unwrap_or_else(|| {
-            panic!("total proof segment {segment} has no checkpoint execution metric")
+        let preflight_time = preflight_by_segment.remove(segment).unwrap_or_else(|| {
+            panic!("total proof segment {segment} has no preflight execution metric")
         });
         assert!(
-            checkpoint_time <= *proof_time,
-            "checkpoint execution exceeds total proof time for segment {segment}"
+            preflight_time <= *proof_time,
+            "preflight execution exceeds total proof time for segment {segment}"
         );
-        paired.push((segment.to_string(), proof_time - checkpoint_time));
+        paired.push((segment.to_string(), proof_time - preflight_time));
     }
     assert!(
-        checkpoint_by_segment.is_empty(),
-        "checkpoint execution metric has no matching total proof segment"
+        preflight_by_segment.is_empty(),
+        "preflight execution metric has no matching total proof segment"
     );
     paired.sort_unstable_by(
         |(a, _), (b, _)| match (a.parse::<u64>(), b.parse::<u64>()) {
@@ -307,10 +308,10 @@ fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
         },
     );
 
-    let serial_checkpoint_ms = checkpoint_times.iter().map(|(value, _)| value).sum();
+    let serial_preflight_ms = preflight_times.iter().map(|(value, _)| value).sum();
     (
         paired.into_iter().map(|(_, value)| value).collect(),
-        serial_checkpoint_ms,
+        serial_preflight_ms,
     )
 }
 
@@ -327,12 +328,12 @@ fn projection_diff_is_compatible(
     previous: &HashMap<String, HashMap<MetricName, Stats>>,
     group_name: &str,
 ) -> bool {
-    let has_checkpoint = |groups: &HashMap<String, HashMap<MetricName, Stats>>| {
+    let has_preflight = |groups: &HashMap<String, HashMap<MetricName, Stats>>| {
         groups
             .get(group_name)
-            .is_some_and(|metrics| metrics.contains_key(EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL))
+            .is_some_and(|metrics| metrics.contains_key(EXECUTE_PREFLIGHT_TIME_LABEL))
     };
-    has_checkpoint(current) == has_checkpoint(previous)
+    has_preflight(current) == has_preflight(previous)
 }
 
 // A hacky way to order the groups for display.
@@ -645,7 +646,6 @@ impl AggregateMetrics {
             } else if metric_name == EXECUTE_PURE_INSN_MI_S_LABEL
                 || metric_name == EXECUTE_PREFLIGHT_INSN_MI_S_LABEL
                 || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
-                || metric_name == EXECUTE_CHECKPOINT_PREFLIGHT_INSN_MI_S_LABEL
             {
                 // skip sum because it is misleading
                 writeln!(
@@ -796,27 +796,20 @@ pub const EXECUTE_PURE_TIME_LABEL: &str = "execute_pure_time_ms";
 pub const EXECUTE_PURE_INSN_MI_S_LABEL: &str = "execute_pure_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
-pub const EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL: &str = "execute_checkpoint_preflight_insns";
-pub const EXECUTE_CHECKPOINT_PREFLIGHT_CHECKPOINTS_LABEL: &str =
-    "execute_checkpoint_preflight_checkpoints";
-pub const EXECUTE_CHECKPOINT_PREFLIGHT_RESIDUALS_LABEL: &str =
-    "execute_checkpoint_preflight_residuals";
-pub const EXECUTE_CHECKPOINT_PREFLIGHT_TRANSCRIPT_BYTES_LABEL: &str =
-    "execute_checkpoint_preflight_transcript_bytes";
-pub const EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL: &str = "execute_checkpoint_preflight_time_ms";
-pub const EXECUTE_CHECKPOINT_PREFLIGHT_INSN_MI_S_LABEL: &str =
-    "execute_checkpoint_preflight_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
+pub const EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL: &str = "execute_preflight_checkpoints";
+pub const EXECUTE_PREFLIGHT_RESIDUALS_LABEL: &str = "execute_preflight_residuals";
+pub const EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL: &str = "execute_preflight_transcript_bytes";
 pub const COMPILE_PURE_TIME_LABEL: &str = "compile_pure_time_ms";
 pub const COMPILE_METERED_TIME_LABEL: &str = "compile_metered_time_ms";
 pub const COMPILE_METERED_SEGMENT_TIME_LABEL: &str = "compile_metered_segment_time_ms";
 pub const COMPILE_METERED_COST_TIME_LABEL: &str = "compile_metered_cost_time_ms";
-pub const COMPILE_CHECKPOINT_PREFLIGHT_TIME_LABEL: &str = "compile_checkpoint_preflight_time_ms";
-pub const PREPARE_RVR_CHECKPOINT_TIME_LABEL: &str = "prepare_rvr_checkpoint_time_ms";
-pub const UPLOAD_CHECKPOINT_PROGRAM_TIME_LABEL: &str = "upload_checkpoint_program_time_ms";
-pub const APP_PROVE_RVR_CHECKPOINT_TIME_LABEL: &str = "app_prove_rvr_checkpoint_time_ms";
-pub const EXPAND_CHECKPOINT_REPLAY_TIME_LABEL: &str = "expand_checkpoint_replay_time_ms";
+pub const COMPILE_PREFLIGHT_TIME_LABEL: &str = "compile_preflight_time_ms";
+pub const PREPARE_PREFLIGHT_TIME_LABEL: &str = "prepare_preflight_time_ms";
+pub const UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL: &str = "upload_preflight_program_time_ms";
+pub const APP_PROVE_TIME_LABEL: &str = "app_prove_time_ms";
+pub const POSTFLIGHT_TIME_LABEL: &str = "postflight_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
 pub const SET_INITIAL_MEMORY_TIME_LABEL: &str = "set_initial_memory_time_ms";
@@ -828,6 +821,41 @@ pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_
 pub const HALO2_VERIFIER_K_LABEL: &str = "halo2_verifier_k";
 pub const HALO2_WRAPPER_K_LABEL: &str = "halo2_wrapper_k";
 
+fn canonical_group_name(name: &str) -> &str {
+    if [
+        "reth.prove_app.block_",
+        "reth.prove_app_rvr.block_",
+        "reth.prove_root.block_",
+        "reth.prove_evm.block_",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
+    {
+        "app_proof"
+    } else {
+        name
+    }
+}
+
+fn canonical_metric_name(name: &str) -> &str {
+    match name {
+        "prepare_rvr_checkpoint_time_ms" | "prepare_rvr_preflight_time_ms" => {
+            PREPARE_PREFLIGHT_TIME_LABEL
+        }
+        "compile_checkpoint_preflight_time_ms" => COMPILE_PREFLIGHT_TIME_LABEL,
+        "upload_checkpoint_program_time_ms" => UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
+        "app_prove_rvr_checkpoint_time_ms" => APP_PROVE_TIME_LABEL,
+        "expand_checkpoint_replay_time_ms" => POSTFLIGHT_TIME_LABEL,
+        "execute_checkpoint_preflight_insns" => EXECUTE_PREFLIGHT_INSNS_LABEL,
+        "execute_checkpoint_preflight_checkpoints" => EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL,
+        "execute_checkpoint_preflight_residuals" => EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
+        "execute_checkpoint_preflight_transcript_bytes" => EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
+        "execute_checkpoint_preflight_time_ms" => EXECUTE_PREFLIGHT_TIME_LABEL,
+        "execute_checkpoint_preflight_insn_mi/s" => EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
+        _ => name,
+    }
+}
+
 pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
@@ -836,26 +864,23 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     COMPILE_METERED_TIME_LABEL,
     COMPILE_METERED_SEGMENT_TIME_LABEL,
     COMPILE_METERED_COST_TIME_LABEL,
-    COMPILE_CHECKPOINT_PREFLIGHT_TIME_LABEL,
-    PREPARE_RVR_CHECKPOINT_TIME_LABEL,
-    UPLOAD_CHECKPOINT_PROGRAM_TIME_LABEL,
-    APP_PROVE_RVR_CHECKPOINT_TIME_LABEL,
+    COMPILE_PREFLIGHT_TIME_LABEL,
+    PREPARE_PREFLIGHT_TIME_LABEL,
+    UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
+    APP_PROVE_TIME_LABEL,
     EXECUTE_PURE_TIME_LABEL,
     EXECUTE_PURE_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSNS_LABEL,
     EXECUTE_METERED_COST_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
-    EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL,
-    EXECUTE_CHECKPOINT_PREFLIGHT_CHECKPOINTS_LABEL,
-    EXECUTE_CHECKPOINT_PREFLIGHT_RESIDUALS_LABEL,
-    EXECUTE_CHECKPOINT_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
-    EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL,
-    EXECUTE_CHECKPOINT_PREFLIGHT_INSN_MI_S_LABEL,
+    EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL,
+    EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
+    EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
     EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
-    EXPAND_CHECKPOINT_REPLAY_TIME_LABEL,
+    POSTFLIGHT_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
     SET_INITIAL_MEMORY_TIME_LABEL,
@@ -900,7 +925,7 @@ mod tests {
         assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
     }
 
-    fn checkpoint_timing_metrics() -> MetricsByName {
+    fn preflight_timing_metrics() -> MetricsByName {
         HashMap::from([
             (
                 PROOF_TIME_LABEL.to_string(),
@@ -911,7 +936,7 @@ mod tests {
                 ],
             ),
             (
-                EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL.to_string(),
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
                 vec![
                     (20.0, labels(Some(1))),
                     (30.0, labels(Some(2))),
@@ -926,21 +951,21 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_execution_remains_serial_in_parallel_projections() {
-        let metrics = checkpoint_timing_metrics();
+    fn preflight_execution_remains_serial_in_parallel_projections() {
+        let metrics = preflight_timing_metrics();
 
         let aggregate = grouped(metrics).aggregate(2);
 
         // Sequential: 50 ms metered + 300 ms segment totals.
         assert_close(aggregate.total_proof_time.val, 0.35);
-        // Infinite parallel: 50 ms metered + 60 ms checkpoint execution +
+        // Infinite parallel: 50 ms metered + 60 ms preflight execution +
         // max(90, 100, 50) ms remaining segment work.
         assert_close(aggregate.total_par_proof_time.val, 0.21);
-        // Two provers: 50 ms metered + 60 ms checkpoint execution +
+        // Two provers: 50 ms metered + 60 ms preflight execution +
         // max(90 + 50, 100) ms remaining segment work.
         assert_close(aggregate.bounded_par_by_group["app"].val, 0.25);
         assert_eq!(
-            aggregate.by_group["app"][EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL]
+            aggregate.by_group["app"][EXECUTE_PREFLIGHT_TIME_LABEL]
                 .sum
                 .val,
             60.0
@@ -948,11 +973,11 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_parallel_diffs_are_suppressed_against_legacy_baseline() {
-        let mut legacy_metrics = checkpoint_timing_metrics();
-        legacy_metrics.remove(EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL);
+    fn preflight_parallel_diffs_require_matching_baseline_metrics() {
+        let mut legacy_metrics = preflight_timing_metrics();
+        legacy_metrics.remove(EXECUTE_PREFLIGHT_TIME_LABEL);
         let legacy = grouped(legacy_metrics).aggregate(2);
-        let mut current = grouped(checkpoint_timing_metrics()).aggregate(2);
+        let mut current = grouped(preflight_timing_metrics()).aggregate(2);
 
         current.set_diff(&legacy);
 
@@ -985,15 +1010,11 @@ mod tests {
                 EXECUTE_PREFLIGHT_INSNS_LABEL.to_string(),
                 vec![(40.0, labels(Some(0))), (60.0, labels(Some(1)))],
             ),
-            (
-                EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL.to_string(),
-                vec![(40.0, labels(Some(0))), (60.0, labels(Some(1)))],
-            ),
         ]);
 
         let aggregate = grouped(metrics).aggregate(2);
         assert_eq!(
-            aggregate.by_group["app"][EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL]
+            aggregate.by_group["app"][EXECUTE_PREFLIGHT_INSNS_LABEL]
                 .sum
                 .val,
             100.0
@@ -1002,7 +1023,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "instruction count mismatch between execute_pure_insns and execute_checkpoint_preflight_insns"
+        expected = "instruction count mismatch between execute_pure_insns and execute_preflight_insns"
     )]
     fn mismatched_execution_counts_are_rejected() {
         let metrics = HashMap::from([
@@ -1011,7 +1032,7 @@ mod tests {
                 vec![(100.0, labels(None))],
             ),
             (
-                EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL.to_string(),
+                EXECUTE_PREFLIGHT_INSNS_LABEL.to_string(),
                 vec![(99.0, labels(None))],
             ),
         ]);

@@ -387,7 +387,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        vm.expand_rvr_checkpoint_replay(
+        vm.postflight(
             program,
             execution,
             expected_retired,
@@ -511,7 +511,7 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
             self.program,
             self.transcript,
             self.replay_plan,

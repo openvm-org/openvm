@@ -453,9 +453,7 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -540,9 +538,7 @@ fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -605,9 +601,7 @@ fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
         mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
@@ -657,9 +651,7 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -740,9 +732,7 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -797,9 +787,7 @@ fn rvr_checkpoint_gpu_replay_rejects_terminate_in_a_suspended_segment() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -989,9 +977,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let full = executor.rvr_preflight_instance(&exe, None).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let max_instructions = instructions.len();
     let max_memory_events = max_instructions * 3;
 
@@ -1221,9 +1207,7 @@ fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
         mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut checkpoint_vm, checkpoint_pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
@@ -1596,9 +1580,7 @@ fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let mut state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let hint_words = [
         0x0123_4567_89ab_cdefu64,

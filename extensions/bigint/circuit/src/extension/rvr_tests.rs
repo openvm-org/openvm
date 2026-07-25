@@ -114,7 +114,7 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
     let executor = VmExecutor::new(config).unwrap();
     for (equal, expected_pc, expected_branch_residual) in [(false, 8, 0u64), (true, 12, 1u64)] {
         let checkpoint = executor
-            .rvr_checkpoint_preflight_instance(&fixture(equal), None)
+            .checkpoint_preflight_instance(&fixture(equal), None)
             .unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let execution = checkpoint
