@@ -590,6 +590,23 @@ mod tests {
             }
             output.system_records.filtered_exec_frequencies = frequencies;
 
+            // The G2 wire (and therefore `reference`) has no was-written signal: a
+            // block's presence in `final_blocks`/`final_timestamps` conflates reads
+            // (which seed a block's known value on first touch) with writes, and
+            // registers are seeded unconditionally regardless of use. Checked G2
+            // emission (the default under `debug_assertions`, i.e. every `fast`
+            // profile CI run) makes the host independently finalize
+            // `touched_memory` from the real per-block dirty shadow before this
+            // arm ever runs, so capture that real, already-computed `is_dirty` per
+            // `(address_space, ptr)` here before it is replaced below with the
+            // wire-reconstructed values.
+            let real_touched_dirty: BTreeMap<(u32, u32), u32> = output
+                .system_records
+                .touched_memory
+                .iter()
+                .map(|block| ((block.address_space, block.ptr), block.is_dirty))
+                .collect();
+
             let mut touched_memory = Vec::with_capacity(reference.final_timestamps.len());
             for (&(address_space, address), &timestamp) in &reference.final_timestamps {
                 let bytes = unsafe {
@@ -603,9 +620,19 @@ mod tests {
                 if let Some(&expected) = reference.final_blocks.get(&(address_space, address)) {
                     assert_eq!(block, expected, "G2 opaque modular final block value");
                 }
+                let ptr = address / 2;
+                let is_dirty = *real_touched_dirty
+                    .get(&(u32::from(address_space), ptr))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "G2 opaque modular touched block (address_space={address_space}, \
+                             ptr={ptr}) is missing from the host-verified dirty set"
+                        )
+                    });
                 touched_memory.push(TouchedBlock {
                     address_space: u32::from(address_space),
-                    ptr: address / 2,
+                    ptr,
+                    is_dirty,
                     timestamp,
                     values: [0, 2, 4, 6].map(|offset| {
                         F::from_u32(u32::from(u16::from_le_bytes([
