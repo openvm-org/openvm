@@ -27,7 +27,7 @@ pub use rvr_openvm_ext_ffi_common::{
 };
 
 use super::{RvrDeltaDecodeEntry, RvrDeltaDecodePrecompute, PREFLIGHT_ADDSUB_RECORD_SIZE};
-use crate::arch::ExecutionError;
+use crate::arch::{ExecutionError, BLOCK_FE_WIDTH};
 #[cfg(feature = "cuda")]
 use crate::system::cuda::memory::DEVICE_TOUCHED_RECORD_WORDS;
 
@@ -36,7 +36,7 @@ const G2_MAX_OPAQUE_LANES: usize = 128;
 
 pub const G2_PREPARED_INSTRUCTION_SIZE: usize = 20;
 pub const G2_TIMELINE_EVENT_SIZE: usize = 32;
-const G2_DEVICE_TOUCHED_RECORD_WORDS: usize = 7;
+const G2_DEVICE_TOUCHED_RECORD_WORDS: usize = 4 + BLOCK_FE_WIDTH;
 #[cfg(feature = "cuda")]
 const _: () = assert!(G2_DEVICE_TOUCHED_RECORD_WORDS == DEVICE_TOUCHED_RECORD_WORDS);
 
@@ -252,7 +252,7 @@ impl RvrSegmentMemoryModel {
     /// `ensure_device_g2_segment`; `wire_bytes` is a conservative capacity bound for the compact
     /// device wire:
     ///
-    /// `wire_bytes + 24R + 28(4T + R + 32) + 12R + 20I + 4T + 4(I + 1)
+    /// `wire_bytes + 24R + 32(4T + R + 32) + 12R + 20I + 4T + 4(I + 1)
     ///  + 32(4T + R + I)`.
     ///
     /// Preflight simultaneously owns a `2R` `DeviceAuxPatch` allocation. Only opaque records

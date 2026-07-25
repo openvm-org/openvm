@@ -1819,7 +1819,7 @@ static_assert(sizeof(G2RegisterSummary) == 16, "G2 register-summary size drift")
 
 struct G2RegisterState {
     uint32_t timestamp;
-    uint32_t reserved;
+    uint32_t is_dirty;
     uint64_t value;
 };
 static_assert(sizeof(G2RegisterState) == 16, "G2 register-state size drift");
@@ -1827,10 +1827,11 @@ static_assert(sizeof(G2RegisterState) == 16, "G2 register-state size drift");
 struct G2TouchedMemoryRecord {
     uint32_t addr_space;
     uint32_t block_ptr;
+    uint32_t is_dirty;
     uint32_t timestamp;
     uint32_t values[4];
 };
-static_assert(sizeof(G2TouchedMemoryRecord) == 28, "G2 touched-record size drift");
+static_assert(sizeof(G2TouchedMemoryRecord) == 32, "G2 touched-record size drift");
 
 static constexpr uint32_t G2_SUMMARY_ACCESSED = 1u;
 static constexpr uint32_t G2_SUMMARY_WRITTEN = 2u;
@@ -1919,7 +1920,10 @@ __global__ void g2_scan_register_chunks(
         incoming[chunk * G2_REGISTER_COUNT + reg] = state;
         G2RegisterSummary summary = summaries[chunk * G2_REGISTER_COUNT + reg];
         if (summary.flags & G2_SUMMARY_ACCESSED) state.timestamp = summary.last_timestamp;
-        if (summary.flags & G2_SUMMARY_WRITTEN) state.value = summary.last_write_value;
+        if (summary.flags & G2_SUMMARY_WRITTEN) {
+            state.value = summary.last_write_value;
+            if (reg != 0) state.is_dirty = 1;
+        }
     }
     final_states[reg] = state;
 }
@@ -2008,6 +2012,7 @@ __global__ void g2_pack_register_touched(
         G2TouchedMemoryRecord record{};
         record.addr_space = 1;
         record.block_ptr = reg * 4;
+        record.is_dirty = reg == 0 ? 0 : state.is_dirty;
         record.timestamp = state.timestamp;
         record.values[0] = Fp(uint16_t(state.value)).asRaw();
         record.values[1] = Fp(uint16_t(state.value >> 16)).asRaw();
@@ -2256,10 +2261,10 @@ __global__ void g2_pack_memory_touched(
         return;
     G2MemoryTransform inclusive = inclusive_transforms[last];
     uint64_t current_value = (initial_value & inclusive.keep) | inclusive.bits;
+    bool is_dirty = inclusive.keep != UINT64_MAX || inclusive.bits != 0;
     uint32_t address_space = uint32_t(key >> 56);
     uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
-    if (address_space == G2_MAIN_MEMORY_ADDRESS_SPACE &&
-        (inclusive.keep != UINT64_MAX || inclusive.bits != 0)) {
+    if (address_space == G2_MAIN_MEMORY_ADDRESS_SPACE && is_dirty) {
         uint64_t page = byte_address / G2_CONTINUATION_PAGE_BYTES;
         uint64_t word = page / 64;
         if (dirty_pages == nullptr || word >= dirty_page_words) {
@@ -2280,6 +2285,7 @@ __global__ void g2_pack_memory_touched(
     G2TouchedMemoryRecord record{};
     record.addr_space = address_space;
     record.block_ptr = uint32_t(byte_address / 2u);
+    record.is_dirty = uint32_t(is_dirty);
     record.timestamp = previous_timestamp;
     record.values[0] = Fp(uint16_t(current_value)).asRaw();
     record.values[1] = Fp(uint16_t(current_value >> 16)).asRaw();
