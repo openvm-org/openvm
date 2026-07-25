@@ -807,6 +807,9 @@ pub const COMPILE_METERED_TIME_LABEL: &str = "compile_metered_time_ms";
 pub const COMPILE_METERED_SEGMENT_TIME_LABEL: &str = "compile_metered_segment_time_ms";
 pub const COMPILE_METERED_COST_TIME_LABEL: &str = "compile_metered_cost_time_ms";
 pub const COMPILE_CHECKPOINT_PREFLIGHT_TIME_LABEL: &str = "compile_checkpoint_preflight_time_ms";
+pub const PREPARE_RVR_CHECKPOINT_TIME_LABEL: &str = "prepare_rvr_checkpoint_time_ms";
+pub const UPLOAD_CHECKPOINT_PROGRAM_TIME_LABEL: &str = "upload_checkpoint_program_time_ms";
+pub const APP_PROVE_RVR_CHECKPOINT_TIME_LABEL: &str = "app_prove_rvr_checkpoint_time_ms";
 pub const EXPAND_CHECKPOINT_REPLAY_TIME_LABEL: &str = "expand_checkpoint_replay_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
@@ -828,6 +831,9 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     COMPILE_METERED_SEGMENT_TIME_LABEL,
     COMPILE_METERED_COST_TIME_LABEL,
     COMPILE_CHECKPOINT_PREFLIGHT_TIME_LABEL,
+    PREPARE_RVR_CHECKPOINT_TIME_LABEL,
+    UPLOAD_CHECKPOINT_PROGRAM_TIME_LABEL,
+    APP_PROVE_RVR_CHECKPOINT_TIME_LABEL,
     EXECUTE_PURE_TIME_LABEL,
     EXECUTE_PURE_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,

@@ -1,6 +1,11 @@
 use std::sync::{Arc, OnceLock};
 
 use getset::Getters;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::arch::{
+    execution_mode::MeteredCtx,
+    rvr::{cuda::GpuRvrProgram, RvrCheckpointPreflightInstance, RvrMeteredInstance},
+};
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
@@ -14,6 +19,10 @@ use openvm_circuit::{
     },
 };
 use openvm_continuations::CommitBytes;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_sdk_config::SdkVmGpuBuilder;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
     StarkEngine, Val,
@@ -159,33 +168,53 @@ where
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-impl
-    AppProver<openvm_cuda_backend::BabyBearPoseidon2GpuEngine, openvm_sdk_config::SdkVmGpuBuilder>
-{
-    /// Proves every continuation segment through the experimental compact RVR
+pub struct RvrCheckpointAppProver<'a> {
+    app: AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+    runtime: super::rvr::RvrCheckpointRuntime<'a>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<'a> RvrCheckpointAppProver<'a> {
+    pub(crate) fn new(
+        app: AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+        metered: RvrMeteredInstance<'a>,
+        metered_ctx: MeteredCtx,
+        checkpoint: RvrCheckpointPreflightInstance<'a>,
+        gpu_program: GpuRvrProgram,
+    ) -> Self {
+        Self {
+            app,
+            runtime: super::rvr::RvrCheckpointRuntime::new(
+                metered,
+                metered_ctx,
+                checkpoint,
+                gpu_program,
+            ),
+        }
+    }
+
+    pub fn vm(&self) -> &VirtualMachine<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
+        self.app.vm()
+    }
+
+    /// Proves every continuation segment through the prepared compact RVR
     /// checkpoint executor and record-free GPU trace generation.
-    ///
-    /// This is an explicit opt-in path while end-to-end correctness, memory,
-    /// and performance are evaluated. [`Self::prove`] remains unchanged.
     #[instrument(
         name = "app_prove_rvr_checkpoint",
         skip_all,
-        fields(group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
+        fields(group = self.app.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
     )]
-    pub fn prove_with_rvr_checkpoint(
-        &mut self,
-        input: StdIn,
-    ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
+    pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
         check_max_constraint_degrees(
-            self.vm_config().as_ref(),
-            self.app_vm_vk.inner.max_constraint_degree(),
+            self.app.vm_config().as_ref(),
+            self.app.app_vm_vk.inner.max_constraint_degree(),
         );
-        let proof = super::rvr::prove(&mut self.instance, input)?;
+        let proof = super::rvr::prove(&mut self.app.instance, input, &self.runtime)?;
         #[cfg(debug_assertions)]
-        let _ = verify_app_proof_inner::<openvm_cuda_backend::BabyBearPoseidon2GpuEngine>(
-            &self.app_vm_vk,
-            self.memory_dimensions(),
-            self.num_user_pvs(),
+        let _ = verify_app_proof_inner::<BabyBearPoseidon2GpuEngine>(
+            &self.app.app_vm_vk,
+            self.app.memory_dimensions(),
+            self.app.num_user_pvs(),
             &proof,
         )
         .expect("app proof verification failed");
