@@ -188,11 +188,14 @@ __host__ __device__ constexpr bool int256_pointer_range(
     uint32_t pointer_max_bits
 ) {
     uint64_t end = pointer + INT256_NUM_U8_LIMBS;
-    if ((pointer & 1u) != 0 || end < pointer || pointer_max_bits > 32) return false;
+    if ((pointer & 7u) != 0 || end < pointer || pointer_max_bits > 32) return false;
     return end <= (uint64_t(1) << pointer_max_bits);
 }
 
 static_assert(int256_pointer_range((uint64_t(1) << 32) - 32, 32));
+static_assert(!int256_pointer_range(2, 32));
+static_assert(!int256_pointer_range(4, 32));
+static_assert(!int256_pointer_range(6, 32));
 static_assert(!int256_pointer_range((uint64_t(1) << 32) - 31, 32));
 static_assert(!int256_pointer_range((uint64_t(1) << 32) - 30, 32));
 static_assert(!int256_pointer_range(0, 33));

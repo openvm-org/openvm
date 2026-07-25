@@ -17,7 +17,7 @@ use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use super::DeferralOutputExecutor;
+use super::{checked_deferral_index, DeferralOutputExecutor};
 use crate::{
     utils::{
         byte_memory_op_chunk, join_byte_memory_ops, split_output, DIGEST_BYTE_MEMORY_OPS,
@@ -177,6 +177,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<u32, ExecutionError> {
     let pc = exec_state.pc();
+    let deferral_idx = checked_deferral_index(
+        pc,
+        exec_state.streams.deferrals.len(),
+        pre_compute.deferral_idx,
+    )?;
     let output_ptr = check_block_aligned_ptr(
         pc,
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr)),
@@ -196,7 +201,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     // Bytes are sponge-hashed and constrained against output_commit. The
     // sponge rate is DIGEST_SIZE.
     let num_rows = output_len_val / DIGEST_SIZE + 1;
-    let output_raw = exec_state.streams.deferrals[pre_compute.deferral_idx as usize]
+    let output_raw = exec_state.streams.deferrals[deferral_idx]
         .try_get_output(&output_commit.to_vec())
         .filter(|output| output.len() == output_len_val)
         .cloned()

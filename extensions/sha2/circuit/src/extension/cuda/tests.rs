@@ -213,23 +213,9 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, RvrPre
         memory_log[2].pointer += 4;
     }
 
-    let mut initial_write_log = vec![
-        seed(RV64_REGISTER_AS, reg(0), &[0; 8]),
-        seed(RV64_REGISTER_AS, reg(4), &[0; 8]),
-    ];
-    for (register, pointer) in [(1, DST_PTR), (2, STATE_PTR), (3, INPUT_PTR)] {
-        initial_write_log.push(seed(
-            RV64_REGISTER_AS,
-            reg(register),
-            &u64::from(pointer).to_le_bytes(),
-        ));
-    }
-    for (index, bytes) in input.chunks_exact(8).enumerate() {
-        initial_write_log.push(seed(RV64_MEMORY_AS, INPUT_PTR + (index * 8) as u32, bytes));
-    }
-    for (index, bytes) in state.chunks_exact(8).enumerate() {
-        initial_write_log.push(seed(RV64_MEMORY_AS, STATE_PTR + (index * 8) as u32, bytes));
-    }
+    // Initial-write seeds exist only for blocks whose first timed event is a write.
+    // First reads resolve directly against the segment's initial memory.
+    let mut initial_write_log = vec![seed(RV64_REGISTER_AS, reg(4), &[0; 8])];
     for index in 0..8 {
         initial_write_log.push(seed(RV64_MEMORY_AS, DST_PTR + index * 8, &[0; 8]));
     }
@@ -359,6 +345,55 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
         .err()
         .expect("a VM with partially updated lookup counts must reject retry");
     assert!(retry.to_string().contains("poisoned"), "{retry}");
+}
+
+#[test]
+fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
+    let (program, exe, _) = fixture(false);
+    let config = Sha2Rv64Config {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let state = executor
+        .interpreter_instance(&exe)
+        .unwrap()
+        .create_initial_vm_state(Vec::<Vec<u8>>::new());
+
+    for (variant, first_write_timestamp) in [("SHA-256", 18), ("SHA-512", 49)] {
+        let (_, _, mut corrupt) = fixture(false);
+        let output = corrupt
+            .memory_log
+            .iter_mut()
+            .find(|event| {
+                event.timestamp == first_write_timestamp
+                    && event.address_space_and_kind == (RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT)
+                    && event.pointer == DST_PTR / 2
+            })
+            .expect("fixture must contain the first deterministic output write");
+        output.value[0] ^= 1;
+
+        let (mut vm, _) =
+            VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
+                .unwrap();
+        let cached_program = vm.commit_program_on_device(&program);
+        vm.load_program(cached_program);
+        vm.transport_init_memory_to_device(&state.memory);
+        let gpu_program = GpuRvrProgram::upload(
+            &program,
+            &config.system.memory_config,
+            &vm.engine.device().device_ctx,
+        )
+        .unwrap();
+        let (gpu_corrupt, corrupt_plan) = gpu_program
+            .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+            .unwrap_or_else(|error| panic!("{variant}: {error}"));
+        let error = Sha2RvrGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
+            .generate_proving_ctx(&mut vm)
+            .err()
+            .unwrap_or_else(|| panic!("{variant} corrupt output must fail closed"));
+        assert!(error.to_string().contains("code 901"), "{variant}: {error}");
+    }
 }
 
 #[test]

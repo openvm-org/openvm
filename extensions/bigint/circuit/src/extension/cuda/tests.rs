@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             cuda::{RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
-            RvrCheckpointPreflightLimits,
+            RvrCheckpointPreflightLimits, RvrPreflightEndpoint, RvrPreflightTranscript,
         },
         VirtualMachine, VmExecutor,
     },
@@ -205,11 +205,13 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
     ];
     assert_eq!(cases.len(), 17);
 
-    // lhs is signed -2^255 but unsigned 2^255; rhs is zero. This makes the
-    // signed and unsigned branch/comparison pairs take opposite boundary paths.
+    // lhs is signed -2^255 but unsigned 2^255. This makes the signed and unsigned
+    // branch/comparison pairs take opposite boundary paths. A nonzero rhs also
+    // exercises multiplication, cross-limb subtraction, and nontrivial shifts.
     let mut lhs = [0u8; 32];
     lhs[31] = 0x80;
-    let rhs = [0u8; 32];
+    let mut rhs = [0u8; 32];
+    rhs[0] = 65;
     let negative_offset = (F::ORDER_U32 - 4) as usize;
     let mut instructions = cases
         .iter()
@@ -320,6 +322,11 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     for case in &cases {
         assert_eq!(replay_plan.opcode_range(case.opcode).len(), 1);
     }
+    let host_transcript = RvrPreflightTranscript {
+        program_log: transcript.program_log_host().unwrap(),
+        memory_log: transcript.memory_log_host().unwrap(),
+        initial_write_log: transcript.initial_write_log_host().unwrap(),
+    };
 
     let tracegen = Int256RvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
@@ -327,6 +334,44 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     drop(transcript);
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+
+    let invalid_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut invalid_vm, _) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = invalid_vm.commit_program_on_device(&program);
+    invalid_vm.load_program(cached_program);
+    invalid_vm.transport_init_memory_to_device(&invalid_state.memory);
+    let invalid_gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+        &program,
+        &config.system.memory_config,
+        &invalid_vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let mut invalid_transcript = host_transcript;
+    let pointer_block = reg(1) as u32 / 2;
+    let mut mutated_reads = 0;
+    for pointer_event in invalid_transcript.memory_log.iter_mut().filter(|event| {
+        event.address_space() == RV64_REGISTER_AS
+            && !event.is_write()
+            && event.pointer == pointer_block
+    }) {
+        assert_eq!(pointer_event.value, [DST_PTR as u16, 0, 0, 0]);
+        pointer_event.value[0] += 2;
+        mutated_reads += 1;
+    }
+    assert!(
+        mutated_reads > 1,
+        "fixture must reuse the destination pointer"
+    );
+    let (invalid_transcript, invalid_plan) = invalid_gpu_program
+        .upload_transcript(&invalid_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let error = Int256RvrGpuTracegen::new(&invalid_gpu_program, &invalid_transcript, &invalid_plan)
+        .generate_proving_ctx(&mut invalid_vm)
+        .err()
+        .expect("Int256 GPU replay must reject a two-byte-aligned heap pointer");
+    assert!(error.to_string().contains("code 403"), "{error}");
 }
 
 #[test]

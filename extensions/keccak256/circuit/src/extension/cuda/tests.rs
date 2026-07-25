@@ -375,11 +375,11 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
             },
             PreflightProgramEvent {
                 pc: 4,
-                timestamp: 1,
+                timestamp: 2,
             },
             PreflightProgramEvent {
                 pc: 4,
-                timestamp: 1,
+                timestamp: 2,
             },
         ],
         memory_log: vec![],
