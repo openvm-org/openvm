@@ -194,9 +194,40 @@ struct MeteredMemoryBreakdown {
     unpadded: usize,
 }
 
+/// Extra memory the rvr G2 preflight allocates beyond the ordinary AIR
+/// proving-memory estimate, split by the physical pool it lives in.
 #[derive(Clone, Copy, Debug, Default)]
 struct SegmentMemoryOverhead {
-    total: usize,
+    /// GPU VRAM held by the G2 device decode buffers. Live during
+    /// device-decode + tracegen (coexisting with the base main trace), then
+    /// released before STARK proving. See `RvrSegmentMemoryEstimate`.
+    device_bytes: usize,
+    /// Pinned host RSS (`DeviceAuxPatch` staging). CPU memory, never GPU VRAM;
+    /// excluded from the GPU segment budget and kept only for logging.
+    host_bytes: usize,
+}
+
+impl SegmentMemoryOverhead {
+    /// GPU VRAM the segment actually peaks at, given the proving-phase peak
+    /// `air_memory` (`main` + secondary/LDE) and its resident base main trace
+    /// `main_memory`.
+    ///
+    /// The two large GPU consumers are temporally disjoint, so their peaks are
+    /// combined with a `max`, not a sum:
+    ///  * STARK proving reaches `air_memory`; by then the G2 decode sources are freed
+    ///    (`release_rvr_cuda_device_trace_sources`), so no rvr device memory coexists with that
+    ///    peak.
+    ///  * device-decode + tracegen hold `main_memory` (the base trace, before the secondary/LDE
+    ///    blowup that only materializes during proving) plus the G2 decode sources (`device_bytes`,
+    ///    drawn from the VPMM pool).
+    ///
+    /// Charging the max of the two disjoint peaks bounds the true GPU peak from
+    /// above without ever summing the released device buffers into the proving
+    /// peak. `host_bytes` is pinned CPU RSS and is never charged here.
+    #[inline(always)]
+    fn gpu_peak(self, air_memory: usize, main_memory: usize) -> usize {
+        air_memory.max(main_memory.saturating_add(self.device_bytes))
+    }
 }
 
 impl SegmentationCtx {
@@ -306,16 +337,25 @@ impl SegmentationCtx {
     ) -> SegmentMemoryOverhead {
         #[cfg(feature = "rvr")]
         {
-            let total = self.rvr_memory_model.as_ref().map_or(0, |model| {
-                model.estimate(trace_heights, num_insns).map_or_else(
-                    |error| {
-                        tracing::warn!("RVR segment memory estimate failed closed: {error}");
-                        usize::MAX
-                    },
-                    |estimate| estimate.total(),
-                )
-            });
-            SegmentMemoryOverhead { total }
+            self.rvr_memory_model
+                .as_ref()
+                .map_or_else(SegmentMemoryOverhead::default, |model| {
+                    model.estimate(trace_heights, num_insns).map_or_else(
+                        |error| {
+                            tracing::warn!("RVR segment memory estimate failed closed: {error}");
+                            // Fail closed: an unbounded device charge forces a
+                            // segment regardless of the AIR peak.
+                            SegmentMemoryOverhead {
+                                device_bytes: usize::MAX,
+                                host_bytes: 0,
+                            }
+                        },
+                        |estimate| SegmentMemoryOverhead {
+                            device_bytes: estimate.device_bytes,
+                            host_bytes: estimate.host_bytes,
+                        },
+                    )
+                })
         }
         #[cfg(not(feature = "rvr"))]
         {
@@ -437,12 +477,7 @@ impl SegmentationCtx {
         let (memory, main, interaction) =
             self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
         let overhead = self.calculate_memory_overhead(num_insns, trace_heights);
-        (
-            memory.saturating_add(overhead.total),
-            main,
-            interaction,
-            overhead,
-        )
+        (overhead.gpu_peak(memory, main), main, interaction, overhead)
     }
 
     #[inline(always)]
@@ -465,8 +500,8 @@ impl SegmentationCtx {
         let overhead = self.calculate_memory_overhead(num_insns, trace_heights);
 
         MeteredMemoryBreakdown {
-            total: total.total.saturating_add(overhead.total),
-            unpadded: unpadded.total.saturating_add(overhead.total),
+            total: overhead.gpu_peak(total.total, total.main),
+            unpadded: overhead.gpu_peak(unpadded.total, unpadded.main),
         }
     }
 
@@ -547,16 +582,18 @@ impl SegmentationCtx {
             counts.interaction_cells,
         );
         let overhead = self.calculate_memory_overhead(num_insns, trace_heights);
-        let total_memory = air_memory.saturating_add(overhead.total);
+        let total_memory = overhead.gpu_peak(air_memory, main_memory);
         if total_memory > self.config.max_memory {
             tracing::info!(
-                "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5}) | segment overhead ({:5})",
+                "overshoot: instret {:10} | GPU peak ({:5}) > max ({:5}) | air ({:5}) | main ({:5}) | interaction ({:5}) | device ({:5}) | host rss ({:5})",
                 instret,
                 ByteSize::b(total_memory as u64),
                 ByteSize::b(self.config.max_memory as u64),
+                ByteSize::b(air_memory as u64),
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
-                ByteSize::b(overhead.total as u64),
+                ByteSize::b(overhead.device_bytes as u64),
+                ByteSize::b(overhead.host_bytes as u64),
             );
             return Some(SegmentationTrigger::Memory);
         }
@@ -731,14 +768,15 @@ impl SegmentationCtx {
         let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
 
         tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}, {:5} overhead) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{}",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:5} GPU peak ({:5} main, {:5} interaction, {:5} device, {:5} host rss) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{}",
             self.segments.len(),
             instret_start,
             num_insns,
             ByteSize::b(total_memory as u64),
             ByteSize::b(main_memory as u64),
             ByteSize::b(interaction_memory as u64),
-            ByteSize::b(overhead.total as u64),
+            ByteSize::b(overhead.device_bytes as u64),
+            ByteSize::b(overhead.host_bytes as u64),
             total_interactions,
             max_trace_height,
             air_name,
@@ -990,7 +1028,9 @@ mod tests {
         let mut ctx = SegmentationCtx::new(config, &[0, 0], &[false, false]);
         let heights = [0, HEIGHT];
         let num_insns = u64::from(HEIGHT);
-        let air_memory = ctx.calculate_total_memory(num_insns, &heights).0;
+        // No rvr model is set yet, so this is the pure proving-phase peak
+        // (`air_memory` = main + secondary/LDE) and its resident base main trace.
+        let (air_memory, main_memory, _, _) = ctx.calculate_total_memory(num_insns, &heights);
         let mut meta = RvrG2MetaV1 {
             fingerprint: [0; 32],
             producer_schema_fingerprint: [0; 32],
@@ -1022,17 +1062,32 @@ mod tests {
             layout_digest: [0; 32],
         }]);
         let model = RvrSegmentMemoryModel::new(Arc::new(meta), true);
-        let overhead = model.estimate(&heights, num_insns).unwrap();
-        assert!(overhead.device_bytes > 5 << 30);
-        assert!(overhead.host_bytes > 5 << 30);
+        let estimate = model.estimate(&heights, num_insns).unwrap();
+        // The opaque decode buffers dominate GPU VRAM here, and the pinned host
+        // patch staging is even larger -- but host RSS is CPU memory and must not
+        // be charged against the GPU budget.
+        assert!(estimate.device_bytes > 5 << 30);
+        assert!(estimate.host_bytes > 5 << 30);
 
-        // The AIR-only estimate admits this shape at the midpoint budget.
-        let max_memory = air_memory + overhead.total() / 2;
-        ctx.set_max_memory(max_memory);
+        // The charged GPU peak: the device decode buffers coexist with the base
+        // main trace during tracegen; the (>5 GiB) host RSS is excluded.
+        let gpu_peak = air_memory.max(main_memory + estimate.device_bytes);
+        assert!(
+            gpu_peak > air_memory,
+            "device decode buffers must dominate the AIR proving peak"
+        );
+
+        ctx.set_rvr_memory_model(model);
+
+        // A budget exactly at the GPU peak admits the shape even though
+        // host_bytes (>5 GiB) far exceeds any remaining headroom: pinned host
+        // RSS is never charged against the GPU budget.
+        ctx.set_max_memory(gpu_peak);
         assert_eq!(ctx.segmentation_trigger(num_insns, &heights), None);
 
-        // The production CUDA/RVR model rejects the same shape before preflight can allocate it.
-        ctx.set_rvr_memory_model(model);
+        // One byte below the coexisting GPU peak forces a segment: the device
+        // decode buffers are charged, guarding the historical 30 GB spike.
+        ctx.set_max_memory(gpu_peak - 1);
         assert_eq!(
             ctx.segmentation_trigger(num_insns, &heights),
             Some(SegmentationTrigger::Memory)

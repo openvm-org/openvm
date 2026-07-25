@@ -229,14 +229,17 @@ pub(crate) struct RvrSegmentMemoryModel {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct RvrSegmentMemoryEstimate {
+    /// GPU VRAM held by the G2 device predecode/transport buffers. These are
+    /// live during preflight + device-decode + tracegen, then explicitly freed
+    /// (`release_rvr_cuda_device_trace_sources`) before STARK proving, and are
+    /// drawn from the VPMM pool while live. They therefore coexist with the base
+    /// main trace during tracegen, but never with the proving-phase (main +
+    /// secondary/LDE) peak.
     pub device_bytes: usize,
+    /// Simultaneous pinned host RSS (`DeviceAuxPatch` staging). This is CPU
+    /// memory, not GPU VRAM, so it must never be charged against the GPU segment
+    /// budget; it is retained purely for logging.
     pub host_bytes: usize,
-}
-
-impl RvrSegmentMemoryEstimate {
-    pub fn total(self) -> usize {
-        self.device_bytes.saturating_add(self.host_bytes)
-    }
 }
 
 impl RvrSegmentMemoryModel {
@@ -2547,9 +2550,10 @@ mod tests {
             estimate.host_bytes,
             capacities.residual as usize * 2 * size_of::<super::super::DeviceAuxPatch>()
         );
+        // Device (GPU) and host (pinned CPU RSS) figures are tracked separately;
+        // both stay well bounded for a standard RV64 shape.
         assert!(estimate.device_bytes < 1 << 30);
         assert!(estimate.host_bytes < 1 << 30);
-        assert!(estimate.total() < 1 << 30);
 
         let host_only = RvrSegmentMemoryModel::new(Arc::new(meta), false)
             .estimate(&[0, HEIGHT], u64::from(HEIGHT))
