@@ -103,6 +103,8 @@ pub enum GenerationError {
     UnexpectedNumArenas { actual: usize, expected: usize },
     #[error("extension trace generation failed: {0}")]
     ExtensionTracegen(String),
+    #[error("proof generation failed: {0}")]
+    Proving(String),
     #[error("trace height for air_idx={air_idx} must be fixed to {expected}, actual={actual}")]
     ForceTraceHeightIncorrect {
         air_idx: usize,

@@ -43,6 +43,20 @@ use crate::{
 
 type F = BabyBear;
 
+#[test]
+fn checkpoint_opcode_families_match_rv64_tracegen_coverage() {
+    let bases = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
+    let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
+
+    for opcode in 0..=u16::MAX as u32 {
+        assert_eq!(
+            bases.owns(opcode),
+            Rv64ImRvrGpuTracegen::supports_opcode(opcode) || opcode == terminate,
+            "checkpoint opcode ownership disagrees at {opcode:#x}"
+        );
+    }
+}
+
 fn reg(index: usize) -> usize {
     index * RV64_REGISTER_NUM_LIMBS
 }

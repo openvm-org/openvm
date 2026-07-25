@@ -2,6 +2,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::Segment,
         hasher::poseidon2::vm_poseidon2_hasher,
+        instructions::exe::VmExe,
         rvr::{
             RvrCheckpointPreflightExecution, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
         },
@@ -15,7 +16,7 @@ use openvm_sdk_config::SdkVmGpuBuilder;
 use openvm_stark_backend::StarkEngine;
 use tracing::info_span;
 
-use crate::{StdIn, SC};
+use crate::{StdIn, F, SC};
 
 const CHECKPOINT_INTERVAL: usize = 512;
 
@@ -29,11 +30,27 @@ pub(super) fn prove(
     instance.reset_state(input.clone());
     let exe = instance.exe().clone();
 
+    let result = prove_inner(instance, input, &exe);
+    if result.is_err() && instance.state().is_none() {
+        // Checkpoint execution consumes the segment state. If it fails before
+        // returning that state, restore an allocated initial state so the
+        // fixed-program instance remains reusable. The next proof resets its
+        // memory and streams before execution.
+        *instance.state_mut() = Some(instance.vm.create_initial_state(&exe, Streams::default()));
+    }
+    result
+}
+
+fn prove_inner(
+    instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+    input: Streams,
+    exe: &VmExe<F>,
+) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     // Meter once. Its exact instruction and residual counts are the only
     // capacities supplied to checkpoint preflight for each segment.
     let (segments, _) = {
-        let metered_ctx = instance.vm.build_metered_ctx(&exe);
-        let metered = instance.vm.metered_instance(&exe)?;
+        let metered_ctx = instance.vm.build_metered_ctx(exe);
+        let metered = instance.vm.metered_instance(exe)?;
         metered.execute_metered(input, metered_ctx)?
     };
 
@@ -41,7 +58,7 @@ pub(super) fn prove(
     // the compiled instance can live across all mutable tracegen/prove calls.
     let checkpoint_executor = VmExecutor::new(instance.vm.config().clone())?;
     let checkpoint =
-        checkpoint_executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+        checkpoint_executor.rvr_experimental_checkpoint_preflight_instance(exe, None)?;
     let gpu_program = SdkVmGpuBuilder::upload_checkpoint_program(&instance.vm, &exe.program)
         .map_err(generation_error)?;
 
@@ -115,11 +132,7 @@ pub(super) fn prove(
             .vm
             .engine
             .prove(instance.vm.pk(), ctx)
-            .map_err(|error| {
-                VirtualMachineError::Generation(GenerationError::ExtensionTracegen(format!(
-                    "RVR continuation proving failed: {error}"
-                )))
-            })?;
+            .map_err(|error| GenerationError::Proving(error.to_string()))?;
         proofs.push(proof);
     }
 
