@@ -151,11 +151,7 @@ where
         if let Some(prepare) = self.prepare_app.take() {
             prepare(self)?;
         }
-        let group = self
-            .program_name
-            .clone()
-            .unwrap_or_else(|| "app_proof".to_string());
-        let _prove_span = info_span!("app_prove", group).entered();
+        let _prove_span = info_span!("app_prove", group = "app_proof").entered();
         let proof = match self.prove_app.as_mut() {
             Some(prove) => prove(&mut self.instance, input)?,
             None => ContinuationVmProver::prove(&mut self.instance, input)?,
