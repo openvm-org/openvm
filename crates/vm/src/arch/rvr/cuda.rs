@@ -1,4 +1,13 @@
-//! GPU-owned copies of the immutable program and append-only preflight logs.
+//! GPU expansion, indexing, and read-only replay for RVR checkpoint preflight.
+//!
+//! This module owns three phases:
+//!
+//! 1. re-execute checkpoint intervals to derive logical program and memory events;
+//! 2. build memory chronology and opcode indexes once for the segment; and
+//! 3. expose the immutable result to system and instruction trace generators.
+//!
+//! Checkpoints and residuals are authoritative executor output. Program events,
+//! memory events, predecessors, and first-write values are derived GPU data.
 
 use std::sync::Arc;
 #[cfg(feature = "test-utils")]
@@ -364,8 +373,8 @@ struct RvrCheckpointInstructionLayout {
 /// Static extension access schedules uploaded once with a GPU program. They
 /// describe access order only and are not part of the preflight transcript.
 ///
-/// This is an experimental composition seam, not a stable extension API. Its
-/// The supported sources remain a finite POD set: residuals, zero, program-owned
+/// This is an internal composition seam, not a stable extension API. The
+/// supported sources remain a finite POD set: residuals, zero, program-owned
 /// constants, and Deferral's field accumulator blocks.
 #[doc(hidden)]
 #[derive(Clone, Debug, Default)]
@@ -1937,6 +1946,21 @@ impl GpuRvrTranscript {
     #[doc(hidden)]
     pub fn program_log_host(&self) -> Result<Vec<PreflightProgramEvent>, MemCopyError> {
         self.program_log.to_host_on(&self.device_ctx)
+    }
+
+    #[cfg(feature = "test-utils")]
+    #[doc(hidden)]
+    pub fn replace_program_log_for_test(
+        &mut self,
+        program_log: &[PreflightProgramEvent],
+    ) -> Result<(), MemCopyError> {
+        assert_eq!(
+            program_log.len(),
+            self.program_log.len(),
+            "a replay plan is valid only for its original program-log length"
+        );
+        self.program_log = program_log.to_device_on(&self.device_ctx)?;
+        Ok(())
     }
 
     #[cfg(feature = "test-utils")]

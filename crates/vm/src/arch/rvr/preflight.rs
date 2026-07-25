@@ -1,4 +1,9 @@
-//! Append-only RVR preflight execution.
+//! Direct-event RVR preflight reference implementation.
+//!
+//! This executor logs the semantic program and memory events directly. It is a
+//! differential oracle for the selected checkpoint path, not the production
+//! checkpoint proving architecture. Production preflight emits only checkpoints
+//! and residuals, then derives these event types by GPU replay.
 
 use std::path::Path;
 
