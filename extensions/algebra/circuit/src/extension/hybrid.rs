@@ -2,7 +2,9 @@
 //! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
 //! projection for other field expressions.
 
-use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
+#[cfg(feature = "rvr")]
+use openvm_algebra_transpiler::Fp2Opcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
     system::{
@@ -1138,10 +1140,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        for (i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
+        for (_i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
-            let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
+            #[cfg(feature = "rvr")]
+            let start_offset = Fp2Opcode::CLASS_OFFSET + _i * Fp2Opcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {

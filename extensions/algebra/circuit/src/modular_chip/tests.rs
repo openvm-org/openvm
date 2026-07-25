@@ -35,8 +35,11 @@ use {
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
-    openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
-    openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    openvm_circuit::system::cuda::memory::MemoryInventoryGPU, openvm_circuit_primitives::Chip,
     openvm_cuda_common::copy::MemCopyD2H,
 };
 
@@ -56,7 +59,7 @@ const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
     tester.memory.memory.data.memory.recompute_touched_pages();
     let device_ctx = tester.range_checker().device_ctx.clone();

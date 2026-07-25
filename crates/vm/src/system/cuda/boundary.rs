@@ -85,6 +85,7 @@ impl BoundaryChipGPU {
     }
 
     /// Releases tracegen-only inputs after their stream has synchronized.
+    #[cfg(feature = "rvr")]
     pub(crate) fn release_records(&mut self) {
         self.records = None;
     }

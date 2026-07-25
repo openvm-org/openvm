@@ -2,12 +2,9 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
-use openvm_cuda_common::{
-    copy::MemCopyH2D,
-    d_buffer::{DeviceBuffer, DeviceBufferView},
-    pinned,
-    stream::GpuDeviceCtx,
-};
+#[cfg(any(test, feature = "rvr"))]
+use openvm_cuda_common::d_buffer::DeviceBufferView;
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, pinned, stream::GpuDeviceCtx};
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::prover::{
     AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
@@ -101,6 +98,7 @@ impl ProgramChipGPU {
     /// `filtered_exec_freqs` must point to a valid device allocation on
     /// `self.device_ctx`, and its owner must outlive the frequency-fill work
     /// newly submitted to that stream. This method launches asynchronously.
+    #[cfg(any(test, feature = "rvr"))]
     pub(crate) unsafe fn generate_proving_ctx_from_device(
         &self,
         filtered_exec_freqs: DeviceBufferView,

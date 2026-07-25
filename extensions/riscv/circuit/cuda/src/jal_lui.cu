@@ -8,7 +8,6 @@ using namespace riscv;
 using namespace program;
 
 constexpr uint32_t LUI_IMM_LOW_BITS = U16_BITS - RV_IS_TYPE_IMM_BITS;
-constexpr uint32_t LUI_IMM_BITS = 32 - RV_IS_TYPE_IMM_BITS;
 constexpr uint32_t PC_HIGH_U16_SHIFT = 2 * U16_BITS - PC_BITS;
 
 template <typename T> struct Rv64JalLuiCoreCols {
