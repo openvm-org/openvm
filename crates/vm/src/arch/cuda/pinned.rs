@@ -72,6 +72,9 @@ struct ReadyPool {
 }
 
 impl ReadyPool {
+    // Only consumed by the rvr-gated `PoolStatsSnapshot::capture`; gate the
+    // method to match so a `cuda`-without-`rvr` build does not see it as dead.
+    #[cfg(feature = "rvr")]
     fn buffer_count(&self) -> usize {
         self.buffers.values().map(VecDeque::len).sum()
     }
