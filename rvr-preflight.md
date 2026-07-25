@@ -18,6 +18,33 @@ The proposal is based on the current RVR and preflight implementations, includin
 the system AIRs and continuation path. It is a semantic design: the physical log
 layout is an explicit benchmark decision, not part of the proof interface.
 
+## Completion checklist
+
+The implementation is not complete until all of the following are resolved:
+
+1. Finish the exact-source pure, metered, and checkpoint `rvr-openvm` regression.
+2. Rebuild the Reth benchmark against a clean worktree of the current branch and
+   verify a fresh 63-segment proof.
+3. Compare execution, generated-code compilation, Cargo compilation, tracegen,
+   proving time, and phase-specific GPU memory with the recorded baselines.
+4. Add genuine BN254 and BLS12-381 checkpoint coverage, including a segment
+   boundary between phantom advice generation and HintStore materialization.
+5. Review the complete diff against `origin/develop-v2.1.0`: centralize the
+   shared replay prologue, add missing overflow guards, return typed errors for
+   malformed pairing pointers, keep imports module-scoped, remove duplication,
+   and delete abstractions that do not clarify the pipeline.
+6. Document the implemented architecture as compiled execution producing a
+   minimal transcript, followed by one generic GPU indexing/postflight phase and
+   parallel AIR-specific replay from the resulting read-only view.
+7. Decide the correct repository-wide `RecordArena` removal boundary. The active
+   checkpoint/GPU replay path must remain arena-free; legacy builder traits,
+   interpreter preflight, CPU tracegen, and test consumers are removed only when
+   their supported replacements are complete.
+
+Every item requires correctness and end-to-end performance evidence. A passing
+microbenchmark or an AIR-local proof does not substitute for the real segmented
+Reth workload.
+
 ## Decision
 
 Preflight is normal RVR execution with exactly two append-only arrays:
