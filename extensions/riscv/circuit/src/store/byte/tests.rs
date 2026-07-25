@@ -18,7 +18,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::LocalOpcode;
 #[cfg(feature = "cuda")]
-use openvm_instructions::{instruction::Instruction, riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -56,6 +56,7 @@ use {
     openvm_cuda_common::copy::MemCopyD2H,
     openvm_instructions::{
         exe::{SparseMemoryImage, VmExe},
+        instruction::Instruction,
         program::Program,
         riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
         SystemOpcode,

@@ -109,6 +109,12 @@ pure and metered SDK executors; it does not add a generic artifact framework or
 store proof records. The caller names the ordinary app prover before preparing
 it, so setup and proof metrics share the same low-cardinality app group.
 
+Successful proofs and failures before an RVR trace-generation session begins
+leave the prepared prover reusable. A failure while that session is active is
+terminal: producer lookup counts are not transactional, so the VM remains
+poisoned and retries fail closed rather than proving from partially mutated
+state. The caller must prepare a new prover after such an error.
+
 ## Authoritative serial output
 
 One successful checkpoint execution returns:
@@ -365,6 +371,12 @@ completed memory top tree.
 The active RVR checkpoint executor, GPU expansion, standard SDK GPU tracegen,
 and continuation proving path do not construct a `RecordArena`.
 
+The direct full-log RVR preflight executor remains available as a correctness
+oracle for differential and negative tests. It is not a second production
+preflight contract. Restricting that oracle to test utilities can happen after
+its integration callers have an appropriate feature boundary; deleting its
+coverage or routing production through it would be a regression.
+
 `RecordArena` still exists for legacy interpreter preflight, legacy/default GPU
 builders, CPU trace generation, and tests that have not moved to checkpoint
 replay. Removing it from those APIs is a separate repository-wide migration.
@@ -386,79 +398,94 @@ The following are implemented with focused GPU prove-and-verify coverage:
   boundaries, including advice generation followed by HintStore
   materialization.
 
-The pinned full-workload execution comparison currently reports:
+The clean exact-source standalone execution comparison reports:
 
 ```text
 mode        median execution   generated-C compilation
-pure          766.924 ms              88.986 s
-metered      1610.067 ms             166.172 s
-checkpoint   1567.966 ms             154.334 s
+pure          738.586 ms              87.004 s
+metered      1390.368 ms             153.896 s
+checkpoint   1369.164 ms             145.622 s
 ```
 
-Metered and checkpoint execution both retired 620,281,236 guest instructions
-with the same 63 segment boundaries and output hash. Checkpoint execution was
-2.6% faster than metered and about 2.04 times pure execution. Generated-C
-compilation is one-time fixed-program preparation and remains reported
-separately from proof execution.
+All three modes retired 501,243,291 guest instructions and passed the exact
+endpoint, segment, and output checks. Checkpoint execution was 1.5% faster than
+metered and about 1.85 times pure execution. Generated-C compilation is
+one-time fixed-program preparation and remains reported separately from proof
+execution. This standalone harness and the proof runner below are separate
+builds and report instruction totals that differ by 3,627; performance
+comparisons are only between matched modes within each table.
 
 Focused pairing tests kept proving as the peak phase: BN254 used about 355 MiB
 during trace generation versus 1.5 GiB during proving, and BLS12-381 used about
 560 MiB versus 2.2 GiB. These small tests validate lifetimes but do not replace
 the full-workload GPU-memory gate.
 
-The exact-source legacy and prepared-checkpoint 63-segment Reth proofs both
-completed:
+The exact-source legacy and prepared-checkpoint Reth proofs used the same
+release binary, input, 15 GiB segmentation estimate, and PID-scoped 0.2-second
+GPU sampler. The prepared checkpoint proof verified all 55 segments and the
+expected output:
+
+```text
+OpenVM       13cddd7cefb2cccbe52ed5864d874403d436e9cf
+stark-backend be2b6983cbd70976b37acbb72ceb1b3593dc67ae
+openvm-eth   a8f6ad8a61ec7f874cab458ff3c3caf3d7d90a34
+rvr-openvm   604ad55aa9cd7a5a9639f45ec7c27a22915b48a0
+input SHA-256 97097c091120b2c09657917d4d3b95c61ec2e3dd25b3b210414f087d80c5a898
+```
 
 ```text
 phase                               legacy records   prepared checkpoint
-guest instructions / segments      620,281,236 / 63   620,281,236 / 63
-one-time executor preparation          138.596 s          334.138 s
-reusable app proof                     123.966 s           83.513 s
-metered execution                        1.588 s            1.959 s
-serial preflight                        38.202 s            1.685 s
-GPU replay expansion                         -             3.462 s
-trace generation                         6.596 s            3.035 s
-proving excluding tracegen              74.672 s           70.916 s
-sum of the timed phases above          121.058 s           81.057 s
-warm runner wall                       148.121 s          103.962 s
+guest instructions / segments      501,246,918 / 55   501,246,918 / 55
+one-time executor preparation          133.576 s          278.097 s
+reusable app proof                     103.075 s           68.695 s
+metered execution                        1.457 s            1.472 s
+serial preflight                        31.287 s            1.385 s
+GPU replay expansion                         -             2.907 s
+trace generation                         5.312 s            2.709 s
+proving excluding tracegen              62.605 s           58.046 s
+sum of the timed phases above          100.661 s           66.519 s
+warm process wall                      122.714 s           84.976 s
 
-checkpoint expansion allocation peak                      2.613 GiB
-checkpoint tracegen allocation peak                       5.902 GiB
-checkpoint proving allocation peak                       14.882 GiB
-sampled process peak                    15,780 MiB       15,851 MiB
-sampled process peak delta                                    +71 MiB
+checkpoint expansion allocation peak                      2.518 GiB
+checkpoint tracegen allocation peak                       5.907 GiB
+legacy proving allocation peak          15.069 GiB
+checkpoint proving allocation peak                         15.077 GiB
+PID-scoped process peak                 16,428 MiB       16,440 MiB
+PID-scoped process peak delta                                +12 MiB
 ```
 
 Expansion and trace generation remain well below proving, and replay buffers
-are not retained at the proving peak. Serial preflight is 22.7 times faster,
-trace generation is 54.0% faster, the timed phase sum is 33.0% faster, and
-the reusable app proof is 32.6% faster. The prepared app-proof value is a direct
-metric. The legacy app-proof and both warm runner values subtract one-time
-generated compilation from otherwise exact runs because the legacy benchmark
-did not expose a prepared prover.
+are not retained at the proving peak. Serial preflight is 22.6 times faster,
+trace generation is 49.0% faster, the timed phase sum is 33.9% faster, and the
+reusable app proof is 33.4% faster. The prepared app-proof value is a direct
+metric. The legacy reusable proof and both warm process values subtract their
+one-time preparation from otherwise exact runs because the legacy benchmark
+does not expose a prepared prover.
 
-The sampled process peak increased by 71 MiB, about 0.45%, and remained in
-proving rather than moving to expansion or trace generation. The allocator's
-phase peak was 14.882 GiB; the 15,851 MiB process sample includes the CUDA
-context and allocator pool and is 491 MiB above a strict 15.0 GiB process cap.
-This must remain an explicit packing constraint even though the new replay path
-is not responsible for the proving peak.
+The identical PID-scoped process peak increased by 12 MiB, about 0.07%, and
+remained in proving rather than moving to expansion or trace generation. The
+allocator's proving peak increased by about 8 MiB. Both paths exceed a strict
+15.0 GiB process cap because the 15 GiB segmentation value estimates proof
+buffers rather than the CUDA context and allocator pool. Packing that requires
+a lower segmentation limit, but checkpoint replay is not responsible for the
+existing proving peak.
 
 The definitive prepared run verified every segment, endpoint continuity, the
 final public-values Merkle proof, and the output
 `b0c6920a15b5f11db176fcd1b22754fe845f9f5b24a245f1c67b997f353f3878`
 followed by the expected zero half. The preparation and proof spans were
-siblings: `compile_metered` took 159.002 seconds,
-`compile_checkpoint_preflight` took 175.052 seconds, immutable program upload
-took 34 milliseconds, and no compilation or upload occurred inside the
-83.513-second app-proof span.
+siblings: `compile_metered` took 133.412 seconds,
+`compile_checkpoint_preflight` took 144.583 seconds, immutable program upload
+took 50 milliseconds, and no compilation or upload occurred inside the
+68.695-second app-proof span. The checkpoint transcript contained 962,366
+checkpoints and 129,268,505 residual words, or 1,288,212,664 logical payload
+bytes and 2.57 bytes per guest instruction.
 
 One-time compilation remains an optimization target, not a proof-time cost.
-Repeated full-workload generated-C runs put metered compilation in the
-159.0-167.8 second range and checkpoint compilation in the 154.3-198.9 second
-range. The like-for-like host fat-LTO build increased from 10m34.35s to
-11m22.62s; later incremental relinks ranged from 8m18.57s to 10m33.20s with
-about 14.2 GiB peak host RSS.
+The clean host release build used the repository's existing fat-LTO profile and
+took 5 minutes after the independently built guest. Generated executors use
+thin LTO. The exact standalone comparison above remains the like-for-like
+compile-time gate for pure, metered, and checkpoint execution.
 
 ## Follow-up work
 

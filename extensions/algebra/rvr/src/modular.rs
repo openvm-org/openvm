@@ -361,25 +361,17 @@ impl RvrExtension for ModularRvrExtension {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use rvr_openvm_ir::{MemWidth, PageAddressSpace};
 
     use super::*;
 
+    #[derive(Default)]
     struct TestEmitCtx {
         operations: Vec<String>,
         checkpoint: bool,
         next_tmp: usize,
-    }
-
-    impl Default for TestEmitCtx {
-        fn default() -> Self {
-            Self {
-                operations: Vec::new(),
-                checkpoint: false,
-                next_tmp: 0,
-            }
-        }
     }
 
     impl TestEmitCtx {

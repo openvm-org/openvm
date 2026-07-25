@@ -1126,7 +1126,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        for (_i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
+        for (_, modulus) in &extension.supported_moduli {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             #[cfg(feature = "rvr")]

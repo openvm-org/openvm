@@ -15,27 +15,22 @@ mod tests {
                 public_values::{extract_public_values, UserPublicValuesProof},
                 MerkleTree,
             },
-            online::{GuestMemory, LinearMemory, PAGE_SIZE},
+            online::LinearMemory,
         },
-        utils::{air_test, air_test_with_min_segments, test_cpu_engine, test_system_config},
+        utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{
-        exe::VmExe,
-        instruction::Instruction,
-        program::Program,
-        riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-        LocalOpcode, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
+        exe::VmExe, instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
+        SystemOpcode,
     };
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
-        BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, DivRemOpcode, MulHOpcode, MulOpcode,
-        Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalLuiOpcode,
-        Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64MTranspilerExtension, Rv64Phantom,
+        DivRemOpcode, MulHOpcode, MulOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
+        Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32},
-        p3_baby_bear::BabyBear,
+        openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
@@ -46,6 +41,23 @@ mod tests {
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use strum::IntoEnumIterator;
     use test_case::test_case;
+    #[cfg(feature = "rvr")]
+    use {
+        openvm_circuit::{
+            system::memory::online::{GuestMemory, PAGE_SIZE},
+            utils::test_cpu_engine,
+        },
+        openvm_instructions::{
+            program::Program,
+            riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+            SysPhantom, PUBLIC_VALUES_AS,
+        },
+        openvm_riscv_transpiler::{
+            BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, Rv64HintStoreOpcode,
+            Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
+        },
+        openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32,
+    };
 
     type F = BabyBear;
     #[cfg(test)]

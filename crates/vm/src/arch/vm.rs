@@ -313,7 +313,12 @@ where
         ))
     }
 
-    /// Compile an append-only RVR preflight instance.
+    /// Compile the append-only full-log RVR preflight oracle.
+    ///
+    /// This path supports differential testing and direct transcript
+    /// validation. Production checkpoint proving uses
+    /// [`Self::rvr_checkpoint_preflight_instance`] and derives the full logs
+    /// by GPU replay.
     pub fn rvr_preflight_instance(
         &self,
         exe: &VmExe<F>,

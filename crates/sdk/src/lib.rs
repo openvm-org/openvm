@@ -263,8 +263,11 @@ where
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 impl GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder> {
     /// Prepares the program-specific RVR executors and immutable GPU replay
-    /// data once. Every subsequent [`RvrCheckpointAppProver::prove`] call
-    /// reuses them without generated-code compilation or program upload.
+    /// data once. Successful [`RvrCheckpointAppProver::prove`] calls and
+    /// recoverable execution failures reuse them without generated-code
+    /// compilation or program upload. A failed RVR trace-generation session
+    /// makes that prepared prover terminal because lookup mutations cannot be
+    /// rolled back safely.
     #[tracing::instrument(
         name = "prepare_rvr_checkpoint",
         level = "info",

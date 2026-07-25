@@ -439,7 +439,7 @@ where
             &data.0,
         );
 
-        let (writes, _, _) = run_field_expression(
+        let run = run_field_expression(
             &self.program,
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
@@ -450,7 +450,7 @@ where
         self.adapter.write(
             state.memory,
             instruction,
-            writes.into(),
+            run.writes.into(),
             &mut adapter_record,
         );
 
@@ -527,7 +527,11 @@ impl<A> FieldExpressionFiller<A> {
         if !self.local_opcode_idx.contains(&local_opcode) {
             return Err(FieldExpressionTraceError::InvalidLocalOpcode(local_opcode));
         }
-        let (writes, inputs, flags) = run_field_expression_checked(
+        let FieldExpressionRun {
+            writes,
+            inputs,
+            flags,
+        } = run_field_expression_checked(
             self.expr.program(),
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
@@ -543,13 +547,19 @@ impl<A> FieldExpressionFiller<A> {
     }
 }
 
+struct FieldExpressionRun {
+    writes: DynArray<u8>,
+    inputs: Vec<BigUint>,
+    flags: Vec<bool>,
+}
+
 fn run_field_expression(
     program: &FieldExpressionProgram,
     local_opcode_flags: &[usize],
     opcode_flag_idx: &[usize],
     data: &[u8],
     local_opcode_idx: usize,
-) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
+) -> FieldExpressionRun {
     run_field_expression_checked(
         program,
         local_opcode_flags,
@@ -566,7 +576,7 @@ fn run_field_expression_checked(
     opcode_flag_idx: &[usize],
     data: &[u8],
     local_opcode_idx: usize,
-) -> Result<(DynArray<u8>, Vec<BigUint>, Vec<bool>), FieldExpressionTraceError> {
+) -> Result<FieldExpressionRun, FieldExpressionTraceError> {
     let field_element_limbs = program.canonical_num_limbs();
     let expected_len = program
         .num_inputs()
@@ -666,7 +676,11 @@ fn run_field_expression_checked(
     }
     let writes: DynArray<_> = write_buffer.into();
 
-    Ok((writes, inputs, flags))
+    Ok(FieldExpressionRun {
+        writes,
+        inputs,
+        flags,
+    })
 }
 
 fn decode_precomputed_inputs<const NEEDS_SETUP: bool>(

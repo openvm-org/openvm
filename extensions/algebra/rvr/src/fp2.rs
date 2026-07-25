@@ -90,6 +90,7 @@ impl Fp2RvrExtension {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use rvr_openvm_ir::{ExtEmitCtx, MemWidth, PageAddressSpace, Variable};
 

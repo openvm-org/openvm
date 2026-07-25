@@ -1,11 +1,9 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{
-    d_buffer::{DeviceBuffer, DeviceBufferView},
-    error::CudaError,
-    stream::cudaStream_t,
-};
+#[cfg(feature = "rvr")]
+use openvm_cuda_common::d_buffer::DeviceBufferView;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 pub mod count {
     use super::*;
