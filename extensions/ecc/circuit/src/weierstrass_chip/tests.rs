@@ -1071,7 +1071,13 @@ mod ec_addne_tests {
                     .map(|(offset, byte)| ((RV64_REGISTER_AS, register + offset as u32), byte)),
             );
         }
-        for (pointer, bytes) in [(0x100u32, &first_input), (0x400u32, &second_input)] {
+        let bytes_per_value = ECC_BLOCKS_32 * MEMORY_BLOCK_BYTES;
+        for (pointer, bytes) in [
+            (0x100u32, &first_input[..bytes_per_value]),
+            (0x200u32, &first_input[bytes_per_value..]),
+            (0x400u32, &second_input[..bytes_per_value]),
+            (0x500u32, &second_input[bytes_per_value..]),
+        ] {
             init_memory.extend(
                 bytes
                     .iter()
@@ -1167,6 +1173,9 @@ mod ec_addne_tests {
         let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
         vm.engine.verify(&pk.get_vk(), &proof).unwrap();
 
+        // Tracegen consumes the segment-start upload. This replay only checks that successful
+        // coordination clears the session poison, so restore the fixture's input image first.
+        vm.transport_init_memory_to_device(&state.memory);
         let (retry_transcript, retry_plan) = vm_gpu_program
             .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
             .unwrap();
@@ -1177,7 +1186,7 @@ mod ec_addne_tests {
             &retry_plan,
         )
         .generate_proving_ctx(&mut vm, &vm_config.modular.modular, None)
-        .expect("successful outer coordination must permit the next RVR segment");
+        .expect("successful outer coordination must permit another RVR tracegen session");
         drop(retry_ctx);
     }
 
