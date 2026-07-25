@@ -7,7 +7,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 #include "xorin.cuh"
 
 #include <cassert>

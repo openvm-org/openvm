@@ -1,3 +1,5 @@
+#[cfg(feature = "rvr")]
+use std::any::Any;
 use std::sync::Arc;
 
 use openvm_circuit::{
@@ -26,7 +28,7 @@ use {
     },
     openvm_circuit_primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-        AnyChip, Chip,
+        Chip,
     },
     openvm_cuda_backend::base::DeviceMatrix,
     openvm_instructions::{LocalOpcode, SystemOpcode},
@@ -310,9 +312,9 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
     pub fn generate_for_chip(
         &mut self,
         _insertion_idx: usize,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
-        if let Some(chip) = chip.as_any().downcast_ref::<PhantomChipGPU>() {
+        if let Some(chip) = chip.downcast_ref::<PhantomChipGPU>() {
             self.mark_generated([SystemOpcode::PHANTOM.global_opcode().as_usize() as u32]);
             return chip.generate_proving_ctx_from_rvr(
                 self.program,
@@ -323,7 +325,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
 
         macro_rules! replay_chip {
             ($chip_ty:ty, [$($opcode:expr),+ $(,)?]) => {
-                if let Some(chip) = chip.as_any().downcast_ref::<$chip_ty>() {
+                if let Some(chip) = chip.downcast_ref::<$chip_ty>() {
                     self.mark_generated([$(
                         Self::opcode($opcode)
                     ),+]);
@@ -450,10 +452,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
                 BaseAluImmOpcode::ANDI,
             ]
         );
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Arc<VariableRangeCheckerChipGPU>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Arc<VariableRangeCheckerChipGPU>>() {
             return Ok(
                 <Arc<VariableRangeCheckerChipGPU> as Chip<(), GpuBackend>>::generate_proving_ctx(
                     chip,
@@ -461,19 +460,13 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
                 ),
             );
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Arc<BitwiseOperationLookupChipGPU<8>>>() {
             return Ok(<Arc<BitwiseOperationLookupChipGPU<8>> as Chip<
                 (),
                 GpuBackend,
             >>::generate_proving_ctx(chip, ()));
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Arc<RangeTupleCheckerChipGPU<2>>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Arc<RangeTupleCheckerChipGPU<2>>>() {
             return Ok(
                 <Arc<RangeTupleCheckerChipGPU<2>> as Chip<(), GpuBackend>>::generate_proving_ctx(
                     chip,
@@ -481,10 +474,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
                 ),
             );
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Arc<Poseidon2PeripheryChipGPU>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Arc<Poseidon2PeripheryChipGPU>>() {
             return Ok(
                 <Arc<Poseidon2PeripheryChipGPU> as Chip<(), GpuBackend>>::generate_proving_ctx(
                     chip,

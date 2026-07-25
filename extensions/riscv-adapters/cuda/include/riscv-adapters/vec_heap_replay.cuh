@@ -1,7 +1,7 @@
 #pragma once
 
 #include "primitives/constants.h"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 template <size_t NUM_READS, size_t BLOCKS>
 struct VecHeapTraceInput {

@@ -8,7 +8,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 #include <cassert>
 #include <cstddef>
@@ -70,25 +70,22 @@ __global__ void keccakf_op_replay_tracegen(
     }
 
     auto const &step = steps[step_start + idx];
-    size_t program_idx = step.program_index;
-    if (program_idx + 1 >= program.len()) {
+    ReplayProgramTransition transition;
+    if (resolve_replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            26,
+            ReplayPcEffect::Sequential,
+            transition
+        ) != ReplayProgramTransitionError::None) {
         preflight_set_error(error, KECCAKF_REPLAY_ERROR);
         return;
     }
-    auto const &from = program[program_idx];
-    auto const &to = program[program_idx + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - DEFAULT_PC_STEP || from.timestamp > UINT32_MAX - 26 ||
-        to.pc != from.pc + DEFAULT_PC_STEP || to.timestamp != from.timestamp + 26) {
-        preflight_set_error(error, KECCAKF_REPLAY_ERROR);
-        return;
-    }
-    size_t instruction_idx = (from.pc - pc_base) / DEFAULT_PC_STEP;
-    if (instruction_idx >= instructions.len()) {
-        preflight_set_error(error, KECCAKF_REPLAY_ERROR);
-        return;
-    }
-    auto const &instruction = instructions[instruction_idx];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     uint32_t rd_ptr = instruction.words[1];
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || (rd_ptr & 1) != 0) {

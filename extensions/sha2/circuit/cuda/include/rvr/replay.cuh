@@ -4,7 +4,7 @@
 #include "block_hasher/variant.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 #include <cstddef>
 #include <cstdint>
 

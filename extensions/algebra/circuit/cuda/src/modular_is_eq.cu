@@ -3,7 +3,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv-adapters/vec_heap.cuh"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 #include "system/memory/params.cuh"
 
 #include <cstddef>

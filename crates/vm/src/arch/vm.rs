@@ -7,13 +7,13 @@
 //!
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use std::any::Any;
 use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
-#[cfg(feature = "rvr")]
-use openvm_circuit_primitives::AnyChip;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_cuda_common::memory_manager::MemTracker;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -1204,40 +1204,6 @@ where
         self.validate_proving_ctx(ctx)
     }
 
-    /// Generates extension traces from a segment-wide source while retaining the normal system
-    /// trace generation, AIR ordering, and trace-height validation. This is the narrow integration
-    /// point used while RVR replay replaces extension record arenas.
-    #[cfg(feature = "rvr")]
-    #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_with_extension_tracegen(
-        &mut self,
-        system_records: SystemRecords<Val<E::SC>>,
-        system_record_arenas: Vec<VB::RecordArena>,
-        generate_extension: impl FnMut(
-            usize,
-            &dyn AnyChip<VB::RecordArena, E::PB>,
-        ) -> Result<
-            openvm_stark_backend::prover::AirProvingContext<E::PB>,
-            GenerationError,
-        >,
-    ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        #[cfg(all(feature = "cuda", feature = "rvr"))]
-        if self.rvr_tracegen_poisoned {
-            return Err(GenerationError::ExtensionTracegen(
-                "VM is poisoned by an incomplete or failed RVR tracegen session".to_string(),
-            ));
-        }
-        let ctx = self
-            .chip_complex
-            .generate_proving_ctx_with_extension_tracegen(
-                system_records,
-                system_record_arenas,
-                generate_extension,
-            )?;
-
-        self.validate_proving_ctx(ctx)
-    }
-
     fn validate_proving_ctx(
         &self,
         ctx: ProvingContext<E::PB>,
@@ -1505,6 +1471,7 @@ where
     /// seam for the first feasibility slice, not a generic replay interface.
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
+    #[instrument(name = "expand_checkpoint_replay", skip_all)]
     pub fn expand_rvr_checkpoint_replay(
         &self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
@@ -1567,7 +1534,7 @@ where
         replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
         generate_extension: impl FnMut(
             usize,
-            &dyn AnyChip<crate::arch::DenseRecordArena, openvm_cuda_backend::GpuBackend>,
+            &dyn Any,
         ) -> Result<
             openvm_stark_backend::prover::AirProvingContext<openvm_cuda_backend::GpuBackend>,
             GenerationError,

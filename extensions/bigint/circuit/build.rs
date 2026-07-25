@@ -26,10 +26,9 @@ fn main() {
 
         let builder = if std::env::var_os("CARGO_FEATURE_RVR").is_some() {
             builder
-                .flag("-I../../riscv/circuit/cuda/rvr/include")
                 .flag("-I../../../crates/vm/cuda/rvr/include")
-                .watch("../../riscv/circuit/cuda/rvr/include/riscv/replay.cuh")
                 .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
+                .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
                 .file("cuda/src/bigint_replay.cu")
         } else {
             builder

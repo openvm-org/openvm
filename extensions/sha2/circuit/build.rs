@@ -33,14 +33,13 @@ fn main() {
 
         let builder = if std::env::var_os("CARGO_FEATURE_RVR").is_some() {
             builder
-                .flag("-I../../riscv/circuit/cuda/rvr/include")
                 .flag("-I../../../crates/vm/cuda/rvr/include")
                 .watch("cuda/include/rvr/replay.cuh")
-                .watch("../../riscv/circuit/cuda/rvr/include/riscv/replay.cuh")
                 .watch(
                     "../../../crates/circuits/primitives/cuda/include/primitives/buffer_view.cuh",
                 )
                 .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
+                .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
                 .files(["cuda/src/rvr/sha2_main.cu", "cuda/src/rvr/sha2_hasher.cu"])
         } else {
             builder.files(["cuda/src/sha2_main.cu", "cuda/src/sha2_hasher.cu"])

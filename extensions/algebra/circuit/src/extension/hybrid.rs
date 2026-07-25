@@ -42,11 +42,11 @@ use {
         RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
     },
     openvm_circuit::arch::rvr::RvrCheckpointPreflightExecution,
-    openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, AnyChip},
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_instructions::program::Program,
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
     openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
-    std::{collections::BTreeSet, sync::Arc},
+    std::{any::Any, collections::BTreeSet, sync::Arc},
 };
 
 use crate::{
@@ -988,12 +988,9 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
 
     pub fn generate_for_chip(
         &mut self,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridModularChip<F, MODULAR_BLOCKS_32>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridModularChip<F, MODULAR_BLOCKS_32>>() {
             let opcodes = chip.checkpoint_opcodes()?;
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,
@@ -1003,9 +1000,18 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             self.claim(opcodes);
             return Ok(Some(ctx));
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridModularChip<F, MODULAR_BLOCKS_48>>()
+        if let Some(chip) = chip.downcast_ref::<HybridModularChip<F, MODULAR_BLOCKS_48>>() {
+            let opcodes = chip.checkpoint_opcodes()?;
+            let ctx = chip.generate_proving_ctx_from_rvr(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            )?;
+            self.claim(opcodes);
+            return Ok(Some(ctx));
+        }
+        if let Some(chip) =
+            chip.downcast_ref::<HybridModularIsEqualChip<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()
         {
             let opcodes = chip.checkpoint_opcodes()?;
             let ctx = chip.generate_proving_ctx_from_rvr(
@@ -1017,8 +1023,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             return Ok(Some(ctx));
         }
         if let Some(chip) =
-            chip.as_any()
-                .downcast_ref::<HybridModularIsEqualChip<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()
+            chip.downcast_ref::<HybridModularIsEqualChip<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()
         {
             let opcodes = chip.checkpoint_opcodes()?;
             let ctx = chip.generate_proving_ctx_from_rvr(
@@ -1029,10 +1034,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             self.claim(opcodes);
             return Ok(Some(ctx));
         }
-        if let Some(chip) =
-            chip.as_any()
-                .downcast_ref::<HybridModularIsEqualChip<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridFp2Chip<F, FP2_BLOCKS_32>>() {
             let opcodes = chip.checkpoint_opcodes()?;
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,
@@ -1042,23 +1044,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             self.claim(opcodes);
             return Ok(Some(ctx));
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridFp2Chip<F, FP2_BLOCKS_32>>()
-        {
-            let opcodes = chip.checkpoint_opcodes()?;
-            let ctx = chip.generate_proving_ctx_from_rvr(
-                self.program,
-                self.transcript,
-                self.replay_plan,
-            )?;
-            self.claim(opcodes);
-            return Ok(Some(ctx));
-        }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridFp2Chip<F, FP2_BLOCKS_48>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridFp2Chip<F, FP2_BLOCKS_48>>() {
             let opcodes = chip.checkpoint_opcodes()?;
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,

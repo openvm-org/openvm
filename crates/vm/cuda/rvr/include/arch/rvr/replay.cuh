@@ -12,6 +12,13 @@ struct ReplayPreviousValue {
 
 enum class ReplayPcEffect : uint8_t { Sequential, Dynamic };
 
+enum class ReplayProgramTransitionError : uint8_t {
+    None = 0,
+    MissingProgramEvent = 1,
+    InvalidTransition = 2,
+    MissingInstruction = 3,
+};
+
 struct ReplayProgramTransition {
     PreflightProgramEvent const *from;
     PreflightProgramEvent const *to;
@@ -21,20 +28,17 @@ struct ReplayProgramTransition {
 /// Resolves one replay step against the immutable program and validates its
 /// timestamp transition. Dynamic-PC callers must validate `to.pc` before
 /// emitting a row.
-static __device__ __forceinline__ bool replay_program_transition(
+static __device__ __forceinline__ ReplayProgramTransitionError resolve_replay_program_transition(
     DeviceBufferConstView<RvrReplayInstruction> instructions,
     uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program,
     size_t program_index,
     uint32_t timestamp_delta,
     ReplayPcEffect pc_effect,
-    ReplayProgramTransition &out,
-    uint32_t *error,
-    uint32_t error_base
+    ReplayProgramTransition &out
 ) {
     if (program_index >= program.len() || program.len() - program_index <= 1) {
-        preflight_set_error(error, error_base);
-        return false;
+        return ReplayProgramTransitionError::MissingProgramEvent;
     }
     auto const &from = program[program_index];
     auto const &to = program[program_index + 1];
@@ -46,19 +50,49 @@ static __device__ __forceinline__ bool replay_program_transition(
                               (from.pc > UINT32_MAX - ::program::DEFAULT_PC_STEP ||
                                to.pc != from.pc + ::program::DEFAULT_PC_STEP);
     if (invalid_pc || invalid_timestamp || invalid_sequential) {
-        preflight_set_error(error, error_base + 1);
-        return false;
+        return ReplayProgramTransitionError::InvalidTransition;
     }
     size_t instruction_index = (from.pc - pc_base) / ::program::DEFAULT_PC_STEP;
     if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, error_base + 2);
-        return false;
+        return ReplayProgramTransitionError::MissingInstruction;
     }
     out = ReplayProgramTransition{
         .from = &from,
         .to = &to,
         .instruction = &instructions[instruction_index],
     };
+    return ReplayProgramTransitionError::None;
+}
+
+/// Reports the three transition failures at `error_base`, `error_base + 1`,
+/// and `error_base + 2`, respectively.
+static __device__ __forceinline__ bool replay_program_transition(
+    DeviceBufferConstView<RvrReplayInstruction> instructions,
+    uint32_t pc_base,
+    DeviceBufferConstView<PreflightProgramEvent> program,
+    size_t program_index,
+    uint32_t timestamp_delta,
+    ReplayPcEffect pc_effect,
+    ReplayProgramTransition &out,
+    uint32_t *error,
+    uint32_t error_base
+) {
+    ReplayProgramTransitionError transition_error = resolve_replay_program_transition(
+        instructions,
+        pc_base,
+        program,
+        program_index,
+        timestamp_delta,
+        pc_effect,
+        out
+    );
+    if (transition_error != ReplayProgramTransitionError::None) {
+        preflight_set_error(
+            error,
+            error_base + static_cast<uint32_t>(transition_error) - 1
+        );
+        return false;
+    }
     return true;
 }
 

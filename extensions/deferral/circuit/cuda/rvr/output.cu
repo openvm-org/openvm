@@ -5,7 +5,7 @@
 #include "poseidon2-air/tracegen.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 using namespace riscv;
 

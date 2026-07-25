@@ -1,3 +1,5 @@
+#[cfg(feature = "rvr")]
+use std::any::Any;
 use std::sync::{Arc, Mutex};
 
 use openvm_circuit::{
@@ -22,7 +24,6 @@ use {
         rvr::RvrCheckpointPreflightExecution, GenerationError, MemoryConfig, VirtualMachine,
         VmBuilder,
     },
-    openvm_circuit_primitives::AnyChip,
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::{program::Program, LocalOpcode},
     openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode},
@@ -180,21 +181,21 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
     /// empty arena for Keccak.
     pub fn generate_for_chip(
         &mut self,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
-        if let Some(chip) = chip.as_any().downcast_ref::<XorinVmChipGpu>() {
+        if let Some(chip) = chip.downcast_ref::<XorinVmChipGpu>() {
             self.pending_xorin = false;
             return chip
                 .generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)
                 .map(Some);
         }
-        if let Some(chip) = chip.as_any().downcast_ref::<KeccakfOpChipGpu>() {
+        if let Some(chip) = chip.downcast_ref::<KeccakfOpChipGpu>() {
             self.pending_keccakf_op = false;
             return chip
                 .generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)
                 .map(Some);
         }
-        if let Some(chip) = chip.as_any().downcast_ref::<KeccakfPermChipGpu>() {
+        if let Some(chip) = chip.downcast_ref::<KeccakfPermChipGpu>() {
             self.pending_keccakf_perm = false;
             return chip
                 .generate_proving_ctx_from_rvr(self.program, self.transcript, self.replay_plan)

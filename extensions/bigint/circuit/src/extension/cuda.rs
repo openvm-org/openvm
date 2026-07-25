@@ -27,7 +27,6 @@ use {
         },
         GenerationError, MemoryConfig, VirtualMachine,
     },
-    openvm_circuit_primitives::AnyChip,
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
@@ -35,6 +34,7 @@ use {
         p3_field::PrimeField32,
         prover::{AirProvingContext, ProvingContext},
     },
+    std::any::Any,
 };
 
 use super::*;
@@ -201,11 +201,11 @@ impl<'a> Int256RvrGpuTracegen<'a> {
 
     pub fn generate_for_chip(
         &mut self,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
         macro_rules! generate {
             ($chip_ty:ty, $pending:ident) => {
-                if let Some(chip) = chip.as_any().downcast_ref::<$chip_ty>() {
+                if let Some(chip) = chip.downcast_ref::<$chip_ty>() {
                     self.$pending = false;
                     return chip
                         .generate_proving_ctx_from_rvr(
