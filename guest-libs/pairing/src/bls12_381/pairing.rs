@@ -28,7 +28,6 @@ use {
     openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     openvm_platform::custom_insn_r,
     openvm_riscv_guest,
-    openvm_riscv_guest::hint_buffer_chunked,
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
@@ -40,6 +39,8 @@ use crate::bls12_381::utils::{
     convert_bls12381_fp2_to_halo2_fq2, convert_bls12381_fp_to_halo2_fq,
     convert_bls12381_halo2_fq12_to_fp12,
 };
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+use crate::materialize_pairing_hint;
 
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
     fn evaluate(&self, xy_frac: &(Fp, Fp)) -> EvaluatedLine<Fp2> {
@@ -301,7 +302,7 @@ impl PairingCheck for Bls12_381 {
                     rs2 = In &q_fat_ptr
                 );
                 let ptr = hint.as_mut_ptr() as *mut u8;
-                hint_buffer_chunked(ptr, (48 * 12 * 2) / openvm_riscv_guest::HINT_WORD_BYTES);
+                materialize_pairing_hint(ptr, (48 * 12 * 2) / openvm_riscv_guest::HINT_WORD_BYTES);
                 hint.assume_init()
             }
         }
