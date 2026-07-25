@@ -3972,9 +3972,8 @@ mod tests {
         }
 
         let sanitized = NativeBuildConfig::from_lookup(|name| {
-            (name == "SANITIZERS").then(|| {
-                OsString::from("-fsanitize=undefined,bounds -fsanitize-trap=all")
-            })
+            (name == "SANITIZERS")
+                .then(|| OsString::from("-fsanitize=undefined,bounds -fsanitize-trap=all"))
         });
         let unsanitized = NativeBuildConfig::from_lookup(|_| None);
 

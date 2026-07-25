@@ -515,10 +515,7 @@ impl MemoryInventoryGPU {
                             merkle_rows,
                         );
                     }
-                    (
-                        num_touched_leaves,
-                        Some((merkle_rows, num_dirty_leaves)),
-                    )
+                    (num_touched_leaves, Some((merkle_rows, num_dirty_leaves)))
                 } else {
                     (
                         d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0],
@@ -570,10 +567,8 @@ impl MemoryInventoryGPU {
                 let mut dirty_nodes = SpanningNodeCounter::default();
                 let mut num_dirty_leaves = 0usize;
                 for record in merkle_words.chunks_exact(MERKLE_TOUCHED_BLOCK_WIDTH) {
-                    let leaf_index = memory_dimensions.label_to_index((
-                        record[0],
-                        record[1] / VM_DIGEST_WIDTH as u32,
-                    ));
+                    let leaf_index = memory_dimensions
+                        .label_to_index((record[0], record[1] / VM_DIGEST_WIDTH as u32));
                     touched_nodes.push(leaf_index, tree_height);
                     if record[2] != 0 {
                         dirty_nodes.push(leaf_index, tree_height);
@@ -588,11 +583,7 @@ impl MemoryInventoryGPU {
                     };
                 {
                     let _span = tracing::info_span!("poseidon2_prepare").entered();
-                    self.prepare_poseidon2_records(
-                        out_num_records,
-                        num_dirty_leaves,
-                        merkle_rows,
-                    );
+                    self.prepare_poseidon2_records(out_num_records, num_dirty_leaves, merkle_rows);
                 }
                 merkle_rows
             };

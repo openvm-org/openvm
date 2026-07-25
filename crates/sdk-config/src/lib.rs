@@ -974,11 +974,7 @@ mod rvr_cuda_lifecycle_tests {
     }
 
     fn custom_g2_exe() -> VmExe<Val<SC>> {
-        let mut instructions = vec![
-            addi(1, 0, 64),
-            addi(2, 0, 512),
-            addi(3, 0, 16),
-        ];
+        let mut instructions = vec![addi(1, 0, 64), addi(2, 0, 512), addi(3, 0, 16)];
         instructions.extend((3..1000).map(|_| addi(0, 0, 0)));
         instructions.extend([
             Instruction::from_usize(
