@@ -13,7 +13,7 @@
 #include "riscv/cores/mul.cuh"
 #include "riscv/cores/shift_logical.cuh"
 #include "riscv/cores/shift_right_arithmetic.cuh"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;

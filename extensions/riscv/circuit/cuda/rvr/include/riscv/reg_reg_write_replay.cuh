@@ -1,7 +1,7 @@
 #pragma once
 
 #include "riscv/adapters/mul.cuh"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 struct Rv64RegRegWriteReplay {
     uint32_t from_pc;

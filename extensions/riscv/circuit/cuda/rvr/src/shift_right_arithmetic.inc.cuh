@@ -1,4 +1,4 @@
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 
 __global__ void rv64_shift_right_arithmetic_replay_tracegen(

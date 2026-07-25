@@ -1,5 +1,4 @@
-#include "arch/rvr/preflight.cuh"
-
+#include "arch/rvr/replay.cuh"
 
 __global__ void phantom_replay_tracegen(
     Fp *trace,
@@ -21,27 +20,23 @@ __global__ void phantom_replay_tracegen(
     if (idx >= num_steps) return;
 
     auto const &step = steps[step_start + idx];
-    size_t program_index = step.program_index;
-    if (program_index + 1 >= program.len()) {
-        preflight_set_error(error, 851);
+    ReplayProgramTransition transition;
+    if (!replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            1,
+            ReplayPcEffect::Sequential,
+            transition,
+            error,
+            851
+        )) {
         return;
     }
-
-    auto const &from = program[program_index];
-    auto const &to = program[program_index + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % 4 != 0 ||
-        from.pc > UINT32_MAX - 4 || from.timestamp == UINT32_MAX ||
-        to.pc != from.pc + 4 || to.timestamp != from.timestamp + 1) {
-        preflight_set_error(error, 852);
-        return;
-    }
-
-    size_t instruction_index = (from.pc - pc_base) / 4;
-    if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, 853);
-        return;
-    }
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     if (instruction.words[0] != phantom_opcode || instruction.words[4] != 0 ||
         instruction.words[5] != 0 || instruction.words[6] != 0 ||
         instruction.words[7] != 0) {
@@ -64,8 +59,6 @@ __global__ void phantom_replay_tracegen(
     COL_WRITE_VALUE(row, PhantomCols, timestamp, from.timestamp);
     COL_WRITE_VALUE(row, PhantomCols, is_valid, Fp::one());
 }
-
-
 
 extern "C" int _phantom_replay_tracegen(
     Fp *d_trace,

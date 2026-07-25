@@ -1,4 +1,4 @@
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 
 __global__ void add_sub_w_replay_tracegen(

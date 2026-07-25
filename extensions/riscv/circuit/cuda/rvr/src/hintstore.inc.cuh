@@ -1,4 +1,4 @@
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 constexpr uint32_t HINTSTORE_REPLAY_ERROR = 701;
 

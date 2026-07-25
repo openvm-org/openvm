@@ -508,16 +508,20 @@ impl<'a> RvrCheckpointPreflightInstance<'a> {
         reuse: Option<RvrCheckpointPreflightTranscript>,
     ) -> Result<RvrCheckpointPreflightExecution, ExecutionError> {
         let from_state = ExecutionState::new(state.pc(), 1u32);
-        let (transcript, endpoint, final_timestamp, retired) = execute_checkpoint_preflight(
-            &self.inner.compiled,
-            &self.inner.runtime_hooks,
-            &mut state,
-            limits,
-            self.inner.system_config.memory_config.timestamp_max_bits,
-            allow_suspended,
-            reuse,
-        )
-        .map_err(map_rvr_execute_error)?;
+        let (transcript, endpoint, final_timestamp, retired) =
+            tracing::info_span!("execute_checkpoint_preflight")
+                .in_scope(|| {
+                    execute_checkpoint_preflight(
+                        &self.inner.compiled,
+                        &self.inner.runtime_hooks,
+                        &mut state,
+                        limits,
+                        self.inner.system_config.memory_config.timestamp_max_bits,
+                        allow_suspended,
+                        reuse,
+                    )
+                })
+                .map_err(map_rvr_execute_error)?;
         let to_state = ExecutionState::new(state.pc(), final_timestamp);
         Ok(RvrCheckpointPreflightExecution {
             state,

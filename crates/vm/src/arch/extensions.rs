@@ -816,7 +816,7 @@ where
         replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
         mut generate_extension: impl FnMut(
             usize,
-            &dyn AnyChip<crate::arch::DenseRecordArena, openvm_cuda_backend::GpuBackend>,
+            &dyn Any,
         ) -> Result<
             AirProvingContext<openvm_cuda_backend::GpuBackend>,
             GenerationError,
@@ -841,7 +841,7 @@ where
             for (chain_pos, (insertion_idx, chip)) in
                 self.inventory.chips.iter().enumerate().rev().enumerate()
             {
-                exec_ctxs[chain_pos] = Some(generate_extension(insertion_idx, chip.as_ref())?);
+                exec_ctxs[chain_pos] = Some(generate_extension(insertion_idx, chip.as_any())?);
             }
         }
         let ctx_without_empties = sys_ctxs

@@ -1,4 +1,4 @@
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 constexpr uint32_t LUI_IMM_BITS = 32 - RV_IS_TYPE_IMM_BITS;
 

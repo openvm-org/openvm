@@ -1,3 +1,5 @@
+#[cfg(feature = "rvr")]
+use std::any::Any;
 use std::sync::Arc;
 
 use openvm_circuit::{
@@ -28,7 +30,6 @@ use {
         rvr::RvrCheckpointPreflightExecution,
         GenerationError, MemoryConfig, VirtualMachine, MEMORY_BLOCK_BYTES,
     },
-    openvm_circuit_primitives::AnyChip,
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_deferral_transpiler::DeferralOpcode,
     openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
@@ -215,9 +216,9 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
     /// delegates the same reverse-walk position to RV64/system coverage.
     pub fn generate_for_chip(
         &mut self,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
-        if let Some(chip) = chip.as_any().downcast_ref::<DeferralOutputChipGpu>() {
+        if let Some(chip) = chip.downcast_ref::<DeferralOutputChipGpu>() {
             DeferralRvrCoverage::claim(&mut self.coverage.pending_output, "Output")?;
             return chip
                 .generate_proving_ctx_from_rvr(
@@ -228,7 +229,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 )
                 .map(Some);
         }
-        if let Some(chip) = chip.as_any().downcast_ref::<DeferralCallChipGpu>() {
+        if let Some(chip) = chip.downcast_ref::<DeferralCallChipGpu>() {
             DeferralRvrCoverage::claim(&mut self.coverage.pending_call, "Call")?;
             return chip
                 .generate_proving_ctx_from_rvr(
@@ -239,10 +240,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 )
                 .map(Some);
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Arc<DeferralPoseidon2ChipGpu>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Arc<DeferralPoseidon2ChipGpu>>() {
             if self.coverage.pending_output || self.coverage.pending_call {
                 return Err(GpuRvrInputError::InvalidTranscript(
                     "Deferral Poseidon2 producer was visited before executor producers".to_string(),
@@ -253,10 +251,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 .generate_proving_ctx_direct(self.max_trace_height)
                 .map(Some);
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Arc<DeferralCircuitCountChipGpu>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Arc<DeferralCircuitCountChipGpu>>() {
             if self.coverage.pending_output
                 || self.coverage.pending_call
                 || self.coverage.pending_poseidon2

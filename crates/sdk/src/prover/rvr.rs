@@ -23,6 +23,9 @@
 //! and memory logs are not executor output and do not survive into the proving
 //! memory peak.
 
+#[cfg(feature = "metrics")]
+use std::time::{Duration, Instant};
+
 use openvm_circuit::{
     arch::{
         execution_mode::Segment,
@@ -94,6 +97,10 @@ fn prove_inner(
         .take()
         .ok_or_else(|| execution_error("VM instance has no execution state"))?;
     let mut reuse = None;
+    #[cfg(feature = "metrics")]
+    let mut checkpoint_execution_time = Duration::ZERO;
+    #[cfg(feature = "metrics")]
+    let mut checkpoint_retired = 0u64;
 
     for (segment_idx, segment) in segments.into_iter().enumerate() {
         let _segment_span = info_span!("prove_segment", segment = segment_idx).entered();
@@ -116,12 +123,19 @@ fn prove_inner(
         // Replay resolves its first reads against this immutable segment-start
         // image, so upload it before checkpoint execution mutates host memory.
         instance.vm.transport_init_memory_to_device(&state.memory);
+        #[cfg(feature = "metrics")]
+        let checkpoint_execution_started = Instant::now();
         let execution = match reuse.take() {
             Some(transcript) => {
                 checkpoint.execute_from_state_for_exact_reusing(state, limits, transcript)?
             }
             None => checkpoint.execute_from_state_for_exact(state, limits)?,
         };
+        #[cfg(feature = "metrics")]
+        {
+            checkpoint_execution_time += checkpoint_execution_started.elapsed();
+            checkpoint_retired += u64::from(execution.retired);
+        }
         validate_endpoint(&execution, segment_idx + 1 == num_segments)?;
 
         let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::expand_checkpoint_replay(
@@ -172,6 +186,18 @@ fn prove_inner(
         final_memory_top_tree,
     );
     *instance.state_mut() = Some(state);
+
+    // Only the proof driver knows the complete segment set, so aggregate
+    // checkpoint count and rate here rather than overwriting an absolute
+    // counter once per direct executor call. Emit only after all proof outputs
+    // and final VM state have been produced successfully.
+    #[cfg(feature = "metrics")]
+    {
+        let elapsed_micros = checkpoint_execution_time.as_secs_f64().max(1e-9) * 1_000_000.0;
+        metrics::counter!("execute_checkpoint_preflight_insns").absolute(checkpoint_retired);
+        metrics::gauge!("execute_checkpoint_preflight_insn_mi/s")
+            .set(checkpoint_retired as f64 / elapsed_micros);
+    }
 
     Ok(ContinuationVmProof {
         per_segment: proofs,

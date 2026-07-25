@@ -1,7 +1,7 @@
 #pragma once
 
 #include "primitives/constants.h"
-#include "riscv/replay.cuh"
+#include "arch/rvr/replay.cuh"
 
 using namespace program;
 using namespace riscv;

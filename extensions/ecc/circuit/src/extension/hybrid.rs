@@ -37,12 +37,12 @@ use {
         },
         GenerationError, VirtualMachine,
     },
-    openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, AnyChip},
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_ecc_transpiler::Rv64WeierstrassOpcode,
     openvm_instructions::{program::Program, LocalOpcode},
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
     openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
-    std::{collections::BTreeSet, sync::Arc},
+    std::{any::Any, collections::BTreeSet, sync::Arc},
     strum::EnumCount,
 };
 
@@ -451,30 +451,18 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
     /// combined coordinator to fall through to algebra and RV64 producers.
     pub fn generate_for_chip(
         &mut self,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridWeierstrassChip<F, 2, ECC_BLOCKS_32>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridWeierstrassChip<F, 2, ECC_BLOCKS_32>>() {
             return self.generate_for_weierstrass_chip(chip).map(Some);
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridWeierstrassChip<F, 1, ECC_BLOCKS_32>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridWeierstrassChip<F, 1, ECC_BLOCKS_32>>() {
             return self.generate_for_weierstrass_chip(chip).map(Some);
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridWeierstrassChip<F, 2, ECC_BLOCKS_48>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridWeierstrassChip<F, 2, ECC_BLOCKS_48>>() {
             return self.generate_for_weierstrass_chip(chip).map(Some);
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<HybridWeierstrassChip<F, 1, ECC_BLOCKS_48>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<HybridWeierstrassChip<F, 1, ECC_BLOCKS_48>>() {
             return self.generate_for_weierstrass_chip(chip).map(Some);
         }
         Ok(None)

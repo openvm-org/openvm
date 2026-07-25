@@ -26,7 +26,6 @@ use {
         },
         GenerationError, MemoryConfig, VirtualMachine,
     },
-    openvm_circuit_primitives::AnyChip,
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
@@ -35,6 +34,7 @@ use {
         p3_field::PrimeField32,
         prover::{AirProvingContext, ProvingContext},
     },
+    std::any::Any,
 };
 
 use super::*;
@@ -162,12 +162,9 @@ impl<'a> Sha2RvrGpuTracegen<'a> {
     /// every other chip in the same reverse inventory walk.
     pub fn generate_for_chip(
         &mut self,
-        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+        chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Sha2MainChipGpu<Sha256Config>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Sha2MainChipGpu<Sha256Config>>() {
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,
                 self.transcript,
@@ -176,10 +173,7 @@ impl<'a> Sha2RvrGpuTracegen<'a> {
             self.pending_sha256_main = false;
             return Ok(Some(ctx));
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Sha2BlockHasherChipGpu<Sha256Config>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Sha2BlockHasherChipGpu<Sha256Config>>() {
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,
                 self.transcript,
@@ -188,10 +182,7 @@ impl<'a> Sha2RvrGpuTracegen<'a> {
             self.pending_sha256_block = false;
             return Ok(Some(ctx));
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Sha2MainChipGpu<Sha512Config>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Sha2MainChipGpu<Sha512Config>>() {
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,
                 self.transcript,
@@ -200,10 +191,7 @@ impl<'a> Sha2RvrGpuTracegen<'a> {
             self.pending_sha512_main = false;
             return Ok(Some(ctx));
         }
-        if let Some(chip) = chip
-            .as_any()
-            .downcast_ref::<Sha2BlockHasherChipGpu<Sha512Config>>()
-        {
+        if let Some(chip) = chip.downcast_ref::<Sha2BlockHasherChipGpu<Sha512Config>>() {
             let ctx = chip.generate_proving_ctx_from_rvr(
                 self.program,
                 self.transcript,
