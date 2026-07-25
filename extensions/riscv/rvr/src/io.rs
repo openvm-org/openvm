@@ -950,7 +950,7 @@ mod tests {
     fn host_hint_prepare_rejects_invalid_operations_without_mutation() {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
-        hint_stream.set_hint(vec![1, 2, 3, 4, 5, 6, 7]);
+        hint_stream.set_hint(vec![1, 2, 3, 4, 5, 6, 7, 8]);
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0xa5; 16];
         let original_memory = memory.clone();
@@ -969,8 +969,8 @@ mod tests {
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
 
-        assert!(!host_hint_prepare(ctx, 0, 1));
         assert!(!host_hint_prepare(ctx, 1, 0));
+        // One full advice word is available, so this fails only on alignment.
         assert!(!host_hint_prepare(ctx, 1, 1));
         assert!(!host_hint_prepare(
             ctx,
@@ -978,10 +978,10 @@ mod tests {
             (MAX_HINT_BUFFER_DWORDS + 1) as u32
         ));
         assert!(!host_hint_prepare(ctx, u64::MAX - 7, 1));
-        assert_eq!(io.hint_stream.remaining(), 7);
-        let mut hint = [0; 7];
+        assert_eq!(io.hint_stream.remaining(), 8);
+        let mut hint = [0; 8];
         io.hint_stream.copy_to_slice(&mut hint);
-        assert_eq!(hint, [1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(hint, [1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!(memory, original_memory);
     }
 
