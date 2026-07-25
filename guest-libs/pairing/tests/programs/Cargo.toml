@@ -32,6 +32,10 @@ std = ["serde/std", "openvm/std"]
 
 bn254 = ["openvm-pairing/bn254"]
 bls12_381 = ["openvm-pairing/bls12_381"]
+# Adds one real curve operation and a test-only advice/materialization call
+# boundary so the checkpoint proof covers the composed ECC inventory and can
+# suspend immediately after the pairing phantom.
+rvr_checkpoint = ["openvm-pairing/rvr-checkpoint-tests"]
 
 [profile.release]
 panic = "abort"

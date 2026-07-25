@@ -71,6 +71,8 @@ cuda = [
     "openvm-ecc-circuit/cuda",
 ]
 rvr = ["openvm-pairing-circuit/rvr"]
+# Keeps hint materialization out of line so checkpoint tests can suspend at its call boundary.
+rvr-checkpoint-tests = []
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "openvm-custom-insn"]
