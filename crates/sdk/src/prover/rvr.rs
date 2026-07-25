@@ -117,6 +117,12 @@ fn prove_inner(
     let mut checkpoint_execution_time = Duration::ZERO;
     #[cfg(feature = "metrics")]
     let mut checkpoint_retired = 0u64;
+    #[cfg(feature = "metrics")]
+    let mut checkpoint_count = 0u64;
+    #[cfg(feature = "metrics")]
+    let mut residual_count = 0u64;
+    #[cfg(feature = "metrics")]
+    let mut transcript_bytes = 0u64;
 
     for (segment_idx, segment) in segments.into_iter().enumerate() {
         let _segment_span = info_span!("prove_segment", segment = segment_idx).entered();
@@ -153,6 +159,11 @@ fn prove_inner(
         {
             checkpoint_execution_time += checkpoint_execution_started.elapsed();
             checkpoint_retired += u64::from(execution.retired);
+            checkpoint_count += execution.transcript.checkpoints.len() as u64;
+            residual_count += execution.transcript.residuals.len() as u64;
+            transcript_bytes += std::mem::size_of_val(execution.transcript.checkpoints.as_slice())
+                as u64
+                + std::mem::size_of_val(execution.transcript.residuals.as_slice()) as u64;
         }
         validate_endpoint(&execution, segment_idx + 1 == num_segments)?;
 
@@ -213,6 +224,10 @@ fn prove_inner(
     {
         let elapsed_micros = checkpoint_execution_time.as_secs_f64().max(1e-9) * 1_000_000.0;
         metrics::counter!("execute_checkpoint_preflight_insns").absolute(checkpoint_retired);
+        metrics::counter!("execute_checkpoint_preflight_checkpoints").absolute(checkpoint_count);
+        metrics::counter!("execute_checkpoint_preflight_residuals").absolute(residual_count);
+        metrics::counter!("execute_checkpoint_preflight_transcript_bytes")
+            .absolute(transcript_bytes);
         metrics::gauge!("execute_checkpoint_preflight_insn_mi/s")
             .set(checkpoint_retired as f64 / elapsed_micros);
     }

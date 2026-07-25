@@ -290,7 +290,7 @@ pub(super) fn execute_preflight(
     Ok((transcript, endpoint))
 }
 
-/// Execute the experimental checkpoint-and-residual preflight artifact.
+/// Execute the checkpoint-and-residual preflight artifact.
 pub(super) fn execute_checkpoint_preflight(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],

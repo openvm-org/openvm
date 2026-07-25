@@ -108,7 +108,7 @@ pub struct RvrCheckpointPreflightTranscript {
     pub residuals: Vec<u64>,
 }
 
-/// State and compact transcript returned by experimental checkpoint preflight.
+/// State and compact transcript returned by checkpoint preflight.
 pub struct RvrCheckpointPreflightExecution {
     pub state: VmState<GuestMemory>,
     pub transcript: RvrCheckpointPreflightTranscript,
@@ -394,7 +394,7 @@ struct RvrCheckpointPreflightInstanceInner<'a> {
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
 }
 
-/// Compiled experimental checkpoint-preflight executor.
+/// Compiled checkpoint-preflight executor.
 pub struct RvrCheckpointPreflightInstance<'a> {
     inner: RvrCheckpointPreflightInstanceInner<'a>,
 }

@@ -195,6 +195,66 @@ The resulting logs are read-only inputs. AIR-specific kernels may select and
 re-execute the rows they own, but they do not mutate VM state and do not create
 another compatibility record.
 
+### Future CPU/GPU overlap
+
+The authoritative checkpoint format already has the right boundary for
+pipelining. A checkpoint closes an interval only after generated execution has
+flushed its PC, registers, timestamp, retired ordinal, and residual cursor.
+Together with the preceding checkpoint, or the distinguished segment start,
+that is enough for the GPU to replay the interval. It does not need an
+interval-specific memory snapshot: replay emits ordered memory intents, and the
+later chronology pass resolves them against the immutable segment-start image.
+
+The current implementation is intentionally full-segment. Generated C writes
+into reserved `Vec` capacity, Rust validates the complete result before setting
+the vector lengths, and `expand_checkpoint_replay` performs count, emit,
+chronology, and opcode indexing in one call. Reading those buffers concurrently
+would be a data race, even though their allocations do not move.
+
+The first pipelined version should introduce one concrete internal transport,
+not another transcript or generic producer trait:
+
+```text
+CPU checkpoint execution
+       |
+       | publish immutable batches of closed intervals
+       v
+GPU count replay while CPU continues
+       |
+       | segment-end validation and final anchor
+       v
+exact allocation + emit + global chronology + opcode index
+       |
+       v
+immutable GPU transcript
+```
+
+A published batch needs only its starting anchor, one or more closing anchors,
+the absolute residual-base cursor, and its immutable residual slice. Publication
+should use owned immutable batches or a small fixed SPSC/double buffer with an
+explicit publish boundary. It must never expose a `Vec` while generated code is
+still appending to it.
+
+Streaming count first preserves the existing exact-allocation discipline. It
+does not retain per-batch event logs, reserve worst-case output, require
+incremental predecessor resolution, or move the memory peak into trace
+generation. After the final serial boundary is validated, one emit pass writes
+the exactly sized segment buffers and the existing device-wide chronology and
+indexing passes run unchanged. Any overlapped count work is speculative and is
+discarded if serial execution or endpoint validation fails.
+
+Streaming emit can be considered separately only if a full-workload benchmark
+shows that count overlap matters and device chunks can be assembled without a
+second full-size buffer. Streaming chronology or AIR trace generation is a
+different, substantially more invasive optimization and is not implied by this
+boundary.
+
+This overlap is not the only reason to keep expansion separate from serial
+execution. Even without overlap, separation keeps proof-shaped work off the CPU
+hot path, lets checkpoint intervals expand in parallel, produces one shared
+read-only history for all AIRs, and keeps the authoritative serial output
+minimal.
+
 ## Timestamp and access semantics
 
 Logical timestamp is not the number of emitted memory events. AIR schedules
@@ -365,7 +425,8 @@ warm runner wall                       148.121 s          103.962 s
 checkpoint expansion allocation peak                      2.613 GiB
 checkpoint tracegen allocation peak                       5.902 GiB
 checkpoint proving allocation peak                       14.882 GiB
-checkpoint sampled process peak                          15.479 GiB
+sampled process peak                    15,780 MiB       15,851 MiB
+sampled process peak delta                                    +71 MiB
 ```
 
 Expansion and trace generation remain well below proving, and replay buffers
@@ -375,6 +436,13 @@ the reusable app proof is 32.6% faster. The prepared app-proof value is a direct
 metric. The legacy app-proof and both warm runner values subtract one-time
 generated compilation from otherwise exact runs because the legacy benchmark
 did not expose a prepared prover.
+
+The sampled process peak increased by 71 MiB, about 0.45%, and remained in
+proving rather than moving to expansion or trace generation. The allocator's
+phase peak was 14.882 GiB; the 15,851 MiB process sample includes the CUDA
+context and allocator pool and is 491 MiB above a strict 15.0 GiB process cap.
+This must remain an explicit packing constraint even though the new replay path
+is not responsible for the proving peak.
 
 The definitive prepared run verified every segment, endpoint continuity, the
 final public-values Merkle proof, and the output
@@ -396,7 +464,10 @@ about 14.2 GiB peak host RSS.
 
 1. Reduce cold generated-C compilation only when a full-workload comparison
    preserves runtime performance and does not increase Rust/CUDA build cost.
-2. Decide separately whether legacy CPU/interpreter support is migrated far
+2. Instrument checkpoint-batch count and transfer time, then prototype
+   closed-interval count overlap only if the whole Reth proof improves without
+   increasing expansion or tracegen peak GPU memory.
+3. Decide separately whether legacy CPU/interpreter support is migrated far
    enough to remove `RecordArena` from shared builder traits. The prepared RVR
    proving path already avoids it.
 
@@ -415,7 +486,7 @@ Track at least:
 - segment proof time and total proof time;
 - live and reserved GPU memory for expansion, tracegen, and proving.
 
-The metrics surface stays phase-level and low-cardinality:
+The production metrics surface stays phase-level and low-cardinality:
 
 - `prepare_rvr_checkpoint_time_ms`, containing the one-time preparation only;
 - the existing `compile_metered_time_ms` plus
@@ -426,6 +497,10 @@ The metrics surface stays phase-level and low-cardinality:
   segment scope;
 - `execute_checkpoint_preflight_insns` and
   `execute_checkpoint_preflight_insn_mi/s`, emitted once per completed proof;
+- `execute_checkpoint_preflight_checkpoints`,
+  `execute_checkpoint_preflight_residuals`, and
+  `execute_checkpoint_preflight_transcript_bytes`, emitted once per completed
+  proof;
 - `expand_checkpoint_replay_time_ms`, attributed only by segment;
 - the existing `trace_gen`, `system_trace_gen`, `executor_trace_gen`, and
   proving metrics.
@@ -433,6 +508,12 @@ The metrics surface stays phase-level and low-cardinality:
 There are no per-opcode, per-kernel, or dynamic instruction labels. The
 profiler checks the proof-level checkpoint instruction total against metered
 execution when both metrics are present.
+
+Native instructions per guest instruction, generated source/object size, host
+compiler RSS, and sampled GPU process memory are offline benchmark/profiler
+measurements rather than production metrics. The standalone `rvr-openvm`
+benchmark reports host instruction counters beside guest instructions so the
+ratio is derived without adding high-volume runtime instrumentation.
 
 An optimization is accepted only when it improves the real workload without
 weakening the execution contract or extending the serial transcript. In

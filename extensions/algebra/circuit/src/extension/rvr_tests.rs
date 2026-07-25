@@ -306,7 +306,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     let config = field_expr_config(modulus);
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
@@ -373,7 +373,7 @@ fn modular_checkpoint_executor_records_only_irreducible_results() {
     let (_, exe) = fixture();
     let executor = VmExecutor::new(config()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let execution = checkpoint
@@ -430,7 +430,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
         let executor = VmExecutor::new(config()).unwrap();
         assert!(executor.interpreter_instance(&exe).is_err());
         assert!(executor
-            .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+            .rvr_checkpoint_preflight_instance(&exe, None)
             .is_err());
     }
 }
@@ -473,7 +473,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
     let config = config();
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
