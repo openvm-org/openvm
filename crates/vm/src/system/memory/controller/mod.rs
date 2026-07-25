@@ -232,6 +232,10 @@ impl<F> SharedMemoryHelper<F> {
             _marker: PhantomData,
         }
     }
+
+    pub fn timestamp_max_bits(&self) -> usize {
+        self.timestamp_lt_air.max_bits
+    }
 }
 
 /// A helper for generating trace values in auxiliary memory columns related to the offline memory

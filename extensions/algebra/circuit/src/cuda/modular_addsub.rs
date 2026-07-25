@@ -151,4 +151,8 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
         drop(projection);
         Ok(AirProvingContext::simple_no_pis(trace))
     }
+
+    pub fn opcode_base(&self) -> usize {
+        self.opcode_base
+    }
 }

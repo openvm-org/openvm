@@ -1142,6 +1142,47 @@ mod tests {
     }
 
     #[test]
+    fn preserves_unreachable_nested_select_guards() {
+        let prime = secp256k1_coord_prime();
+        let (range_checker, builder) = setup(&prime);
+        let lhs = ExprBuilder::new_input(builder.clone());
+        let rhs = ExprBuilder::new_input(builder.clone());
+        let (output_index, output) = builder.borrow_mut().new_var();
+        let mut output = FieldVariable::from_var(builder.clone(), output);
+        let flag = builder.borrow_mut().new_flag();
+        builder
+            .borrow_mut()
+            .set_constraint(output_index, output.expr.clone() - lhs.expr.clone());
+        builder.borrow_mut().set_compute(
+            output_index,
+            SymbolicExpr::Select(
+                flag,
+                Box::new(SymbolicExpr::Select(
+                    flag,
+                    Box::new(lhs.expr.clone()),
+                    Box::new(lhs.expr.clone() / rhs.expr),
+                )),
+                Box::new(lhs.expr),
+            ),
+        );
+        output.save_output();
+        let program = FieldExpressionProgram::new(builder.borrow().clone(), true);
+        let expr = FieldExpr::new(program, range_checker.bus());
+        let filler =
+            FieldExpressionFiller::new((), expr, vec![2, 3], vec![flag], range_checker, true);
+
+        let program = build_device_program(&filler).unwrap();
+        let division = program
+            .value_ops
+            .iter()
+            .find(|op| op.opcode == ValueOpcode::Div as u32)
+            .unwrap();
+        assert_eq!(division.guard_true, 1 << flag);
+        assert_eq!(division.guard_false, 1 << flag);
+        serialize_field_expr(&filler).unwrap();
+    }
+
+    #[test]
     fn reuses_sequential_value_and_constraint_scratch() {
         let prime = secp256k1_coord_prime();
         let (range_checker, builder) = setup(&prime);

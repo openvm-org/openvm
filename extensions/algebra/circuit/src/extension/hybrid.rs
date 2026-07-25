@@ -1,4 +1,6 @@
-//! Prover extension for the GPU backend which still does trace generation on CPU.
+//! GPU prover extension. Record-based trace generation uses the CPU fallback. RVR checkpoint
+//! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
+//! projection for other field expressions.
 
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
@@ -32,16 +34,17 @@ use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
+    crate::cuda::field_expr::FieldExprReplayChip,
     openvm_circuit::arch::rvr::cuda::{
         GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
         RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
     },
     openvm_circuit::arch::rvr::RvrCheckpointPreflightExecution,
-    openvm_circuit_primitives::AnyChip,
+    openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, AnyChip},
     openvm_instructions::program::Program,
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
     openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
-    std::collections::BTreeSet,
+    std::{collections::BTreeSet, sync::Arc},
 };
 
 use crate::{
@@ -56,17 +59,13 @@ pub struct HybridModularChip<F, const BLOCKS: usize> {
     cpu: ModularChip<F, BLOCKS>,
     device_ctx: GpuDeviceCtx,
     #[cfg(feature = "rvr")]
-    replay: Option<FieldExpressionReplayConfig>,
-    #[cfg(feature = "rvr")]
-    direct_addsub: Option<crate::cuda::modular_addsub::ModularAddSubReplayChipGpu<BLOCKS>>,
+    replay: Option<ModularReplay<BLOCKS>>,
 }
 
 #[cfg(feature = "rvr")]
-#[derive(Clone, Copy)]
-struct FieldExpressionReplayConfig {
-    opcode_base: usize,
-    pointer_max_bits: usize,
-    timestamp_max_bits: usize,
+enum ModularReplay<const BLOCKS: usize> {
+    FieldExpr(FieldExprReplayChip<2, BLOCKS>),
+    AddSub(crate::cuda::modular_addsub::ModularAddSubReplayChipGpu<BLOCKS>),
 }
 
 #[cfg(feature = "rvr")]
@@ -101,8 +100,6 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             device_ctx,
             #[cfg(feature = "rvr")]
             replay: None,
-            #[cfg(feature = "rvr")]
-            direct_addsub: None,
         }
     }
 
@@ -111,18 +108,14 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
         cpu: ModularChip<F, BLOCKS>,
         device_ctx: GpuDeviceCtx,
         opcode_base: usize,
-        pointer_max_bits: usize,
-        timestamp_max_bits: usize,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
+        let field_expr_replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
+            .expect("valid modular field-expression replay configuration");
         Self {
             cpu,
             device_ctx,
-            replay: Some(FieldExpressionReplayConfig {
-                opcode_base,
-                pointer_max_bits,
-                timestamp_max_bits,
-            }),
-            direct_addsub: None,
+            replay: Some(ModularReplay::FieldExpr(field_expr_replay)),
         }
     }
 
@@ -145,18 +138,20 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             opcode_base,
             pointer_max_bits,
             timestamp_max_bits,
-            range_checker,
+            range_checker.clone(),
         )
         .expect("valid modular add/sub replay configuration");
+        let replay = match direct_addsub {
+            Some(replay) => ModularReplay::AddSub(replay),
+            None => ModularReplay::FieldExpr(
+                FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
+                    .expect("valid modular field-expression replay configuration"),
+            ),
+        };
         Self {
             cpu,
             device_ctx,
-            replay: Some(FieldExpressionReplayConfig {
-                opcode_base,
-                pointer_max_bits,
-                timestamp_max_bits,
-            }),
-            direct_addsub,
+            replay: Some(replay),
         }
     }
 
@@ -168,34 +163,24 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
         replay_plan: &openvm_circuit::arch::rvr::cuda::GpuRvrReplayPlan,
     ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
     {
-        if let Some(direct) = &self.direct_addsub {
-            return direct.generate_proving_ctx(program, transcript, replay_plan);
-        }
-        let replay = self.replay.ok_or_else(|| {
+        let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
                 "Modular chip was constructed without checkpoint replay".to_string(),
             )
         })?;
-        let projection = crate::cuda::vec_heap::gather_vec_heap_trace_inputs::<2, BLOCKS>(
-            program,
-            transcript,
-            replay_plan,
-            replay.opcode_base,
-            &self.cpu.inner.local_opcode_idx,
-            replay.pointer_max_bits,
-            &self.device_ctx,
-        )?;
-        crate::cuda::vec_heap::generate_field_expression_ctx_from_projection(
-            &self.cpu,
-            projection,
-            replay.timestamp_max_bits,
-            &self.device_ctx,
-        )
+        match replay {
+            ModularReplay::FieldExpr(replay) => {
+                replay.generate_proving_ctx(&self.cpu, program, transcript, replay_plan)
+            }
+            ModularReplay::AddSub(replay) => {
+                replay.generate_proving_ctx(program, transcript, replay_plan)
+            }
+        }
     }
 
     #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn uses_direct_addsub_replay(&self) -> bool {
-        self.direct_addsub.is_some()
+        matches!(self.replay, Some(ModularReplay::AddSub(_)))
     }
 
     #[cfg(feature = "rvr")]
@@ -203,17 +188,21 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
         &self,
     ) -> Result<Vec<openvm_instructions::VmOpcode>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
     {
-        let replay = self.replay.ok_or_else(|| {
+        let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
                 "Modular chip was constructed without checkpoint replay".to_string(),
             )
         })?;
+        let opcode_base = match replay {
+            ModularReplay::FieldExpr(replay) => replay.opcode_base(),
+            ModularReplay::AddSub(replay) => replay.opcode_base(),
+        };
         Ok(self
             .cpu
             .inner
             .local_opcode_idx
             .iter()
-            .map(|&local| checked_replay_opcode(replay.opcode_base, local))
+            .map(|&local| checked_replay_opcode(opcode_base, local))
             .collect::<Result<Vec<_>, _>>()?)
     }
 }
@@ -434,8 +423,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     muldiv,
                     device_ctx.clone(),
                     start_offset,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridModularChip::new(muldiv, device_ctx.clone());
@@ -515,8 +503,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     muldiv,
                     device_ctx.clone(),
                     start_offset,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridModularChip::new(muldiv, device_ctx.clone());
@@ -569,7 +556,7 @@ pub struct HybridFp2Chip<F, const BLOCKS: usize> {
     cpu: Fp2Chip<F, BLOCKS>,
     device_ctx: GpuDeviceCtx,
     #[cfg(feature = "rvr")]
-    replay: Option<FieldExpressionReplayConfig>,
+    replay: Option<FieldExprReplayChip<2, BLOCKS>>,
 }
 
 impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
@@ -587,17 +574,14 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
         cpu: Fp2Chip<F, BLOCKS>,
         device_ctx: GpuDeviceCtx,
         opcode_base: usize,
-        pointer_max_bits: usize,
-        timestamp_max_bits: usize,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
+        let replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
+            .expect("valid Fp2 field-expression replay configuration");
         Self {
             cpu,
             device_ctx,
-            replay: Some(FieldExpressionReplayConfig {
-                opcode_base,
-                pointer_max_bits,
-                timestamp_max_bits,
-            }),
+            replay: Some(replay),
         }
     }
 
@@ -609,26 +593,12 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
         replay_plan: &openvm_circuit::arch::rvr::cuda::GpuRvrReplayPlan,
     ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
     {
-        let replay = self.replay.ok_or_else(|| {
+        let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
                 "Fp2 chip was constructed without checkpoint replay".to_string(),
             )
         })?;
-        let projection = crate::cuda::vec_heap::gather_vec_heap_trace_inputs::<2, BLOCKS>(
-            program,
-            transcript,
-            replay_plan,
-            replay.opcode_base,
-            &self.cpu.inner.local_opcode_idx,
-            replay.pointer_max_bits,
-            &self.device_ctx,
-        )?;
-        crate::cuda::vec_heap::generate_field_expression_ctx_from_projection(
-            &self.cpu,
-            projection,
-            replay.timestamp_max_bits,
-            &self.device_ctx,
-        )
+        replay.generate_proving_ctx(&self.cpu, program, transcript, replay_plan)
     }
 
     #[cfg(feature = "rvr")]
@@ -636,17 +606,15 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
         &self,
     ) -> Result<Vec<openvm_instructions::VmOpcode>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
     {
-        let replay = self.replay.ok_or_else(|| {
+        let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
                 "Fp2 chip was constructed without checkpoint replay".to_string(),
             )
         })?;
-        Ok(self
-            .cpu
-            .inner
-            .local_opcode_idx
+        Ok(replay
+            .local_opcodes()
             .iter()
-            .map(|&local| checked_replay_opcode(replay.opcode_base, local))
+            .map(|&local| checked_replay_opcode(replay.opcode_base(), local))
             .collect::<Result<Vec<_>, _>>()?)
     }
 }
@@ -1194,8 +1162,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     addsub,
                     device_ctx.clone(),
                     start_offset,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridFp2Chip::new(addsub, device_ctx.clone());
@@ -1213,8 +1180,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     muldiv,
                     device_ctx.clone(),
                     start_offset,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridFp2Chip::new(muldiv, device_ctx.clone());
@@ -1238,8 +1204,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     addsub,
                     device_ctx.clone(),
                     start_offset,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridFp2Chip::new(addsub, device_ctx.clone());
@@ -1257,8 +1222,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     muldiv,
                     device_ctx.clone(),
                     start_offset,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridFp2Chip::new(muldiv, device_ctx.clone());
@@ -1272,8 +1236,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
     }
 }
 
-/// This builder will do tracegen for the RV64IM extensions on GPU but the modular extensions on
-/// CPU.
+/// GPU builder for RV64IM and modular extensions.
 #[derive(Clone)]
 pub struct Rv64ModularHybridBuilder;
 
@@ -1312,8 +1275,7 @@ impl VmBuilder<E> for Rv64ModularHybridBuilder {
     }
 }
 
-/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and complex
-/// extensions on CPU.
+/// GPU builder for RV64IM, modular, and complex extensions.
 #[derive(Clone)]
 pub struct Rv64ModularWithFp2HybridBuilder;
 

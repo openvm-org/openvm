@@ -307,6 +307,30 @@ fn range_counts(checker: &VariableRangeCheckerChip) -> Vec<u32> {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
+fn gpu_range_counts(tester: &GpuChipTestBuilder) -> Vec<u32> {
+    tester
+        .range_checker()
+        .count
+        .to_host_on(&tester.range_checker().device_ctx)
+        .unwrap()
+        .into_iter()
+        // GPU lookup histograms store ordinary u32 counters in an F-sized buffer.
+        // SAFETY: BabyBear and u32 have the same representation size, as required by the GPU
+        // variable range checker.
+        .map(|count| unsafe { std::mem::transmute::<F, u32>(count) })
+        .collect()
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn assert_range_count_delta(before: &[u32], after: &[u32], expected: &[u32]) {
+    assert_eq!(before.len(), expected.len());
+    assert_eq!(after.len(), expected.len());
+    for ((before, after), expected) in before.iter().zip(after).zip(expected) {
+        assert_eq!(after - before, *expected);
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn combine_two_vec_heap_transcripts(
     first_instruction: Instruction<F>,
     mut first: RvrPreflightTranscript,
@@ -449,8 +473,7 @@ mod ec_addne_tests {
             gpu_cpu_chip,
             tester.range_checker().device_ctx.clone(),
             offset,
-            tester.address_bits(),
-            tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
         #[cfg(not(feature = "rvr"))]
         let hybrid_chip =
@@ -812,6 +835,7 @@ mod ec_addne_tests {
         let legacy_ctx = harness.gpu_chip.generate_proving_ctx(legacy_arena);
         let legacy_counts = range_counts(&cpu_range_checker);
         cpu_range_checker.clear();
+        let gpu_counts_before = gpu_range_counts(&tester);
 
         let (program, mut transcript) = make_vec_heap_transcript::<2, BLOCKS>(
             instruction,
@@ -855,10 +879,13 @@ mod ec_addne_tests {
                 .to_host_on(&device_ctx)
                 .unwrap()
         );
-        assert_eq!(legacy_counts, range_counts(&cpu_range_checker));
+        let replay_counts = gpu_range_counts(&tester);
+        assert_range_count_delta(&gpu_counts_before, &replay_counts, &legacy_counts);
+        assert!(range_counts(&cpu_range_checker)
+            .into_iter()
+            .all(|count| count == 0));
         drop(legacy_ctx);
 
-        let before_corruption = range_counts(&cpu_range_checker);
         let write_start = 3 + 2 * BLOCKS;
         transcript.memory_log[write_start].value[0] ^= 1;
         let (corrupt_transcript, corrupt_plan) = gpu_program
@@ -868,7 +895,7 @@ mod ec_addne_tests {
             .gpu_chip
             .generate_proving_ctx_from_rvr(&gpu_program, &corrupt_transcript, &corrupt_plan)
             .is_err());
-        assert_eq!(before_corruption, range_counts(&cpu_range_checker));
+        assert_eq!(replay_counts, gpu_range_counts(&tester));
 
         tester
             .build()
@@ -1299,8 +1326,7 @@ mod ec_double_tests {
             gpu_cpu_chip,
             tester.range_checker().device_ctx.clone(),
             offset,
-            tester.address_bits(),
-            tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
         #[cfg(not(feature = "rvr"))]
         let hybrid_chip =
@@ -1674,7 +1700,12 @@ mod ec_double_tests {
         let values = if is_setup {
             vec![modulus, a]
         } else {
-            vec![BigUint::from(1u8), BigUint::from(2u8)]
+            // Exercise device input reduction with the smallest noncanonical value and the
+            // largest value representable by the declared limb width.
+            let one = BigUint::from(1u8);
+            let max_value = (&one << (NUM_LIMBS * LIMB_BITS)) - &one;
+            assert_ne!(&max_value % &modulus, BigUint::zero());
+            vec![modulus + &one, max_value]
         };
         let input_bytes = encode_field_inputs(&values, NUM_LIMBS);
         let output_bytes =
@@ -1722,6 +1753,7 @@ mod ec_double_tests {
         let legacy_ctx = harness.gpu_chip.generate_proving_ctx(legacy_arena);
         let legacy_counts = range_counts(&cpu_range_checker);
         cpu_range_checker.clear();
+        let gpu_counts_before = gpu_range_counts(&tester);
 
         let (program, mut transcript) = make_vec_heap_transcript::<1, BLOCKS>(
             instruction,
@@ -1765,10 +1797,13 @@ mod ec_double_tests {
                 .to_host_on(&device_ctx)
                 .unwrap()
         );
-        assert_eq!(legacy_counts, range_counts(&cpu_range_checker));
+        let replay_counts = gpu_range_counts(&tester);
+        assert_range_count_delta(&gpu_counts_before, &replay_counts, &legacy_counts);
+        assert!(range_counts(&cpu_range_checker)
+            .into_iter()
+            .all(|count| count == 0));
         drop(legacy_ctx);
 
-        let before_corruption = range_counts(&cpu_range_checker);
         let write_start = 2 + BLOCKS;
         transcript.memory_log[write_start].value[0] ^= 1;
         let (corrupt_transcript, corrupt_plan) = gpu_program
@@ -1778,7 +1813,7 @@ mod ec_double_tests {
             .gpu_chip
             .generate_proving_ctx_from_rvr(&gpu_program, &corrupt_transcript, &corrupt_plan)
             .is_err());
-        assert_eq!(before_corruption, range_counts(&cpu_range_checker));
+        assert_eq!(replay_counts, gpu_range_counts(&tester));
 
         tester
             .build()

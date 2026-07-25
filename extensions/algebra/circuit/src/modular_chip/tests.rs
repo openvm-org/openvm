@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::{borrow::BorrowMut, str::FromStr};
 
 use num_bigint::BigUint;
-use num_traits::{One, Zero};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use num_traits::One;
+use num_traits::Zero;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
@@ -770,8 +772,7 @@ mod muldiv_tests {
             replay_cpu_chip,
             tester.range_checker().device_ctx.clone(),
             offset,
-            tester.address_bits(),
-            tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
         #[cfg(not(feature = "rvr"))]
         let hybrid_chip =

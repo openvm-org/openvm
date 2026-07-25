@@ -132,6 +132,7 @@ pub mod phantom {
     }
 }
 
+#[cfg(feature = "rvr")]
 pub mod rvr_postflight {
     use super::*;
 
@@ -482,6 +483,7 @@ pub mod rvr_postflight {
     }
 }
 
+#[cfg(feature = "rvr")]
 pub mod rvr_checkpoint_replay {
     use super::*;
     use crate::arch::rvr::cuda::{RvrCheckpointEventCount, RvrCheckpointOpcodeBases};
