@@ -375,6 +375,138 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
 }
 
 #[test]
+fn int256_checkpoint_replay_rejects_wrapping_transitions() {
+    let instructions = [
+        Instruction::<F>::from_usize(
+            Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+            [
+                reg(2),
+                reg(3),
+                8,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        ),
+        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let mut init_memory = SparseMemoryImage::default();
+    for (register, pointer) in [(2, LHS_PTR), (3, RHS_PTR)] {
+        init_memory.extend(
+            u64::from(pointer)
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)),
+        );
+    }
+    init_memory.extend(
+        [0u8; 32]
+            .into_iter()
+            .enumerate()
+            .map(|(offset, byte)| ((RV64_MEMORY_AS, LHS_PTR + offset as u32), byte)),
+    );
+    init_memory.extend(
+        std::iter::once(1u8)
+            .chain([0u8; 31])
+            .enumerate()
+            .map(|(offset, byte)| ((RV64_MEMORY_AS, RHS_PTR + offset as u32), byte)),
+    );
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let config = Int256Rv64Config {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+    let initial_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut source_vm, _) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = source_vm.commit_program_on_device(&program);
+    source_vm.load_program(cached_program);
+    source_vm.transport_init_memory_to_device(&initial_state.memory);
+    let execution = checkpoint
+        .execute_from_state_for(initial_state, RvrCheckpointPreflightLimits::new(1, 1, 1))
+        .unwrap();
+    assert_eq!(execution.transcript.residuals.len(), 1);
+    assert_eq!(
+        execution.endpoint,
+        RvrPreflightEndpoint::Suspended {
+            resume_pc: 4,
+            final_timestamp: 11,
+        }
+    );
+    let gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+        &program,
+        &config.system.memory_config,
+        &source_vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (transcript, replay_plan) = Int256RvrGpuTracegen::expand_checkpoint_replay(
+        &source_vm,
+        &gpu_program,
+        &execution,
+        execution.retired,
+    )
+    .unwrap();
+    let host_transcript = RvrPreflightTranscript {
+        program_log: transcript.program_log_host().unwrap(),
+        memory_log: transcript.memory_log_host().unwrap(),
+        initial_write_log: transcript.initial_write_log_host().unwrap(),
+    };
+    drop(replay_plan);
+    drop(transcript);
+
+    for corrupt_timestamp in [true, false] {
+        let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        let (mut vm, _) = VirtualMachine::new_with_keygen(
+            test_gpu_engine(),
+            Int256Rv64GpuBuilder,
+            config.clone(),
+        )
+        .unwrap();
+        let cached_program = vm.commit_program_on_device(&program);
+        vm.load_program(cached_program);
+        vm.transport_init_memory_to_device(&state.memory);
+        let gpu_program = Int256RvrGpuTracegen::upload_checkpoint_program(
+            &program,
+            &config.system.memory_config,
+            &vm.engine.device().device_ctx,
+        )
+        .unwrap();
+        let (mut transcript, replay_plan) = gpu_program
+            .upload_transcript(&host_transcript, execution.endpoint)
+            .unwrap();
+        let mut program_log = host_transcript.program_log.clone();
+        if corrupt_timestamp {
+            // Int256 branch rows consume 10 timed events. This pair would pass a
+            // wrapping addition check while violating the u32 timestamp domain.
+            program_log[0].timestamp = u32::MAX - 9;
+            program_log[1].timestamp = 0;
+        } else {
+            // A sequential +4 from this PC wraps to zero.
+            program_log[0].pc = u32::MAX - 3;
+            program_log[1].pc = 0;
+        }
+        transcript
+            .replace_program_log_for_test(&program_log)
+            .unwrap();
+        let error = Int256RvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
+            .generate_proving_ctx(&mut vm)
+            .err()
+            .expect("Int256 GPU replay must reject a wrapping transition");
+        let expected_code = if corrupt_timestamp { 401 } else { 402 };
+        assert!(
+            error.to_string().contains(&format!("code {expected_code}")),
+            "{error}"
+        );
+    }
+}
+
+#[test]
 fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
     for (equal, expected_pc, expected_branch_residual) in [(false, 12, 0u64), (true, 16, 1u64)] {
         let (program, exe) = fixture(equal);

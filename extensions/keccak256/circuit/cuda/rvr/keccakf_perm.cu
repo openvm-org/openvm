@@ -88,14 +88,15 @@ __global__ void keccakf_perm_replay_phase2(
 
     if (perm_idx < num_records && round_idx == NUM_ROUNDS - 1) {
         auto const &step = steps[step_start + perm_idx];
-        if (step.program_index + 1 >= program.len()) {
+        size_t program_index = step.program_index;
+        if (program_index >= program.len() || program.len() - program_index <= 1) {
             preflight_set_error(error, KECCAKF_PERM_REPLAY_ERROR);
             KECCAKF_PERM_WRITE(inner._export, 0);
             KECCAKF_PERM_WRITE(timestamp, 0);
             return;
         }
         KECCAKF_PERM_WRITE(inner._export, 1);
-        KECCAKF_PERM_WRITE(timestamp, program[step.program_index].timestamp);
+        KECCAKF_PERM_WRITE(timestamp, program[program_index].timestamp);
     } else {
         KECCAKF_PERM_WRITE(inner._export, 0);
         KECCAKF_PERM_WRITE(timestamp, 0);

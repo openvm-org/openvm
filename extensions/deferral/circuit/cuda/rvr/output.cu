@@ -82,12 +82,13 @@ static __device__ bool deferral_output_resolve_step(
         return false;
     }
     auto const step = steps[step_idx];
-    if (step.program_index + 1 >= program.len()) {
+    size_t program_index = step.program_index;
+    if (program_index >= program.len() || program.len() - program_index <= 1) {
         preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
         return false;
     }
-    auto const from = program[step.program_index];
-    auto const to = program[step.program_index + 1];
+    auto const from = program[program_index];
+    auto const to = program[program_index + 1];
     if (from.pc < pc_base ||
         (from.pc - pc_base) % ::program::DEFAULT_PC_STEP != 0) {
         preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
@@ -118,6 +119,7 @@ static __device__ bool deferral_output_resolve_step(
     uint32_t len = deferral_output_replay_u32(len_event.value);
     uint32_t words = len / MEMORY_BLOCK_BYTES;
     if (len % DIGEST_SIZE != 0 || from.timestamp > UINT32_MAX - 7u - words ||
+        from.pc > UINT32_MAX - ::program::DEFAULT_PC_STEP ||
         to.timestamp != from.timestamp + 7u + words ||
         to.pc != from.pc + ::program::DEFAULT_PC_STEP ||
         memory.len() - step.memory_start < 7u + words) {
