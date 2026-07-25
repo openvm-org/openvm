@@ -39,7 +39,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use crate::{
     canonicity::CanonicityTraceGen,
     count::DeferralCircuitCountChip,
-    output::DeferralOutputCols,
+    output::{checked_deferral_index, DeferralOutputCols},
     poseidon2::DeferralPoseidon2Chip,
     utils::{
         byte_memory_op_chunk, f_commit_to_bytes, join_byte_memory_ops, split_output,
@@ -176,6 +176,8 @@ where
         let rd_ptr = a.as_canonical_u32();
         let rs_ptr = b.as_canonical_u32();
         let deferral_idx = c.as_canonical_u32();
+        let deferral_state_idx =
+            checked_deferral_index(*state.pc, state.streams.deferrals.len(), deferral_idx)?;
 
         // Do a non-tracing read to get the output_len and compute num_rows
         let read_ptr = read_rv64_register_as_u32(state.memory.data(), rs_ptr);
@@ -235,7 +237,7 @@ where
         }
 
         let output_raw =
-            state.streams.deferrals[deferral_idx as usize].get_output(&output_commit.to_vec());
+            state.streams.deferrals[deferral_state_idx].get_output(&output_commit.to_vec());
         debug_assert_eq!(output_raw.len(), output_len_val);
 
         for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {

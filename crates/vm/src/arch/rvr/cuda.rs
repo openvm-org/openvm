@@ -1947,6 +1947,12 @@ impl GpuRvrTranscript {
 
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
+    pub fn initial_write_log_host(&self) -> Result<Vec<PreflightInitialWrite>, MemCopyError> {
+        self.initial_write_log.to_host_on(&self.device_ctx)
+    }
+
+    #[cfg(feature = "test-utils")]
+    #[doc(hidden)]
     pub fn field_values_host(&self) -> Result<Vec<RvrFieldBlock>, MemCopyError> {
         self.field_values.to_host_on(&self.device_ctx)
     }

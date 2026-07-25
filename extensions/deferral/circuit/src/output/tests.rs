@@ -5,8 +5,8 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
-    MEMORY_BLOCK_BYTES,
+    to_byte_ptr_bits, Arena, ExecutionError, MatrixRecordArena, MemoryConfig, PreflightExecutor,
+    VmStateMut, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -347,6 +347,51 @@ fn rand_deferral_output_test() {
         .finalize()
         .simple_test()
         .expect("Verification failed");
+}
+
+#[test]
+fn deferral_output_rejects_invalid_deferral_index_without_mutation() {
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let CpuHarnessBundle { mut harness, .. } = create_cpu_harness(&tester, NUM_DEFERRALS);
+    init_streams(&mut tester, NUM_DEFERRALS);
+
+    let initial_pc = 17;
+    let initial_timestamp = tester.memory.memory.timestamp();
+    let initial_trace_offset = harness.arena.trace_offset;
+    let mut pc = initial_pc;
+    let state = VmStateMut::new(
+        &mut pc,
+        &mut tester.memory.memory,
+        &mut tester.streams,
+        &mut tester.rng,
+        &mut harness.arena,
+    );
+    let instruction: Instruction<F> = Instruction::from_usize(
+        DeferralOpcode::OUTPUT.global_opcode(),
+        [
+            0,
+            0,
+            NUM_DEFERRALS,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    );
+
+    let error = harness
+        .executor
+        .execute(state, &instruction)
+        .expect_err("invalid deferral index must return an execution error");
+
+    assert!(matches!(
+        error,
+        ExecutionError::Fail {
+            pc: 17,
+            msg: "deferral index is out of bounds"
+        }
+    ));
+    assert_eq!(pc, initial_pc);
+    assert_eq!(tester.memory.memory.timestamp(), initial_timestamp);
+    assert_eq!(harness.arena.trace_offset, initial_trace_offset);
 }
 
 /// Regression test that the filler clears the canonicity aux columns
