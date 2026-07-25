@@ -1,6 +1,9 @@
 #![no_std]
 
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+use core::{cmp::min, mem::MaybeUninit};
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use openvm_platform::alloc::AlignedBuf;
 
 pub const OPCODE: u8 = 0x0b;
@@ -37,39 +40,82 @@ pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: us
         return;
     }
     unsafe {
-        let buffer_aligned = buffer as usize % MIN_ALIGN == 0;
-        let input_aligned = input as usize % MIN_ALIGN == 0;
-        let len_aligned = len % MIN_ALIGN == 0;
-        let all_aligned = buffer_aligned && input_aligned && len_aligned;
-
-        if all_aligned {
+        if (buffer as usize).is_multiple_of(MIN_ALIGN)
+            && (input as usize).is_multiple_of(MIN_ALIGN)
+            && len.is_multiple_of(MIN_ALIGN)
+        {
             __native_xorin(buffer, input, len);
         } else {
-            let adjusted_len = len.next_multiple_of(MIN_ALIGN);
-            let aligned_buffer;
-            let aligned_input;
+            xorin_unaligned(buffer, input, len);
+        }
+    }
+}
 
-            let actual_buffer = if buffer_aligned && len_aligned {
-                buffer
+/// XOR `len` bytes from `input` into `buffer` when the operands do not satisfy the XORIN
+/// instruction's requirements (both pointers 8-byte aligned, `len` a multiple of 8).
+///
+/// The instruction absorbs whole aligned words only, so the bytes before `buffer` reaches
+/// alignment and the bytes past its last whole word are XORed in software instead. A
+/// misaligned `input` cannot be fixed up in place and is staged in an aligned buffer, but
+/// only for the part the instruction handles.
+///
+/// Neither pointer is accessed outside `[0, len)`, so this holds to the same contract as the
+/// aligned path.
+///
+/// # Safety
+///
+/// Same as [`native_xorin`]: `buffer` and `input` must be valid for `len` bytes, and `len`
+/// must not exceed [`KECCAK_RATE`].
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[cold]
+#[inline(never)]
+unsafe fn xorin_unaligned(buffer: *mut u8, input: *const u8, len: usize) {
+    /// Staging buffer for a misaligned `input`, sized for the largest absorb.
+    #[repr(align(8))]
+    struct AlignedRate(MaybeUninit<[u8; KECCAK_RATE]>);
+
+    unsafe {
+        // Bring `buffer` up to alignment one byte at a time.
+        let misalignment = buffer as usize % MIN_ALIGN;
+        let lead = if misalignment == 0 {
+            0
+        } else {
+            min(MIN_ALIGN - misalignment, len)
+        };
+        xorin_bytes(buffer, input, lead);
+
+        // Absorb the whole aligned words that remain.
+        let bulk = (len - lead) & !(MIN_ALIGN - 1);
+        if bulk != 0 {
+            let bulk_buffer = buffer.add(lead);
+            let bulk_input = input.add(lead);
+            if (bulk_input as usize).is_multiple_of(MIN_ALIGN) {
+                __native_xorin(bulk_buffer, bulk_input, bulk);
             } else {
-                aligned_buffer = AlignedBuf::uninit(adjusted_len, MIN_ALIGN);
-                core::ptr::copy_nonoverlapping(buffer, aligned_buffer.ptr, len);
-                aligned_buffer.ptr
-            };
-
-            let actual_input = if input_aligned && len_aligned {
-                input
-            } else {
-                aligned_input = AlignedBuf::uninit(adjusted_len, MIN_ALIGN);
-                core::ptr::copy_nonoverlapping(input, aligned_input.ptr, len);
-                aligned_input.ptr
-            };
-
-            __native_xorin(actual_buffer, actual_input, adjusted_len);
-
-            if !buffer_aligned || !len_aligned {
-                core::ptr::copy_nonoverlapping(actual_buffer as *const u8, buffer, len);
+                let mut staged = AlignedRate(MaybeUninit::uninit());
+                let staged_input = staged.0.as_mut_ptr() as *mut u8;
+                core::ptr::copy_nonoverlapping(bulk_input, staged_input, bulk);
+                __native_xorin(bulk_buffer, staged_input, bulk);
             }
+        }
+
+        // XOR the trailing partial word in software.
+        let absorbed = lead + bulk;
+        xorin_bytes(buffer.add(absorbed), input.add(absorbed), len - absorbed);
+    }
+}
+
+/// XOR `len` bytes from `input` into `buffer` without using the XORIN instruction.
+///
+/// # Safety
+///
+/// `buffer` and `input` must be valid for `len` bytes.
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[inline(always)]
+unsafe fn xorin_bytes(buffer: *mut u8, input: *const u8, len: usize) {
+    unsafe {
+        for i in 0..len {
+            *buffer.add(i) ^= *input.add(i);
         }
     }
 }
@@ -83,7 +129,7 @@ pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: us
 #[no_mangle]
 pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
     unsafe {
-        if buffer as usize % MIN_ALIGN == 0 {
+        if (buffer as usize).is_multiple_of(MIN_ALIGN) {
             __native_keccakf(buffer);
         } else {
             let aligned_buffer = AlignedBuf::new(buffer, KECCAK_WIDTH_BYTES, MIN_ALIGN);
