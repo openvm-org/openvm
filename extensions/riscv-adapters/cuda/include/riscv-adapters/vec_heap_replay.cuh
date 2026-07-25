@@ -82,8 +82,6 @@ __global__ void vec_heap_replay_gather(
 ) {
     size_t index = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (index >= num_steps) return;
-    auto &out = output[output_start + index];
-    out = {};
 
     if (step_start > steps.len() || index >= steps.len() - step_start ||
         predecessors.len() != memory.len()) {
@@ -124,9 +122,8 @@ __global__ void vec_heap_replay_gather(
         return;
     }
 
-    // A rejected row must contribute nothing to the projection buffer: every
-    // field accumulates in a local and `out` keeps its zeroed store until all
-    // replay checks below have passed.
+    // A rejected row must not mutate the projection buffer. Accumulate every
+    // field locally and publish it only after all replay checks have passed.
     VecHeapTraceInput<NUM_READS, BLOCKS> input = {};
     input.from_pc = from.pc;
     input.from_timestamp = from.timestamp;
@@ -256,5 +253,5 @@ __global__ void vec_heap_replay_gather(
         preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
         return;
     }
-    out = input;
+    output[output_start + index] = input;
 }

@@ -2,6 +2,7 @@
 #include "arch/rvr/preflight.cuh"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
+#include "system/memory/touched_block.cuh"
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
@@ -44,15 +45,8 @@ struct RvrMemoryAddressSpace {
     uint32_t padding;
 };
 
-struct RvrTouchedBlock {
-    uint32_t address_space;
-    uint32_t pointer;
-    uint32_t timestamp;
-    uint32_t values[4];
-};
-
 static_assert(sizeof(RvrMemoryAddressSpace) == 16);
-static_assert(sizeof(RvrTouchedBlock) == 7 * sizeof(uint32_t));
+using RvrTouchedBlock = MemoryTouchedBlock;
 
 struct ByteQuad {
     uint32_t bytes;
@@ -60,6 +54,7 @@ struct ByteQuad {
 };
 
 static_assert(sizeof(ByteQuad) == sizeof(uint64_t));
+static constexpr uint32_t BYTE_QUAD_DIRTY = 1u << 31;
 
 struct BlockKeyEqual {
     __host__ __device__ __forceinline__ bool operator()(uint64_t lhs, uint64_t rhs) const {
@@ -81,6 +76,12 @@ struct LastWriteWins {
         }
         result.valid |= current.valid;
         return result;
+    }
+};
+
+struct AnyWrite {
+    __host__ __device__ __forceinline__ uint32_t operator()(uint32_t lhs, uint32_t rhs) const {
+        return lhs | rhs;
     }
 };
 
@@ -464,9 +465,10 @@ __global__ void scatter_chronology_metadata(
         }
         auto &record = touched[touched_index];
         record.address_space = preflight_address_space(event);
-        record.pointer = event.pointer;
+        record.ptr = event.pointer;
+        record.is_dirty = 0;
         record.timestamp = event.timestamp;
-        record.values[0] = ordinal;
+        record.values[0] = static_cast<uint32_t>(pos);
         record.values[1] = 0;
         record.values[2] = 0;
         record.values[3] = 0;
@@ -540,6 +542,9 @@ __global__ void prepare_byte_quads(
             quad.valid |= bit;
         }
     }
+    if (write_masks[ordinal] != 0) {
+        quad.valid |= BYTE_QUAD_DIRTY;
+    }
     quads[sorted_pos] = quad;
 }
 
@@ -592,6 +597,8 @@ __global__ void finalize_chronology_touched(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<RvrFieldBlock> field_values,
+    uint64_t const *sorted_keys,
+    ByteQuad const *quads,
     RvrTouchedBlock *touched,
     size_t num_touched,
     uint32_t *error
@@ -599,11 +606,23 @@ __global__ void finalize_chronology_touched(
     size_t index = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (index >= num_touched) return;
     auto &record = touched[index];
-    uint32_t ordinal = record.values[0];
+    uint32_t sorted_pos = record.values[0];
+    if (sorted_pos >= memory.len()) {
+        preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
+        return;
+    }
+    uint32_t key = uint32_t(sorted_keys[sorted_pos] >> 32);
+    if (sorted_pos + 1 < memory.len() &&
+        uint32_t(sorted_keys[sorted_pos + 1] >> 32) == key) {
+        preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
+        return;
+    }
+    uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
     if (ordinal >= memory.len()) {
         preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
         return;
     }
+    record.is_dirty = uint32_t((quads[sorted_pos].valid & BYTE_QUAD_DIRTY) != 0);
     auto const &event = memory[ordinal];
     auto const &config = address_spaces[preflight_address_space(event)];
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
@@ -698,6 +717,25 @@ __global__ void mark_final_events(
     flags[sorted_pos] = is_event && is_group_tail;
 }
 
+__global__ void mark_group_dirtiness(
+    DeviceBufferConstView<PreflightMemoryEvent> memory,
+    size_t num_seeds,
+    uint64_t const *sorted_keys,
+    size_t num_entries,
+    uint32_t *dirty
+) {
+    size_t sorted_pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
+    if (sorted_pos >= num_entries) return;
+    uint32_t ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos]);
+    if (ordinal < num_seeds) {
+        dirty[sorted_pos] = 0;
+        return;
+    }
+    size_t event_index = ordinal - num_seeds;
+    dirty[sorted_pos] =
+        event_index < memory.len() && preflight_is_write(memory[event_index]);
+}
+
 __global__ void scatter_final_events(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     size_t num_seeds,
@@ -711,12 +749,16 @@ __global__ void scatter_final_events(
 ) {
     size_t sorted_pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (sorted_pos >= num_entries) return;
-    if (sorted_pos + 1 == num_entries) {
-        *num_out = positions[sorted_pos] + flags[sorted_pos];
-    }
-    if (flags[sorted_pos] == 0) return;
-
+    uint32_t block_key = static_cast<uint32_t>(sorted_keys[sorted_pos] >> 32);
+    bool is_group_tail =
+        sorted_pos + 1 == num_entries ||
+        block_key != static_cast<uint32_t>(sorted_keys[sorted_pos + 1] >> 32);
     uint32_t ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos]);
+    if (sorted_pos + 1 == num_entries) {
+        *num_out = positions[sorted_pos] + uint32_t(is_group_tail && ordinal >= num_seeds);
+    }
+    if (!is_group_tail) return;
+
     if (ordinal < num_seeds) {
         preflight_set_error(error, ERROR_SORT_ORDER);
         return;
@@ -729,7 +771,8 @@ __global__ void scatter_final_events(
     auto const &event = memory[event_index];
     auto &record = out[positions[sorted_pos]];
     record.address_space = preflight_address_space(event);
-    record.pointer = event.pointer;
+    record.ptr = event.pointer;
+    record.is_dirty = uint32_t(flags[sorted_pos] != 0);
     record.timestamp = event.timestamp;
     #pragma unroll
     for (size_t i = 0; i < 4; ++i) {
@@ -812,6 +855,7 @@ extern "C" int _rvr_memory_index_get_temp_bytes(
 ) {
     size_t sort_temp_bytes = 0;
     size_t scan_temp_bytes = 0;
+    size_t dirty_temp_bytes = 0;
     if (num_entries != 0) {
         cub::DeviceRadixSort::SortKeys(
             nullptr,
@@ -831,8 +875,20 @@ extern "C" int _rvr_memory_index_get_temp_bytes(
             num_entries,
             stream
         );
+        cub::DeviceScan::InclusiveScanByKey(
+            nullptr,
+            dirty_temp_bytes,
+            static_cast<uint64_t *>(nullptr),
+            static_cast<uint32_t *>(nullptr),
+            static_cast<uint32_t *>(nullptr),
+            AnyWrite{},
+            num_entries,
+            BlockKeyEqual{},
+            stream
+        );
     }
     *h_temp_bytes_out = sort_temp_bytes > scan_temp_bytes ? sort_temp_bytes : scan_temp_bytes;
+    if (dirty_temp_bytes > *h_temp_bytes_out) *h_temp_bytes_out = dirty_temp_bytes;
     return CHECK_KERNEL();
 }
 
@@ -920,6 +976,24 @@ extern "C" int _rvr_memory_index_scatter(
             touched_flags,
             touched_positions,
             num_entries,
+            stream
+        );
+        err != cudaSuccess) {
+        return err;
+    }
+    mark_group_dirtiness<<<grid, block, 0, stream>>>(
+        memory, num_seeds, sorted_keys, num_entries, touched_flags
+    );
+    if (int err = CHECK_KERNEL(); err) return err;
+    if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
+            temp_storage,
+            temp_storage_bytes,
+            sorted_keys,
+            touched_flags,
+            touched_flags,
+            AnyWrite{},
+            num_entries,
+            BlockKeyEqual{},
             stream
         );
         err != cudaSuccess) {
@@ -1222,6 +1296,8 @@ extern "C" int _rvr_memory_chronology_resolve(
             DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
             address_spaces,
             DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+            sorted_keys,
+            quads,
             touched.ptr,
             touched.len(),
             error

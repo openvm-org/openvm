@@ -81,8 +81,7 @@ checkpoint_preflight_mark_dirty_page(uint64_t* restrict dirty_pages,
                                      uint64_t dirty_page_words,
                                      uint64_t page) {
   uint64_t word = page >> 6;
-  assert(dirty_pages != NULL && word < dirty_page_words);
-  assume(dirty_pages != NULL && word < dirty_page_words);
+  debug_assume(dirty_pages != NULL && word < dirty_page_words);
   dirty_pages[word] |= 1ull << (page & 63ull);
 }
 

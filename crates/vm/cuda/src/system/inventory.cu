@@ -2,6 +2,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "system/memory/params.cuh"
+#include "system/memory/touched_block.cuh"
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -27,7 +28,7 @@ template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
 // Input records are one memory-bus message (`BLOCK_FE_WIDTH` cells, one
 // timestamp). The merge kernel groups `BLOCKS_PER_LEAF` of them per merkle
 // leaf (= `DIGEST_WIDTH` cells, `BLOCKS_PER_LEAF` timestamps).
-using InRec = MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>;
+using InRec = MemoryTouchedBlock;
 using OutRec = MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>;
 inline constexpr uint32_t ADDRESS_SPACE_OFFSET = 1;
 
@@ -134,7 +135,7 @@ __global__ void cukernel_build_candidates(
     OutRec rec{};
     rec.address_space = in[row_idx].address_space;
     rec.ptr = (in[row_idx].ptr / DIGEST_WIDTH) * DIGEST_WIDTH;
-    rec.is_dirty = in[row_idx].is_dirty;
+    rec.is_dirty = uint32_t(in[row_idx].is_dirty != 0);
     #pragma unroll
     for (size_t i = 0; i < BLOCKS_PER_LEAF; ++i) {
         rec.timestamps[i] = 0;
@@ -149,7 +150,7 @@ __global__ void cukernel_build_candidates(
     for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
         rec.values[block_idx * BLOCK_FE_WIDTH + i] = in[row_idx].values[i];
     }
-    rec.timestamps[block_idx] = in[row_idx].timestamps[0];
+    rec.timestamps[block_idx] = in[row_idx].timestamp;
 
     // If two input records fall in the same chunk, overwrite the second block too
     if (row_idx + 1 < in_num_records && same_output_block(in, row_idx, row_idx + 1)) {
@@ -158,8 +159,8 @@ __global__ void cukernel_build_candidates(
         for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
             rec.values[block_idx2 * BLOCK_FE_WIDTH + i] = in[row_idx + 1].values[i];
         }
-        rec.timestamps[block_idx2] = in[row_idx + 1].timestamps[0];
-        rec.is_dirty |= in[row_idx + 1].is_dirty;
+        rec.timestamps[block_idx2] = in[row_idx + 1].timestamp;
+        rec.is_dirty |= uint32_t(in[row_idx + 1].is_dirty != 0);
     }
 
     tmp_out[row_idx] = rec;
@@ -184,7 +185,7 @@ __global__ void cukernel_mark_dirty_leaves(
         return;
     }
     bool const present = idx < metadata->out_num_records;
-    flags[idx] = present ? out[idx].is_dirty : 0;
+    flags[idx] = uint32_t(present && out[idx].is_dirty != 0);
     if (present) {
         leaf_indices[idx] = leaf_index(out[idx], address_height);
     }
@@ -280,15 +281,15 @@ extern "C" int _inventory_merge_records(
         return err;
     }
 
-    cub::DeviceScan::ExclusiveSum(
-        d_temp_storage,
-        temp_storage_bytes,
-        d_flags,
-        d_positions,
-        in_num_records,
-        stream
-    );
-    if (int err = CHECK_KERNEL(); err) {
+    if (cudaError_t err = cub::DeviceScan::ExclusiveSum(
+            d_temp_storage,
+            temp_storage_bytes,
+            d_flags,
+            d_positions,
+            in_num_records,
+            stream
+        );
+        err != cudaSuccess) {
         return err;
     }
 
@@ -318,15 +319,15 @@ extern "C" int _inventory_merge_records(
     if (int err = CHECK_KERNEL(); err) {
         return err;
     }
-    cub::DeviceScan::ExclusiveSum(
-        d_temp_storage,
-        temp_storage_bytes,
-        d_flags,
-        d_positions,
-        in_num_records,
-        stream
-    );
-    if (int err = CHECK_KERNEL(); err) {
+    if (cudaError_t err = cub::DeviceScan::ExclusiveSum(
+            d_temp_storage,
+            temp_storage_bytes,
+            d_flags,
+            d_positions,
+            in_num_records,
+            stream
+        );
+        err != cudaSuccess) {
         return err;
     }
     cukernel_scatter_dirty_leaves<<<grid, block, 0, stream>>>(
@@ -388,7 +389,7 @@ __global__ void inventory_to_merkle_records_kernel(
         uint32_t *dst = merkle_records + i * MERKLE_REC_WIDTH;
         dst[0] = r.address_space;
         dst[1] = r.ptr;
-        dst[2] = r.is_dirty;
+        dst[2] = uint32_t(r.is_dirty != 0);
 #pragma unroll
         for (int j = 0; j < DIGEST_WIDTH; ++j) {
             dst[3 + j] = r.values[j];
