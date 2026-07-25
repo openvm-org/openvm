@@ -1592,9 +1592,19 @@ where
             // `transcript` and `replay_plan`. Synchronize the common stream even
             // when trace generation failed, so this safe API never returns while
             // those owners are still in use.
-            let replay_sync = transcript
-                .synchronize()
-                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
+            let replay_sync = transcript.synchronize();
+            if replay_sync.is_ok() {
+                // The boundary trace kernel has completed on this stream. Its
+                // merged input records are not part of the proving context;
+                // the trace and Poseidon2 outputs own separate buffers.
+                self.chip_complex
+                    .system
+                    .memory_inventory
+                    .boundary
+                    .release_records();
+            }
+            let replay_sync =
+                replay_sync.map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
             let ctx = ctx?;
             replay_sync?;
             let replay_error = transcript

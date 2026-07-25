@@ -83,6 +83,11 @@ impl BoundaryChipGPU {
             .as_ref()
             .expect("Finalize records to get buffer")
     }
+
+    /// Releases tracegen-only inputs after their stream has synchronized.
+    pub(crate) fn release_records(&mut self) {
+        self.records = None;
+    }
 }
 
 impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
