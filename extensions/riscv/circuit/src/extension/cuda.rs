@@ -6,11 +6,7 @@ use openvm_circuit::{
     },
     system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
-    var_range::VariableRangeCheckerChipGPU,
-};
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
@@ -28,7 +24,10 @@ use {
     openvm_circuit::system::cuda::{
         phantom::PhantomChipGPU, poseidon2::Poseidon2PeripheryChipGPU, SystemChipInventoryGPU,
     },
-    openvm_circuit_primitives::{AnyChip, Chip},
+    openvm_circuit_primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+        AnyChip, Chip,
+    },
     openvm_cuda_backend::base::DeviceMatrix,
     openvm_instructions::{LocalOpcode, SystemOpcode},
     openvm_riscv_transpiler::{

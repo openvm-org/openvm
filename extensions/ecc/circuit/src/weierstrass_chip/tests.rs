@@ -29,7 +29,6 @@ use {
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
-    openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -37,6 +36,7 @@ use {
     openvm_circuit::arch::rvr::{
         cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
     },
+    openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
         arch::{DenseRecordArena, VirtualMachine, VmExecutor},
         utils::{test_gpu_engine, test_system_config},

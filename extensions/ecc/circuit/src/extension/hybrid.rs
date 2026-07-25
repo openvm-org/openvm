@@ -46,10 +46,12 @@ use {
     strum::EnumCount,
 };
 
+#[cfg(feature = "rvr")]
+use crate::CurveConfig;
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, CurveConfig, EccRecord, Rv64WeierstrassConfig,
-    WeierstrassAir, WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48,
-    NUM_LIMBS_32, NUM_LIMBS_48,
+    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
+    WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
+    NUM_LIMBS_48,
 };
 
 #[cfg(feature = "rvr")]

@@ -1,5 +1,6 @@
 #include "riscv/replay.cuh"
 
+constexpr uint32_t LUI_IMM_BITS = 32 - RV_IS_TYPE_IMM_BITS;
 
 __global__ void jal_lui_replay_tracegen(
     Fp *trace,
