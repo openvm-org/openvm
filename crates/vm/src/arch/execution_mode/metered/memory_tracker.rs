@@ -26,10 +26,8 @@ pub struct PageTouch {
     pub _padding: u32,
     /// Leaves touched in this page, with one bit per leaf.
     pub leaf_mask: u64,
-    /// Leaves *written* in this page (`dirty_mask & !leaf_mask == 0`). Written leaves
-    /// are exactly the leaves tracegen commits final state for (dirtiness is per write,
-    /// independent of the written content), costing final-direction Merkle rows and
-    /// Poseidon2 compressions; read-only leaves do not.
+    /// Leaves written in this page (`dirty_mask & !leaf_mask == 0`). A write adds
+    /// final-direction Merkle rows and Poseidon2 compressions, regardless of the written value.
     pub dirty_mask: u64,
 }
 
@@ -436,9 +434,8 @@ impl SegmentMemoryTracker {
         count
     }
 
-    /// Leaf/node counting without baseline bookkeeping. Used for the dirty
-    /// (written-leaf) mirror: dirtiness has no first-touch/default-hash concept (those
-    /// are initial-side notions), only the size of the spanning tree matters.
+    /// Counts written leaves and their tree nodes. The baseline only affects initial-state rows,
+    /// so written leaves need only the size of their spanning tree.
     #[inline(always)]
     pub(super) fn insert_counting(&mut self, page_id: usize, leaf_mask: u64) -> (u32, u32) {
         debug_assert!(page_id < self.segment_leaf_masks.len());

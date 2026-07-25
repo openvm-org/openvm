@@ -41,9 +41,8 @@ pub struct MemoryCtx {
     memory_dimensions: MemoryDimensions,
     /// Memory leaves and nodes already counted in the current segment.
     segment_memory: SegmentMemoryTracker,
-    /// Written (dirty) leaves and nodes already counted in the current segment. Dirty
-    /// entities cost final-direction Merkle rows and Poseidon2 compressions; read-only
-    /// ones do not. Dirtiness is per write, matching tracegen's definition exactly.
+    /// Written leaves and their tree nodes already counted in the current segment. A write adds
+    /// final-direction Merkle rows and Poseidon2 compressions, regardless of the written value.
     segment_dirty: SegmentMemoryTracker,
     /// Memory leaves and nodes present in the baseline at the last checkpoint.
     baseline_memory: BaselineMemoryTracker,
@@ -348,8 +347,8 @@ impl MemoryCtx {
     /// - BOUNDARY_AIR: `segment_leaves` rows (one per touched leaf)
     /// - MERKLE_AIR:   `segment_merkle_nodes + dirty_merkle_nodes` rows (an initial row per touched
     ///   node, a final row per written-below node)
-    /// - Poseidon2:    hashes at the end of the segment (dirty entities only) plus hashes at its
-    ///   start (all touched entities)
+    /// - Poseidon2:    end-of-segment hashes for written leaves and nodes, plus start-of-segment
+    ///   hashes for all touched leaves and nodes
     ///
     /// A leaf or node absent at the checkpoint starts from the hash of zero-filled memory. Equal
     /// starting hashes share a row: one for all zero leaves and one for each internal-node height.
@@ -361,8 +360,8 @@ impl MemoryCtx {
     ///                + shared zero-filled hashes
     /// ```
     ///
-    /// "Written" is exactly tracegen's definition of dirty (per write, independent of the
-    /// written content), so the dirty terms match the realized trace heights.
+    /// A leaf is dirty after any write, regardless of the written value. This matches trace
+    /// generation, so the dirty counts match the generated trace heights.
     #[inline(always)]
     pub(crate) fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_segment_leaves;

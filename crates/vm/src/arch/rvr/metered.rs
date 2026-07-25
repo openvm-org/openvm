@@ -228,6 +228,7 @@ impl SegmentationState {
             let merged = if let Some(previous) = self.drained_mem_page_touches.last_mut() {
                 if previous.page_id == touch.page_id {
                     previous.leaf_mask |= touch.leaf_mask;
+                    previous.dirty_mask |= touch.dirty_mask;
                     true
                 } else {
                     false
@@ -799,21 +800,27 @@ mod tests {
 
     #[test]
     fn test_memory_buffer_flush_replays_after_segmentation() {
-        let touch = PageTouch {
+        let clean_touch = PageTouch {
             page_id: 7,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 0,
+        };
+        let dirty_touch = PageTouch {
             dirty_mask: 1,
+            ..clean_touch
         };
 
         let mut drained = make_segmentation_state();
-        drained.mem_page_buf[0] = touch;
+        drained.mem_page_buf[0] = clean_touch;
+        drained.drain_main_memory_buffer(1);
+        drained.mem_page_buf[0] = dirty_touch;
         drained.drain_main_memory_buffer(1);
         *drained.ctx.trace_heights.last_mut().unwrap() = 4096;
         assert!(drained.on_periodic_check(0, 0, 0, 0, 0));
 
         let mut buffered = make_segmentation_state();
-        buffered.mem_page_buf[0] = touch;
+        buffered.mem_page_buf[0] = dirty_touch;
         *buffered.ctx.trace_heights.last_mut().unwrap() = 4096;
         assert!(buffered.on_periodic_check(1, 0, 0, 0, 0));
 

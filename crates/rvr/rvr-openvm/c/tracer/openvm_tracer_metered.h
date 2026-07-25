@@ -48,9 +48,8 @@ typedef struct PageTouch {
   /* Align leaf_mask and make the shared 24-byte Rust/C layout explicit. */
   uint32_t _padding;
   uint64_t leaf_mask;
-  /* Leaves *written* in this page (subset of leaf_mask). Written leaves cost
-   * final-direction Merkle rows and Poseidon2 compressions; read-only leaves
-   * do not. Matches MeteredCtx's per-write dirtiness exactly. */
+  /* Leaves written in this page, always a subset of leaf_mask. A write adds
+   * final-direction Merkle rows and Poseidon2 compressions. */
   uint64_t dirty_mask;
 } PageTouch;
 
