@@ -572,6 +572,66 @@ initial-memory upload, measured frontend work fell by 70.1% to 78.4%. The sum
 of segment proof spans fell by 35.6% to 42.0%, and proving remained the peak
 GPU-memory phase.
 
+Matched CI runs confirm the same result on the default block and the two
+extension-heavy blocks:
+
+```text
+block / phase                         strict pre-change     current
+24001988
+  guest instructions / segments    664,708,221 / 73   664,680,064 / 73
+  one-time executor preparation          338.451 s          743.051 s
+  preflight                               14.881 s            1.043 s
+  postflight                                   -             1.643 s
+  trace generation                         2.370 s            1.101 s
+  sum of segment proof spans              61.718 s           48.097 s
+  peak GPU memory                          15.79 GB           15.83 GB
+
+24846099
+  guest instructions / segments    532,181,524 / 51   532,150,076 / 51
+  one-time executor preparation          336.385 s          744.411 s
+  preflight                               14.061 s            2.678 s
+  postflight                                   -             1.396 s
+  trace generation                        18.965 s            4.310 s
+  sum of segment proof spans              65.811 s           41.361 s
+  peak GPU memory                          15.89 GB           15.87 GB
+
+25563139
+  guest instructions / segments    514,932,464 / 50   514,898,244 / 50
+  one-time executor preparation          339.524 s          738.208 s
+  preflight                               15.036 s            3.798 s
+  postflight                                   -             1.382 s
+  trace generation                        24.567 s            6.764 s
+  sum of segment proof spans              75.500 s           47.818 s
+  peak GPU memory                          15.89 GB           15.96 GB
+```
+
+The two runs in each CI pair used the same workflow inputs and restored RPC
+input cache. Each branch built its own guest artifact, so the local
+byte-identical-ELF table above is the controlled comparison. In the
+end-to-end CI comparison, the historical revision retired 0.0042% to 0.0066%
+more instructions while segment counts stayed equal. Frontend work including
+postflight and initial-memory upload fell by 69.2% to 73.8%. Segment proof
+spans fell by 22.1% on the default block and 36.7% to 37.2% on the
+extension-heavy blocks.
+
+The historical workflows are:
+
+- block `24001988`:
+  [30201287271](https://github.com/axiom-crypto/openvm-eth/actions/runs/30201287271);
+- block `24846099`:
+  [30201286921](https://github.com/axiom-crypto/openvm-eth/actions/runs/30201286921);
+- block `25563139`:
+  [30201287142](https://github.com/axiom-crypto/openvm-eth/actions/runs/30201287142).
+
+The matching current workflows are:
+
+- block `24001988`:
+  [30198644614](https://github.com/axiom-crypto/openvm-eth/actions/runs/30198644614);
+- block `24846099`:
+  [30199862246](https://github.com/axiom-crypto/openvm-eth/actions/runs/30199862246);
+- block `25563139`:
+  [30199862810](https://github.com/axiom-crypto/openvm-eth/actions/runs/30199862810).
+
 One-time compilation remains an optimization target, not a proof-time cost.
 The clean host release build used the repository's existing fat-LTO profile and
 took 5 minutes after the independently built guest. Generated executors use
