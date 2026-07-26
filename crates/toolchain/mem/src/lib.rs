@@ -239,19 +239,22 @@ fn byte_ordering(a: u64, b: u64) -> i32 {
 /// `a` and `b` must be valid for reads of `n` bytes.
 #[inline(always)]
 pub unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
-    let mut i = 0;
     if n >= WORD {
-        while i + WORD <= n {
-            let (x, y) = (read_word(a.add(i)), read_word(b.add(i)));
+        // Advancing the pointers keeps the loop one instruction shorter than indexing off a base.
+        let (mut a, mut b, mut rem) = (a, b, n);
+        while rem >= WORD {
+            let (x, y) = (read_word(a), read_word(b));
             if x != y {
                 return byte_ordering(x, y);
             }
-            i += WORD;
+            a = a.add(WORD);
+            b = b.add(WORD);
+            rem -= WORD;
         }
-        if i < n {
-            // Overlapping final word. Everything below `i` already matched, so the first
+        if rem != 0 {
+            // Overlapping final word. Everything before it already matched, so the first
             // difference within it is also the first difference overall.
-            let (x, y) = (read_word(a.add(n - WORD)), read_word(b.add(n - WORD)));
+            let (x, y) = (read_word(a.sub(WORD - rem)), read_word(b.sub(WORD - rem)));
             if x != y {
                 return byte_ordering(x, y);
             }
@@ -259,6 +262,7 @@ pub unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
         return 0;
     }
     // Under a word there is nothing to widen into; at most seven iterations.
+    let mut i = 0;
     while i < n {
         let (x, y) = (*a.add(i), *b.add(i));
         if x != y {
@@ -276,16 +280,19 @@ pub unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
 /// `a` and `b` must be valid for reads of `n` bytes.
 #[inline(always)]
 pub unsafe fn bytes_differ(a: *const u8, b: *const u8, n: usize) -> bool {
-    let mut i = 0;
     if n >= WORD {
-        while i + WORD <= n {
-            if read_word(a.add(i)) != read_word(b.add(i)) {
+        let (mut a, mut b, mut rem) = (a, b, n);
+        while rem >= WORD {
+            if read_word(a) != read_word(b) {
                 return true;
             }
-            i += WORD;
+            a = a.add(WORD);
+            b = b.add(WORD);
+            rem -= WORD;
         }
-        return i < n && read_word(a.add(n - WORD)) != read_word(b.add(n - WORD));
+        return rem != 0 && read_word(a.sub(WORD - rem)) != read_word(b.sub(WORD - rem));
     }
+    let mut i = 0;
     while i < n {
         if *a.add(i) != *b.add(i) {
             return true;
