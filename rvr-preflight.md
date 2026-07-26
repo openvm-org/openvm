@@ -509,6 +509,69 @@ authoritative before/after baseline. Its 74 segment proof reported 7.919
 seconds of preflight, 13.497 seconds of trace generation, 66.101 seconds across
 app segment proof spans, and 16.18 GB peak GPU memory.
 
+For a historical comparison, the strict pre-change baseline is the merge base,
+OpenVM `e2bced3b`, with compiled RVR metering and legacy RecordArena preflight.
+The current revision is `00afc086`. Local CUDA proofs used byte-identical guest
+ELFs, cached block inputs, and VM configuration in each pair. All six proofs
+verified, and each pair produced the same number of segments.
+
+```text
+block / phase                         strict pre-change     current
+23992138
+  guest instructions / segments    501,255,045 / 54   501,244,565 / 54
+  one-time executor preparation          130.450 s          277.575 s
+  metered execution                        1.371 s            1.542 s
+  preflight                               30.403 s            1.443 s
+  postflight                                   -             2.181 s
+  trace generation                         5.141 s            2.622 s
+  initial-memory upload                    1.839 s            1.838 s
+  backend proving excluding tracegen      59.725 s           54.340 s
+  sum of segment proof spans              97.195 s           62.561 s
+  peak GPU memory                         17,083 MiB         17,055 MiB
+
+24846099
+  guest instructions / segments    532,124,531 / 51   532,120,058 / 51
+  one-time executor preparation          129.485 s          281.044 s
+  metered execution                        3.268 s            3.342 s
+  preflight                               34.646 s            3.251 s
+  postflight                                   -             2.291 s
+  trace generation                        19.707 s            6.177 s
+  initial-memory upload                    0.886 s            0.904 s
+  backend proving excluding tracegen      53.366 s           50.243 s
+  sum of segment proof spans             108.688 s           62.990 s
+  peak GPU memory                         17,053 MiB         17,029 MiB
+
+25563139
+  guest instructions / segments    514,887,163 / 50   514,877,771 / 50
+  one-time executor preparation          129.501 s            9.834 s*
+  metered execution                        4.536 s            4.598 s
+  preflight                               35.211 s            4.538 s
+  postflight                                   -             2.218 s
+  trace generation                        22.687 s            9.859 s
+  initial-memory upload                    0.955 s            0.974 s
+  backend proving excluding tracegen      55.679 s           52.603 s
+  sum of segment proof spans             114.609 s           70.317 s
+  peak GPU memory                         17,049 MiB         17,029 MiB
+```
+
+`*` The current run reused the cross-process native artifact prepared by an
+earlier block. The two cold current runs spent about 280 seconds compiling
+metered and preflight executors, versus about 130 seconds for the historical
+metered executor alone. Compilation remains outside the segment proof spans.
+
+The historical executor retired between 4,473 and 10,480 more instructions
+despite identical inputs and guest code, a difference of 0.0008% to 0.0021%.
+The branch includes RVR correctness and hardening changes in addition to the
+preflight pipeline, so this historical table is not an execution-only
+experiment. The exact-instruction interpreter comparison above remains the
+isolated preflight measurement.
+
+Across the historical workloads, preflight is 7.8 to 21.1 times faster and
+trace generation is 2.0 to 3.2 times faster. Including postflight and
+initial-memory upload, measured frontend work fell by 70.1% to 78.4%. The sum
+of segment proof spans fell by 35.6% to 42.0%, and proving remained the peak
+GPU-memory phase.
+
 One-time compilation remains an optimization target, not a proof-time cost.
 The clean host release build used the repository's existing fat-LTO profile and
 took 5 minutes after the independently built guest. Generated executors use
