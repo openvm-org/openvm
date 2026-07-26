@@ -60,8 +60,8 @@ use super::rvr::cuda::{
 use super::rvr::PreflightExecution;
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile::compile_preflight,
+    compile_metered, compile_metered_cost, compile_metered_segment_boundary,
     compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
     PreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
     RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
@@ -1637,6 +1637,7 @@ pub type ContinuationProverFn<E, VB> = Box<
     dyn FnMut(
             &mut VmInstance<E, VB>,
             Streams,
+            Option<&str>,
         ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>
         + Send,
 >;

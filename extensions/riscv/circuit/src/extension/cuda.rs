@@ -11,23 +11,13 @@ use openvm_circuit::{
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
-use {openvm_circuit::arch::GenerationError, openvm_stark_backend::prover::ProvingContext};
 #[cfg(feature = "rvr")]
 use {
-    openvm_circuit::arch::{
-        rvr::{
-            cuda::{
-                GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
-                GpuPostflightTranscript, PostflightOpcodeBases,
-            },
-            PreflightExecution,
-        },
-        VirtualMachine, VmBuilder,
+    openvm_circuit::arch::rvr::cuda::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        PostflightOpcodeBases,
     },
-    openvm_circuit::system::cuda::{
-        phantom::PhantomChipGPU, poseidon2::Poseidon2PeripheryChipGPU, SystemChipInventoryGPU,
-    },
+    openvm_circuit::system::cuda::{phantom::PhantomChipGPU, poseidon2::Poseidon2PeripheryChipGPU},
     openvm_circuit_primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
         Chip,
@@ -42,6 +32,14 @@ use {
         ShiftWOpcode,
     },
     openvm_stark_backend::prover::AirProvingContext,
+};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use {
+    openvm_circuit::{
+        arch::{rvr::PreflightExecution, GenerationError, VirtualMachine, VmBuilder},
+        system::cuda::SystemChipInventoryGPU,
+    },
+    openvm_stark_backend::prover::ProvingContext,
 };
 
 use crate::{
@@ -121,6 +119,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// first become unresolved block intents; the VM chronology pass resolves
     /// those intents before the ordinary transcript indexes and unchanged
     /// trace generators consume them.
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuPostflightProgram,

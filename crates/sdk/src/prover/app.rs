@@ -134,15 +134,25 @@ where
         let input: Streams = input.into();
         #[cfg(all(feature = "cuda", feature = "rvr"))]
         let proof = match self.prove_app.as_mut() {
-            Some(prove) => prove(&mut self.instance, input)?,
+            Some(prove) => prove(&mut self.instance, input, self.program_name.as_deref())?,
             None => {
-                let _prove_span = info_span!("app_prove", group = "app_proof").entered();
+                let _prove_span = info_span!(
+                    "app_prove",
+                    group = "app_proof",
+                    program = self.program_name.as_deref().unwrap_or("")
+                )
+                .entered();
                 ContinuationVmProver::prove(&mut self.instance, input)?
             }
         };
         #[cfg(not(all(feature = "cuda", feature = "rvr")))]
         let proof = {
-            let _prove_span = info_span!("app_prove", group = "app_proof").entered();
+            let _prove_span = info_span!(
+                "app_prove",
+                group = "app_proof",
+                program = self.program_name.as_deref().unwrap_or("")
+            )
+            .entered();
             ContinuationVmProver::prove(&mut self.instance, input)?
         };
         #[cfg(debug_assertions)]
