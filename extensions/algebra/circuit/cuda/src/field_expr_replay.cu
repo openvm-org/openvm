@@ -27,7 +27,7 @@ static constexpr uint32_t MAX_U32_LIMBS = 12;
 
 // Value-phase opcodes
 enum { VOP_LOAD_INPUT = 0, VOP_CONST, VOP_ADD, VOP_SUB, VOP_MUL, VOP_DIV,
-       VOP_INTADD, VOP_INTMUL, VOP_SELECT, VOP_SAVE_VAR, VOP_LOAD_OUTPUT };
+       VOP_INTADD, VOP_INTMUL, VOP_SELECT, VOP_SAVE_VAR };
 // Limb-phase opcodes
 enum { LOP_INPUT = 0, LOP_VAR, LOP_CONST, LOP_ADD, LOP_SUB, LOP_MUL,
        LOP_INTADD, LOP_INTMUL, LOP_SELECT };
@@ -227,7 +227,7 @@ static __device__ bool validate_and_load_prog(
         const uint32_t *op = s.vops + 7 * index;
         uint32_t code = op[0], flag = op[1], guard_true = op[2], guard_false = op[3];
         uint32_t dst = op[4], a = op[5], b = op[6];
-        if (code > VOP_LOAD_OUTPUT || dst >= s.num_slots ||
+        if (code > VOP_SAVE_VAR || dst >= s.num_slots ||
             ((guard_true | guard_false) & ~valid_flag_mask) != 0) {
             return false;
         }
@@ -240,8 +240,7 @@ static __device__ bool validate_and_load_prog(
             ((code == VOP_INTADD || code == VOP_INTMUL) &&
              (a >= s.num_slots || b >= mont_values)) ||
             (code == VOP_SELECT && flag >= s.num_flags) ||
-            (code == VOP_SAVE_VAR && a >= s.num_vars) ||
-            (code == VOP_LOAD_OUTPUT && a >= s.n_outputs)) {
+            (code == VOP_SAVE_VAR && a >= s.num_vars)) {
             return false;
         }
     }
@@ -318,9 +317,6 @@ static __device__ bool validate_and_load_prog(
     if (no_flag_count != 1) return false;
     for (uint32_t index = 0; index < s.n_outputs; index++) {
         if (s.outputs[index] >= s.num_vars) return false;
-        for (uint32_t previous = 0; previous < index; previous++) {
-            if (s.outputs[previous] == s.outputs[index]) return false;
-        }
     }
     return true;
 }
@@ -590,22 +586,6 @@ static __device__ bool field_expr_fill_core_row(
                 for (uint32_t j = 0; j < k; j++) d[j] = pb[j];
                 break;
             }
-            case VOP_LOAD_OUTPUT: {
-                for (uint32_t j = 0; j < k; j++) value_extra[j] = 0;
-                if (!is_dummy) {
-                    const uint8_t *src = logged_output + a * nl;
-                    for (uint32_t i = 0; i < nl; i++) {
-                        value_extra[i * lb / 32] |=
-                            static_cast<uint32_t>(src[i]) << ((i * lb) % 32);
-                    }
-                    if (sub_u32_limbs(value_extra, s.p, d, k) == 0) {
-                        preflight_set_error(err, FIELD_EXPR_OUTPUT_MISMATCH);
-                        return false;
-                    }
-                }
-                mont_mul(s, value_extra, s.r2, d, mont_workspace);
-                break;
-            }
             default:
                 preflight_set_error(err, FIELD_EXPR_BAD_PROGRAM_OP);
                 return false;
@@ -788,10 +768,6 @@ static __device__ bool field_expr_fill_core_row(
             core_row[carry_col] = Fp(f_of_i64(carry_acc));
             carry_col++;
             if (!is_dummy) rc.add_count((uint32_t)(carry_acc + carry_min_abs), carry_bits);
-        }
-        if (!is_dummy && carry_acc != 0) {
-            preflight_set_error(err, FIELD_EXPR_OUTPUT_MISMATCH);
-            return false;
         }
     }
     for (uint32_t f = 0; f < s.num_flags; f++) {
