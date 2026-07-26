@@ -228,21 +228,12 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         Vec::new()
     }
 
-    /// Whether this node emits a complete logical schedule in preflight mode.
-    ///
-    /// The default is fail-closed because semantic execution alone is not
-    /// sufficient: preflight must also preserve disabled clock slots and every
-    /// proof-visible memory access.
-    fn supports_preflight(&self) -> bool {
-        false
-    }
-
     /// Whether this node emits enough replay values and logical clock slots
-    /// for compact checkpoint preflight.
+    /// for preflight.
     ///
-    /// The default is fail-closed because legacy value tracing and compact
-    /// checkpoint replay have different completeness requirements.
-    fn supports_checkpoint_preflight(&self) -> bool {
+    /// The default is fail-closed because semantic execution alone does not
+    /// preserve the complete proof-visible schedule.
+    fn supports_preflight(&self) -> bool {
         false
     }
 

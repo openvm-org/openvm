@@ -51,7 +51,7 @@ impl FieldKind for Fp2Kind {
         field.fp2_c_suffix()
     }
 
-    fn supports_checkpoint_preflight() -> bool {
+    fn supports_preflight() -> bool {
         true
     }
 }
@@ -236,7 +236,7 @@ mod tests {
                     num_limbs,
                     vec![7; num_limbs as usize],
                 );
-                assert!(instr.supports_checkpoint_preflight());
+                assert!(instr.supports_preflight());
 
                 let mut checkpoint = TestEmitCtx::checkpoint();
                 instr.emit_c(&mut checkpoint);
@@ -289,7 +289,7 @@ mod tests {
                 num_limbs,
                 vec![11; num_limbs as usize],
             );
-            assert!(instr.supports_checkpoint_preflight());
+            assert!(instr.supports_preflight());
 
             let mut checkpoint = TestEmitCtx::checkpoint();
             instr.emit_c(&mut checkpoint);

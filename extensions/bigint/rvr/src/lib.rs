@@ -167,7 +167,7 @@ impl ExtInstr for Int256AluInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -235,7 +235,7 @@ impl ExtInstr for Int256BranchEqInstr {
         })
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -295,7 +295,7 @@ impl ExtInstr for Int256BranchLtInstr {
         })
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -736,8 +736,7 @@ mod tests {
             op: Int256AluOp::Add,
             chip_idx: None,
         };
-        assert!(!instruction.supports_preflight());
-        assert!(instruction.supports_checkpoint_preflight());
+        assert!(instruction.supports_preflight());
 
         let mut checkpoint = TestEmitCtx::default();
         instruction.emit_c(&mut checkpoint);
@@ -785,8 +784,7 @@ mod tests {
             is_ne: false,
             chip_idx: None,
         };
-        assert!(!instruction.supports_preflight());
-        assert!(instruction.supports_checkpoint_preflight());
+        assert!(instruction.supports_preflight());
 
         let mut checkpoint = TestEmitCtx::default();
         instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));

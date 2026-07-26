@@ -1,9 +1,6 @@
 use openvm_circuit::{
     arch::{
-        rvr::{
-            cuda::{GpuPostflightProgram, PostflightAccessRegistry, PostflightAccessSpan},
-            FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
-        },
+        rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog, PreflightLimits},
         VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
@@ -15,7 +12,6 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, SystemOpcode,
 };
-use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::StarkEngine;
@@ -138,9 +134,7 @@ fn sha_results(state: &[u8; 64], input: &[u8; 128]) -> ([u8; 32], [u8; 64]) {
     (result256, result512)
 }
 
-fn fixture(
-    corrupt_sha256_register_event: bool,
-) -> (Program<F>, VmExe<F>, FullLogPreflightTranscript) {
+fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, PreflightEventLog) {
     let instructions = [
         Instruction::<F>::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
@@ -222,7 +216,7 @@ fn fixture(
         initial_write_log.push(seed(RV64_MEMORY_AS, DST_PTR + index * 8, &[0; 8]));
     }
 
-    let transcript = FullLogPreflightTranscript {
+    let transcript = PreflightEventLog {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -252,20 +246,6 @@ fn fixture(
 }
 
 #[test]
-fn sha_checkpoint_registry_rejects_native_opcode_collision() {
-    let native_opcode = BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32;
-    let span = PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 1);
-    let mut registry = PostflightAccessRegistry::default();
-    registry
-        .register(native_opcode, &[1], 0, 4, 5, &[span])
-        .unwrap();
-    let error = registry
-        .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())
-        .unwrap_err();
-    assert!(error.to_string().contains("both native"), "{error}");
-}
-
-#[test]
 fn mixed_rv64_sha_checkpoint_expansion_proves() {
     let (program, exe, _) = fixture(false);
     let config = Sha2Rv64Config {
@@ -273,7 +253,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())

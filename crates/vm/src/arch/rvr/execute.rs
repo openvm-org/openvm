@@ -16,18 +16,17 @@ use super::{
         deferral_memory_ptr, public_values_slice, read_rv64_registers, rv64_memory_ptr,
         write_rv64_registers,
     },
-    checkpoint_preflight::{
-        CheckpointDirtyPages, CheckpointPreflightBuffers, PreflightEndpoint, PreflightLimits,
-        PreflightTranscript,
-    },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
-    preflight::{FullLogPreflightLimits, FullLogPreflightTranscript, PreflightBuffers},
+    preflight::{
+        CheckpointDirtyPages, CheckpointPreflightBuffers, PreflightEndpoint, PreflightLimits,
+        PreflightTranscript,
+    },
     state::{
-        init_rvr_state, CheckpointPreflightRvState, MeteredCostRvState, MeteredRvState,
-        PreflightRvState, PureRvState, PureWithInstretTrackingRvState,
+        init_state, CheckpointPreflightRvState, MeteredCostRvState, MeteredRvState, PureRvState,
+        PureWithInstretTrackingRvState,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
@@ -225,67 +224,11 @@ pub(super) fn execute_pure(
     require_execution_kind(compiled, "Pure", &[RvrExecutionKind::Pure])?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
-    let mut state: PureRvState = init_rvr_state(vm_state, pc);
+    let mut state: PureRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
     run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
         .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
     Ok(())
-}
-
-/// Execute an append-only preflight artifact until termination.
-pub(super) fn execute_full_log_preflight(
-    compiled: &RvrCompiled,
-    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
-    vm_state: &mut VmState<GuestMemory>,
-    limits: FullLogPreflightLimits,
-    timestamp_max_bits: usize,
-    allow_suspended: bool,
-    reuse: Option<FullLogPreflightTranscript>,
-) -> Result<(FullLogPreflightTranscript, PreflightEndpoint), ExecuteError> {
-    require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
-    let pc = vm_state.pc();
-    let mut buffers = match reuse {
-        Some(transcript) => PreflightBuffers::reuse(limits, transcript),
-        None => PreflightBuffers::new(limits),
-    }
-    .map_err(ExecuteError::InvalidPreflightContext)?;
-    let mut state: PreflightRvState = init_rvr_state(vm_state, pc);
-    state.regs = read_rv64_registers(vm_state);
-    state.mode_state = buffers.ffi_state();
-
-    let execution = run_and_finalize(
-        compiled,
-        runtime_hooks,
-        vm_state,
-        &mut state,
-        allow_suspended,
-        None,
-    );
-    if state.mode_state.error != 0 {
-        return Err(ExecuteError::InvalidPreflightContext(format!(
-            "generated preflight logger failed with code {}",
-            state.mode_state.error
-        )));
-    }
-    let status =
-        execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
-    let final_pc = u32::try_from(state.pc).map_err(|_| {
-        ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
-    })?;
-    let endpoint = match status {
-        ExecutionStatus::Terminated => PreflightEndpoint::Terminated,
-        ExecutionStatus::Suspended => PreflightEndpoint::Suspended {
-            resume_pc: final_pc,
-            final_timestamp: state.mode_state.timestamp,
-        },
-        _ => unreachable!("run_and_finalize accepted an invalid preflight status"),
-    };
-    // SAFETY: the raw state was created from `buffers` immediately above and
-    // neither vector can reallocate during generated execution.
-    let transcript =
-        unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits, vm_state) }
-            .map_err(ExecuteError::InvalidPreflightContext)?;
-    Ok((transcript, endpoint))
 }
 
 /// Execute the checkpoint-and-residual preflight artifact.
@@ -298,11 +241,7 @@ pub(super) fn execute_preflight(
     allow_suspended: bool,
     reuse: Option<PreflightTranscript>,
 ) -> Result<(PreflightTranscript, PreflightEndpoint, u32, u32), ExecuteError> {
-    require_execution_kind(
-        compiled,
-        "CheckpointPreflight",
-        &[RvrExecutionKind::CheckpointPreflight],
-    )?;
+    require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
     let mut buffers = match reuse {
         Some(transcript) => CheckpointPreflightBuffers::reuse(limits, transcript),
@@ -311,7 +250,7 @@ pub(super) fn execute_preflight(
     .map_err(ExecuteError::InvalidPreflightContext)?;
     let mut dirty_pages = CheckpointDirtyPages::new(&vm_state.memory.memory)
         .map_err(ExecuteError::InvalidPreflightContext)?;
-    let mut state: CheckpointPreflightRvState = init_rvr_state(vm_state, pc);
+    let mut state: CheckpointPreflightRvState = init_state(vm_state, pc);
     state.regs = read_rv64_registers(vm_state);
     state.mode_state = buffers.ffi_state(&mut dirty_pages);
 
@@ -331,16 +270,10 @@ pub(super) fn execute_preflight(
     }
     let status =
         execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
-    let final_pc = u32::try_from(state.pc).map_err(|_| {
-        ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
-    })?;
     let final_timestamp = state.mode_state.timestamp;
     let endpoint = match status {
         ExecutionStatus::Terminated => PreflightEndpoint::Terminated,
-        ExecutionStatus::Suspended => PreflightEndpoint::Suspended {
-            resume_pc: final_pc,
-            final_timestamp,
-        },
+        ExecutionStatus::Suspended => PreflightEndpoint::Suspended,
         _ => unreachable!("run_and_finalize accepted an invalid preflight status"),
     };
     // SAFETY: the raw state was created from `buffers` immediately above and
@@ -399,7 +332,7 @@ fn execute_pure_with_instret_tracking_impl(
         &[RvrExecutionKind::PureWithInstretTracking],
     )?;
     let pc = vm_state.pc();
-    let mut state: PureWithInstretTrackingRvState = init_rvr_state(vm_state, pc);
+    let mut state: PureWithInstretTrackingRvState = init_state(vm_state, pc);
     state.regs = read_rv64_registers(vm_state);
     state.mode_state = tracking;
     let status = run_and_finalize(
@@ -427,7 +360,7 @@ pub(super) fn execute_metered_cost(
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
+    let mut state: MeteredCostRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
 
     run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
@@ -489,7 +422,7 @@ fn execute_metered_impl(
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut state: MeteredRvState = init_rvr_state(vm_state, pc);
+    let mut state: MeteredRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
 
     let check_counter = u32::try_from(seg_state.ctx.segmentation_ctx.instrets_until_check)

@@ -1,6 +1,4 @@
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_circuit_primitives::Chip;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{instruction::Instruction, SystemOpcode, VmOpcode};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -22,13 +20,10 @@ use crate::{
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     arch::{
-        rvr::{cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint},
-        DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
+        rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
+        MemoryConfig,
     },
-    system::{
-        cuda::phantom::PhantomChipGPU,
-        phantom::{PhantomCols, PhantomRecord},
-    },
+    system::cuda::phantom::PhantomChipGPU,
 };
 
 type F = BabyBear;
@@ -139,7 +134,7 @@ fn test_cuda_phantom_preflight_replay() {
         0xabcd,
     );
     let program = Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
-    let transcript = FullLogPreflightTranscript {
+    let transcript = PreflightEventLog {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -153,42 +148,17 @@ fn test_cuda_phantom_preflight_replay() {
         memory_log: vec![],
         initial_write_log: vec![],
     };
-    let endpoint = PreflightEndpoint::Suspended {
-        resume_pc: 4,
-        final_timestamp: 2,
-    };
+    let endpoint = PreflightEndpoint::Suspended;
     let memory_config = MemoryConfig::default();
     let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program.upload_transcript(&transcript, endpoint).unwrap();
     let chip = PhantomChipGPU::new(device_ctx.clone());
-    let replay_ctx = chip
+    let _replay_ctx = chip
         .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
 
-    let mut arena = DenseRecordArena::with_capacity(1, PhantomCols::<F>::width());
-    let record: &mut PhantomRecord = arena.alloc(EmptyMultiRowLayout::default());
-    record.pc = 0;
-    record.operands = [
-        instruction.a.as_canonical_u32(),
-        instruction.b.as_canonical_u32(),
-        instruction.c.as_canonical_u32(),
-    ];
-    record.timestamp = 1;
-    let legacy_ctx = chip.generate_proving_ctx(arena);
-    let replay_trace = openvm_cuda_backend::data_transporter::transport_matrix_d2h_row_major(
-        &replay_ctx.common_main,
-        &device_ctx,
-    )
-    .unwrap();
-    let legacy_trace = openvm_cuda_backend::data_transporter::transport_matrix_d2h_row_major(
-        &legacy_ctx.common_main,
-        &device_ctx,
-    )
-    .unwrap();
-    assert_eq!(replay_trace, legacy_trace);
-
-    let corrupt = FullLogPreflightTranscript {
+    let corrupt = PreflightEventLog {
         program_log: transcript.program_log,
         memory_log: vec![PreflightMemoryEvent {
             timestamp: 1,

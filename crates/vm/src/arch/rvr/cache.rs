@@ -41,7 +41,7 @@ impl NativeArtifactCache {
     pub(super) fn configured(kind: RvrExecutionKind, native_debug_info: bool) -> Option<Self> {
         if !matches!(
             kind,
-            RvrExecutionKind::Metered | RvrExecutionKind::CheckpointPreflight
+            RvrExecutionKind::Metered | RvrExecutionKind::Preflight
         ) || native_debug_info
         {
             return None;

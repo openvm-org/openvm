@@ -74,10 +74,6 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn supports_preflight(&self) -> bool {
-        true
-    }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
         // This remains a system PHANTOM operation: the callback produces host
         // advice, while the Phantom AIR contributes only the one clock slot
         // emitted above and no proof-visible memory events.
@@ -269,7 +265,6 @@ mod tests {
             curve: KnownPairingCurve::Bn254,
         };
         assert!(instr.supports_preflight());
-        assert!(instr.supports_checkpoint_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);

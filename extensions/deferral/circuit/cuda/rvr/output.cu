@@ -1,6 +1,5 @@
 #include "../src/output.cu"
 
-#include "arch/rvr/preflight.cuh"
 #include "poseidon2-air/params.cuh"
 #include "poseidon2-air/tracegen.cuh"
 #include "primitives/buffer_view.cuh"

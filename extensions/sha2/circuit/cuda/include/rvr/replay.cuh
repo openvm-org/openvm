@@ -1,6 +1,5 @@
 #pragma once
 
-#include "arch/rvr/preflight.cuh"
 #include "block_hasher/variant.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"

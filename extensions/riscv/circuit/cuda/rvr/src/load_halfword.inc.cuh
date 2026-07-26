@@ -1,4 +1,4 @@
-#include "riscv/load_halfword_replay.cuh"
+#include "riscv/load_multibyte_replay.cuh"
 
 
 __global__ void rv64_load_halfword_replay_tracegen(
@@ -29,8 +29,8 @@ __global__ void rv64_load_halfword_replay_tracegen(
     row.fill_zero(0, sizeof(Rv64LoadHalfwordCols<uint8_t>));
     if (idx >= num_steps) return;
 
-    ReplayLoadHalfwordInput input = {};
-    if (!replay_load_halfword(
+    ReplayLoadMultiByteInput input = {};
+    if (!replay_load_multibyte<HALFWORD_ACCESS_WIDTH, false, 231>(
             instructions,
             pc_base,
             program,
@@ -42,7 +42,6 @@ __global__ void rv64_load_halfword_replay_tracegen(
             register_as,
             memory_as,
             pointer_max_bits,
-            false,
             input,
             error
         )) {

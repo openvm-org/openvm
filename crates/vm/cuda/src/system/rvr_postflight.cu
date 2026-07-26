@@ -1,5 +1,5 @@
 #define CUB_WRAPPED_NAMESPACE openvm_rvr_postflight_cub
-#include "arch/rvr/preflight.cuh"
+#include "arch/rvr/replay.cuh"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
 #include "system/memory/touched_block.cuh"
@@ -10,24 +10,10 @@
 
 namespace cub = openvm_rvr_postflight_cub::cub;
 
-template <typename T> struct MutableDeviceBufferView {
-    T *ptr;
-    size_t size;
-
-    __device__ __host__ __forceinline__ size_t len() const { return size / sizeof(T); }
-    __device__ __host__ __forceinline__ T &operator[](size_t index) const {
-        assert(index < len());
-        return ptr[index];
-    }
-};
-
 namespace {
 
 static constexpr uint32_t ERROR_MEMORY_TIMESTAMPS = 101;
 static constexpr uint32_t ERROR_SORT_ORDER = 103;
-static constexpr uint32_t ERROR_MISSING_FIRST_WRITE_SEED = 104;
-static constexpr uint32_t ERROR_DUPLICATE_SEED = 105;
-static constexpr uint32_t ERROR_UNUSED_SEED = 106;
 static constexpr uint32_t ERROR_MEMORY_ADDRESS = 107;
 static constexpr uint32_t ERROR_MEMORY_MASK = 108;
 static constexpr uint32_t ERROR_INITIAL_MEMORY = 109;
@@ -76,12 +62,6 @@ struct LastWriteWins {
         }
         result.valid |= current.valid;
         return result;
-    }
-};
-
-struct AnyWrite {
-    __host__ __device__ __forceinline__ uint32_t operator()(uint32_t lhs, uint32_t rhs) const {
-        return lhs | rhs;
     }
 };
 
@@ -549,9 +529,9 @@ __global__ void prepare_byte_quads(
 }
 
 __global__ void scatter_byte_quads(
-    MutableDeviceBufferView<PreflightMemoryEvent> memory,
+    DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
-    MutableDeviceBufferView<RvrFieldBlock> field_values,
+    DeviceBufferView<RvrFieldBlock> field_values,
     uint64_t const *sorted_keys,
     size_t sorted_offset,
     size_t num_entries,
@@ -643,375 +623,7 @@ __global__ void finalize_chronology_touched(
     }
 }
 
-// The low 32 bits are the source ordinal. Seeds occupy the ordinal prefix, so
-// for one block they sort before all chronological memory events. Including
-// the ordinal also makes every key unique; sort stability is not required.
-__global__ void prepare_entries(
-    DeviceBufferConstView<PreflightMemoryEvent> memory,
-    DeviceBufferConstView<PreflightInitialWrite> seeds,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
-    uint32_t address_space_offset,
-    uint32_t address_space_height,
-    uint32_t pointer_max_bits,
-    uint64_t *keys,
-    uint32_t *error
-) {
-    size_t ordinal = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (ordinal < seeds.len()) {
-        auto const &seed = seeds[ordinal];
-        uint32_t compact_key;
-        if ((seed.address_space & PREFLIGHT_WRITE_BIT) != 0 ||
-            !compact_block_key(
-                seed.address_space,
-                seed.pointer,
-                address_spaces,
-                address_space_offset,
-                address_space_height,
-                pointer_max_bits,
-                false,
-                compact_key
-            )) {
-            preflight_set_error(error, ERROR_MEMORY_ADDRESS);
-            compact_key = 0;
-        }
-        keys[ordinal] = (static_cast<uint64_t>(compact_key) << 32) | ordinal;
-        return;
-    }
-    size_t event_index = ordinal - seeds.len();
-    if (event_index >= memory.len()) return;
-    auto const &event = memory[event_index];
-    uint32_t compact_key;
-    if (!compact_block_key(
-            preflight_address_space(event),
-            event.pointer,
-            address_spaces,
-            address_space_offset,
-            address_space_height,
-            pointer_max_bits,
-            false,
-            compact_key
-        )) {
-        preflight_set_error(error, ERROR_MEMORY_ADDRESS);
-        compact_key = 0;
-    }
-    keys[ordinal] = (static_cast<uint64_t>(compact_key) << 32) | ordinal;
-    if (event_index != 0 && memory[event_index - 1].timestamp >= event.timestamp) {
-        preflight_set_error(error, ERROR_MEMORY_TIMESTAMPS);
-    }
-}
-
-__global__ void mark_final_events(
-    size_t num_seeds,
-    uint64_t const *sorted_keys,
-    size_t num_entries,
-    uint32_t *flags
-) {
-    size_t sorted_pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (sorted_pos >= num_entries) return;
-    uint32_t ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos]);
-    uint32_t block_key = static_cast<uint32_t>(sorted_keys[sorted_pos] >> 32);
-    bool is_event = ordinal >= num_seeds;
-    bool is_group_tail =
-        sorted_pos + 1 == num_entries ||
-        block_key != static_cast<uint32_t>(sorted_keys[sorted_pos + 1] >> 32);
-    flags[sorted_pos] = is_event && is_group_tail;
-}
-
-__global__ void mark_group_dirtiness(
-    DeviceBufferConstView<PreflightMemoryEvent> memory,
-    size_t num_seeds,
-    uint64_t const *sorted_keys,
-    size_t num_entries,
-    uint32_t *dirty
-) {
-    size_t sorted_pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (sorted_pos >= num_entries) return;
-    uint32_t ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos]);
-    if (ordinal < num_seeds) {
-        dirty[sorted_pos] = 0;
-        return;
-    }
-    size_t event_index = ordinal - num_seeds;
-    dirty[sorted_pos] =
-        event_index < memory.len() && preflight_is_write(memory[event_index]);
-}
-
-__global__ void scatter_final_events(
-    DeviceBufferConstView<PreflightMemoryEvent> memory,
-    size_t num_seeds,
-    uint64_t const *sorted_keys,
-    size_t num_entries,
-    uint32_t const *flags,
-    uint32_t const *positions,
-    RvrTouchedBlock *out,
-    uint32_t *num_out,
-    uint32_t *error
-) {
-    size_t sorted_pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (sorted_pos >= num_entries) return;
-    uint32_t block_key = static_cast<uint32_t>(sorted_keys[sorted_pos] >> 32);
-    bool is_group_tail =
-        sorted_pos + 1 == num_entries ||
-        block_key != static_cast<uint32_t>(sorted_keys[sorted_pos + 1] >> 32);
-    uint32_t ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos]);
-    if (sorted_pos + 1 == num_entries) {
-        *num_out = positions[sorted_pos] + uint32_t(is_group_tail && ordinal >= num_seeds);
-    }
-    if (!is_group_tail) return;
-
-    if (ordinal < num_seeds) {
-        preflight_set_error(error, ERROR_SORT_ORDER);
-        return;
-    }
-    size_t event_index = ordinal - num_seeds;
-    if (event_index >= memory.len() || positions[sorted_pos] >= memory.len()) {
-        preflight_set_error(error, ERROR_SORT_ORDER);
-        return;
-    }
-    auto const &event = memory[event_index];
-    auto &record = out[positions[sorted_pos]];
-    record.address_space = preflight_address_space(event);
-    record.ptr = event.pointer;
-    record.is_dirty = uint32_t(flags[sorted_pos] != 0);
-    record.timestamp = event.timestamp;
-    #pragma unroll
-    for (size_t i = 0; i < 4; ++i) {
-        record.values[i] = Fp(event.value[i]).asRaw();
-    }
-}
-
-__global__ void scatter_predecessors(
-    DeviceBufferConstView<PreflightMemoryEvent> memory,
-    size_t num_seeds,
-    uint64_t const *sorted_keys,
-    size_t num_entries,
-    uint32_t *predecessors,
-    uint32_t *error
-) {
-    size_t sorted_pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (sorted_pos >= num_entries) return;
-    uint32_t ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos]);
-    uint32_t block_key = static_cast<uint32_t>(sorted_keys[sorted_pos] >> 32);
-
-    if (ordinal < num_seeds) {
-        bool duplicate = sorted_pos + 1 < num_entries &&
-                         block_key == static_cast<uint32_t>(sorted_keys[sorted_pos + 1] >> 32) &&
-                         static_cast<uint32_t>(sorted_keys[sorted_pos + 1]) < num_seeds;
-        if (duplicate) {
-            preflight_set_error(error, ERROR_DUPLICATE_SEED);
-            return;
-        }
-        bool followed_by_event = sorted_pos + 1 < num_entries &&
-                                 block_key == static_cast<uint32_t>(sorted_keys[sorted_pos + 1] >> 32) &&
-                                 static_cast<uint32_t>(sorted_keys[sorted_pos + 1]) >= num_seeds;
-        if (!followed_by_event) {
-            preflight_set_error(error, ERROR_UNUSED_SEED);
-            return;
-        }
-        size_t first_event_index = static_cast<uint32_t>(sorted_keys[sorted_pos + 1]) - num_seeds;
-        if (!preflight_is_write(memory[first_event_index])) {
-            preflight_set_error(error, ERROR_UNUSED_SEED);
-        }
-        return;
-    }
-
-    size_t event_index = ordinal - num_seeds;
-    auto const &event = memory[event_index];
-    bool same_as_previous = sorted_pos != 0 &&
-                            static_cast<uint32_t>(sorted_keys[sorted_pos - 1] >> 32) == block_key;
-    if (!same_as_previous) {
-        if (preflight_is_write(event)) {
-            preflight_set_error(error, ERROR_MISSING_FIRST_WRITE_SEED);
-            return;
-        }
-        predecessors[event_index] = 0;
-        return;
-    }
-
-    uint32_t previous_ordinal = static_cast<uint32_t>(sorted_keys[sorted_pos - 1]);
-    if (previous_ordinal < num_seeds) {
-        if (!preflight_is_write(event)) {
-            predecessors[event_index] = 0;
-            return;
-        }
-        predecessors[event_index] = MEMORY_PREDECESSOR_SEED_BIT | previous_ordinal;
-        return;
-    }
-
-    size_t previous_event_index = previous_ordinal - num_seeds;
-    if (previous_event_index >= event_index) {
-        preflight_set_error(error, ERROR_SORT_ORDER);
-        return;
-    }
-    predecessors[event_index] = static_cast<uint32_t>(previous_event_index + 1);
-}
-
 } // namespace
-
-extern "C" int _rvr_memory_index_get_temp_bytes(
-    size_t num_entries,
-    size_t *h_temp_bytes_out,
-    cudaStream_t stream
-) {
-    size_t sort_temp_bytes = 0;
-    size_t scan_temp_bytes = 0;
-    size_t dirty_temp_bytes = 0;
-    if (num_entries != 0) {
-        cub::DeviceRadixSort::SortKeys(
-            nullptr,
-            sort_temp_bytes,
-            static_cast<uint64_t *>(nullptr),
-            static_cast<uint64_t *>(nullptr),
-            num_entries,
-            0,
-            64,
-            stream
-        );
-        cub::DeviceScan::ExclusiveSum(
-            nullptr,
-            scan_temp_bytes,
-            static_cast<uint32_t *>(nullptr),
-            static_cast<uint32_t *>(nullptr),
-            num_entries,
-            stream
-        );
-        cub::DeviceScan::InclusiveScanByKey(
-            nullptr,
-            dirty_temp_bytes,
-            static_cast<uint64_t *>(nullptr),
-            static_cast<uint32_t *>(nullptr),
-            static_cast<uint32_t *>(nullptr),
-            AnyWrite{},
-            num_entries,
-            BlockKeyEqual{},
-            stream
-        );
-    }
-    *h_temp_bytes_out = sort_temp_bytes > scan_temp_bytes ? sort_temp_bytes : scan_temp_bytes;
-    if (dirty_temp_bytes > *h_temp_bytes_out) *h_temp_bytes_out = dirty_temp_bytes;
-    return CHECK_KERNEL();
-}
-
-extern "C" int _rvr_memory_index_sort(
-    DeviceBufferConstView<PreflightMemoryEvent> memory,
-    DeviceBufferConstView<PreflightInitialWrite> seeds,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
-    uint32_t address_space_offset,
-    uint32_t address_space_height,
-    uint32_t pointer_max_bits,
-    uint64_t *keys_in,
-    uint64_t *keys_out,
-    void *temp_storage,
-    size_t temp_storage_bytes,
-    uint32_t *error,
-    cudaStream_t stream
-) {
-    size_t num_entries = memory.len() + seeds.len();
-    if (num_entries == 0) return 0;
-
-    auto [grid, block] = kernel_launch_params(num_entries);
-    prepare_entries<<<grid, block, 0, stream>>>(
-        memory,
-        seeds,
-        address_spaces,
-        address_space_offset,
-        address_space_height,
-        pointer_max_bits,
-        keys_in,
-        error
-    );
-    if (int err = CHECK_KERNEL(); err) return err;
-    if (cudaError_t err = cub::DeviceRadixSort::SortKeys(
-            temp_storage,
-            temp_storage_bytes,
-            keys_in,
-            keys_out,
-            num_entries,
-            0,
-            64,
-            stream
-        );
-        err != cudaSuccess) {
-        return err;
-    }
-    return CHECK_KERNEL();
-}
-
-extern "C" int _rvr_memory_index_scatter(
-    DeviceBufferConstView<PreflightMemoryEvent> memory,
-    size_t num_seeds,
-    uint64_t const *sorted_keys,
-    size_t num_entries,
-    uint32_t *predecessors,
-    uint32_t *touched_flags,
-    uint32_t *touched_positions,
-    RvrTouchedBlock *touched_blocks,
-    uint32_t *num_touched_blocks,
-    void *temp_storage,
-    size_t temp_storage_bytes,
-    uint32_t *error,
-    cudaStream_t stream
-) {
-    if (num_entries == 0) {
-        if (cudaError_t err = cudaMemsetAsync(
-                num_touched_blocks, 0, sizeof(uint32_t), stream
-            );
-            err != cudaSuccess) {
-            return err;
-        }
-        return 0;
-    }
-    auto [grid, block] = kernel_launch_params(num_entries);
-    scatter_predecessors<<<grid, block, 0, stream>>>(
-        memory, num_seeds, sorted_keys, num_entries, predecessors, error
-    );
-    if (int err = CHECK_KERNEL(); err) return err;
-    mark_final_events<<<grid, block, 0, stream>>>(
-        num_seeds, sorted_keys, num_entries, touched_flags
-    );
-    if (int err = CHECK_KERNEL(); err) return err;
-    if (cudaError_t err = cub::DeviceScan::ExclusiveSum(
-            temp_storage,
-            temp_storage_bytes,
-            touched_flags,
-            touched_positions,
-            num_entries,
-            stream
-        );
-        err != cudaSuccess) {
-        return err;
-    }
-    mark_group_dirtiness<<<grid, block, 0, stream>>>(
-        memory, num_seeds, sorted_keys, num_entries, touched_flags
-    );
-    if (int err = CHECK_KERNEL(); err) return err;
-    if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
-            temp_storage,
-            temp_storage_bytes,
-            sorted_keys,
-            touched_flags,
-            touched_flags,
-            AnyWrite{},
-            num_entries,
-            BlockKeyEqual{},
-            stream
-        );
-        err != cudaSuccess) {
-        return err;
-    }
-    scatter_final_events<<<grid, block, 0, stream>>>(
-        memory,
-        num_seeds,
-        sorted_keys,
-        num_entries,
-        touched_flags,
-        touched_positions,
-        touched_blocks,
-        num_touched_blocks,
-        error
-    );
-    return CHECK_KERNEL();
-}
 
 extern "C" int _rvr_memory_chronology_get_temp_bytes(
     size_t num_entries,
@@ -1152,20 +764,20 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
 }
 
 extern "C" int _rvr_memory_chronology_resolve(
-    MutableDeviceBufferView<PreflightMemoryEvent> memory,
+    DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
-    MutableDeviceBufferView<RvrFieldBlock> field_values,
+    DeviceBufferView<RvrFieldBlock> field_values,
     uint64_t const *sorted_keys,
     uint64_t *workspace,
     uint32_t *predecessors,
-    MutableDeviceBufferView<PreflightInitialWrite> seeds,
-    MutableDeviceBufferView<RvrFieldBlock> field_seeds,
+    DeviceBufferView<PreflightInitialWrite> seeds,
+    DeviceBufferView<RvrFieldBlock> field_seeds,
     uint32_t field_begin,
     uint32_t field_end,
     uint32_t field_seed_base,
-    MutableDeviceBufferView<RvrTouchedBlock> touched,
+    DeviceBufferView<RvrTouchedBlock> touched,
     void *temp_storage,
     size_t temp_storage_bytes,
     uint32_t *error,
@@ -1340,20 +952,6 @@ __device__ size_t memory_lower_bound(
     return left;
 }
 
-__device__ bool resolve_instruction(
-    DeviceBufferConstView<RvrReplayInstruction> instructions,
-    uint32_t pc_base,
-    uint32_t pc,
-    RvrReplayInstruction const *&instruction,
-    size_t &slot
-) {
-    if (pc < pc_base || (pc - pc_base) % 4 != 0) return false;
-    slot = (pc - pc_base) / 4;
-    if (slot >= instructions.len() || instructions[slot].words[0] == UINT32_MAX) return false;
-    instruction = &instructions[slot];
-    return true;
-}
-
 __global__ void prepare_program_steps(
     DeviceBufferConstView<RvrReplayInstruction> instructions,
     DeviceBufferConstView<uint32_t> dense_program_rows,
@@ -1381,8 +979,9 @@ __global__ void prepare_program_steps(
     }
     RvrReplayInstruction const *instruction = nullptr;
     size_t instruction_slot = 0;
-    if (!resolve_instruction(instructions, pc_base, from.pc, instruction, instruction_slot) ||
-        instruction_slot >= dense_program_rows.len() ||
+    instruction =
+        resolve_replay_instruction(instructions, pc_base, from.pc, &instruction_slot);
+    if (instruction == nullptr || instruction_slot >= dense_program_rows.len() ||
         dense_program_rows[instruction_slot] == UINT32_MAX) {
         preflight_set_error(error, ERROR_PROGRAM_PC);
         return;
@@ -1423,10 +1022,10 @@ __global__ void prepare_program_steps(
         } else {
             RvrReplayInstruction const *resume_instruction = nullptr;
             size_t resume_slot = 0;
+            resume_instruction =
+                resolve_replay_instruction(instructions, pc_base, to.pc, &resume_slot);
             if (to.pc != resume_pc || to.timestamp != final_timestamp || is_terminate ||
-                !resolve_instruction(
-                    instructions, pc_base, to.pc, resume_instruction, resume_slot
-                )) {
+                resume_instruction == nullptr) {
                 preflight_set_error(error, ERROR_ENDPOINT);
                 return;
             }
@@ -1455,13 +1054,13 @@ __global__ void validate_empty_program(
     auto const &sentinel = program[0];
     RvrReplayInstruction const *resume_instruction = nullptr;
     size_t resume_slot = 0;
+    resume_instruction =
+        resolve_replay_instruction(instructions, pc_base, sentinel.pc, &resume_slot);
     if (sentinel.timestamp >= (uint32_t{1} << timestamp_max_bits)) {
         preflight_set_error(error, ERROR_TIMESTAMP_DOMAIN);
     } else if (endpoint_kind != 1 || sentinel.timestamp != 1 || sentinel.pc != resume_pc ||
         sentinel.timestamp != final_timestamp || memory.len() != 0 ||
-        !resolve_instruction(
-            instructions, pc_base, sentinel.pc, resume_instruction, resume_slot
-        )) {
+        resume_instruction == nullptr) {
         preflight_set_error(error, ERROR_ENDPOINT);
     }
 }

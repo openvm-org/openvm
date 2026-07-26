@@ -15,6 +15,8 @@ use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_cuda_common::memory_manager::MemTracker;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
@@ -25,6 +27,8 @@ use openvm_instructions::{
 };
 #[cfg(all(feature = "cuda", feature = "metrics", feature = "rvr"))]
 use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
 use openvm_stark_backend::{
@@ -47,17 +51,24 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
-#[cfg(all(feature = "cuda", feature = "metrics", feature = "rvr"))]
-use super::rvr::cuda::GpuPostflightPlan;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::rvr::cuda::{
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    PostflightOpcodeBases,
+};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::rvr::PreflightExecution;
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_full_log_preflight,
-    compile_metered, compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
-    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, FullLogPreflightInstance,
-    GuestDebugMap, PreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
+    compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
+    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
+    PreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
     RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::DenseRecordArena;
 use super::{
     execution_mode::{
         ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
@@ -77,6 +88,8 @@ use super::{
 use crate::metrics::emit_opcode_counts;
 #[cfg(feature = "perf-metrics")]
 use crate::metrics::end_segment_metrics;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::system::cuda::SystemChipInventoryGPU;
 use crate::{
     arch::deferral::DeferralState,
     execute_spanned,
@@ -258,7 +271,7 @@ where
 
     #[cfg(feature = "rvr")]
     pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<'_>, StaticProgramError> {
-        Self::rvr_instance(self, exe, None)
+        self.instance_with_debug_map(exe, None)
     }
 }
 
@@ -280,13 +293,13 @@ where
     VC: VmExecutionConfig<F>,
     VC::Executor: Executor<F>,
 {
-    pub fn rvr_instance(
+    pub fn instance_with_debug_map(
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
         let compiled =
             compile(exe, extensions.lifters(), guest_debug_map).map_err(map_rvr_compile_error)?;
@@ -299,42 +312,17 @@ where
     }
 
     /// Compile a pure RVR instance with instret tracking and block-boundary suspension.
-    pub fn rvr_instret_tracking_instance(
+    pub fn instret_tracking_instance(
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrPureWithInstretTrackingInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
         let compiled = compile_with_instret_tracking(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         Ok(RvrPureWithInstretTrackingInstance::new(
-            self.inventory.config(),
-            RvrInitialImage::from(exe),
-            compiled,
-            extensions.into_runtime_hooks(),
-        ))
-    }
-
-    /// Compile the append-only full-log RVR preflight oracle.
-    ///
-    /// This path supports differential testing and direct transcript
-    /// validation. Production preflight proving uses
-    /// [`Self::preflight_instance`] and derives the full logs
-    /// by GPU replay.
-    pub fn full_log_preflight_instance(
-        &self,
-        exe: &VmExe<F>,
-        guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<FullLogPreflightInstance<'_>, StaticProgramError> {
-        #[cfg(feature = "metrics")]
-        let _compilation_span =
-            tracing::info_span!("compile_preflight", backend = "full_log").entered();
-        let extensions = self.build_rvr_extensions(None);
-        let compiled = compile_full_log_preflight(exe, extensions.lifters(), guest_debug_map)
-            .map_err(map_rvr_compile_error)?;
-        Ok(FullLogPreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
             compiled,
@@ -348,13 +336,13 @@ where
     pub fn preflight_instance(
         &self,
         exe: &VmExe<F>,
-        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<PreflightInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_preflight", backend = "rvr").entered();
+        let _compilation_span =
+            tracing::info_span!("compile_preflight", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
-            .map_err(map_rvr_compile_error)?;
+        let compiled =
+            compile_preflight(exe, extensions.lifters(), None).map_err(map_rvr_compile_error)?;
         Ok(PreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
@@ -473,10 +461,10 @@ where
         executor_idx_to_air_idx: &[usize],
         num_airs: usize,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
-        self.metered_rvr_instance(exe, executor_idx_to_air_idx, num_airs, None)
+        self.metered_instance_with_debug_map(exe, executor_idx_to_air_idx, num_airs, None)
     }
 
-    pub fn metered_rvr_instance(
+    pub fn metered_instance_with_debug_map(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
@@ -484,7 +472,8 @@ where
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
+        let _compilation_span =
+            tracing::info_span!("compile_metered", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
             num_airs,
@@ -504,7 +493,7 @@ where
         ))
     }
 
-    pub fn metered_segment_rvr_instance(
+    pub fn metered_segment_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
@@ -513,7 +502,7 @@ where
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
-            tracing::info_span!("compile_metered_segment", backend = "rvr").entered();
+            tracing::info_span!("compile_metered_segment", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
             num_airs,
@@ -540,7 +529,7 @@ where
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
-        self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths, None)
+        self.metered_cost_instance_with_debug_map(exe, executor_idx_to_air_idx, widths, None)
     }
 
     /// Load a previously saved metered-mode artifact. Its generated execution
@@ -619,7 +608,7 @@ where
         })
     }
 
-    pub fn metered_cost_rvr_instance(
+    pub fn metered_cost_instance_with_debug_map(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
@@ -628,7 +617,7 @@ where
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
-            tracing::info_span!("compile_metered_cost", backend = "rvr").entered();
+            tracing::info_span!("compile_metered_cost", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let emitted_widths: Vec<u64> = widths.iter().map(|&width| width as u64).collect();
         let chips = ChipMapping {
@@ -813,19 +802,7 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        Self::get_rvr_instance(self, exe)
-    }
-
-    #[cfg(feature = "rvr")]
-    pub fn get_rvr_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrPureInstance<'_>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
-    {
-        self.executor().rvr_instance(exe, None)
+        self.executor().instance(exe)
     }
 
     // Interpreter access when RVR is enabled.
@@ -870,21 +847,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn get_metered_rvr_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
-    {
-        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor()
-            .metered_rvr_instance(exe, &executor_idx_to_air_idx, self.num_airs(), None)
-    }
-
-    #[cfg(feature = "rvr")]
-    pub fn get_metered_segment_rvr_instance(
+    pub fn metered_segment_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError>
@@ -893,7 +856,7 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor().metered_segment_rvr_instance(
+        self.executor().metered_segment_instance(
             exe,
             &executor_idx_to_air_idx,
             self.num_airs(),
@@ -968,18 +931,6 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
-        Self::get_metered_cost_rvr_instance(self, exe)
-    }
-
-    #[cfg(feature = "rvr")]
-    pub fn get_metered_cost_rvr_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
-    {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         let widths: Vec<usize> = self
             .pk
@@ -987,8 +938,12 @@ where
             .iter()
             .map(|pk| pk.vk.params.width.total_width())
             .collect();
-        self.executor()
-            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths, None)
+        self.executor().metered_cost_instance_with_debug_map(
+            exe,
+            &executor_idx_to_air_idx,
+            &widths,
+            None,
+        )
     }
 
     #[cfg(feature = "rvr")]
@@ -1466,12 +1421,12 @@ where
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-impl<VB> VirtualMachine<openvm_cuda_backend::BabyBearPoseidon2GpuEngine, VB>
+impl<VB> VirtualMachine<BabyBearPoseidon2GpuEngine, VB>
 where
     VB: VmBuilder<
-        openvm_cuda_backend::BabyBearPoseidon2GpuEngine,
-        RecordArena = crate::arch::DenseRecordArena,
-        SystemChipInventory = crate::system::cuda::SystemChipInventoryGPU,
+        BabyBearPoseidon2GpuEngine,
+        RecordArena = DenseRecordArena,
+        SystemChipInventory = SystemChipInventoryGPU,
     >,
 {
     /// Expands one compact preflight execution against the segment's
@@ -1482,17 +1437,11 @@ where
     #[instrument(name = "postflight", skip_all)]
     pub fn postflight(
         &self,
-        program: &crate::arch::rvr::cuda::GpuPostflightProgram,
-        execution: &crate::arch::rvr::PreflightExecution,
+        program: &GpuPostflightProgram,
+        execution: &PreflightExecution,
         expected_retired: u32,
-        opcodes: crate::arch::rvr::cuda::PostflightOpcodeBases,
-    ) -> Result<
-        (
-            crate::arch::rvr::cuda::GpuPostflightTranscript,
-            crate::arch::rvr::cuda::GpuPostflightPlan,
-        ),
-        crate::arch::rvr::cuda::GpuPostflightError,
-    > {
+        opcodes: PostflightOpcodeBases,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let memory = MemTracker::start_and_reset_peak("postflight");
         let result = (|| {
             let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
@@ -1500,13 +1449,13 @@ where
                 initial_memory
                     .get(RV64_REGISTER_AS as usize)
                     .ok_or_else(|| {
-                        crate::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
+                        GpuPostflightError::InvalidTranscript(
                             "initial register image was not transported to the GPU".to_string(),
                         )
                     })?;
             let initial_main_memory =
                 initial_memory.get(RV64_MEMORY_AS as usize).ok_or_else(|| {
-                    crate::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
+                    GpuPostflightError::InvalidTranscript(
                         "initial main-memory image was not transported to the GPU".to_string(),
                     )
                 })?;
@@ -1534,7 +1483,7 @@ where
     pub fn emit_preflight_opcode_counts(&self, replay_plan: &GpuPostflightPlan)
     where
         <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
-            PreflightExecutor<BabyBear, crate::arch::DenseRecordArena>,
+            PreflightExecutor<BabyBear, DenseRecordArena>,
     {
         let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
         for opcode in replay_plan.executed_opcodes() {
@@ -1566,25 +1515,24 @@ where
         }
     }
 
-    /// Low-level preflight trace-generation seam used by a concrete extension
-    /// coordinator. It fences borrowed GPU inputs and validates trace heights,
-    /// but does not know whether the callback visited every executed opcode.
-    /// Callers should expose a coverage-checked extension entry point instead.
+    /// Generates one preflight proving context and leaves the VM reusable only
+    /// after the concrete producer has validated complete opcode coverage.
     #[doc(hidden)]
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_preflight_proving_ctx_unchecked_coverage(
+    pub fn generate_preflight_proving_ctx<P>(
         &mut self,
-        program: &crate::arch::rvr::cuda::GpuPostflightProgram,
-        transcript: &crate::arch::rvr::cuda::GpuPostflightTranscript,
-        replay_plan: &crate::arch::rvr::cuda::GpuPostflightPlan,
-        generate_extension: impl FnMut(
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+        producer: P,
+        mut generate_extension: impl FnMut(
+            &mut P,
             usize,
             &dyn Any,
-        ) -> Result<
-            openvm_stark_backend::prover::AirProvingContext<openvm_cuda_backend::GpuBackend>,
-            GenerationError,
-        >,
-    ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
+        )
+            -> Result<AirProvingContext<GpuBackend>, GenerationError>,
+        finish: impl FnOnce(P) -> Result<(), GenerationError>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         begin_preflight_tracegen_session(&mut self.preflight_tracegen_poisoned)?;
         // Reset once around the complete segment tracegen phase. Nested CUDA
         // components may report their own deltas, but must not reset this
@@ -1592,12 +1540,13 @@ where
         // source of truth for live buffers; reserved pool pages are reported
         // separately and may remain mapped after a correct drop.
         let memory = MemTracker::start_and_reset_peak("tracegen");
+        let mut producer = producer;
         let result = (|| {
             let ctx = self.chip_complex.generate_proving_ctx_from_postflight(
                 program,
                 transcript,
                 replay_plan,
-                generate_extension,
+                |insertion_idx, chip| generate_extension(&mut producer, insertion_idx, chip),
             );
 
             // Every system and extension kernel above uses raw views borrowed from
@@ -1627,19 +1576,15 @@ where
                     "preflight GPU trace generation rejected transcript with code {replay_error}"
                 )));
             }
-            self.validate_proving_ctx(ctx)
+            let ctx = self.validate_proving_ctx(ctx)?;
+            finish(producer)?;
+            Ok(ctx)
         })();
         memory.emit_metrics();
+        if result.is_ok() {
+            self.preflight_tracegen_poisoned = false;
+        }
         result
-    }
-
-    /// Clears the preflight poison only after the outermost extension coordinator has
-    /// checked complete opcode ownership. Errors deliberately leave the VM
-    /// poisoned because per-producer lookup counts are not rolled back.
-    #[doc(hidden)]
-    pub fn complete_preflight_tracegen_session(&mut self) {
-        debug_assert!(self.preflight_tracegen_poisoned);
-        self.preflight_tracegen_poisoned = false;
     }
 }
 
@@ -1686,6 +1631,16 @@ pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub user_public_values: UserPublicValuesProof<{ VM_DIGEST_WIDTH }, Val<SC>>,
 }
 
+/// Optional backend-specific continuation proving driver.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub type ContinuationProverFn<E, VB> = Box<
+    dyn FnMut(
+            &mut VmInstance<E, VB>,
+            Streams,
+        ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>
+        + Send,
+>;
+
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
 pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
@@ -1706,7 +1661,7 @@ where
     VB: VmBuilder<E>,
 {
     pub vm: VirtualMachine<E, VB>,
-    pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+    pub interpreter: Option<PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -1727,11 +1682,10 @@ where
     ) -> Result<Self, StaticProgramError> {
         let program_commitment = cached_program_trace.commitment;
         vm.load_program(cached_program_trace);
-        let interpreter = vm.preflight_interpreter(&exe)?;
         let state = vm.create_initial_state(&exe, vec![]);
         Ok(Self {
             vm,
-            interpreter,
+            interpreter: None,
             program_commitment,
             exe,
             state: Some(state),
@@ -1790,6 +1744,13 @@ where
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();
         self.reset_state(input.clone());
+        if self.interpreter.is_none() {
+            self.interpreter = Some(self.vm.preflight_interpreter(&self.exe)?);
+        }
+        let interpreter = self
+            .interpreter
+            .as_mut()
+            .expect("preflight interpreter was initialized above");
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
         let metered_instance = vm.metered_instance(&self.exe)?;
@@ -1811,12 +1772,7 @@ where
                 system_records,
                 record_arenas,
                 to_state,
-            } = vm.execute_preflight_for(
-                &mut self.interpreter,
-                from_state,
-                num_insns,
-                &trace_heights,
-            )?;
+            } = vm.execute_preflight_for(interpreter, from_state, num_insns, &trace_heights)?;
             state = Some(to_state);
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;

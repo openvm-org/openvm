@@ -194,6 +194,5 @@ mod tests {
             panic!("expected body instruction");
         };
         assert_eq!(instr.opname(), "mul");
-        assert!(instr.supports_preflight());
     }
 }

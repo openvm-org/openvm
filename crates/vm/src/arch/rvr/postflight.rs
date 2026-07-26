@@ -1,16 +1,25 @@
 //! Small derived indexes for replaying a preflight transcript.
 
-use std::{
-    collections::{hash_map::Entry, BTreeMap},
-    ops::Range,
-};
+use std::collections::{hash_map::Entry, BTreeMap};
+#[cfg(test)]
+use std::ops::Range;
 
+#[cfg(test)]
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use p3_baby_bear::BabyBear;
 use rustc_hash::FxHashMap;
-use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent};
+#[cfg(test)]
+use rvr_state::PreflightProgramEvent;
+use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT};
 use thiserror::Error;
 
-use super::{cuda::RvrReplayStep, FullLogPreflightTranscript, PreflightEndpoint};
+#[cfg(test)]
+use super::{cuda::RvrReplayStep, PreflightEndpoint, PreflightEventLog};
+use crate::{
+    arch::{MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    system::TouchedBlock,
+};
 
 /// No earlier timed event exists for this block. This is valid for a first read,
 /// whose logged value is the segment's initial value.
@@ -34,6 +43,7 @@ impl PreflightIndexError {
     }
 }
 
+#[cfg(test)]
 fn build_step_memory_starts(
     program: &[PreflightProgramEvent],
     memory: &[PreflightMemoryEvent],
@@ -96,17 +106,19 @@ fn build_step_memory_starts(
 }
 
 /// Cold derived replay data built once from one program/transcript pair.
+#[cfg(test)]
 #[derive(Debug)]
-pub(crate) struct RvrReplayData {
+pub(crate) struct ReplayData {
     steps: Vec<RvrReplayStep>,
     opcode_ranges: BTreeMap<u32, Range<usize>>,
 }
 
-impl RvrReplayData {
+#[cfg(test)]
+impl ReplayData {
     pub(crate) fn build(
         pc_base: u32,
         opcodes: &[u32],
-        transcript: &FullLogPreflightTranscript,
+        transcript: &PreflightEventLog,
         endpoint: PreflightEndpoint,
     ) -> Result<Self, PreflightIndexError> {
         let step_memory_starts =
@@ -158,6 +170,7 @@ impl RvrReplayData {
     }
 }
 
+#[cfg(test)]
 fn resolve_opcode(
     pc_base: u32,
     opcodes: &[u32],
@@ -189,6 +202,7 @@ fn resolve_opcode(
     Ok(opcode)
 }
 
+#[cfg(test)]
 fn validate_step_endpoint(
     opcode: u32,
     program_index: usize,
@@ -215,10 +229,11 @@ fn validate_step_endpoint(
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_endpoint(
     pc_base: u32,
     opcodes: &[u32],
-    transcript: &FullLogPreflightTranscript,
+    transcript: &PreflightEventLog,
     endpoint: PreflightEndpoint,
 ) -> Result<(), PreflightIndexError> {
     match endpoint {
@@ -237,16 +252,8 @@ fn validate_endpoint(
                 ));
             }
         }
-        PreflightEndpoint::Suspended {
-            resume_pc,
-            final_timestamp,
-        } => {
+        PreflightEndpoint::Suspended => {
             let sentinel = transcript.program_log.last().unwrap();
-            if sentinel.pc != resume_pc || sentinel.timestamp != final_timestamp {
-                return Err(PreflightIndexError::new(
-                    "suspended transcript sentinel does not match the execution boundary",
-                ));
-            }
             resolve_opcode(pc_base, opcodes, sentinel)?;
         }
     }
@@ -321,6 +328,113 @@ pub(crate) fn build_memory_predecessors(
     Ok(predecessors)
 }
 
+pub(crate) struct MemoryReplayIndex {
+    pub(crate) predecessors: Vec<u32>,
+    pub(crate) touched_blocks: Vec<TouchedBlock<BabyBear>>,
+}
+
+/// Builds the derived memory metadata used only when tests upload fabricated
+/// expanded logs. Production preflight derives the same metadata on the GPU
+/// from compact checkpoints and residuals.
+pub(crate) fn build_memory_index(
+    memory: &[PreflightMemoryEvent],
+    seeds: &[PreflightInitialWrite],
+    config: &MemoryConfig,
+) -> Result<MemoryReplayIndex, PreflightIndexError> {
+    let timestamp_limit = 1u64
+        .checked_shl(config.timestamp_max_bits as u32)
+        .ok_or_else(|| PreflightIndexError::new("timestamp width exceeds u64"))?;
+    let mut previous_timestamp = None;
+    let mut final_blocks = BTreeMap::<u64, (PreflightMemoryEvent, bool)>::new();
+    for (index, event) in memory.iter().copied().enumerate() {
+        validate_memory_block(event.address_space(), event.pointer, config)?;
+        if u64::from(event.timestamp) >= timestamp_limit {
+            return Err(PreflightIndexError::new(format!(
+                "memory event {index} timestamp exceeds the configured domain"
+            )));
+        }
+        if previous_timestamp.is_some_and(|previous| previous >= event.timestamp) {
+            return Err(PreflightIndexError::new(
+                "memory timestamps are not strictly increasing",
+            ));
+        }
+        previous_timestamp = Some(event.timestamp);
+        final_blocks
+            .entry(memory_key(event.address_space(), event.pointer))
+            .and_modify(|(last, dirty)| {
+                *last = event;
+                *dirty |= event.is_write();
+            })
+            .or_insert((event, event.is_write()));
+    }
+    for seed in seeds {
+        if seed.address_space & PREFLIGHT_WRITE_BIT != 0 {
+            return Err(PreflightIndexError::new(
+                "initial-write seed address space contains the write bit",
+            ));
+        }
+        validate_memory_block(seed.address_space, seed.pointer, config)?;
+    }
+
+    let predecessors = build_memory_predecessors(memory, seeds)?;
+    let touched_blocks = final_blocks
+        .into_values()
+        .map(|(event, dirty)| TouchedBlock {
+            address_space: event.address_space(),
+            ptr: event.pointer,
+            is_dirty: u32::from(dirty),
+            timestamp: event.timestamp,
+            values: event.value.map(BabyBear::from_u16),
+        })
+        .collect();
+    Ok(MemoryReplayIndex {
+        predecessors,
+        touched_blocks,
+    })
+}
+
+fn validate_memory_block(
+    address_space: u32,
+    pointer: u32,
+    config: &MemoryConfig,
+) -> Result<(), PreflightIndexError> {
+    let address_space_count = 1u64
+        .checked_shl(config.addr_space_height as u32)
+        .ok_or_else(|| PreflightIndexError::new("address-space height exceeds u64"))?;
+    let address_space_limit = u64::from(ADDR_SPACE_OFFSET)
+        .checked_add(address_space_count)
+        .ok_or_else(|| PreflightIndexError::new("address-space domain overflow"))?;
+    let pointer_limit = 1u64
+        .checked_shl(config.pointer_max_bits as u32)
+        .ok_or_else(|| PreflightIndexError::new("pointer width exceeds u64"))?;
+    let layout = config
+        .addr_spaces
+        .get(address_space as usize)
+        .filter(|_| {
+            address_space >= ADDR_SPACE_OFFSET && u64::from(address_space) < address_space_limit
+        })
+        .ok_or_else(|| {
+            PreflightIndexError::new(format!("address space {address_space} is out of range"))
+        })?;
+    if layout.layout != MemoryCellType::U16 {
+        return Err(PreflightIndexError::new(format!(
+            "address space {address_space} does not use u16 cells"
+        )));
+    }
+    let end = u64::from(pointer)
+        .checked_add(BLOCK_FE_WIDTH as u64)
+        .ok_or_else(|| PreflightIndexError::new("memory block pointer overflow"))?;
+    if pointer % BLOCK_FE_WIDTH as u32 != 0
+        || u64::from(pointer) >= pointer_limit
+        || end > layout.num_cells as u64
+    {
+        return Err(PreflightIndexError::new(format!(
+            "memory block AS={address_space} pointer={pointer} is out of range or misaligned"
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use rvr_state::{
@@ -349,7 +463,7 @@ mod tests {
 
     #[test]
     fn builds_step_offsets_and_memory_predecessors() {
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -399,7 +513,7 @@ mod tests {
 
     #[test]
     fn rejects_a_first_write_without_exactly_one_seed() {
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -464,6 +578,76 @@ mod tests {
     }
 
     #[test]
+    fn builds_touched_blocks_and_rejects_invalid_memory_metadata() {
+        let config = MemoryConfig::default();
+        let memory = [
+            read(1, 4, [1, 2, 3, 4]),
+            write(2, 0, [5, 6, 7, 8]),
+            write(3, 4, [9, 10, 11, 12]),
+        ];
+        let index = build_memory_index(
+            &memory,
+            &[PreflightInitialWrite {
+                address_space: 1,
+                pointer: 0,
+                initial_value: [0; 4],
+            }],
+            &config,
+        )
+        .unwrap();
+        assert_eq!(index.predecessors, [0, MEMORY_PREDECESSOR_SEED_BIT, 1]);
+        assert_eq!(
+            index.touched_blocks,
+            [
+                TouchedBlock {
+                    address_space: 1,
+                    ptr: 0,
+                    is_dirty: 1,
+                    timestamp: 2,
+                    values: [5, 6, 7, 8].map(BabyBear::from_u16),
+                },
+                TouchedBlock {
+                    address_space: 1,
+                    ptr: 4,
+                    is_dirty: 1,
+                    timestamp: 3,
+                    values: [9, 10, 11, 12].map(BabyBear::from_u16),
+                },
+            ]
+        );
+
+        for invalid in [
+            PreflightMemoryEvent {
+                address_space_and_kind: 0,
+                ..read(1, 0, [0; 4])
+            },
+            read(1, 2, [0; 4]),
+            PreflightMemoryEvent {
+                address_space_and_kind: 4,
+                ..read(1, 0, [0; 4])
+            },
+        ] {
+            assert!(build_memory_index(&[invalid], &[], &config).is_err());
+        }
+        assert!(
+            build_memory_index(&[read(1, 0, [0; 4]), read(1, 4, [0; 4])], &[], &config).is_err()
+        );
+        let mut narrow_timestamp = config.clone();
+        narrow_timestamp.timestamp_max_bits = 1;
+        assert!(build_memory_index(&[read(2, 0, [0; 4])], &[], &narrow_timestamp).is_err());
+        assert!(build_memory_index(
+            &[write(1, 0, [0; 4])],
+            &[PreflightInitialWrite {
+                address_space: PREFLIGHT_WRITE_BIT | 1,
+                pointer: 0,
+                initial_value: [0; 4],
+            }],
+            &config,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn rejects_non_increasing_memory_timestamps_across_steps() {
         let program = vec![
             PreflightProgramEvent {
@@ -489,7 +673,7 @@ mod tests {
     #[test]
     fn accepts_a_suspended_segment_boundary() {
         let phantom = SystemOpcode::PHANTOM.global_opcode().as_usize() as u32;
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 8,
@@ -503,14 +687,11 @@ mod tests {
             memory_log: vec![read(1, 0, [0; 4]), read(2, 4, [0; 4])],
             initial_write_log: vec![],
         };
-        let replay = RvrReplayData::build(
+        let replay = ReplayData::build(
             8,
             &[phantom, phantom],
             &transcript,
-            PreflightEndpoint::Suspended {
-                resume_pc: 12,
-                final_timestamp: 3,
-            },
+            PreflightEndpoint::Suspended,
         )
         .unwrap();
         assert_eq!(
@@ -520,14 +701,11 @@ mod tests {
                 memory_start: 0
             }]
         );
-        assert!(RvrReplayData::build(
+        assert!(ReplayData::build(
             8,
             &[phantom, phantom],
             &transcript,
-            PreflightEndpoint::Suspended {
-                resume_pc: 16,
-                final_timestamp: 3,
-            },
+            PreflightEndpoint::Suspended,
         )
         .unwrap_err()
         .to_string()

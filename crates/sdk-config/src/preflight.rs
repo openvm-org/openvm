@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{any::Any, collections::BTreeMap};
 
 use openvm_algebra_circuit::AlgebraPreflightGpuTracegen;
 use openvm_bigint_circuit::Int256PreflightGpuTracegen;
@@ -16,7 +16,11 @@ use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
 use openvm_keccak256_circuit::Keccak256PreflightGpuTracegen;
 use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_sha2_circuit::Sha2PreflightGpuTracegen;
-use openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext, StarkEngine};
+use openvm_stark_backend::{
+    p3_field::PrimeField32,
+    prover::{AirProvingContext, ProvingContext},
+    StarkEngine,
+};
 
 use crate::{SdkVmConfig, SdkVmGpuBuilder};
 
@@ -43,7 +47,7 @@ struct SdkPreflightGpuTracegen<'a> {
 impl SdkVmGpuBuilder {
     /// Uploads one immutable program together with all postflight access
     /// schedules enabled by this SDK configuration.
-    pub fn upload_preflight_program<F: PrimeField32>(
+    pub(crate) fn upload_preflight_program<F: PrimeField32>(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
     ) -> Result<GpuPostflightProgram, GpuPostflightError> {
@@ -97,7 +101,7 @@ impl SdkVmGpuBuilder {
     /// This layer deliberately does not guess executor buffer limits. The
     /// segment's metered instruction and residual counts must be used when
     /// constructing `PreflightLimits`.
-    pub fn postflight(
+    pub(crate) fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &GpuPostflightProgram,
         execution: &PreflightExecution,
@@ -118,7 +122,7 @@ impl SdkVmGpuBuilder {
 
     /// Generates the standard SDK proving context from one postflight segment
     /// without constructing a `RecordArena`.
-    pub fn generate_preflight_proving_ctx(
+    pub(crate) fn generate_preflight_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &GpuPostflightProgram,
         transcript: &GpuPostflightTranscript,
@@ -240,49 +244,60 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
 
     /// Generates every standard SDK AIR through one reverse inventory walk.
     fn generate_proving_ctx(
-        mut self,
+        self,
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
-        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
+        vm.generate_preflight_proving_ctx(
             self.program,
             self.transcript,
             self.replay_plan,
-            |_insertion_idx, chip| {
-                if let Some(tracegen) = &mut self.deferral {
-                    if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
-                        return Ok(ctx);
-                    }
-                }
-                if let Some(tracegen) = &mut self.keccak {
-                    if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
-                        return Ok(ctx);
-                    }
-                }
-                if let Some(tracegen) = &mut self.sha2 {
-                    if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
-                        return Ok(ctx);
-                    }
-                }
-                if let Some(tracegen) = &mut self.bigint {
-                    if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
-                        return Ok(ctx);
-                    }
-                }
-                if let Some(tracegen) = &mut self.ecc {
-                    if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
-                        return Ok(ctx);
-                    }
-                }
-                if let Some(tracegen) = &mut self.algebra {
-                    if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
-                        return Ok(ctx);
-                    }
-                }
-                self.rv64
-                    .generate_for_chip(_insertion_idx, chip)
-                    .map_err(extension_error)
-            },
-        )?;
+            self,
+            |tracegen, insertion_idx, chip| tracegen.generate_for_chip(insertion_idx, chip),
+            SdkPreflightGpuTracegen::finish,
+        )
+    }
+
+    fn generate_for_chip(
+        &mut self,
+        insertion_idx: usize,
+        chip: &dyn Any,
+    ) -> Result<AirProvingContext<GpuBackend>, GenerationError> {
+        if let Some(tracegen) = &mut self.deferral {
+            if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
+                return Ok(ctx);
+            }
+        }
+        if let Some(tracegen) = &mut self.keccak {
+            if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
+                return Ok(ctx);
+            }
+        }
+        if let Some(tracegen) = &mut self.sha2 {
+            if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
+                return Ok(ctx);
+            }
+        }
+        if let Some(tracegen) = &mut self.bigint {
+            if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
+                return Ok(ctx);
+            }
+        }
+        if let Some(tracegen) = &mut self.ecc {
+            if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
+                return Ok(ctx);
+            }
+        }
+        if let Some(tracegen) = &mut self.algebra {
+            if let Some(ctx) = tracegen.generate_for_chip(chip).map_err(extension_error)? {
+                return Ok(ctx);
+            }
+        }
+        self.rv64
+            .generate_for_chip(insertion_idx, chip)
+            .map_err(extension_error)
+    }
+
+    fn finish(self) -> Result<(), GenerationError> {
         if let Some(tracegen) = self.keccak {
             tracegen.finish().map_err(extension_error)?;
         }
@@ -301,9 +316,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         if let Some(tracegen) = self.algebra {
             tracegen.finish().map_err(extension_error)?;
         }
-        self.rv64.finish().map_err(extension_error)?;
-        vm.complete_preflight_tracegen_session();
-        Ok(ctx)
+        self.rv64.finish().map_err(extension_error)
     }
 }
 
@@ -418,7 +431,7 @@ mod tests {
         let mut config = SdkVmConfig::standard();
         config.system.config = small_system_config();
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let preflight = executor.preflight_instance(&exe, None).unwrap();
+        let preflight = executor.preflight_instance(&exe).unwrap();
         let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
 
         let mut params = SystemParams::new_for_testing(21);

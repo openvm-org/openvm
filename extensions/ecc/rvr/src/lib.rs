@@ -109,7 +109,7 @@ impl ExtInstr for EcAddNeInstr {
             let rd = ctx.read_var(self.rd_reg);
             (rd, rs1, rs2)
         } else {
-            // Preserve the established pure, metered, and ValueTrace register order.
+            // Preserve the established pure and metered register order.
             let rd = ctx.read_var(self.rd_reg);
             let rs1 = ctx.read_var(self.rs1_reg);
             let rs2 = ctx.read_var(self.rs2_reg);
@@ -146,7 +146,7 @@ impl ExtInstr for EcAddNeInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -174,7 +174,7 @@ impl ExtInstr for EcDoubleInstr {
             let rd = ctx.read_var(self.rd_reg);
             (rd, rs1)
         } else {
-            // Preserve the established pure, metered, and ValueTrace register order.
+            // Preserve the established pure and metered register order.
             let rd = ctx.read_var(self.rd_reg);
             let rs1 = ctx.read_var(self.rs1_reg);
             (rd, rs1)
@@ -211,7 +211,7 @@ impl ExtInstr for EcDoubleInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -493,8 +493,7 @@ mod tests {
                     curve,
                     is_setup,
                 };
-                assert!(!instruction.supports_preflight());
-                assert!(instruction.supports_checkpoint_preflight());
+                assert!(instruction.supports_preflight());
 
                 let mut checkpoint = TestEmitCtx::checkpoint();
                 instruction.emit_c(&mut checkpoint);
@@ -538,8 +537,7 @@ mod tests {
                     curve,
                     is_setup,
                 };
-                assert!(!instruction.supports_preflight());
-                assert!(instruction.supports_checkpoint_preflight());
+                assert!(instruction.supports_preflight());
 
                 let mut checkpoint = TestEmitCtx::checkpoint();
                 instruction.emit_c(&mut checkpoint);

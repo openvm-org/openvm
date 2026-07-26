@@ -165,10 +165,6 @@ fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> Str
 }
 
 fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, tc: &TermCtx<'_>) {
-    if ctx.writes_full_events() && target == tc.current_block {
-        ctx.write_line("goto preflight_block_loop;");
-        return;
-    }
     ctx.flush_preflight_local();
     ctx.write_line(&static_tail_call(target, args, tc.valid_blocks));
 }
@@ -260,19 +256,9 @@ mod tests {
         emit_terminator(&mut direct, &term, 0, &tc);
         assert!(!direct.buf().contains("reg_read"));
 
-        let mut tracing = EmitContext::new(
-            HashSet::new(),
-            EmitMode::ValueTrace,
-            BlockAbi::Plain,
-            None,
-            None,
-        );
-        emit_terminator(&mut tracing, &term, 0, &tc);
-        assert_eq!(tracing.buf().matches("preflight_local_reg_read").count(), 2);
-
         let mut checkpoint = EmitContext::new(
             HashSet::new(),
-            EmitMode::CheckpointPreflight,
+            EmitMode::Preflight,
             BlockAbi::Plain,
             None,
             None,

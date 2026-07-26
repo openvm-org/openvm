@@ -1,6 +1,4 @@
-//! C-compatible append buffers used by RVR preflight execution.
-
-use core::mem::offset_of;
+//! C-compatible logical execution events derived by GPU replay.
 
 pub const PREFLIGHT_WRITE_BIT: u32 = 1 << 31;
 pub const PREFLIGHT_ADDRESS_SPACE_MASK: u32 = !PREFLIGHT_WRITE_BIT;
@@ -47,54 +45,6 @@ pub struct PreflightInitialWrite {
     pub initial_value: [u16; 4],
 }
 
-/// Raw buffer descriptors shared with generated C.
-///
-/// The pointers refer to spare capacity owned by Rust for the duration of one
-/// execution call. Generated code only updates lengths, timestamp, and error.
-#[repr(C)]
-#[derive(Debug)]
-pub struct PreflightState {
-    pub program_log: *mut PreflightProgramEvent,
-    pub memory_log: *mut PreflightMemoryEvent,
-    pub initial_write_log: *mut PreflightInitialWrite,
-    pub program_log_len: u64,
-    pub program_log_cap: u64,
-    pub memory_log_len: u64,
-    pub memory_log_cap: u64,
-    pub initial_write_log_len: u64,
-    pub initial_write_log_cap: u64,
-    pub timestamp: u32,
-    pub error: u32,
-    /// Segment-local scratch used to avoid emitting redundant register seeds.
-    pub seen_register_blocks: u32,
-    pub wrote_register: u32,
-    /// Lets finalization skip its memory-log scan when execution touched only registers.
-    pub has_non_register_events: u32,
-    pub padding: u32,
-}
-
-impl Default for PreflightState {
-    fn default() -> Self {
-        Self {
-            program_log: core::ptr::null_mut(),
-            memory_log: core::ptr::null_mut(),
-            initial_write_log: core::ptr::null_mut(),
-            program_log_len: 0,
-            program_log_cap: 0,
-            memory_log_len: 0,
-            memory_log_cap: 0,
-            initial_write_log_len: 0,
-            initial_write_log_cap: 0,
-            timestamp: 1,
-            error: 0,
-            seen_register_blocks: 0,
-            wrote_register: 0,
-            has_non_register_events: 0,
-            padding: 0,
-        }
-    }
-}
-
 const _: () = {
     assert!(size_of::<PreflightProgramEvent>() == 8);
     assert!(align_of::<PreflightProgramEvent>() == 4);
@@ -102,14 +52,4 @@ const _: () = {
     assert!(align_of::<PreflightMemoryEvent>() == 4);
     assert!(size_of::<PreflightInitialWrite>() == 16);
     assert!(align_of::<PreflightInitialWrite>() == 4);
-    assert!(size_of::<PreflightState>() == 96);
-    assert!(align_of::<PreflightState>() == 8);
-    assert!(offset_of!(PreflightState, program_log) == 0);
-    assert!(offset_of!(PreflightState, memory_log) == 8);
-    assert!(offset_of!(PreflightState, initial_write_log) == 16);
-    assert!(offset_of!(PreflightState, program_log_len) == 24);
-    assert!(offset_of!(PreflightState, timestamp) == 72);
-    assert!(offset_of!(PreflightState, error) == 76);
-    assert!(offset_of!(PreflightState, seen_register_blocks) == 80);
-    assert!(offset_of!(PreflightState, has_non_register_events) == 88);
 };

@@ -45,17 +45,15 @@ impl PageAddressSpace {
 /// slots without a memory event. A peek reads the current value and preserves
 /// the current timestamp.
 pub trait ExtEmitCtx {
-    /// Whether this emitter is producing the minimal checkpoint transcript.
-    /// Instruction nodes use this only when checkpoint memory order differs
-    /// from an older execution mode whose generated code must remain stable.
+    /// Whether this emitter is producing the minimal preflight transcript.
     fn is_checkpoint_preflight(&self) -> bool {
         false
     }
 
     /// Whether replay values must be counted for exact segment sizing.
     ///
-    /// This is true while writing checkpoint preflight and while metering RVR
-    /// execution. Only checkpoint preflight materializes the values.
+    /// This is true during preflight and metered execution. Only preflight
+    /// materializes the values.
     fn counts_checkpoint_residuals(&self) -> bool {
         self.is_checkpoint_preflight()
     }
@@ -68,8 +66,7 @@ pub trait ExtEmitCtx {
 
     /// Reserve logical clock slots that have no enabled memory event.
     ///
-    /// This affects value-tracing execution only. Pure and metered emitters
-    /// preserve their existing execution behavior.
+    /// Pure and metered emitters preserve their existing execution behavior.
     fn advance_timestamp(&mut self, slots: u32);
 
     /// Write a variable through a VM memory access.
@@ -93,15 +90,15 @@ pub trait ExtEmitCtx {
     /// does not reserve a second block-access slot.
     fn write_aligned_mem_block(&mut self, addr: &str, val: &str);
 
-    /// Ensure value tracing can append `writes` memory writes and advance
-    /// `slots` logical clock slots before an instruction starts mutating state.
+    /// Ensure preflight can append `writes` memory writes and advance `slots`
+    /// logical clock slots before an instruction starts mutating state.
     ///
     /// Pure and metered emitters preserve their existing execution behavior.
     fn reserve_preflight_writes(&mut self, writes: &str, slots: &str);
 
     /// Reserve space for a runtime-sized sequence of replay values.
     ///
-    /// Checkpoint preflight uses this before consuming host advice. Metered
+    /// Preflight uses this before consuming host advice. Metered
     /// execution uses the same count without materializing a replay-value stream.
     fn reserve_replay_values(&mut self, _count: &str) {}
 
@@ -122,7 +119,7 @@ pub trait ExtEmitCtx {
     /// Append a post-write range of aligned main-memory words to checkpoint
     /// replay values.
     ///
-    /// This emits no loads outside checkpoint preflight; metered execution only
+    /// This emits no loads outside preflight; metered execution only
     /// accounts for the already-reserved range length.
     fn append_replay_memory_u64_range(&mut self, _base: &str, _count: &str) {}
 
@@ -134,9 +131,7 @@ pub trait ExtEmitCtx {
 
     /// Account for memory-bus slots performed inside an opaque extension call.
     ///
-    /// This is checkpoint-preflight-only bookkeeping. In particular, it must
-    /// not add timestamp operations to legacy value tracing, whose memory
-    /// wrappers already emit the call's events.
+    /// This is preflight-only bookkeeping.
     fn advance_checkpoint_timestamp(&mut self, _slots: u32) {}
 
     /// Flush local page state, emit a C call, then reload the page state.

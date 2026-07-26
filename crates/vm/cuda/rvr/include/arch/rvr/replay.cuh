@@ -25,6 +25,25 @@ struct ReplayProgramTransition {
     RvrReplayInstruction const *instruction;
 };
 
+static __device__ __forceinline__ RvrReplayInstruction const *resolve_replay_instruction(
+    DeviceBufferConstView<RvrReplayInstruction> instructions,
+    uint32_t pc_base,
+    uint32_t pc,
+    size_t *slot_out = nullptr
+) {
+    if (pc < pc_base || (pc - pc_base) % ::program::DEFAULT_PC_STEP != 0) {
+        return nullptr;
+    }
+    size_t slot = (pc - pc_base) / ::program::DEFAULT_PC_STEP;
+    if (slot >= instructions.len() || instructions[slot].words[0] == UINT32_MAX) {
+        return nullptr;
+    }
+    if (slot_out != nullptr) {
+        *slot_out = slot;
+    }
+    return &instructions[slot];
+}
+
 /// Resolves one replay step against the immutable program and validates its
 /// timestamp transition. Dynamic-PC callers must validate `to.pc` before
 /// emitting a row.
@@ -52,14 +71,14 @@ static __device__ __forceinline__ ReplayProgramTransitionError resolve_replay_pr
     if (invalid_pc || invalid_timestamp || invalid_sequential) {
         return ReplayProgramTransitionError::InvalidTransition;
     }
-    size_t instruction_index = (from.pc - pc_base) / ::program::DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) {
+    auto const *instruction = resolve_replay_instruction(instructions, pc_base, from.pc);
+    if (instruction == nullptr) {
         return ReplayProgramTransitionError::MissingInstruction;
     }
     out = ReplayProgramTransition{
         .from = &from,
         .to = &to,
-        .instruction = &instructions[instruction_index],
+        .instruction = instruction,
     };
     return ReplayProgramTransitionError::None;
 }

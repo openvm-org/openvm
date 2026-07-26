@@ -74,7 +74,7 @@ impl ExtInstr for KeccakfInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -119,7 +119,7 @@ impl ExtInstr for XorinInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -362,8 +362,7 @@ mod tests {
             buffer_ptr_reg: Variable::new(5),
             perm_chip_idx: None,
         };
-        assert!(!instruction.supports_preflight());
-        assert!(instruction.supports_checkpoint_preflight());
+        assert!(instruction.supports_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instruction.emit_c(&mut ctx);
@@ -386,8 +385,7 @@ mod tests {
             input_ptr_reg: Variable::new(6),
             len_reg: Variable::new(7),
         };
-        assert!(!instruction.supports_preflight());
-        assert!(instruction.supports_checkpoint_preflight());
+        assert!(instruction.supports_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instruction.emit_c(&mut ctx);

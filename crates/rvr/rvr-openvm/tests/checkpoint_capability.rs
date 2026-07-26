@@ -11,21 +11,17 @@ use rvr_openvm_lift::ExtensionRegistry;
 static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
-struct LegacyPreflightOnlyInstr;
+struct UnsupportedPreflightInstr;
 
-impl ExtInstr for LegacyPreflightOnlyInstr {
+impl ExtInstr for UnsupportedPreflightInstr {
     fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
 
     fn opname(&self) -> &str {
-        "legacy-only"
+        "unsupported"
     }
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
-    }
-
-    fn supports_preflight(&self) -> bool {
-        true
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -43,7 +39,7 @@ impl ExtInstr for CheckpointCapableInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 
@@ -92,12 +88,12 @@ impl Drop for TempDir {
 }
 
 #[test]
-fn checkpoint_compiler_rejects_legacy_preflight_only_instruction() {
+fn preflight_compiler_rejects_unsupported_instruction() {
     let output = std::env::temp_dir().join("unused-checkpoint-capability-output");
-    let project = CProject::new(&output, "test", RvrExecutionKind::CheckpointPreflight);
+    let project = CProject::new(&output, "test", RvrExecutionKind::Preflight);
     let error = project
         .write_all(
-            &[block(LegacyPreflightOnlyInstr)],
+            &[block(UnsupportedPreflightInstr)],
             0x100,
             0x100,
             &ExtensionRegistry::new(),
@@ -106,14 +102,14 @@ fn checkpoint_compiler_rejects_legacy_preflight_only_instruction() {
 
     assert_eq!(
         error.to_string(),
-        "instruction legacy-only at 0x100 does not support RVR preflight"
+        "instruction unsupported at 0x100 does not support RVR preflight"
     );
 }
 
 #[test]
-fn checkpoint_compiler_accepts_explicit_checkpoint_opt_in() {
+fn preflight_compiler_accepts_explicit_capability() {
     let output = TempDir::new("checkpoint-capable");
-    let project = CProject::new(output.path(), "test", RvrExecutionKind::CheckpointPreflight);
+    let project = CProject::new(output.path(), "test", RvrExecutionKind::Preflight);
 
     project
         .write_all(

@@ -122,7 +122,7 @@ fn prove_pairing_checkpoint(
 ) -> Result<()> {
     *config.as_mut() = test_system_config();
     let executor = VmExecutor::new(config.clone())?;
-    let checkpoint = executor.preflight_instance(&exe, None)?;
+    let checkpoint = executor.preflight_instance(&exe)?;
     let pairing_pcs = exe
         .program
         .enumerate_by_pc()
@@ -187,24 +187,12 @@ fn prove_pairing_checkpoint(
             "execution-bus start does not match the prior endpoint"
         );
         match (segment_index, execution.endpoint) {
-            (
-                0,
-                PreflightEndpoint::Suspended {
-                    resume_pc,
-                    final_timestamp,
-                },
-            ) => {
-                ensure!(
-                    (resume_pc, final_timestamp)
-                        == (execution.to_state.pc, execution.to_state.timestamp),
-                    "suspended endpoint does not match the execution boundary"
-                );
-            }
+            (0, PreflightEndpoint::Suspended) => {}
             (1, PreflightEndpoint::Terminated) => {}
             (0, PreflightEndpoint::Terminated) => {
                 eyre::bail!("pairing prefix terminated before HintStore")
             }
-            (1, PreflightEndpoint::Suspended { .. }) => {
+            (1, PreflightEndpoint::Suspended) => {
                 eyre::bail!("final pairing segment did not terminate")
             }
             _ => unreachable!(),

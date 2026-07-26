@@ -143,7 +143,7 @@ impl ExtInstr for DeferralCallInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -230,7 +230,7 @@ impl ExtInstr for DeferralOutputInstr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -1136,7 +1136,7 @@ mod tests {
             def_idx: 3,
             poseidon2_chip_idx: None,
         };
-        assert!(instruction.supports_checkpoint_preflight());
+        assert!(instruction.supports_preflight());
 
         let mut checkpoint = TestEmitCtx::checkpoint();
         instruction.emit_c(&mut checkpoint);
@@ -1190,7 +1190,7 @@ mod tests {
             output_chip_idx: None,
             poseidon2_chip_idx: None,
         };
-        assert!(instruction.supports_checkpoint_preflight());
+        assert!(instruction.supports_preflight());
 
         let mut checkpoint = TestEmitCtx::checkpoint();
         instruction.emit_c(&mut checkpoint);

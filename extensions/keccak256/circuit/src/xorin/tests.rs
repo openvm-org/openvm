@@ -33,9 +33,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    openvm_circuit::arch::rvr::{
-        cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
-    },
+    openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
 };
@@ -560,7 +558,7 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
         });
     }
     let final_timestamp = 4 + 3 * num_blocks as u32;
-    let transcript = FullLogPreflightTranscript {
+    let transcript = PreflightEventLog {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,

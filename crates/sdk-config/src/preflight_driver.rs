@@ -31,31 +31,95 @@ use openvm_circuit::{
         execution_mode::{MeteredCtx, Segment},
         hasher::poseidon2::vm_poseidon2_hasher,
         rvr::{cuda::GpuPostflightProgram, RvrMeteredInstance},
-        ContinuationVmProof, ExecutionError, GenerationError, PreflightEndpoint,
-        PreflightExecution, PreflightInstance, PreflightLimits, Streams, VirtualMachineError,
-        VmInstance,
+        ContinuationProverFn, ContinuationVmProof, ExecutionError, GenerationError,
+        PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, Streams,
+        VirtualMachineError, VmInstance,
     },
     system::memory::merkle::public_values::UserPublicValuesProof,
 };
 use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
-use openvm_sdk_config::SdkVmGpuBuilder;
 use openvm_stark_backend::StarkEngine;
 use tracing::info_span;
 
-use crate::{StdIn, SC};
+use crate::{SdkVmGpuBuilder, SC};
 
 const CHECKPOINT_INTERVAL: usize = 512;
 
+struct PreparedPreflight {
+    metered: RvrMeteredInstance<'static>,
+    metered_ctx: MeteredCtx,
+    preflight: PreflightInstance<'static>,
+    gpu_program: GpuPostflightProgram,
+}
+
+impl PreparedPreflight {
+    fn new(
+        instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+    ) -> Result<Self, VirtualMachineError> {
+        let _prepare = info_span!("prepare_preflight", group = "app_proof").entered();
+        let exe = instance.exe();
+        let metered_ctx = instance.vm.build_metered_ctx(exe);
+        let executor_idx_to_air_idx = instance.vm.executor_idx_to_air_idx();
+        let metered = instance
+            .vm
+            .executor()
+            .metered_instance_with_debug_map(
+                exe,
+                &executor_idx_to_air_idx,
+                metered_ctx.trace_heights.len(),
+                None,
+            )
+            .map_err(VirtualMachineError::from)?
+            .into_owned();
+        let preflight = instance
+            .vm
+            .executor()
+            .preflight_instance(exe)
+            .map_err(VirtualMachineError::from)?
+            .into_owned();
+        let gpu_program = info_span!("upload_preflight_program")
+            .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(&instance.vm, &exe.program))
+            .map_err(generation_error)?;
+        Ok(Self {
+            metered,
+            metered_ctx,
+            preflight,
+            gpu_program,
+        })
+    }
+}
+
+pub(crate) fn continuation_prover(
+) -> ContinuationProverFn<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
+    let mut prepared = None;
+    Box::new(move |instance, input| {
+        if prepared.is_none() {
+            let ready = PreparedPreflight::new(instance)?;
+            // Publish only complete preparation so a failed attempt remains retryable.
+            prepared = Some(ready);
+        }
+        let prepared = prepared.as_ref().unwrap();
+        let _prove_span = info_span!("app_prove", group = "app_proof").entered();
+        prove(
+            instance,
+            input,
+            &prepared.metered,
+            &prepared.metered_ctx,
+            &prepared.preflight,
+            &prepared.gpu_program,
+        )
+    })
+}
+
 /// Continuation driver for compiled preflight and record-free GPU trace generation.
-pub(super) fn prove(
+fn prove(
     instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
-    input: StdIn,
+    input: Streams,
     metered: &RvrMeteredInstance<'_>,
     metered_ctx: &MeteredCtx,
     preflight: &PreflightInstance<'_>,
     gpu_program: &GpuPostflightProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
-    let input: Streams = input.into();
     instance.reset_state(input.clone());
     let exe = instance.exe().clone();
 
@@ -133,17 +197,9 @@ fn prove_inner(
         #[cfg(feature = "metrics")]
         let preflight_started = Instant::now();
         let execution = match reuse.take() {
-            Some(transcript) => {
-                preflight.execute_from_state_for_reusing(state, limits, transcript)?
-            }
-            None => preflight.execute_from_state_for(state, limits)?,
+            Some(transcript) => preflight.execute_segment_reusing(state, limits, transcript)?,
+            None => preflight.execute_segment(state, limits)?,
         };
-        if execution.retired != expected_retired {
-            return Err(execution_error(format!(
-                "preflight retired {} instructions, expected {expected_retired}",
-                execution.retired
-            )));
-        }
         #[cfg(feature = "metrics")]
         {
             preflight_time += preflight_started.elapsed();
@@ -231,7 +287,7 @@ fn validate_endpoint(
 ) -> Result<(), VirtualMachineError> {
     let valid = matches!(
         (&execution.endpoint, is_final_segment),
-        (PreflightEndpoint::Suspended { .. }, false) | (PreflightEndpoint::Terminated, true)
+        (PreflightEndpoint::Suspended, false) | (PreflightEndpoint::Terminated, true)
     );
     if valid {
         Ok(())

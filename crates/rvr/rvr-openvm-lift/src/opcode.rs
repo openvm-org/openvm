@@ -75,10 +75,6 @@ impl ExtInstr for NopInstr {
         true
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
-        true
-    }
-
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }

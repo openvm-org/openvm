@@ -219,7 +219,7 @@ mod tests {
             ..Default::default()
         };
         let executor = VmExecutor::new(config)?;
-        let checkpoint = executor.preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe)?;
         let mut initial = checkpoint.create_initial_vm_state(streams);
         let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
         initial.memory.memory.touched_pages[DEFERRAL_AS as usize] =
@@ -233,7 +233,7 @@ mod tests {
             checkpoint.execute_from_state_for(split_initial, PreflightLimits::new(2, 13, 1))?;
         assert!(matches!(
             first.endpoint,
-            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended { resume_pc: 8, .. }
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended
         ));
         assert_eq!(
             first.state.memory.memory.touched_pages[DEFERRAL_AS as usize]
@@ -278,14 +278,14 @@ mod tests {
 
         let executor = VmExecutor::new(config.clone())?;
         let pure_error = executor
-            .rvr_instance(&exe, None)?
+            .instance(&exe)?
             .execute(Streams::default())
             .err()
             .expect("pure RVR must trap an out-of-bounds OUTPUT key");
         assert_rvr_trap(pure_error);
 
         let checkpoint_error = executor
-            .preflight_instance(&exe, None)?
+            .preflight_instance(&exe)?
             .execute(
                 Streams::default(),
                 PreflightLimits::new(instructions.len(), 0, 1),

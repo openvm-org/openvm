@@ -10,11 +10,9 @@
 //! memory events, predecessors, and first-write values are derived GPU data.
 
 use std::sync::Arc;
-#[cfg(feature = "test-utils")]
-use std::time::{Duration, Instant};
 
 use openvm_cuda_common::{
-    copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
+    copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::{CudaError, MemCopyError},
     stream::GpuDeviceCtx,
@@ -33,11 +31,8 @@ use rvr_state::{
 use thiserror::Error;
 
 #[cfg(feature = "test-utils")]
-use super::postflight::RvrReplayData;
-use super::{
-    bridge::read_rv64_registers, checkpoint_preflight::PreflightExecution,
-    FullLogPreflightTranscript, PreflightEndpoint,
-};
+use super::PreflightEventLog;
+use super::{bridge::read_rv64_registers, preflight::PreflightExecution, PreflightEndpoint};
 use crate::{
     arch::{
         to_byte_ptr_bits, ExecutionState, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET,
@@ -69,7 +64,7 @@ const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == size_of::<[u32; 8]>
 /// Four native field cells in the raw Montgomery representation used by CUDA.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct PostflightFieldBlock {
+pub(crate) struct PostflightFieldBlock {
     pub values: [u32; BLOCK_FE_WIDTH],
 }
 
@@ -842,7 +837,7 @@ const RVR_MEMORY_CELL_UNSUPPORTED: u32 = 0;
 const RVR_MEMORY_CELL_U16: u32 = 1;
 const RVR_MEMORY_CELL_FIELD32: u32 = 2;
 
-fn rvr_memory_cell_kind(layout: MemoryCellType) -> u32 {
+fn memory_cell_kind(layout: MemoryCellType) -> u32 {
     match layout {
         MemoryCellType::U16 => RVR_MEMORY_CELL_U16,
         MemoryCellType::F { size: 4 } => RVR_MEMORY_CELL_FIELD32,
@@ -882,8 +877,9 @@ fn upload<T>(values: &[T], device_ctx: &GpuDeviceCtx) -> Result<DeviceBuffer<T>,
 
 pub(crate) type ConnectorBoundary = (ExecutionState<u32>, ExecutionState<u32>, Option<u32>);
 
+#[cfg(feature = "test-utils")]
 fn replay_boundary(
-    transcript: &FullLogPreflightTranscript,
+    transcript: &PreflightEventLog,
     endpoint: PreflightEndpoint,
 ) -> Result<ConnectorBoundary, GpuPostflightError> {
     let first = transcript.program_log.first().ok_or_else(|| {
@@ -904,8 +900,6 @@ pub struct GpuPostflightProgram {
     instructions: DeviceBuffer<PostflightInstruction>,
     dense_program_rows: DeviceBuffer<u32>,
     num_program_rows: usize,
-    #[cfg(feature = "test-utils")]
-    opcodes: Vec<u32>,
     active_opcodes: Vec<u32>,
     d_active_opcodes: DeviceBuffer<u32>,
     checkpoint_schedule_dispatch: DeviceBuffer<u32>,
@@ -914,6 +908,9 @@ pub struct GpuPostflightProgram {
     checkpoint_static_values: DeviceBuffer<u64>,
     checkpoint_schedule_opcodes: Vec<u32>,
     memory_address_spaces: DeviceBuffer<RvrMemoryAddressSpace>,
+    #[cfg(feature = "test-utils")]
+    /// Host layout for validating fabricated expanded logs before upload.
+    memory_config: MemoryConfig,
     address_space_height: u32,
     /// Pointer width used by chronology keys, whose pointers count AS-native cells.
     cell_pointer_max_bits: u32,
@@ -927,6 +924,7 @@ pub struct GpuPostflightProgram {
 }
 
 impl GpuPostflightProgram {
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn upload<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
@@ -981,7 +979,7 @@ impl GpuPostflightProgram {
             .iter()
             .map(|config| RvrMemoryAddressSpace {
                 num_cells: config.num_cells as u64,
-                cell_kind: rvr_memory_cell_kind(config.layout),
+                cell_kind: memory_cell_kind(config.layout),
                 _padding: 0,
             })
             .collect::<Vec<_>>();
@@ -1061,8 +1059,6 @@ impl GpuPostflightProgram {
             instructions: upload(&instructions, device_ctx)?,
             dense_program_rows: upload(&dense_program_rows, device_ctx)?,
             num_program_rows: next_program_row as usize,
-            #[cfg(feature = "test-utils")]
-            opcodes,
             d_active_opcodes: upload(&active_opcodes, device_ctx)?,
             active_opcodes,
             checkpoint_schedule_dispatch: upload(&registry.dispatch, device_ctx)?,
@@ -1071,6 +1067,8 @@ impl GpuPostflightProgram {
             checkpoint_static_values: upload(&registry.static_values, device_ctx)?,
             checkpoint_schedule_opcodes,
             memory_address_spaces: upload(&memory_address_spaces, device_ctx)?,
+            #[cfg(feature = "test-utils")]
+            memory_config: memory_config.clone(),
             address_space_height: memory_config.addr_space_height as u32,
             cell_pointer_max_bits: memory_config.pointer_max_bits as u32,
             byte_pointer_max_bits: to_byte_ptr_bits(memory_config.pointer_max_bits)
@@ -1093,18 +1091,17 @@ impl GpuPostflightProgram {
     /// Upload one segment's logs and its derived replay work. Deriving the work
     /// through the uploaded program prevents mixing a plan with another static
     /// program that happens to have the same length.
+    #[cfg(feature = "test-utils")]
     pub fn upload_transcript(
         &self,
-        transcript: &FullLogPreflightTranscript,
+        transcript: &PreflightEventLog,
         endpoint: PreflightEndpoint,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
         let gpu = GpuPostflightTranscript::upload(
             transcript,
-            self.address_space_height,
-            self.cell_pointer_max_bits,
-            self.memory_address_spaces.view(),
+            &self.memory_config,
             &self.device_ctx,
             self.identity.clone(),
             segment_identity.clone(),
@@ -1125,7 +1122,7 @@ impl GpuPostflightProgram {
     /// chronology pass resolves them against the segment-start memory image.
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
-    pub fn postflight(
+    pub(crate) fn postflight(
         &self,
         execution: &PreflightExecution,
         expected_retired: u32,
@@ -1152,19 +1149,7 @@ impl GpuPostflightProgram {
         }
         let (endpoint_kind, exit_code) = match execution.endpoint {
             PreflightEndpoint::Terminated => (0, Some(0)),
-            PreflightEndpoint::Suspended {
-                resume_pc,
-                final_timestamp,
-            } if (resume_pc, final_timestamp)
-                == (execution.to_state.pc, execution.to_state.timestamp) =>
-            {
-                (1, None)
-            }
-            PreflightEndpoint::Suspended { .. } => {
-                return Err(GpuPostflightError::InvalidTranscript(
-                    "checkpoint suspended endpoint does not match its final boundary".to_string(),
-                ));
-            }
+            PreflightEndpoint::Suspended => (1, None),
         };
         if execution.from_state.timestamp != 1
             || execution.to_state.pc != execution.state.pc()
@@ -1359,52 +1344,6 @@ impl GpuPostflightProgram {
         Ok((transcript, plan))
     }
 
-    /// Benchmark-only split of synchronized raw-log upload plus memory indexing
-    /// and synchronized GPU program indexing plus its small range-table D2H.
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    pub fn upload_transcript_profiled(
-        &self,
-        transcript: &FullLogPreflightTranscript,
-        endpoint: PreflightEndpoint,
-    ) -> Result<
-        (
-            GpuPostflightTranscript,
-            GpuPostflightPlan,
-            Duration,
-            Duration,
-        ),
-        GpuPostflightError,
-    > {
-        let boundary = replay_boundary(transcript, endpoint)?;
-        self.device_ctx.stream.synchronize()?;
-        let started = Instant::now();
-        let segment_identity = Arc::new(());
-        let transcript = GpuPostflightTranscript::upload(
-            transcript,
-            self.address_space_height,
-            self.cell_pointer_max_bits,
-            self.memory_address_spaces.view(),
-            &self.device_ctx,
-            self.identity.clone(),
-            segment_identity.clone(),
-        )?;
-        self.device_ctx.stream.synchronize()?;
-        let upload_time = started.elapsed();
-
-        let started = Instant::now();
-        let plan = GpuPostflightPlan::build(
-            self,
-            &transcript,
-            endpoint,
-            boundary,
-            self.identity.clone(),
-            segment_identity,
-        )?;
-        let index_time = started.elapsed();
-        Ok((transcript, plan, index_time, upload_time))
-    }
-
     pub fn ensure_replay_inputs(
         &self,
         transcript: &GpuPostflightTranscript,
@@ -1423,115 +1362,6 @@ impl GpuPostflightProgram {
             return Err(GpuPostflightError::SegmentMismatch);
         }
         Ok(())
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    pub fn cpu_memory_predecessors(
-        transcript: &FullLogPreflightTranscript,
-    ) -> Result<Vec<u32>, GpuPostflightError> {
-        super::postflight::build_memory_predecessors(
-            &transcript.memory_log,
-            &transcript.initial_write_log,
-        )
-        .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    #[allow(clippy::type_complexity)]
-    pub fn cpu_replay_plan(
-        &self,
-        transcript: &FullLogPreflightTranscript,
-        endpoint: PreflightEndpoint,
-    ) -> Result<
-        (
-            Vec<[u32; 2]>,
-            std::collections::BTreeMap<u32, std::ops::Range<usize>>,
-        ),
-        GpuPostflightError,
-    > {
-        let replay = RvrReplayData::build(self.pc_base, &self.opcodes, transcript, endpoint)
-            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
-        Ok((
-            replay
-                .steps()
-                .iter()
-                .map(|step| [step.program_index, step.memory_start])
-                .collect(),
-            replay.opcode_ranges().clone(),
-        ))
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    /// Requested live-buffer payload, excluding allocator page rounding, the
-    /// shared error word, raw logs, and the static program.
-    pub fn gpu_index_memory_bytes(
-        &self,
-        transcript: &FullLogPreflightTranscript,
-    ) -> Result<(usize, usize), GpuPostflightError> {
-        let num_memory = transcript.memory_log.len();
-        let num_entries = num_memory + transcript.initial_write_log.len();
-        let num_steps = transcript.program_log.len().saturating_sub(1);
-        let num_touched = transcript
-            .memory_log
-            .iter()
-            .map(|event| (event.address_space(), event.pointer))
-            .collect::<std::collections::HashSet<_>>()
-            .len();
-        let mut memory_temp = 0usize;
-        let mut program_temp = 0usize;
-        unsafe {
-            rvr_postflight::memory_index_get_temp_bytes(
-                num_entries,
-                &mut memory_temp,
-                self.device_ctx.stream.as_raw(),
-            )?;
-            rvr_postflight::program_index_get_temp_bytes(
-                num_steps,
-                &mut program_temp,
-                self.device_ctx.stream.as_raw(),
-            )?;
-        }
-        // Both radix sorts use separate input and output buffers. Memory
-        // embeds each source ordinal in its 64-bit sort key; program indexing
-        // sorts an 8-byte step value beside each 32-bit opcode key.
-        // They run sequentially, so peak incremental allocation is the larger
-        // stage rather than their sum.
-        let touched_block_bytes = size_of::<TouchedBlock<BabyBear>>();
-        let memory_sort_stage = 16 * num_entries + memory_temp;
-        let memory_scatter_stage = 16 * num_entries
-            + (size_of::<u32>() + touched_block_bytes) * num_memory
-            + memory_temp
-            + size_of::<u32>();
-        let compact_touched = num_touched < num_memory && num_touched <= num_memory / 2;
-        let memory_compaction_stage = if compact_touched {
-            (size_of::<u32>() + touched_block_bytes) * num_memory
-                + touched_block_bytes * num_touched
-        } else {
-            (size_of::<u32>() + touched_block_bytes) * num_memory
-        };
-        let retained_touched = if compact_touched {
-            num_touched
-        } else {
-            num_memory
-        };
-        let retained_memory_index =
-            size_of::<u32>() * num_memory + touched_block_bytes * retained_touched;
-        let program_stage = retained_memory_index
-            + 24 * num_steps
-            + 8 * self.active_opcodes.len()
-            + 4 * self.num_program_rows
-            + program_temp;
-        let steady = retained_memory_index + 8 * num_steps + 4 * self.num_program_rows;
-        Ok((
-            memory_sort_stage
-                .max(memory_scatter_stage)
-                .max(memory_compaction_stage)
-                .max(program_stage),
-            steady,
-        ))
     }
 }
 
@@ -1735,118 +1565,6 @@ fn build_gpu_memory_chronology(
     ))
 }
 
-fn build_gpu_memory_index(
-    memory: &DeviceBuffer<PreflightMemoryEvent>,
-    seeds: &DeviceBuffer<PreflightInitialWrite>,
-    address_space_height: u32,
-    pointer_max_bits: u32,
-    address_spaces: DeviceBufferView,
-    error: &DeviceBuffer<u32>,
-    device_ctx: &GpuDeviceCtx,
-) -> Result<GpuMemoryIndex, GpuPostflightError> {
-    let num_entries = memory.len().checked_add(seeds.len()).ok_or_else(|| {
-        GpuPostflightError::InvalidTranscript(
-            "memory index entry count exceeds the host index domain".to_string(),
-        )
-    })?;
-    let keys_in = gpu_buffer::<u64>(num_entries, device_ctx);
-    let keys_out = gpu_buffer::<u64>(num_entries, device_ctx);
-
-    let mut temp_bytes = 0usize;
-    unsafe {
-        rvr_postflight::memory_index_get_temp_bytes(
-            num_entries,
-            &mut temp_bytes,
-            device_ctx.stream.as_raw(),
-        )?;
-    }
-    let temp_storage = gpu_buffer::<u8>(temp_bytes, device_ctx);
-    unsafe {
-        rvr_postflight::memory_index_sort(
-            memory.view(),
-            seeds.view(),
-            address_spaces,
-            ADDR_SPACE_OFFSET,
-            address_space_height,
-            pointer_max_bits,
-            &keys_in,
-            &keys_out,
-            &temp_storage,
-            temp_bytes,
-            error,
-            device_ctx.stream.as_raw(),
-        )?;
-    }
-    // The scan reuses the sort scratch. All allocations and frees remain
-    // ordered on this stream.
-    drop(keys_in);
-    let memory_predecessors = gpu_buffer::<u32>(memory.len(), device_ctx);
-    let touched_flags = gpu_buffer::<u32>(num_entries, device_ctx);
-    let touched_positions = gpu_buffer::<u32>(num_entries, device_ctx);
-    let touched_blocks_upper_bound = gpu_buffer::<TouchedBlock<BabyBear>>(memory.len(), device_ctx);
-    let num_touched_blocks_device = [0u32].to_device_on(device_ctx)?;
-    unsafe {
-        rvr_postflight::memory_index_scatter(
-            memory.view(),
-            seeds.len(),
-            &keys_out,
-            num_entries,
-            &memory_predecessors,
-            &touched_flags,
-            &touched_positions,
-            touched_blocks_upper_bound.as_mut_raw_ptr(),
-            &num_touched_blocks_device,
-            &temp_storage,
-            temp_bytes,
-            error,
-            device_ctx.stream.as_raw(),
-        )?;
-    }
-    let num_touched_blocks = num_touched_blocks_device.to_host_on(device_ctx)?[0] as usize;
-    if num_touched_blocks > memory.len() {
-        return Err(GpuPostflightError::InvalidTranscript(
-            "GPU touched-block count exceeds the memory log".to_string(),
-        ));
-    }
-    // The scatter needs an upper-bound output because the unique count is not
-    // known until its device scan completes. Do not retain that worst-case
-    // allocation while all trace matrices are being generated when the unique
-    // prefix is substantially smaller. Compaction itself temporarily owns both
-    // buffers, so only compact at or below half occupancy. Then predecessors
-    // plus the upper-bound and compact touched buffers remain bounded by the
-    // preceding scatter phase.
-    // At higher occupancy, retain the upper bound and expose only its initialized
-    // prefix rather than creating a larger tracegen peak for a small saving.
-    drop(keys_out);
-    drop(touched_flags);
-    drop(touched_positions);
-    drop(temp_storage);
-    drop(num_touched_blocks_device);
-    let compact_touched =
-        num_touched_blocks < memory.len() && num_touched_blocks <= memory.len() / 2;
-    let touched_blocks = if compact_touched {
-        let compact = gpu_buffer::<TouchedBlock<BabyBear>>(num_touched_blocks, device_ctx);
-        if num_touched_blocks != 0 {
-            unsafe {
-                cuda_memcpy_on::<true, true>(
-                    compact.as_mut_raw_ptr(),
-                    touched_blocks_upper_bound.as_raw_ptr(),
-                    num_touched_blocks * size_of::<TouchedBlock<BabyBear>>(),
-                    device_ctx,
-                )?;
-            }
-        }
-        compact
-    } else {
-        touched_blocks_upper_bound
-    };
-    Ok(GpuMemoryIndex {
-        predecessors: memory_predecessors,
-        touched_blocks,
-        num_touched_blocks,
-    })
-}
-
 /// Device-resident transcript and its one generic predecessor index.
 ///
 /// This object is shared across all opcode kernels for the segment. `error` is
@@ -1870,46 +1588,36 @@ pub struct GpuPostflightTranscript {
 }
 
 impl GpuPostflightTranscript {
+    #[cfg(feature = "test-utils")]
     fn upload(
-        transcript: &FullLogPreflightTranscript,
-        address_space_height: u32,
-        pointer_max_bits: u32,
-        address_spaces: DeviceBufferView,
+        transcript: &PreflightEventLog,
+        memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
         program_identity: Arc<()>,
         segment_identity: Arc<()>,
     ) -> Result<Self, GpuPostflightError> {
-        let packed_index_limit = (1usize << 31) - 1;
-        if transcript.memory_log.len() >= packed_index_limit
-            || transcript.initial_write_log.len() >= packed_index_limit
-        {
-            return Err(GpuPostflightError::InvalidTranscript(
-                "memory or initial-write log is too large for packed predecessor indexes"
-                    .to_string(),
-            ));
-        }
+        let memory_index = super::postflight::build_memory_index(
+            &transcript.memory_log,
+            &transcript.initial_write_log,
+            memory_config,
+        )
+        .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         let program_log = upload(&transcript.program_log, device_ctx)?;
         let memory_log = upload(&transcript.memory_log, device_ctx)?;
         let initial_write_log = upload(&transcript.initial_write_log, device_ctx)?;
         let error = [0u32].to_device_on(device_ctx)?;
-        let memory_index = build_gpu_memory_index(
-            &memory_log,
-            &initial_write_log,
-            address_space_height,
-            pointer_max_bits,
-            address_spaces,
-            &error,
-            device_ctx,
-        )?;
+        let memory_predecessors = upload(&memory_index.predecessors, device_ctx)?;
+        let touched_blocks = upload(&memory_index.touched_blocks, device_ctx)?;
+        let num_touched_blocks = touched_blocks.len();
         Ok(Self {
             program_log,
             memory_log,
             initial_write_log,
             field_values: DeviceBuffer::new(),
             field_initial_values: DeviceBuffer::new(),
-            memory_predecessors: memory_index.predecessors,
-            touched_blocks: memory_index.touched_blocks,
-            num_touched_blocks: memory_index.num_touched_blocks,
+            memory_predecessors,
+            touched_blocks,
+            num_touched_blocks,
             error,
             device_ctx: device_ctx.clone(),
             program_identity,
@@ -1972,12 +1680,6 @@ impl GpuPostflightTranscript {
 
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
-    pub fn memory_predecessors_host(&self) -> Result<Vec<u32>, MemCopyError> {
-        self.memory_predecessors.to_host_on(&self.device_ctx)
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
     pub fn program_log_host(&self) -> Result<Vec<PreflightProgramEvent>, MemCopyError> {
         self.program_log.to_host_on(&self.device_ctx)
     }
@@ -2011,22 +1713,13 @@ impl GpuPostflightTranscript {
 
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
-    pub fn field_values_host(&self) -> Result<Vec<PostflightFieldBlock>, MemCopyError> {
-        self.field_values.to_host_on(&self.device_ctx)
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    pub fn field_initial_values_host(&self) -> Result<Vec<PostflightFieldBlock>, MemCopyError> {
-        self.field_initial_values.to_host_on(&self.device_ctx)
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    pub fn touched_blocks_host(&self) -> Result<Vec<TouchedBlock<BabyBear>>, MemCopyError> {
-        let mut blocks = self.touched_blocks.to_host_on(&self.device_ctx)?;
-        blocks.truncate(self.num_touched_blocks);
-        Ok(blocks)
+    pub fn field_values_host(&self) -> Result<Vec<[u32; BLOCK_FE_WIDTH]>, MemCopyError> {
+        Ok(self
+            .field_values
+            .to_host_on(&self.device_ctx)?
+            .into_iter()
+            .map(|block| block.values)
+            .collect())
     }
 
     pub fn error_ptr(&self) -> *mut u32 {
@@ -2086,10 +1779,7 @@ impl GpuPostflightPlan {
         let temp_storage = gpu_buffer::<u8>(temp_bytes, &program.device_ctx);
         let (endpoint_kind, resume_pc, final_timestamp) = match endpoint {
             PreflightEndpoint::Terminated => (0, 0, 0),
-            PreflightEndpoint::Suspended {
-                resume_pc,
-                final_timestamp,
-            } => (1, resume_pc, final_timestamp),
+            PreflightEndpoint::Suspended => (1, boundary.1.pc, boundary.1.timestamp),
         };
         unsafe {
             rvr_postflight::program_index(
@@ -2199,18 +1889,6 @@ impl GpuPostflightPlan {
             .map(|step| [step.program_index, step.memory_start])
             .collect())
     }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    pub fn program_frequencies_host(&self) -> Result<Vec<u32>, MemCopyError> {
-        self.program_frequencies.to_host_on(&self.device_ctx)
-    }
-
-    #[cfg(feature = "test-utils")]
-    #[doc(hidden)]
-    pub fn opcode_ranges_host(&self) -> &std::collections::BTreeMap<u32, std::ops::Range<usize>> {
-        &self.opcode_ranges
-    }
 }
 
 #[cfg(test)]
@@ -2226,21 +1904,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::system::memory::online::TracingMemory;
-
-    fn event(
-        timestamp: u32,
-        address_space: u32,
-        pointer: u32,
-        is_write: bool,
-    ) -> PreflightMemoryEvent {
-        PreflightMemoryEvent {
-            timestamp,
-            address_space_and_kind: address_space | if is_write { PREFLIGHT_WRITE_BIT } else { 0 },
-            pointer,
-            value: [timestamp as u16; 4],
-        }
-    }
 
     fn event_value(
         timestamp: u32,
@@ -2311,7 +1974,7 @@ mod tests {
             .iter()
             .map(|config| RvrMemoryAddressSpace {
                 num_cells: config.num_cells as u64,
-                cell_kind: rvr_memory_cell_kind(config.layout),
+                cell_kind: memory_cell_kind(config.layout),
                 _padding: 0,
             })
             .collect::<Vec<_>>();
@@ -2338,107 +2001,6 @@ mod tests {
             index.predecessors.to_host_on(&device_ctx).unwrap(),
             touched,
         ))
-    }
-
-    fn seed(address_space: u32, pointer: u32) -> PreflightInitialWrite {
-        PreflightInitialWrite {
-            address_space,
-            pointer,
-            initial_value: [0; 4],
-        }
-    }
-
-    fn gpu_predecessors(
-        memory: &[PreflightMemoryEvent],
-        seeds: &[PreflightInitialWrite],
-    ) -> (Vec<u32>, u32) {
-        let config = MemoryConfig::default();
-        gpu_predecessors_with_domain(
-            memory,
-            seeds,
-            config.addr_space_height as u32,
-            config.pointer_max_bits as u32,
-        )
-    }
-
-    fn gpu_predecessors_with_domain(
-        memory: &[PreflightMemoryEvent],
-        seeds: &[PreflightInitialWrite],
-        address_space_height: u32,
-        pointer_max_bits: u32,
-    ) -> (Vec<u32>, u32) {
-        let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
-        let memory = upload(memory, &device_ctx).unwrap();
-        let seeds = upload(seeds, &device_ctx).unwrap();
-        let pointer_limit = 1u64 << pointer_max_bits;
-        let address_spaces = upload(
-            &vec![
-                RvrMemoryAddressSpace {
-                    num_cells: pointer_limit,
-                    cell_kind: RVR_MEMORY_CELL_U16,
-                    _padding: 0,
-                };
-                ADDR_SPACE_OFFSET as usize + (1usize << address_space_height)
-            ],
-            &device_ctx,
-        )
-        .unwrap();
-        let error = [0u32].to_device_on(&device_ctx).unwrap();
-        let index = build_gpu_memory_index(
-            &memory,
-            &seeds,
-            address_space_height,
-            pointer_max_bits,
-            address_spaces.view(),
-            &error,
-            &device_ctx,
-        )
-        .unwrap();
-        (
-            index.predecessors.to_host_on(&device_ctx).unwrap(),
-            error.to_host_on(&device_ctx).unwrap()[0],
-        )
-    }
-
-    fn gpu_memory_index_with_config(
-        memory: &[PreflightMemoryEvent],
-        seeds: &[PreflightInitialWrite],
-        config: &MemoryConfig,
-    ) -> (Vec<u32>, Vec<TouchedBlock<BabyBear>>, usize, u32) {
-        let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
-        let memory = upload(memory, &device_ctx).unwrap();
-        let seeds = upload(seeds, &device_ctx).unwrap();
-        let address_spaces = config
-            .addr_spaces
-            .iter()
-            .map(|config| RvrMemoryAddressSpace {
-                num_cells: config.num_cells as u64,
-                cell_kind: rvr_memory_cell_kind(config.layout),
-                _padding: 0,
-            })
-            .collect::<Vec<_>>();
-        let address_spaces = upload(&address_spaces, &device_ctx).unwrap();
-        let error = [0u32].to_device_on(&device_ctx).unwrap();
-        let index = build_gpu_memory_index(
-            &memory,
-            &seeds,
-            config.addr_space_height as u32,
-            config.pointer_max_bits as u32,
-            address_spaces.view(),
-            &error,
-            &device_ctx,
-        )
-        .unwrap();
-        assert!(index.touched_blocks.len() >= index.num_touched_blocks);
-        let touched_capacity = index.touched_blocks.len();
-        let mut touched = index.touched_blocks.to_host_on(&device_ctx).unwrap();
-        touched.truncate(index.num_touched_blocks);
-        (
-            index.predecessors.to_host_on(&device_ctx).unwrap(),
-            touched,
-            touched_capacity,
-            error.to_host_on(&device_ctx).unwrap()[0],
-        )
     }
 
     fn gpu_program(opcodes: &[u32], device_ctx: &GpuDeviceCtx) -> GpuPostflightProgram {
@@ -2471,7 +2033,7 @@ mod tests {
             .iter()
             .map(|config| RvrMemoryAddressSpace {
                 num_cells: config.num_cells as u64,
-                cell_kind: rvr_memory_cell_kind(config.layout),
+                cell_kind: memory_cell_kind(config.layout),
                 _padding: 0,
             })
             .collect::<Vec<_>>();
@@ -2479,7 +2041,6 @@ mod tests {
             instructions: upload(&instructions, device_ctx).unwrap(),
             dense_program_rows: upload(&dense_program_rows, device_ctx).unwrap(),
             num_program_rows: next_program_row as usize,
-            opcodes: opcodes.to_vec(),
             d_active_opcodes: upload(&active_opcodes, device_ctx).unwrap(),
             active_opcodes,
             checkpoint_schedule_dispatch: DeviceBuffer::new(),
@@ -2488,6 +2049,7 @@ mod tests {
             checkpoint_static_values: DeviceBuffer::new(),
             checkpoint_schedule_opcodes: Vec::new(),
             memory_address_spaces: upload(&memory_address_spaces, device_ctx).unwrap(),
+            memory_config: config.clone(),
             address_space_height: config.addr_space_height as u32,
             cell_pointer_max_bits: config.pointer_max_bits as u32,
             byte_pointer_max_bits: to_byte_ptr_bits(config.pointer_max_bits).min(u32::BITS as usize)
@@ -2501,16 +2063,14 @@ mod tests {
 
     fn gpu_plan(
         program: &GpuPostflightProgram,
-        transcript: &FullLogPreflightTranscript,
+        transcript: &PreflightEventLog,
         endpoint: PreflightEndpoint,
     ) -> Result<GpuPostflightPlan, GpuPostflightError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
         let gpu_transcript = GpuPostflightTranscript::upload(
             transcript,
-            program.address_space_height,
-            program.cell_pointer_max_bits,
-            program.memory_address_spaces.view(),
+            &program.memory_config,
             &program.device_ctx,
             program.identity.clone(),
             segment_identity.clone(),
@@ -2523,220 +2083,6 @@ mod tests {
             program.identity.clone(),
             segment_identity,
         )
-    }
-
-    #[test]
-    fn gpu_memory_index_matches_cpu_oracle() {
-        let memory = vec![
-            event(1, 1, 0, false),
-            event(2, 3, 8, true),
-            event(3, 1, 4, true),
-            event(4, 2, 0, false),
-            event(5, 1, 0, false),
-            event(6, 3, 8, true),
-        ];
-        // Deliberately use an order different from the sorted block-key order.
-        let seeds = vec![seed(3, 8), seed(1, 4)];
-        let expected =
-            super::super::postflight::build_memory_predecessors(&memory, &seeds).unwrap();
-        let (actual, error) = gpu_predecessors(&memory, &seeds);
-        assert_eq!(error, 0);
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn gpu_memory_index_rejects_invalid_seed_schedules() {
-        let (_, missing) = gpu_predecessors(&[event(1, 1, 4, true)], &[]);
-        assert_eq!(missing, 104);
-
-        let duplicate_seed = seed(1, 4);
-        let (_, duplicate) =
-            gpu_predecessors(&[event(1, 1, 4, true)], &[duplicate_seed, duplicate_seed]);
-        assert_eq!(duplicate, 105);
-
-        let (_, unused) = gpu_predecessors(&[], &[seed(1, 4)]);
-        assert_eq!(unused, 106);
-
-        let (_, seed_before_read) = gpu_predecessors(&[event(1, 1, 4, false)], &[seed(1, 4)]);
-        assert_eq!(seed_before_read, 106);
-    }
-
-    #[test]
-    fn gpu_memory_index_rejects_non_increasing_timestamps() {
-        let (_, error) = gpu_predecessors(&[event(1, 1, 0, false), event(1, 2, 0, false)], &[]);
-        assert_eq!(error, 101);
-    }
-
-    #[test]
-    fn gpu_memory_index_rejects_addresses_outside_its_bound_domain() {
-        let config = MemoryConfig::default();
-        let address_space_limit = ADDR_SPACE_OFFSET + (1 << config.addr_space_height);
-        for invalid in [
-            event(1, ADDR_SPACE_OFFSET - 1, 0, false),
-            event(1, address_space_limit, 0, false),
-            event(1, ADDR_SPACE_OFFSET, 2, false),
-        ] {
-            let (_, error) = gpu_predecessors(&[invalid], &[]);
-            assert_eq!(error, 107);
-        }
-
-        let (_, error) =
-            gpu_predecessors_with_domain(&[event(1, ADDR_SPACE_OFFSET, 16, false)], &[], 2, 4);
-        assert_eq!(error, 107);
-    }
-
-    #[test]
-    fn gpu_memory_index_accepts_the_maximum_compact_block_label() {
-        let highest_address_space = ADDR_SPACE_OFFSET + 3;
-        let (predecessors, error) = gpu_predecessors_with_domain(
-            &[event(1, highest_address_space, u32::MAX - 3, false)],
-            &[],
-            2,
-            32,
-        );
-        assert_eq!(error, 0);
-        assert_eq!(predecessors, vec![0]);
-    }
-
-    #[test]
-    fn gpu_touched_blocks_match_tracing_memory_finalize() {
-        let config = MemoryConfig::default();
-        let memory = vec![
-            event_value(1, RV64_MEMORY_AS, 4, false, [0; 4]),
-            event_value(2, RV64_REGISTER_AS, 4, true, [1, u16::MAX, 0, 3]),
-            event_value(3, RV64_MEMORY_AS, 0, true, [10, 11, 12, 13]),
-            event_value(4, RV64_MEMORY_AS, 4, false, [0; 4]),
-            event_value(5, RV64_MEMORY_AS, 4, true, [20, 21, 22, 23]),
-            event_value(6, RV64_MEMORY_AS, 4, false, [20, 21, 22, 23]),
-            event_value(7, RV64_MEMORY_AS, 0, false, [10, 11, 12, 13]),
-        ];
-        // Deliberately opposite the final touched-block sort order.
-        let seeds = vec![
-            PreflightInitialWrite {
-                address_space: RV64_MEMORY_AS,
-                pointer: 0,
-                initial_value: [0; 4],
-            },
-            PreflightInitialWrite {
-                address_space: RV64_REGISTER_AS,
-                pointer: 4,
-                initial_value: [0; 4],
-            },
-        ];
-
-        let mut cpu = TracingMemory::new(&config);
-        unsafe {
-            cpu.read::<u16, 4>(RV64_MEMORY_AS, 4);
-            cpu.write::<u16, 4>(RV64_REGISTER_AS, 4, [1, u16::MAX, 0, 3]);
-            cpu.write::<u16, 4>(RV64_MEMORY_AS, 0, [10, 11, 12, 13]);
-            cpu.read::<u16, 4>(RV64_MEMORY_AS, 4);
-            cpu.write::<u16, 4>(RV64_MEMORY_AS, 4, [20, 21, 22, 23]);
-            cpu.read::<u16, 4>(RV64_MEMORY_AS, 4);
-            cpu.read::<u16, 4>(RV64_MEMORY_AS, 0);
-        }
-        let expected = cpu.finalize::<BabyBear>();
-        let (_, actual, _, error) = gpu_memory_index_with_config(&memory, &seeds, &config);
-        assert_eq!(error, 0);
-        assert_eq!(actual, expected);
-        assert!(actual.iter().all(|block| block.is_dirty == 1));
-        assert_eq!(
-            actual
-                .iter()
-                .map(|block| (block.address_space, block.ptr, block.timestamp))
-                .collect::<Vec<_>>(),
-            vec![
-                (RV64_REGISTER_AS, 4, 2),
-                (RV64_MEMORY_AS, 0, 7),
-                (RV64_MEMORY_AS, 4, 6),
-            ]
-        );
-    }
-
-    #[test]
-    fn gpu_touched_blocks_accept_empty_and_last_aligned_u16_block() {
-        let config = MemoryConfig::default();
-        let (_, touched, _, error) = gpu_memory_index_with_config(&[], &[], &config);
-        assert_eq!(error, 0);
-        assert!(touched.is_empty());
-
-        let pointer = config.addr_spaces[RV64_REGISTER_AS as usize].num_cells as u32 - 4;
-        let (_, touched, _, error) = gpu_memory_index_with_config(
-            &[event_value(
-                1,
-                RV64_REGISTER_AS,
-                pointer,
-                false,
-                [u16::MAX; 4],
-            )],
-            &[],
-            &config,
-        );
-        assert_eq!(error, 0);
-        assert_eq!(touched.len(), 1);
-        assert_eq!(touched[0].ptr, pointer);
-        assert_eq!(touched[0].is_dirty, 0);
-        assert_eq!(
-            touched[0].values.map(|value| value.as_canonical_u32()),
-            [u16::MAX as u32; 4]
-        );
-    }
-
-    #[test]
-    fn gpu_touched_block_compaction_never_raises_the_scatter_peak() {
-        let config = MemoryConfig::default();
-        let at_half = [
-            event(1, RV64_MEMORY_AS, 0, false),
-            event(2, RV64_MEMORY_AS, 0, false),
-            event(3, RV64_MEMORY_AS, 4, false),
-            event(4, RV64_MEMORY_AS, 4, false),
-        ];
-        let (_, touched, capacity, error) = gpu_memory_index_with_config(&at_half, &[], &config);
-        assert_eq!(error, 0);
-        assert_eq!(touched.len(), 2);
-        assert_eq!(capacity, 2, "half-full prefixes should compact exactly");
-
-        let above_half = [
-            event(1, RV64_MEMORY_AS, 0, false),
-            event(2, RV64_MEMORY_AS, 4, false),
-            event(3, RV64_MEMORY_AS, 8, false),
-            event(4, RV64_MEMORY_AS, 8, false),
-        ];
-        let (_, touched, capacity, error) = gpu_memory_index_with_config(&above_half, &[], &config);
-        assert_eq!(error, 0);
-        assert_eq!(touched.len(), 3);
-        assert_eq!(
-            capacity, 4,
-            "high-occupancy prefixes should retain the upper bound"
-        );
-    }
-
-    #[test]
-    fn gpu_memory_metadata_fails_closed_for_bad_layout_and_bounds() {
-        let config = MemoryConfig::default();
-        let assert_rejected =
-            |memory: &[PreflightMemoryEvent], seeds: &[PreflightInitialWrite], config| {
-                let (_, _, _, error) = gpu_memory_index_with_config(memory, seeds, config);
-                assert_ne!(error, 0);
-            };
-
-        assert_rejected(
-            &[event_value(1, DEFERRAL_AS, 0, false, [0; 4])],
-            &[],
-            &config,
-        );
-        let end = config.addr_spaces[RV64_REGISTER_AS as usize].num_cells as u32;
-        assert_rejected(
-            &[event_value(1, RV64_REGISTER_AS, end, false, [0; 4])],
-            &[],
-            &config,
-        );
-        let mut crossing = config.clone();
-        crossing.addr_spaces[RV64_REGISTER_AS as usize].num_cells -= 2;
-        assert_rejected(
-            &[event_value(1, RV64_REGISTER_AS, end - 4, false, [0; 4])],
-            &[],
-            &crossing,
-        );
     }
 
     fn mixed_chronology_fixture() -> (MemoryConfig, Vec<Vec<u8>>) {
@@ -3047,7 +2393,7 @@ mod tests {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let opcodes = [100, 200, terminate];
         let program = gpu_program(&opcodes, &device_ctx);
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -3079,7 +2425,7 @@ mod tests {
         };
         let endpoint = PreflightEndpoint::Terminated;
         let expected =
-            super::super::postflight::RvrReplayData::build(0, &opcodes, &transcript, endpoint)
+            super::super::postflight::ReplayData::build(0, &opcodes, &transcript, endpoint)
                 .unwrap();
         let actual = gpu_plan(&program, &transcript, endpoint).unwrap();
         let actual_steps = actual.steps.to_host_on(&device_ctx).unwrap();
@@ -3107,7 +2453,7 @@ mod tests {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let mut program = gpu_program(&[100, u32::MAX, 200, 300, terminate], &device_ctx);
         program.pc_base = 0x100;
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0x100,
@@ -3147,7 +2493,7 @@ mod tests {
             )
         );
 
-        let suspended = FullLogPreflightTranscript {
+        let suspended = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0x100,
@@ -3161,15 +2507,7 @@ mod tests {
             memory_log: vec![],
             initial_write_log: vec![],
         };
-        let plan = gpu_plan(
-            &program,
-            &suspended,
-            PreflightEndpoint::Suspended {
-                resume_pc: 0x108,
-                final_timestamp: 2,
-            },
-        )
-        .unwrap();
+        let plan = gpu_plan(&program, &suspended, PreflightEndpoint::Suspended).unwrap();
         assert_eq!(
             plan.program_frequencies.to_host_on(&device_ctx).unwrap(),
             vec![1, 0, 0, 0]
@@ -3183,7 +2521,7 @@ mod tests {
             )
         );
 
-        let empty = FullLogPreflightTranscript {
+        let empty = PreflightEventLog {
             program_log: vec![PreflightProgramEvent {
                 pc: 0x100,
                 timestamp: 1,
@@ -3191,15 +2529,7 @@ mod tests {
             memory_log: vec![],
             initial_write_log: vec![],
         };
-        let plan = gpu_plan(
-            &program,
-            &empty,
-            PreflightEndpoint::Suspended {
-                resume_pc: 0x100,
-                final_timestamp: 1,
-            },
-        )
-        .unwrap();
+        let plan = gpu_plan(&program, &empty, PreflightEndpoint::Suspended).unwrap();
         assert_eq!(
             plan.program_frequencies.to_host_on(&device_ctx).unwrap(),
             vec![0; 4]
@@ -3212,7 +2542,7 @@ mod tests {
         let mut program = gpu_program(&[100, u32::MAX, 200], &device_ctx);
         program.pc_base = 0x100;
         for invalid_pc in [0xfc, 0x102, 0x104, 0x10c] {
-            let transcript = FullLogPreflightTranscript {
+            let transcript = PreflightEventLog {
                 program_log: vec![
                     PreflightProgramEvent {
                         pc: invalid_pc,
@@ -3226,15 +2556,7 @@ mod tests {
                 memory_log: vec![],
                 initial_write_log: vec![],
             };
-            assert!(gpu_plan(
-                &program,
-                &transcript,
-                PreflightEndpoint::Suspended {
-                    resume_pc: invalid_pc,
-                    final_timestamp: 2,
-                },
-            )
-            .is_err());
+            assert!(gpu_plan(&program, &transcript, PreflightEndpoint::Suspended,).is_err());
         }
     }
 
@@ -3242,7 +2564,7 @@ mod tests {
     fn gpu_program_index_accepts_an_empty_suspended_segment() {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let program = gpu_program(&[100], &device_ctx);
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -3250,10 +2572,7 @@ mod tests {
             memory_log: vec![],
             initial_write_log: vec![],
         };
-        let endpoint = PreflightEndpoint::Suspended {
-            resume_pc: 0,
-            final_timestamp: 1,
-        };
+        let endpoint = PreflightEndpoint::Suspended;
         let plan = gpu_plan(&program, &transcript, endpoint).unwrap();
         assert!(plan.steps.is_empty());
         assert!(plan.opcode_ranges.is_empty());
@@ -3264,7 +2583,7 @@ mod tests {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let mut program = gpu_program(&[100], &device_ctx);
         program.timestamp_max_bits = 2;
-        let transcript = |final_timestamp| FullLogPreflightTranscript {
+        let transcript = |final_timestamp| PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -3279,22 +2598,10 @@ mod tests {
             initial_write_log: vec![],
         };
         program
-            .upload_transcript(
-                &transcript(3),
-                PreflightEndpoint::Suspended {
-                    resume_pc: 0,
-                    final_timestamp: 3,
-                },
-            )
+            .upload_transcript(&transcript(3), PreflightEndpoint::Suspended)
             .unwrap();
         assert!(program
-            .upload_transcript(
-                &transcript(4),
-                PreflightEndpoint::Suspended {
-                    resume_pc: 0,
-                    final_timestamp: 4,
-                },
-            )
+            .upload_transcript(&transcript(4), PreflightEndpoint::Suspended,)
             .is_err());
     }
 
@@ -3303,7 +2610,7 @@ mod tests {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let program = gpu_program(&[100, terminate], &device_ctx);
-        let transcript = |program_log| FullLogPreflightTranscript {
+        let transcript = |program_log| PreflightEventLog {
             program_log,
             memory_log: vec![],
             initial_write_log: vec![],
@@ -3319,15 +2626,7 @@ mod tests {
                 timestamp: 2,
             },
         ]);
-        assert!(gpu_plan(
-            &program,
-            &undefined_pc,
-            PreflightEndpoint::Suspended {
-                resume_pc: 12,
-                final_timestamp: 2,
-            },
-        )
-        .is_err());
+        assert!(gpu_plan(&program, &undefined_pc, PreflightEndpoint::Suspended,).is_err());
 
         let missing_terminate = transcript(vec![
             PreflightProgramEvent {
