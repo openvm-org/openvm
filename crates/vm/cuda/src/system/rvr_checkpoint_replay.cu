@@ -631,9 +631,10 @@ __device__ __forceinline__ void write_event(
     event.timestamp = timestamp;
     event.address_space_and_kind = address_space | (is_write ? PREFLIGHT_WRITE_BIT : 0);
     event.pointer = pointer;
-    // Reads are unresolved chronology intents. Only writes carry payload,
-    // which makes zero outside the write mask a cheap fail-closed invariant.
-    u64_to_limbs(is_write ? value : 0, event.value);
+    // Register values are already known while replaying a checkpoint interval.
+    // Chronology still links accesses, but it need not scatter these values back
+    // into the log after sorting by address.
+    u64_to_limbs(value, event.value);
     if (write_mask != nullptr) *write_mask = is_write ? FULL_WRITE_MASK : 0;
 }
 

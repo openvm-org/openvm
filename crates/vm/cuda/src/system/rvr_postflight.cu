@@ -227,7 +227,7 @@ __global__ void prepare_chronology_entries(
                 }
             }
         }
-    } else {
+    } else if (preflight_address_space(event) != address_space_offset) {
         auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
 #pragma unroll
         for (uint32_t lane = 0; lane < 8; ++lane) {
@@ -542,6 +542,7 @@ __global__ void scatter_value_chunks(
     DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferView<RvrFieldBlock> field_values,
+    uint32_t register_address_space,
     uint64_t const *sorted_keys,
     size_t sorted_offset,
     size_t num_entries,
@@ -559,6 +560,7 @@ __global__ void scatter_value_chunks(
     }
     uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
     auto const &event = memory[ordinal];
+    if (preflight_address_space(event) == register_address_space) return;
     auto const &config = address_spaces[preflight_address_space(event)];
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
@@ -590,6 +592,7 @@ __global__ void finalize_chronology_touched(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<RvrFieldBlock> field_values,
+    uint32_t register_address_space,
     uint64_t const *sorted_keys,
     ValueChunk const *chunks,
     RvrTouchedBlock *touched,
@@ -615,8 +618,15 @@ __global__ void finalize_chronology_touched(
         preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
         return;
     }
-    record.is_dirty = uint32_t((chunks[sorted_pos].valid & VALUE_CHUNK_DIRTY) != 0);
     auto const &event = memory[ordinal];
+    record.is_dirty = uint32_t((chunks[sorted_pos].valid & VALUE_CHUNK_DIRTY) != 0);
+    if (preflight_address_space(event) == register_address_space) {
+#pragma unroll
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+            record.values[lane] = Fp(event.value[lane]).asRaw();
+        }
+        return;
+    }
     auto const &config = address_spaces[preflight_address_space(event)];
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
@@ -787,6 +797,7 @@ extern "C" int _rvr_memory_chronology_resolve(
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
     DeviceBufferView<RvrFieldBlock> field_values,
+    uint32_t register_address_space,
     uint64_t const *sorted_keys,
     uint64_t *workspace,
     uint32_t *predecessors,
@@ -858,6 +869,7 @@ extern "C" int _rvr_memory_chronology_resolve(
         memory,
         address_spaces,
         field_values,
+        register_address_space,
         sorted_keys,
         0,
         num_entries,
@@ -906,6 +918,7 @@ extern "C" int _rvr_memory_chronology_resolve(
             memory,
             address_spaces,
             field_values,
+            register_address_space,
             sorted_keys,
             field_begin,
             num_field_entries,
@@ -922,6 +935,7 @@ extern "C" int _rvr_memory_chronology_resolve(
             DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
             address_spaces,
             DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+            register_address_space,
             sorted_keys,
             chunks,
             touched.ptr,
