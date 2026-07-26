@@ -21,7 +21,7 @@ use crate::modular_chip::ModularIsEqualCoreCols;
 mod cuda_abi;
 pub mod field_expr;
 pub(crate) mod modular_addsub;
-pub mod vec_heap;
+pub(crate) mod vec_heap;
 
 const MAX_ALGEBRA_TRACE_HEIGHT: usize = 1 << 26;
 
@@ -32,7 +32,7 @@ struct DeferredGpuRangeCheckerCounts {
 }
 
 impl DeferredGpuRangeCheckerCounts {
-    pub fn commit(self) -> Result<(), GpuPostflightError> {
+    fn commit(self) -> Result<(), GpuPostflightError> {
         unsafe {
             cuda_abi::merge_range_counts(
                 self.target.as_ref(),

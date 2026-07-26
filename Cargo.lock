@@ -5480,6 +5480,7 @@ dependencies = [
  "bon",
  "cfg-if 1.0.1",
  "derive_more 1.0.0",
+ "metrics",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-bigint-circuit",
@@ -5508,6 +5509,7 @@ dependencies = [
  "rvr-openvm-lift",
  "serde",
  "toml",
+ "tracing",
 ]
 
 [[package]]

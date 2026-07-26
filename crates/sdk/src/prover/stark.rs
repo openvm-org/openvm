@@ -47,20 +47,8 @@ where
         agg_prover: Arc<AggProver>,
         deferral_setup: DeferralSetup,
     ) -> Result<Self> {
-        Self::from_app_prover(
-            AppProver::new(vm_builder, app_vm_pk, app_exe)?,
-            agg_prover,
-            deferral_setup,
-        )
-    }
-
-    pub(crate) fn from_app_prover(
-        app_prover: AppProver<E, VB>,
-        agg_prover: Arc<AggProver>,
-        deferral_setup: DeferralSetup,
-    ) -> Result<Self> {
         Ok(Self {
-            app_prover,
+            app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
             agg_prover,
             deferral_setup,
         })

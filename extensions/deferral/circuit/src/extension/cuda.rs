@@ -27,15 +27,21 @@ use {
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
             PostflightAccessRegistry, PostflightAccessSpan,
         },
-        rvr::PreflightExecution,
-        GenerationError, MemoryConfig, VirtualMachine, MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES,
+    },
+    openvm_deferral_transpiler::DeferralOpcode,
+    openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode},
+    openvm_stark_backend::prover::AirProvingContext,
+};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use {
+    openvm_circuit::arch::{
+        rvr::PreflightExecution, GenerationError, MemoryConfig, VirtualMachine,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
-    openvm_deferral_transpiler::DeferralOpcode,
-    openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
+    openvm_instructions::program::Program,
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::p3_field::PrimeField32,
-    openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
+    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
 };
 
 use crate::{
@@ -160,6 +166,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         )
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
@@ -177,6 +184,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         )
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuPostflightProgram,
@@ -275,8 +283,9 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
 
     /// Generates one complete Deferral + RV64/system segment in the VM's
     /// single reverse inventory walk, then verifies both coverage sets.
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn generate_proving_ctx<VB>(
-        mut self,
+        self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
@@ -287,19 +296,20 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
+        vm.generate_preflight_proving_ctx(
             self.program,
             self.transcript,
             self.replay_plan,
-            |insertion_idx, chip| {
-                if let Some(ctx) = self
+            (self, rv64),
+            |(tracegen, rv64), insertion_idx, chip| {
+                if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
@@ -309,13 +319,14 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-        )?;
-        self.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        rv64.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_preflight_tracegen_session();
-        Ok(ctx)
+            |(tracegen, rv64)| {
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                rv64.finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
     }
 }
 

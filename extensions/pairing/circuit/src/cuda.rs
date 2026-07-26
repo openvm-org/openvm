@@ -87,8 +87,7 @@ mod tests {
     use openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
-                PreflightLimits,
+                cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog, PreflightLimits,
             },
             VirtualMachine, VmExecutor,
         },
@@ -237,7 +236,7 @@ mod tests {
             Rv64PairingConfig::new(vec![curve], vec![pairing_complex_name(curve).to_string()]);
         *config.as_mut() = test_system_config();
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let checkpoint = executor.preflight_instance(&exe, None).unwrap();
+        let checkpoint = executor.preflight_instance(&exe).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
@@ -258,13 +257,7 @@ mod tests {
         let first = checkpoint
             .execute_from_state_for(state, PreflightLimits::new(2, 0, 1))
             .unwrap();
-        assert_eq!(
-            first.endpoint,
-            PreflightEndpoint::Suspended {
-                resume_pc: 8,
-                final_timestamp: 3,
-            }
-        );
+        assert_eq!(first.endpoint, PreflightEndpoint::Suspended);
         assert!(first.state.streams.hint_stream.remaining() > 8);
         let hint_bytes = first.state.streams.hint_stream.remaining();
         let (transcript, replay_plan) = vm
@@ -336,7 +329,7 @@ mod tests {
             SystemOpcode::TERMINATE.global_opcode(),
             [0; 5],
         )]);
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,

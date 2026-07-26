@@ -4,10 +4,7 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        rvr::{
-            cuda::{PostflightAccessRegistry, PostflightAccessSpan},
-            FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
-        },
+        rvr::{PreflightEndpoint, PreflightEventLog, PreflightLimits},
         VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
@@ -19,7 +16,6 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode,
     MulOpcode, ShiftOpcode,
@@ -110,20 +106,6 @@ fn fixture(equal: bool) -> (Program<F>, VmExe<F>) {
         program.clone(),
         VmExe::new(program).with_init_memory(init_memory),
     )
-}
-
-#[test]
-fn int256_checkpoint_registry_rejects_native_opcode_collision() {
-    let native_opcode = BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32;
-    let span = PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 1);
-    let mut registry = PostflightAccessRegistry::default();
-    registry
-        .register(native_opcode, &[1], 0, 4, 5, &[span])
-        .unwrap();
-    let error = registry
-        .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())
-        .unwrap_err();
-    assert!(error.to_string().contains("both native"), "{error}");
 }
 
 #[derive(Clone, Copy)]
@@ -282,7 +264,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
@@ -313,7 +295,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     for case in &cases {
         assert_eq!(replay_plan.opcode_range(case.opcode).len(), 1);
     }
-    let host_transcript = FullLogPreflightTranscript {
+    let host_transcript = PreflightEventLog {
         program_log: transcript.program_log_host().unwrap(),
         memory_log: transcript.memory_log_host().unwrap(),
         initial_write_log: transcript.initial_write_log_host().unwrap(),
@@ -410,7 +392,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut source_vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
@@ -422,13 +404,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         .execute_from_state_for(initial_state, PreflightLimits::new(1, 1, 1))
         .unwrap();
     assert_eq!(execution.transcript.residuals.len(), 1);
-    assert_eq!(
-        execution.endpoint,
-        PreflightEndpoint::Suspended {
-            resume_pc: 4,
-            final_timestamp: 11,
-        }
-    );
+    assert_eq!(execution.endpoint, PreflightEndpoint::Suspended);
     let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,
@@ -442,7 +418,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         execution.retired,
     )
     .unwrap();
-    let host_transcript = FullLogPreflightTranscript {
+    let host_transcript = PreflightEventLog {
         program_log: transcript.program_log_host().unwrap(),
         memory_log: transcript.memory_log_host().unwrap(),
         initial_write_log: transcript.initial_write_log_host().unwrap(),
@@ -505,7 +481,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             ..Default::default()
         };
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let checkpoint = executor.preflight_instance(&exe, None).unwrap();
+        let checkpoint = executor.preflight_instance(&exe).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),

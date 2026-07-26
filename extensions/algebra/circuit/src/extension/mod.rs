@@ -15,7 +15,7 @@ use openvm_riscv_circuit::{
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "rvr")]
+#[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
 use {
     openvm_algebra_transpiler::Rv64ModularArithmeticOpcode,
     openvm_instructions::{program::Program, LocalOpcode},
@@ -51,9 +51,8 @@ mod rvr_tests;
 
 /// Returns the first configured modular IS_EQ/SETUP_ISEQ program slot whose
 /// destination is x0.
-#[cfg(feature = "rvr")]
-#[doc(hidden)]
-pub fn modular_is_eq_x0_destination<F: PrimeField32>(
+#[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
+pub(crate) fn modular_is_eq_x0_destination<F: PrimeField32>(
     program: &Program<F>,
     num_moduli: usize,
 ) -> Option<usize> {

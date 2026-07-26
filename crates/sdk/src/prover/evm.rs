@@ -49,21 +49,14 @@ where
         root_prover: Arc<RootProver>,
         #[cfg(feature = "evm-prove")] halo2_prover: Option<Halo2Prover>,
     ) -> Result<Self> {
-        Self::from_stark_prover(
-            StarkProver::new(vm_builder, app_vm_pk, app_exe, agg_prover, deferral_setup)?,
-            root_prover,
-            #[cfg(feature = "evm-prove")]
-            halo2_prover,
-        )
-    }
-
-    pub(crate) fn from_stark_prover(
-        stark_prover: StarkProver<E, VB>,
-        root_prover: Arc<RootProver>,
-        #[cfg(feature = "evm-prove")] halo2_prover: Option<Halo2Prover>,
-    ) -> Result<Self> {
         Ok(Self {
-            stark_prover,
+            stark_prover: StarkProver::new(
+                vm_builder,
+                app_vm_pk,
+                app_exe,
+                agg_prover,
+                deferral_setup,
+            )?,
             root_prover,
             #[cfg(feature = "evm-prove")]
             halo2_prover,

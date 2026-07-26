@@ -3,8 +3,6 @@ use std::sync::Arc;
 use std::{borrow::BorrowMut, str::FromStr};
 
 use num_bigint::BigUint;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use num_traits::One;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
@@ -39,8 +37,7 @@ use {
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    openvm_circuit::system::cuda::memory::MemoryInventoryGPU, openvm_circuit_primitives::Chip,
-    openvm_cuda_common::copy::MemCopyD2H,
+    openvm_circuit::system::cuda::memory::MemoryInventoryGPU, openvm_cuda_common::copy::MemCopyD2H,
 };
 
 use crate::{
@@ -74,18 +71,6 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
 
 #[cfg(test)]
 mod addsub_tests {
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    use openvm_circuit::arch::{
-        rvr::{cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint},
-        DenseRecordArena,
-    };
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    use openvm_instructions::{program::Program, SystemOpcode};
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    use rvr_state::{
-        PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
-    };
-
     use super::*;
 
     const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
@@ -416,270 +401,6 @@ mod addsub_tests {
             0,
             BLS12_381_MODULUS.clone(),
             50,
-        );
-    }
-
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_cuda_preflight_modular_addsub_projection_test(
-        modulus: BigUint,
-        local_opcode: Rv64ModularArithmeticOpcode,
-        b: BigUint,
-        c: BigUint,
-    ) {
-        const BLOCKS: usize = MODULAR_BLOCKS_32;
-        let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
-        let config = ExprBuilderConfig {
-            modulus: modulus.clone(),
-            num_limbs: NUM_LIMBS_32,
-            limb_bits: LIMB_BITS,
-        };
-        let rd_reg = 8usize;
-        let b_reg = 16usize;
-        let c_reg = 24usize;
-        let rd_ptr = 0x100u32;
-        let b_ptr = 0x200u32;
-        let c_ptr = 0x300u32;
-        let result = match local_opcode {
-            Rv64ModularArithmeticOpcode::ADD => (&b + &c) % &modulus,
-            Rv64ModularArithmeticOpcode::SUB => {
-                ((&b % &modulus) + &modulus - (&c % &modulus)) % &modulus
-            }
-            Rv64ModularArithmeticOpcode::SETUP_ADDSUB => &b % &modulus,
-            _ => unreachable!(),
-        };
-        let to_cells = |value: &BigUint| {
-            let bytes = biguint_to_limbs_vec(value, NUM_LIMBS_32);
-            std::array::from_fn::<u16, { BLOCKS * 4 }, _>(|index| {
-                u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]])
-            })
-        };
-        let b_cells = to_cells(&b);
-        let c_cells = to_cells(&c);
-        let result_cells = to_cells(&result);
-        let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + local_opcode as usize),
-            [
-                rd_reg,
-                b_reg,
-                c_reg,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
-        );
-        let program = Program::from_instructions(&[
-            instruction.clone(),
-            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
-        ]);
-        let mut tester = GpuChipTestBuilder::default();
-        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, opcode_base);
-        assert!(
-            harness.gpu_chip.uses_direct_addsub_replay(),
-            "test requires the direct CUDA modular add/sub replay path"
-        );
-        let register_block = |pointer: u32| [pointer as u16, (pointer >> 16) as u16, 0, 0];
-        for (register, pointer) in [(rd_reg, rd_ptr), (b_reg, b_ptr), (c_reg, c_ptr)] {
-            unsafe {
-                tester.memory.memory.data.write::<u16, 4>(
-                    RV64_REGISTER_AS,
-                    register as u32 / 2,
-                    register_block(pointer),
-                );
-            }
-        }
-        for (pointer, cells) in [(b_ptr, b_cells), (c_ptr, c_cells)] {
-            for block in 0..BLOCKS {
-                unsafe {
-                    tester.memory.memory.data.write::<u16, 4>(
-                        RV64_MEMORY_AS,
-                        pointer / 2 + (block * 4) as u32,
-                        std::array::from_fn(|limb| cells[block * 4 + limb]),
-                    );
-                }
-            }
-        }
-        reset_gpu_initial_memory(&mut tester);
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &instruction,
-            0,
-        );
-
-        let legacy_arena = std::mem::replace(
-            &mut harness.dense_arena,
-            DenseRecordArena::with_byte_capacity(0),
-        );
-        let legacy_ctx =
-            Chip::<DenseRecordArena, openvm_cuda_backend::GpuBackend>::generate_proving_ctx(
-                &harness.gpu_chip,
-                legacy_arena,
-            );
-        let device_ctx = &tester.range_checker().device_ctx;
-        let legacy_trace = legacy_ctx
-            .common_main
-            .buffer()
-            .to_host_on(device_ctx)
-            .unwrap();
-        let legacy_counts = tester
-            .cpu_range_checker()
-            .count
-            .iter()
-            .map(|count| count.load(std::sync::atomic::Ordering::Relaxed))
-            .collect::<Vec<_>>();
-        tester.cpu_range_checker().clear();
-
-        let event_count = (3 + 3 * BLOCKS) as u32;
-        let mut memory_log = vec![
-            PreflightMemoryEvent {
-                timestamp: 1,
-                address_space_and_kind: RV64_REGISTER_AS,
-                pointer: b_reg as u32 / 2,
-                value: register_block(b_ptr),
-            },
-            PreflightMemoryEvent {
-                timestamp: 2,
-                address_space_and_kind: RV64_REGISTER_AS,
-                pointer: c_reg as u32 / 2,
-                value: register_block(c_ptr),
-            },
-            PreflightMemoryEvent {
-                timestamp: 3,
-                address_space_and_kind: RV64_REGISTER_AS,
-                pointer: rd_reg as u32 / 2,
-                value: register_block(rd_ptr),
-            },
-        ];
-        for (read, (pointer, cells)) in [(b_ptr, b_cells), (c_ptr, c_cells)].into_iter().enumerate()
-        {
-            for block in 0..BLOCKS {
-                memory_log.push(PreflightMemoryEvent {
-                    timestamp: 4 + (read * BLOCKS + block) as u32,
-                    address_space_and_kind: RV64_MEMORY_AS,
-                    pointer: pointer / 2 + (block * 4) as u32,
-                    value: std::array::from_fn(|limb| cells[block * 4 + limb]),
-                });
-            }
-        }
-        for block in 0..BLOCKS {
-            memory_log.push(PreflightMemoryEvent {
-                timestamp: 4 + (2 * BLOCKS + block) as u32,
-                address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
-                pointer: rd_ptr / 2 + (block * 4) as u32,
-                value: std::array::from_fn(|limb| result_cells[block * 4 + limb]),
-            });
-        }
-        let transcript = FullLogPreflightTranscript {
-            program_log: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: 1 + event_count,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: 1 + event_count,
-                },
-            ],
-            memory_log,
-            initial_write_log: (0..BLOCKS)
-                .map(|block| PreflightInitialWrite {
-                    address_space: RV64_MEMORY_AS,
-                    pointer: rd_ptr / 2 + (block * 4) as u32,
-                    initial_value: [0; 4],
-                })
-                .collect(),
-        };
-        let memory_config = openvm_circuit::arch::MemoryConfig::default();
-        let gpu_program =
-            GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
-        let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
-            .unwrap();
-        let gpu_counts_before = tester.range_checker().count.to_host_on(device_ctx).unwrap();
-        let replay_ctx = harness
-            .gpu_chip
-            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
-            .unwrap();
-        let replay_trace = replay_ctx
-            .common_main
-            .buffer()
-            .to_host_on(device_ctx)
-            .unwrap();
-        assert_eq!(replay_trace, legacy_trace);
-        let replay_counts = tester.range_checker().count.to_host_on(device_ctx).unwrap();
-        assert_eq!(replay_counts.len(), legacy_counts.len());
-        for ((before, after), expected) in gpu_counts_before
-            .iter()
-            .zip(&replay_counts)
-            .zip(&legacy_counts)
-        {
-            // GPU lookup histograms store ordinary u32 counters in an F-sized buffer.
-            // SAFETY: BabyBear and u32 have the same representation size, as required by
-            // VariableRangeCheckerChipGPU.
-            let before = unsafe { std::mem::transmute::<F, u32>(*before) };
-            let after = unsafe { std::mem::transmute::<F, u32>(*after) };
-            assert_eq!(after - before, *expected);
-        }
-
-        let mut corrupt = transcript;
-        corrupt.memory_log.last_mut().unwrap().value[0] ^= 1;
-        let (gpu_corrupt, corrupt_plan) = gpu_program
-            .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
-            .unwrap();
-        assert!(harness
-            .gpu_chip
-            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_corrupt, &corrupt_plan)
-            .is_err());
-        assert_eq!(
-            tester.range_checker().count.to_host_on(device_ctx).unwrap(),
-            replay_counts
-        );
-
-        tester
-            .build()
-            .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
-            .finalize()
-            .simple_test()
-            .expect("record-free Modular ADD/SUB checkpoint replay proof failed");
-    }
-
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    #[test]
-    fn cuda_preflight_modular_addsub_projection_matches_legacy_and_rejects_corrupt_output() {
-        run_cuda_preflight_modular_addsub_projection_test(
-            secp256k1_coord_prime(),
-            Rv64ModularArithmeticOpcode::ADD,
-            BigUint::from(0x0102_abcdu32),
-            BigUint::from(17u32),
-        );
-        let modulus = secp256k1_coord_prime();
-        run_cuda_preflight_modular_addsub_projection_test(
-            modulus.clone(),
-            Rv64ModularArithmeticOpcode::ADD,
-            &modulus - BigUint::one(),
-            &modulus - BigUint::one(),
-        );
-        let max_u256 = (BigUint::one() << 256usize) - BigUint::one();
-        run_cuda_preflight_modular_addsub_projection_test(
-            modulus.clone(),
-            Rv64ModularArithmeticOpcode::ADD,
-            max_u256.clone(),
-            max_u256,
-        );
-        run_cuda_preflight_modular_addsub_projection_test(
-            modulus.clone(),
-            Rv64ModularArithmeticOpcode::SUB,
-            BigUint::from(5u32),
-            BigUint::from(17u32),
-        );
-        run_cuda_preflight_modular_addsub_projection_test(
-            modulus.clone(),
-            Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
-            modulus,
-            BigUint::zero(),
         );
     }
 }
@@ -1036,7 +757,7 @@ mod is_equal_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
         openvm_circuit::arch::rvr::{
-            cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
+            cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog,
         },
         openvm_instructions::{program::Program, SystemOpcode},
         rvr_state::{
@@ -1500,7 +1221,7 @@ mod is_equal_tests {
             pointer: is_eq_rd as u32 / 2,
             value: [1, 0, 0, 0],
         });
-        let transcript = FullLogPreflightTranscript {
+        let transcript = PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,

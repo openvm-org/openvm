@@ -17,24 +17,23 @@ use {
         Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
         Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
     },
+    openvm_circuit::arch::rvr::cuda::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        PostflightAccessRegistry, PostflightAccessSpan,
+    },
+    openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode},
+    openvm_stark_backend::prover::AirProvingContext,
+    std::any::Any,
+};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use {
     openvm_circuit::arch::{
-        rvr::{
-            cuda::{
-                GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
-                GpuPostflightTranscript, PostflightAccessRegistry, PostflightAccessSpan,
-            },
-            PreflightExecution,
-        },
-        GenerationError, MemoryConfig, VirtualMachine,
+        rvr::PreflightExecution, GenerationError, MemoryConfig, VirtualMachine,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
-    openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
+    openvm_instructions::program::Program,
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::{
-        p3_field::PrimeField32,
-        prover::{AirProvingContext, ProvingContext},
-    },
-    std::any::Any,
+    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
 };
 
 use super::*;
@@ -115,6 +114,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         Ok(())
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn upload_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
@@ -132,6 +132,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         )
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuPostflightProgram,
@@ -252,8 +253,9 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         }
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn generate_proving_ctx<VB>(
-        mut self,
+        self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
@@ -264,19 +266,20 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
+        vm.generate_preflight_proving_ctx(
             self.program,
             self.transcript,
             self.replay_plan,
-            |insertion_idx, chip| {
-                if let Some(ctx) = self
+            (self, rv64),
+            |(tracegen, rv64), insertion_idx, chip| {
+                if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
@@ -286,13 +289,14 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-        )?;
-        self.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        rv64.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_preflight_tracegen_session();
-        Ok(ctx)
+            |(tracegen, rv64)| {
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                rv64.finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
     }
 }
 

@@ -161,9 +161,9 @@ Capacity is bounded before execution. Arithmetic overflow, exhausted checkpoint
 or residual capacity, a malformed callback result, and a transcript cursor
 mismatch fail the segment rather than returning a partial transcript.
 
-The direct full-log preflight implementation remains a differential oracle. It
-logs semantic program and memory events directly and is useful for tests, but it
-is not the production proving architecture.
+Tests can copy and deliberately corrupt the derived program and memory logs, and
+the chronology tests retain an independent CPU index oracle. There is no second
+serial executor that produces a competing full-log preflight contract.
 
 ## Derived read-only history
 
@@ -393,11 +393,9 @@ completed memory top tree.
 The active compiled preflight executor, postflight, standard SDK GPU tracegen,
 and continuation proving path do not construct a `RecordArena`.
 
-The direct full-log preflight executor remains available as a correctness
-oracle for differential and negative tests. It is not a second production
-preflight contract. Restricting that oracle to test utilities can happen after
-its integration callers have an appropriate feature boundary; deleting its
-coverage or routing production through it would be a regression.
+Negative tests retain a small expanded-log fixture type, and chronology tests
+retain an independent CPU oracle. Both are test utilities over postflight's
+derived history; neither is a second execution mode or production contract.
 
 `RecordArena` still exists for legacy interpreter preflight, legacy/default GPU
 builders, CPU trace generation, and tests that have not moved to read-only

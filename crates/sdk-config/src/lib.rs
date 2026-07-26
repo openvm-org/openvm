@@ -35,6 +35,8 @@ use deferral::DeferralConfig;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 mod preflight;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+mod preflight_driver;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -448,6 +450,11 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
+
+    #[cfg(feature = "rvr")]
+    fn continuation_prover() -> Option<ContinuationProverFn<BabyBearPoseidon2GpuEngine, Self>> {
+        Some(preflight_driver::continuation_prover())
+    }
 
     fn create_chip_complex(
         &self,

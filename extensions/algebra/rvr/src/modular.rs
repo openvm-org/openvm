@@ -68,7 +68,7 @@ impl FieldKind for ModArithKind {
         Some(field.c_suffix())
     }
 
-    fn supports_checkpoint_preflight() -> bool {
+    fn supports_preflight() -> bool {
         true
     }
 }
@@ -143,7 +143,7 @@ impl ExtInstr for ModSetupIsEqInstr {
         CfgEffect::WriteUnknown { dst: self.rd_reg }
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -184,10 +184,6 @@ impl ExtInstr for HintNonQrInstr {
     }
 
     fn supports_preflight(&self) -> bool {
-        true
-    }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
         true
     }
 }
@@ -231,10 +227,6 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn supports_preflight(&self) -> bool {
-        true
-    }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
         true
     }
 }
@@ -501,7 +493,6 @@ mod tests {
             non_qr_bytes: vec![1; 32],
         };
         assert!(instr.supports_preflight());
-        assert!(instr.supports_checkpoint_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
@@ -533,7 +524,6 @@ mod tests {
             non_qr_bytes: vec![0; 32],
         };
         assert!(instr.supports_preflight());
-        assert!(instr.supports_checkpoint_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
@@ -568,7 +558,7 @@ mod tests {
                     num_limbs,
                     vec![7; num_limbs as usize],
                 );
-                assert!(instr.supports_checkpoint_preflight());
+                assert!(instr.supports_preflight());
 
                 let mut checkpoint = TestEmitCtx::checkpoint();
                 instr.emit_c(&mut checkpoint);
@@ -625,7 +615,7 @@ mod tests {
                 num_limbs,
                 vec![11; num_limbs as usize],
             );
-            assert!(instr.supports_checkpoint_preflight());
+            assert!(instr.supports_preflight());
 
             let mut checkpoint = TestEmitCtx::checkpoint();
             instr.emit_c(&mut checkpoint);
@@ -659,7 +649,7 @@ mod tests {
                 num_limbs,
                 vec![13; num_limbs as usize],
             );
-            assert!(instr.supports_checkpoint_preflight());
+            assert!(instr.supports_preflight());
 
             let mut checkpoint = TestEmitCtx::checkpoint();
             instr.emit_c(&mut checkpoint);
@@ -704,7 +694,7 @@ mod tests {
                 num_limbs,
                 modulus: vec![17; num_limbs as usize],
             };
-            assert!(instr.supports_checkpoint_preflight());
+            assert!(instr.supports_preflight());
 
             let mut checkpoint = TestEmitCtx::checkpoint();
             instr.emit_c(&mut checkpoint);

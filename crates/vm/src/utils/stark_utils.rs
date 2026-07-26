@@ -176,7 +176,7 @@ where
             .expect("Failed to execute");
 
         let rvr_state_pure = vm
-            .get_rvr_instance(exe)?
+            .instance(exe)?
             .execute(input.clone())
             .expect("Failed to execute");
 
@@ -192,7 +192,7 @@ where
         let metered_cost_ctx = vm.build_metered_cost_ctx();
 
         let (rvr_cost_ctx, _) = vm
-            .get_metered_cost_rvr_instance(exe)?
+            .metered_cost_instance(exe)?
             .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
 
         let (interp_cost_ctx, _) = vm
@@ -219,7 +219,7 @@ where
     {
         let metered_ctx = vm.build_metered_ctx(exe);
         let (rvr_segments, _rvr_state_metered) = vm
-            .get_metered_rvr_instance(exe)?
+            .metered_instance(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         let (interp_segments, _interp_state_metered) = vm

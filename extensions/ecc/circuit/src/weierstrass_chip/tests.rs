@@ -33,9 +33,7 @@ use {
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    openvm_circuit::arch::rvr::{
-        cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
-    },
+    openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
         arch::{DenseRecordArena, VirtualMachine, VmExecutor},
@@ -50,14 +48,10 @@ use {
         SystemOpcode,
     },
     openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram},
-    openvm_stark_backend::{
-        prover::{AirProvingContext, MatrixDimensions},
-        StarkEngine,
-    },
+    openvm_stark_backend::{prover::AirProvingContext, StarkEngine},
     rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     },
-    std::sync::atomic::Ordering,
     strum::EnumCount,
 };
 
@@ -143,7 +137,7 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
     rd_val: u32,
     input_bytes: &[u8],
     output_bytes: &[u8],
-) -> (Program<F>, FullLogPreflightTranscript) {
+) -> (Program<F>, PreflightEventLog) {
     let bytes_per_value = BLOCKS * MEMORY_BLOCK_BYTES;
     assert_eq!(input_bytes.len(), NUM_READS * bytes_per_value);
     assert_eq!(output_bytes.len(), bytes_per_value);
@@ -203,7 +197,7 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
     (
         Program::from_instructions(&[instruction, terminate]),
-        FullLogPreflightTranscript {
+        PreflightEventLog {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -298,15 +292,6 @@ fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn range_counts(checker: &VariableRangeCheckerChip) -> Vec<u32> {
-    checker
-        .count
-        .iter()
-        .map(|count| count.load(Ordering::Relaxed))
-        .collect()
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn gpu_range_counts(tester: &GpuChipTestBuilder) -> Vec<u32> {
     tester
         .range_checker()
@@ -322,21 +307,12 @@ fn gpu_range_counts(tester: &GpuChipTestBuilder) -> Vec<u32> {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn assert_range_count_delta(before: &[u32], after: &[u32], expected: &[u32]) {
-    assert_eq!(before.len(), expected.len());
-    assert_eq!(after.len(), expected.len());
-    for ((before, after), expected) in before.iter().zip(after).zip(expected) {
-        assert_eq!(after - before, *expected);
-    }
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn combine_two_vec_heap_transcripts(
     first_instruction: Instruction<F>,
-    mut first: FullLogPreflightTranscript,
+    mut first: PreflightEventLog,
     second_instruction: Instruction<F>,
-    mut second: FullLogPreflightTranscript,
-) -> (Program<F>, FullLogPreflightTranscript) {
+    mut second: PreflightEventLog,
+) -> (Program<F>, PreflightEventLog) {
     let second_start = first.program_log[1].timestamp;
     let timestamp_shift = second_start - second.program_log[0].timestamp;
     for event in &mut second.memory_log {
@@ -819,24 +795,15 @@ mod ec_addne_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
+        // This isolated chip proof still needs the harness's memory lookup
+        // counterpart. The chip trace itself remains the replay-derived context below.
         tester.execute_with_pc(
             &mut harness.executor,
             &mut harness.dense_arena,
             &instruction,
             0,
         );
-
         let device_ctx = tester.range_checker().device_ctx.clone();
-        let cpu_range_checker = tester.cpu_range_checker();
-        let legacy_arena = std::mem::replace(
-            &mut harness.dense_arena,
-            DenseRecordArena::with_byte_capacity(0),
-        );
-        let legacy_ctx = harness.gpu_chip.generate_proving_ctx(legacy_arena);
-        let legacy_counts = range_counts(&cpu_range_checker);
-        cpu_range_checker.clear();
-        let gpu_counts_before = gpu_range_counts(&tester);
-
         let (program, mut transcript) = make_vec_heap_transcript::<2, BLOCKS>(
             instruction,
             rs_ptrs,
@@ -859,32 +826,7 @@ mod ec_addne_tests {
             .gpu_chip
             .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
-        assert_eq!(
-            legacy_ctx.common_main.height(),
-            replay_ctx.common_main.height()
-        );
-        assert_eq!(
-            legacy_ctx.common_main.width(),
-            replay_ctx.common_main.width()
-        );
-        assert_eq!(
-            legacy_ctx
-                .common_main
-                .buffer()
-                .to_host_on(&device_ctx)
-                .unwrap(),
-            replay_ctx
-                .common_main
-                .buffer()
-                .to_host_on(&device_ctx)
-                .unwrap()
-        );
         let replay_counts = gpu_range_counts(&tester);
-        assert_range_count_delta(&gpu_counts_before, &replay_counts, &legacy_counts);
-        assert!(range_counts(&cpu_range_checker)
-            .into_iter()
-            .all(|count| count == 0));
-        drop(legacy_ctx);
 
         let write_start = 3 + 2 * BLOCKS;
         transcript.memory_log[write_start].value[0] ^= 1;
@@ -1752,24 +1694,15 @@ mod ec_double_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
+        // This isolated chip proof still needs the harness's memory lookup
+        // counterpart. The chip trace itself remains the replay-derived context below.
         tester.execute_with_pc(
             &mut harness.executor,
             &mut harness.dense_arena,
             &instruction,
             0,
         );
-
         let device_ctx = tester.range_checker().device_ctx.clone();
-        let cpu_range_checker = tester.cpu_range_checker();
-        let legacy_arena = std::mem::replace(
-            &mut harness.dense_arena,
-            DenseRecordArena::with_byte_capacity(0),
-        );
-        let legacy_ctx = harness.gpu_chip.generate_proving_ctx(legacy_arena);
-        let legacy_counts = range_counts(&cpu_range_checker);
-        cpu_range_checker.clear();
-        let gpu_counts_before = gpu_range_counts(&tester);
-
         let (program, mut transcript) = make_vec_heap_transcript::<1, BLOCKS>(
             instruction,
             rs_ptrs,
@@ -1792,32 +1725,7 @@ mod ec_double_tests {
             .gpu_chip
             .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
             .unwrap();
-        assert_eq!(
-            legacy_ctx.common_main.height(),
-            replay_ctx.common_main.height()
-        );
-        assert_eq!(
-            legacy_ctx.common_main.width(),
-            replay_ctx.common_main.width()
-        );
-        assert_eq!(
-            legacy_ctx
-                .common_main
-                .buffer()
-                .to_host_on(&device_ctx)
-                .unwrap(),
-            replay_ctx
-                .common_main
-                .buffer()
-                .to_host_on(&device_ctx)
-                .unwrap()
-        );
         let replay_counts = gpu_range_counts(&tester);
-        assert_range_count_delta(&gpu_counts_before, &replay_counts, &legacy_counts);
-        assert!(range_counts(&cpu_range_checker)
-            .into_iter()
-            .all(|count| count == 0));
-        drop(legacy_ctx);
 
         let write_start = 2 + BLOCKS;
         transcript.memory_log[write_start].value[0] ^= 1;

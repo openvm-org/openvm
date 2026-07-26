@@ -31,7 +31,7 @@ pub(crate) trait FieldKind: Clone + Debug + Send + Sync + 'static {
     fn known_suffix(field: KnownField) -> Option<&'static str>;
 
     /// Checkpoint replay is enabled explicitly per field family.
-    fn supports_checkpoint_preflight() -> bool {
+    fn supports_preflight() -> bool {
         false
     }
 }
@@ -159,20 +159,19 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let (rd, rs1, rs2) = if K::supports_checkpoint_preflight() && ctx.is_checkpoint_preflight()
-        {
+        let (rd, rs1, rs2) = if K::supports_preflight() && ctx.is_checkpoint_preflight() {
             let rs1 = ctx.read_var(self.rs1_reg);
             let rs2 = ctx.read_var(self.rs2_reg);
             let rd = ctx.read_var(self.rd_reg);
             (rd, rs1, rs2)
         } else {
-            // Preserve the established pure, metered, and ValueTrace output.
+            // Preserve the established pure and metered output.
             let rd = ctx.read_var(self.rd_reg);
             let rs1 = ctx.read_var(self.rs1_reg);
             let rs2 = ctx.read_var(self.rs2_reg);
             (rd, rs1, rs2)
         };
-        if K::supports_checkpoint_preflight() {
+        if K::supports_preflight() {
             ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
         }
         emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
@@ -182,7 +181,7 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         ctx.write_line("{");
         ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
         ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
-        if K::supports_checkpoint_preflight() && !K::SETUP_OUTPUT_IS_STATIC_ZERO {
+        if K::supports_preflight() && !K::SETUP_OUTPUT_IS_STATIC_ZERO {
             for word in 0..self.num_limbs * K::STORAGE_FACTOR / 8 {
                 ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
             }
@@ -198,8 +197,8 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
-        K::supports_checkpoint_preflight()
+    fn supports_preflight(&self) -> bool {
+        K::supports_preflight()
     }
 }
 
@@ -211,7 +210,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        if K::supports_checkpoint_preflight() {
+        if K::supports_preflight() {
             ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 2 / 8);
         }
         emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
@@ -220,7 +219,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
         if let Some(suffix) = known_suffix {
             let name = format!("rvr_ext_{prefix}_iseq_{suffix}");
             let val = ctx.emit_call_expr("bool", &name, &["state", &rs1, &rs2]);
-            if K::supports_checkpoint_preflight() {
+            if K::supports_preflight() {
                 ctx.append_replay_value(&val);
             }
             ctx.write_var(self.rd_reg, &val);
@@ -231,7 +230,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
             let name = format!("rvr_ext_{prefix}_iseq");
             let num_limbs = format!("{}u", self.num_limbs);
             let val = ctx.emit_call_expr("bool", &name, &["state", &rs1, &rs2, &num_limbs, "mod_"]);
-            if K::supports_checkpoint_preflight() {
+            if K::supports_preflight() {
                 ctx.append_replay_value(&val);
             }
             ctx.write_var(self.rd_reg, &val);
@@ -247,8 +246,8 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
         CfgEffect::WriteUnknown { dst: self.rd_reg }
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
-        K::supports_checkpoint_preflight()
+    fn supports_preflight(&self) -> bool {
+        K::supports_preflight()
     }
 }
 
@@ -258,20 +257,19 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let (rd, rs1, rs2) = if K::supports_checkpoint_preflight() && ctx.is_checkpoint_preflight()
-        {
+        let (rd, rs1, rs2) = if K::supports_preflight() && ctx.is_checkpoint_preflight() {
             let rs1 = ctx.read_var(self.rs1_reg);
             let rs2 = ctx.read_var(self.rs2_reg);
             let rd = ctx.read_var(self.rd_reg);
             (rd, rs1, rs2)
         } else {
-            // Preserve the established pure, metered, and ValueTrace output.
+            // Preserve the established pure and metered output.
             let rd = ctx.read_var(self.rd_reg);
             let rs1 = ctx.read_var(self.rs1_reg);
             let rs2 = ctx.read_var(self.rs2_reg);
             (rd, rs1, rs2)
         };
-        if K::supports_checkpoint_preflight() {
+        if K::supports_preflight() {
             ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
         }
         emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
@@ -290,7 +288,7 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
-        if K::supports_checkpoint_preflight() {
+        if K::supports_preflight() {
             for word in 0..self.num_limbs * K::STORAGE_FACTOR / 8 {
                 ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
             }
@@ -305,7 +303,7 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
-        K::supports_checkpoint_preflight()
+    fn supports_preflight(&self) -> bool {
+        K::supports_preflight()
     }
 }

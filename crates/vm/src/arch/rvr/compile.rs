@@ -382,27 +382,6 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
     )
 }
 
-/// Compile a `VmExe` for append-only full-log preflight execution.
-pub fn compile_full_log_preflight<F: PrimeField32>(
-    exe: &VmExe<F>,
-    extensions: &ExtensionRegistry,
-    guest_debug_map: Option<&GuestDebugMap>,
-) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
-        exe,
-        &CompileOptions {
-            base_name: None,
-            execution_kind: RvrExecutionKind::Preflight,
-            extensions,
-            chips: None,
-            guest_debug_map,
-            native_debug_info: cfg!(feature = "profiling"),
-            sanitize: DEFAULT_SANITIZE,
-            keep_artifacts: false,
-        },
-    )
-}
-
 /// Compile a VmExe for the checkpoint-and-residual preflight executor.
 pub fn compile_preflight<F: PrimeField32>(
     exe: &VmExe<F>,
@@ -413,7 +392,7 @@ pub fn compile_preflight<F: PrimeField32>(
         exe,
         &CompileOptions {
             base_name: None,
-            execution_kind: RvrExecutionKind::CheckpointPreflight,
+            execution_kind: RvrExecutionKind::Preflight,
             extensions,
             chips: None,
             guest_debug_map,
@@ -563,7 +542,6 @@ fn load_num_airs(
         RvrExecutionKind::Pure
             | RvrExecutionKind::PureWithInstretTracking
             | RvrExecutionKind::Preflight
-            | RvrExecutionKind::CheckpointPreflight
     ) {
         return Ok(None);
     }
@@ -618,8 +596,7 @@ fn compile_impl<F: PrimeField32>(
     match opts.execution_kind {
         RvrExecutionKind::Pure
         | RvrExecutionKind::PureWithInstretTracking
-        | RvrExecutionKind::Preflight
-        | RvrExecutionKind::CheckpointPreflight => {}
+        | RvrExecutionKind::Preflight => {}
         RvrExecutionKind::Metered
         | RvrExecutionKind::MeteredSegment
         | RvrExecutionKind::MeteredCost => {
@@ -681,8 +658,7 @@ fn compile_impl<F: PrimeField32>(
                 }
                 RvrExecutionKind::Pure
                 | RvrExecutionKind::PureWithInstretTracking
-                | RvrExecutionKind::Preflight
-                | RvrExecutionKind::CheckpointPreflight => {
+                | RvrExecutionKind::Preflight => {
                     unreachable!()
                 }
             }

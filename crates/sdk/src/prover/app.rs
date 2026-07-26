@@ -2,17 +2,13 @@ use std::sync::{Arc, OnceLock};
 
 use getset::Getters;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_circuit::arch::{
-    execution_mode::MeteredCtx,
-    rvr::{cuda::GpuPostflightProgram, RvrMeteredInstance},
-    PreflightInstance,
-};
+use openvm_circuit::arch::ContinuationProverFn;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
-        PreflightExecutor, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
+        PreflightExecutor, Streams, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
         VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
     },
     system::{
@@ -20,10 +16,6 @@ use openvm_circuit::{
     },
 };
 use openvm_continuations::CommitBytes;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_sdk_config::SdkVmGpuBuilder;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
     StarkEngine, Val,
@@ -37,15 +29,6 @@ use crate::{
     util::check_max_constraint_degrees,
     SdkError, StdIn, F, SC,
 };
-type ProveAppFn<E, VB> = Box<
-    dyn FnMut(
-            &mut VmInstance<E, VB>,
-            StdIn,
-        ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>
-        + Send,
->;
-type PrepareAppFn<E, VB> =
-    Box<dyn FnOnce(&mut AppProver<E, VB>) -> Result<(), VirtualMachineError> + Send>;
 
 #[derive(Getters)]
 pub struct AppProver<E, VB>
@@ -59,8 +42,8 @@ where
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     app_exe_commit: OnceLock<Digest>,
-    prepare_app: Option<PrepareAppFn<E, VB>>,
-    prove_app: Option<ProveAppFn<E, VB>>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    prove_app: Option<ContinuationProverFn<E, VB>>,
 }
 
 impl<E, VB> AppProver<E, VB>
@@ -94,8 +77,8 @@ where
             instance,
             app_vm_vk,
             app_exe_commit: OnceLock::new(),
-            prepare_app: None,
-            prove_app: None,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            prove_app: VB::continuation_prover(),
         }
     }
 
@@ -148,13 +131,19 @@ where
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),
         );
-        if let Some(prepare) = self.prepare_app.take() {
-            prepare(self)?;
-        }
-        let _prove_span = info_span!("app_prove", group = "app_proof").entered();
+        let input: Streams = input.into();
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
         let proof = match self.prove_app.as_mut() {
             Some(prove) => prove(&mut self.instance, input)?,
-            None => ContinuationVmProver::prove(&mut self.instance, input)?,
+            None => {
+                let _prove_span = info_span!("app_prove", group = "app_proof").entered();
+                ContinuationVmProver::prove(&mut self.instance, input)?
+            }
+        };
+        #[cfg(not(all(feature = "cuda", feature = "rvr")))]
+        let proof = {
+            let _prove_span = info_span!("app_prove", group = "app_proof").entered();
+            ContinuationVmProver::prove(&mut self.instance, input)?
         };
         #[cfg(debug_assertions)]
         let _ = verify_app_proof_inner::<E>(
@@ -180,36 +169,6 @@ where
     /// App VM config
     pub fn vm_config(&self) -> &VB::VmConfig {
         self.instance.vm.config()
-    }
-
-    #[cfg(feature = "rvr")]
-    pub(crate) fn prepare_with(
-        &mut self,
-        prepare: impl FnOnce(&mut Self) -> Result<(), VirtualMachineError> + Send + 'static,
-    ) {
-        self.prepare_app = Some(Box::new(prepare));
-    }
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-impl AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
-    pub(crate) fn use_compiled_preflight(
-        &mut self,
-        metered: RvrMeteredInstance<'static>,
-        metered_ctx: MeteredCtx,
-        preflight: PreflightInstance<'static>,
-        gpu_program: GpuPostflightProgram,
-    ) {
-        self.prove_app = Some(Box::new(move |instance, input| {
-            super::preflight::prove(
-                instance,
-                input,
-                &metered,
-                &metered_ctx,
-                &preflight,
-                &gpu_program,
-            )
-        }));
     }
 }
 

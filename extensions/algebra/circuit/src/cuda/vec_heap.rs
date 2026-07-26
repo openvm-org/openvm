@@ -74,7 +74,7 @@ pub(crate) fn checked_trace_shape(
 /// Projects only the semantic values required by a vector-heap adapter and a
 /// field-expression core. The device allocation has exactly one entry per
 /// selected execution.
-pub struct DeviceVecHeapProjection<const NUM_READS: usize, const BLOCKS: usize> {
+pub(crate) struct DeviceVecHeapProjection<const NUM_READS: usize, const BLOCKS: usize> {
     pub(crate) inputs: DeviceBuffer<VecHeapTraceInput<NUM_READS, BLOCKS>>,
 }
 
@@ -91,7 +91,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> DeviceVecHeapProjection<NUM_RE
 /// Gathers the bounded VecHeap replay projection without copying it back to the
 /// host. Direct GPU trace generators consume this allocation and drop it before
 /// proving starts.
-pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS: usize>(
+pub(crate) fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS: usize>(
     program: &GpuPostflightProgram,
     transcript: &GpuPostflightTranscript,
     replay_plan: &GpuPostflightPlan,
@@ -205,7 +205,7 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
     Ok(DeviceVecHeapProjection { inputs: projection })
 }
 
-pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>(
+pub(crate) fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>(
     program: &GpuPostflightProgram,
     transcript: &GpuPostflightTranscript,
     replay_plan: &GpuPostflightPlan,
@@ -241,7 +241,7 @@ fn flatten_writes<const BLOCKS: usize>(blocks: &[[u16; 4]; BLOCKS]) -> Vec<u8> {
 /// Builds a CPU field-expression trace directly from the bounded semantic
 /// projection, then transfers only the final trace to the GPU. Temporary range
 /// counts are merged atomically only after every row has validated.
-pub fn generate_field_expression_ctx_from_projection<
+pub(crate) fn generate_field_expression_ctx_from_projection<
     const NUM_READS: usize,
     const BLOCKS: usize,
 >(

@@ -5,8 +5,6 @@ mod deferral;
 mod evm;
 #[cfg(feature = "evm-prove")]
 mod halo2;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-mod preflight;
 #[cfg(feature = "root-prover")]
 mod root;
 mod stark;

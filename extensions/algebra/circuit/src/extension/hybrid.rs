@@ -5,6 +5,8 @@
 #[cfg(feature = "rvr")]
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+#[cfg(all(feature = "rvr", test))]
+use openvm_circuit::arch::rvr::PreflightExecution;
 use openvm_circuit::{
     arch::*,
     system::{
@@ -41,7 +43,6 @@ use {
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         PostflightAccessRegistry, PostflightAccessSpan,
     },
-    openvm_circuit::arch::rvr::PreflightExecution,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_instructions::program::Program,
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
@@ -178,11 +179,6 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
                 replay.generate_proving_ctx(program, transcript, replay_plan)
             }
         }
-    }
-
-    #[cfg(all(test, feature = "rvr"))]
-    pub(crate) fn uses_direct_addsub_replay(&self) -> bool {
-        matches!(self.replay, Some(ModularReplay::AddSub(_)))
     }
 
     #[cfg(feature = "rvr")]
@@ -871,6 +867,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
     /// Uploads one concrete RV64+Algebra checkpoint program. The registry is
     /// immutable program metadata; execution still writes only checkpoints and
     /// irreducible postimages.
+    #[cfg(test)]
     pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
@@ -891,6 +888,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         )
     }
 
+    #[cfg(test)]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuPostflightProgram,
@@ -1078,7 +1076,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
     }
 
     pub fn generate_proving_ctx<VB>(
-        mut self,
+        self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
@@ -1089,19 +1087,20 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         >,
     {
         let extension_opcodes = self.configured_opcodes.clone();
-        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
+        vm.generate_preflight_proving_ctx(
             self.program,
             self.transcript,
             self.replay_plan,
-            |insertion_idx, chip| {
-                if let Some(ctx) = self
+            (self, rv64),
+            |(tracegen, rv64), insertion_idx, chip| {
+                if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
@@ -1111,13 +1110,14 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-        )?;
-        rv64.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        self.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_preflight_tracegen_session();
-        Ok(ctx)
+            |(tracegen, rv64)| {
+                rv64.finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
     }
 }
 

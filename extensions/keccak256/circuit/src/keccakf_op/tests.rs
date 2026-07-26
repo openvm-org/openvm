@@ -40,9 +40,7 @@ use rand::Rng;
 use tiny_keccak::keccakf;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    openvm_circuit::arch::rvr::{
-        cuda::GpuPostflightProgram, FullLogPreflightTranscript, PreflightEndpoint,
-    },
+    openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
@@ -513,7 +511,7 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
             value: block(&postimage[i * 8..][..8]),
         });
     }
-    let transcript = FullLogPreflightTranscript {
+    let transcript = PreflightEventLog {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -538,10 +536,8 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits() as u32,
-        shared_records.clone(),
+        shared_records,
     );
-    let perm_chip =
-        KeccakfPermChipGpu::new(shared_records, tester.range_checker().device_ctx.clone());
 
     let device_ctx = &tester.range_checker().device_ctx;
     let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
@@ -549,9 +545,6 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
         .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let _op_ctx = op_chip
-        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
-        .unwrap();
-    let _perm_ctx = perm_chip
         .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);

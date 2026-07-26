@@ -10,7 +10,7 @@ pub use checkpoint_preflight::{
 };
 pub use instret::InstretTrackingState;
 pub use preflight::{
-    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PreflightState,
+    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
     PREFLIGHT_ADDRESS_SPACE_MASK, PREFLIGHT_WRITE_BIT,
 };
 pub use state::{ExecutionStatus, RvState, NUM_REGS};

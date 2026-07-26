@@ -34,7 +34,7 @@ static __device__ __forceinline__ uint8_t replay_load_byte(
     return static_cast<uint8_t>((value >> ((byte & 1) * RV64_BYTE_BITS)) & UINT8_MAX);
 }
 
-template <size_t WIDTH_BYTES, bool SIGN_EXTEND>
+template <size_t WIDTH_BYTES, bool SIGN_EXTEND, uint32_t ERROR_BASE = 241>
 static __device__ bool replay_load_multibyte(
     DeviceBufferConstView<RvrReplayInstruction> instructions,
     uint32_t pc_base,
@@ -50,8 +50,14 @@ static __device__ bool replay_load_multibyte(
     ReplayLoadMultiByteInput &out,
     uint32_t *error
 ) {
-    static_assert(WIDTH_BYTES == WORD_ACCESS_WIDTH || WIDTH_BYTES == DOUBLEWORD_ACCESS_WIDTH);
-    static_assert(!SIGN_EXTEND || WIDTH_BYTES == WORD_ACCESS_WIDTH);
+    static_assert(
+        WIDTH_BYTES == HALFWORD_ACCESS_WIDTH || WIDTH_BYTES == WORD_ACCESS_WIDTH ||
+        WIDTH_BYTES == DOUBLEWORD_ACCESS_WIDTH
+    );
+    static_assert(
+        !SIGN_EXTEND ||
+        (WIDTH_BYTES == HALFWORD_ACCESS_WIDTH || WIDTH_BYTES == WORD_ACCESS_WIDTH)
+    );
 
     ReplayProgramTransition transition;
     if (!replay_program_transition(
@@ -63,7 +69,7 @@ static __device__ bool replay_load_multibyte(
             ReplayPcEffect::Sequential,
             transition,
             error,
-            241
+            ERROR_BASE
         )) {
         return false;
     }
@@ -84,14 +90,14 @@ static __device__ bool replay_load_multibyte(
         instruction.words[5] != memory_as || imm > UINT16_MAX || needs_write > 1 ||
         imm_sign > 1 || needs_write != (rd_ptr != 0) || !rd_is_canonical ||
         !rs1_is_canonical) {
-        preflight_set_error(error, 244);
+        preflight_set_error(error, ERROR_BASE + 3);
         return false;
     }
 
     size_t rs1_index = step.memory_start;
     size_t block0_index = rs1_index + 1;
     if (block0_index >= memory.len() || block0_index >= predecessors.len()) {
-        preflight_set_error(error, 245);
+        preflight_set_error(error, ERROR_BASE + 4);
         return false;
     }
     auto const &rs1_read = memory[rs1_index];
@@ -100,7 +106,7 @@ static __device__ bool replay_load_multibyte(
         preflight_address_space(rs1_read) != register_as || rs1_read.pointer != rs1_ptr / 2 ||
         block0_read.timestamp != from.timestamp + 1 || preflight_is_write(block0_read) ||
         preflight_address_space(block0_read) != memory_as) {
-        preflight_set_error(error, 245);
+        preflight_set_error(error, ERROR_BASE + 4);
         return false;
     }
 
@@ -108,7 +114,7 @@ static __device__ bool replay_load_multibyte(
     uint16_t read_data[2][BLOCK_FE_WIDTH] = {};
     if (!replay_u16_block(rs1_read.value, rs1) ||
         !replay_u16_block(block0_read.value, read_data[0]) || rs1[2] != 0 || rs1[3] != 0) {
-        preflight_set_error(error, 246);
+        preflight_set_error(error, ERROR_BASE + 5);
         return false;
     }
     uint32_t rs1_val =
@@ -120,7 +126,7 @@ static __device__ bool replay_load_multibyte(
         pointer_max_bits < 32 &&
         static_cast<uint64_t>(effective) >= (uint64_t(1) << pointer_max_bits);
     if (effective < 0 || effective > UINT32_MAX || exceeds_configured_width) {
-        preflight_set_error(error, 247);
+        preflight_set_error(error, ERROR_BASE + 6);
         return false;
     }
     uint32_t ptr = static_cast<uint32_t>(effective);
@@ -128,7 +134,7 @@ static __device__ bool replay_load_multibyte(
     uint8_t shift = ptr - aligned_ptr;
     bool crosses = shift + WIDTH_BYTES > MEMORY_BLOCK_BYTES;
     if (block0_read.pointer != aligned_ptr / U16_CELL_SIZE) {
-        preflight_set_error(error, 248);
+        preflight_set_error(error, ERROR_BASE + 7);
         return false;
     }
 
@@ -141,7 +147,7 @@ static __device__ bool replay_load_multibyte(
             block1_ptr + MEMORY_BLOCK_BYTES > (uint64_t(1) << pointer_max_bits);
         if (block1_ptr > UINT32_MAX || block1_exceeds_configured_width ||
             next_index >= memory.len() || next_index >= predecessors.len()) {
-            preflight_set_error(error, 248);
+            preflight_set_error(error, ERROR_BASE + 7);
             return false;
         }
         auto const &block1_read = memory[next_index];
@@ -149,34 +155,34 @@ static __device__ bool replay_load_multibyte(
             preflight_address_space(block1_read) != memory_as ||
             block1_read.pointer != block1_ptr / U16_CELL_SIZE ||
             !replay_u16_block(block1_read.value, read_data[1])) {
-            preflight_set_error(error, 248);
+            preflight_set_error(error, ERROR_BASE + 7);
             return false;
         }
         block1_index = next_index;
         next_index++;
     } else if (next_index < memory.len() &&
                memory[next_index].timestamp < from.timestamp + 3) {
-        preflight_set_error(error, 245);
+        preflight_set_error(error, ERROR_BASE + 4);
         return false;
     }
 
     size_t write_index = SIZE_MAX;
     if (needs_write) {
         if (next_index >= memory.len() || next_index >= predecessors.len()) {
-            preflight_set_error(error, 245);
+            preflight_set_error(error, ERROR_BASE + 4);
             return false;
         }
         auto const &write = memory[next_index];
         if (write.timestamp != from.timestamp + 3 || !preflight_is_write(write) ||
             preflight_address_space(write) != register_as || write.pointer != rd_ptr / 2) {
-            preflight_set_error(error, 245);
+            preflight_set_error(error, ERROR_BASE + 4);
             return false;
         }
         write_index = next_index;
         next_index++;
     }
     if (next_index < memory.len() && memory[next_index].timestamp < to.timestamp) {
-        preflight_set_error(error, 245);
+        preflight_set_error(error, ERROR_BASE + 4);
         return false;
     }
 
@@ -198,13 +204,13 @@ static __device__ bool replay_load_multibyte(
     if (needs_write) {
         uint16_t logged_rd[BLOCK_FE_WIDTH];
         if (!replay_u16_block(memory[write_index].value, logged_rd)) {
-            preflight_set_error(error, 246);
+            preflight_set_error(error, ERROR_BASE + 5);
             return false;
         }
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             if (logged_rd[i] != expected_rd[i]) {
-                preflight_set_error(error, 249);
+                preflight_set_error(error, ERROR_BASE + 8);
                 return false;
             }
         }
@@ -243,7 +249,7 @@ static __device__ bool replay_load_multibyte(
              seeds,
              write_previous
          ))) {
-        preflight_set_error(error, 250);
+        preflight_set_error(error, ERROR_BASE + 9);
         return false;
     }
 

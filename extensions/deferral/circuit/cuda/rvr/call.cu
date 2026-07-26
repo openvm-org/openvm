@@ -1,6 +1,5 @@
 #include "../src/call.cu"
 
-#include "arch/rvr/preflight.cuh"
 #include "arch/rvr/replay.cuh"
 
 static constexpr uint32_t DEFERRAL_CALL_REPLAY_ERROR = 1201;

@@ -28,22 +28,24 @@ use {
         ModularExtension,
     },
     openvm_circuit::arch::{
-        rvr::{
-            cuda::{
-                GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
-                GpuPostflightTranscript, PostflightAccessRegistry, PostflightAccessSpan,
-            },
-            PreflightExecution,
+        rvr::cuda::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+            PostflightAccessRegistry, PostflightAccessSpan,
         },
         GenerationError, VirtualMachine,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
     openvm_ecc_transpiler::Rv64WeierstrassOpcode,
-    openvm_instructions::{program::Program, LocalOpcode},
+    openvm_instructions::LocalOpcode,
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
+    openvm_stark_backend::prover::ProvingContext,
     std::{any::Any, collections::BTreeSet, sync::Arc},
     strum::EnumCount,
+};
+#[cfg(all(feature = "rvr", test))]
+use {
+    openvm_circuit::arch::rvr::PreflightExecution, openvm_instructions::program::Program,
+    openvm_stark_backend::p3_field::PrimeField32,
 };
 
 #[cfg(feature = "rvr")]
@@ -354,6 +356,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     }
 
     /// Uploads one concrete RV64+Algebra+Weierstrass checkpoint program.
+    #[cfg(test)]
     pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
@@ -379,6 +382,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         )
     }
 
+    #[cfg(test)]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuPostflightProgram,
@@ -487,7 +491,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     /// Generates the complete RISC-V + modular + optional Fp2 + Weierstrass proving context
     /// from one checkpoint transcript, without constructing execution records.
     pub fn generate_proving_ctx<VB>(
-        mut self,
+        self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
@@ -499,7 +503,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        let mut algebra = AlgebraPreflightGpuTracegen::new(
+        let algebra = AlgebraPreflightGpuTracegen::new(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -509,19 +513,20 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         let mut extension_opcodes = self.claimed_opcodes.clone();
         extension_opcodes.extend_from_slice(algebra.extension_opcodes());
-        let mut rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
+        vm.generate_preflight_proving_ctx(
             self.program,
             self.transcript,
             self.replay_plan,
-            |insertion_idx, chip| {
-                if let Some(ctx) = self
+            (self, algebra, rv64),
+            |(tracegen, algebra, rv64), insertion_idx, chip| {
+                if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
@@ -536,16 +541,17 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-        )?;
-        rv64.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        algebra
-            .finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        self.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_preflight_tracegen_session();
-        Ok(ctx)
+            |(tracegen, algebra, rv64)| {
+                rv64.finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                algebra
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
     }
 }
 

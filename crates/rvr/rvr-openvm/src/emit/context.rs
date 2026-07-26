@@ -22,14 +22,9 @@ pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), In
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Emit ordered PC, register, and memory hooks used to build execution records.
-    ///
-    /// Page hooks are separate because they record only addresses for metering.
-    #[allow(dead_code)]
-    ValueTrace,
     /// Emit only block checkpoints and the residual values that execution
     /// cannot derive while replaying a block.
-    CheckpointPreflight,
+    Preflight,
     /// Memory accesses use direct helpers and do not emit memory trace events.
     #[default]
     Direct,
@@ -64,15 +59,11 @@ impl BlockAbi {
 
 impl EmitMode {
     fn preserves_logical_schedule(self) -> bool {
-        matches!(self, Self::ValueTrace | Self::CheckpointPreflight)
-    }
-
-    fn writes_full_events(self) -> bool {
-        matches!(self, Self::ValueTrace)
+        matches!(self, Self::Preflight)
     }
 
     fn uses_checkpoint_local(self) -> bool {
-        matches!(self, Self::CheckpointPreflight)
+        matches!(self, Self::Preflight)
     }
 
     fn is_metered_without_memory_pages(self) -> bool {
@@ -119,10 +110,6 @@ pub struct EmitContext<'a> {
     chip_widths: Option<&'a [u64]>,
     num_airs: Option<u32>,
     invalid_chip_index: Option<InvalidChipIndex>,
-    preflight_local_events: u32,
-    preflight_local_writes: u32,
-    preflight_local_slots: u32,
-    preflight_dynamic_reserve: bool,
     checkpoint_fixed_slots: u32,
     checkpoint_fixed_residuals: u32,
     checkpoint_pending_dynamic_slots: Option<String>,
@@ -150,43 +137,12 @@ impl<'a> EmitContext<'a> {
             chip_widths,
             num_airs,
             invalid_chip_index: None,
-            preflight_local_events: 0,
-            preflight_local_writes: 0,
-            preflight_local_slots: 0,
-            preflight_dynamic_reserve: false,
             checkpoint_fixed_slots: 0,
             checkpoint_fixed_residuals: 0,
             checkpoint_pending_dynamic_slots: None,
             checkpoint_dynamic_schedule: false,
             checkpoint_dynamic_residuals: false,
         }
-    }
-
-    fn count_preflight_local(&mut self, events: u32, writes: u32, slots: u32) {
-        if !self.mode.writes_full_events() {
-            return;
-        }
-        self.preflight_local_events = self
-            .preflight_local_events
-            .checked_add(events)
-            .expect("preflight block memory-event count overflow");
-        self.preflight_local_writes = self
-            .preflight_local_writes
-            .checked_add(writes)
-            .expect("preflight block write count overflow");
-        self.preflight_local_slots = self
-            .preflight_local_slots
-            .checked_add(slots)
-            .expect("preflight block timestamp-slot count overflow");
-    }
-
-    pub(crate) fn preflight_local_budget(&self) -> (u32, u32, u32, bool) {
-        (
-            self.preflight_local_events,
-            self.preflight_local_writes,
-            self.preflight_local_slots,
-            self.preflight_dynamic_reserve,
-        )
     }
 
     pub(crate) fn checkpoint_preflight_budget(&self) -> (u32, u32) {
@@ -259,23 +215,12 @@ impl<'a> EmitContext<'a> {
         self.mode.preserves_logical_schedule()
     }
 
-    pub(crate) fn writes_full_events(&self) -> bool {
-        self.mode.writes_full_events()
-    }
-
     /// Reserve logical memory slots that have no enabled memory event.
     pub(crate) fn advance_timestamp(&mut self, slots: u32) {
         if slots == 0 {
             return;
         }
-        if self.mode.writes_full_events() {
-            self.count_preflight_local(0, 0, slots);
-            self.write_line(&format!(
-                "preflight_local_advance_timestamp_unchecked(&preflight, {slots}u);"
-            ));
-        } else {
-            self.count_checkpoint_slots(slots);
-        }
+        self.count_checkpoint_slots(slots);
     }
 
     /// Append a line of C code (indented).
@@ -341,12 +286,7 @@ impl<'a> EmitContext<'a> {
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
             if matches!(kind, RegisterReadKind::MemoryAccess) {
-                if self.mode.writes_full_events() {
-                    self.count_preflight_local(1, 0, 1);
-                    self.write_line("preflight_local_reg_read_unchecked(&preflight, 0, 0ull);");
-                } else {
-                    self.count_checkpoint_slots(1);
-                }
+                self.count_checkpoint_slots(1);
             }
             return "0ull".to_string();
         }
@@ -362,21 +302,7 @@ impl<'a> EmitContext<'a> {
             var
         };
 
-        if self.mode.writes_full_events() {
-            let trace_fn = match kind {
-                RegisterReadKind::MemoryAccess => "preflight_local_reg_read_unchecked",
-                RegisterReadKind::Peek => "trace_reg_peek",
-            };
-            if matches!(kind, RegisterReadKind::MemoryAccess) {
-                self.count_preflight_local(1, 0, 1);
-            }
-            let trace_state = if matches!(kind, RegisterReadKind::MemoryAccess) {
-                "&preflight"
-            } else {
-                "state"
-            };
-            self.write_line(&format!("{trace_fn}({trace_state}, {idx}, {value});"));
-        } else if matches!(kind, RegisterReadKind::MemoryAccess) {
+        if matches!(kind, RegisterReadKind::MemoryAccess) {
             self.count_checkpoint_slots(1);
         }
 
@@ -399,32 +325,7 @@ impl<'a> EmitContext<'a> {
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
-            if self.mode.writes_full_events() {
-                self.count_preflight_local(0, 0, 1);
-                self.write_line("preflight_local_timestamp_unchecked(&preflight);");
-            } else {
-                self.count_checkpoint_slots(1);
-            }
-            return;
-        }
-        if self.mode.writes_full_events() {
-            self.count_preflight_local(1, 1, 1);
-            let tmp = self.next_var();
-            self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
-            let previous = if self.hot_regs.contains(&idx) {
-                Self::abi_name(idx).to_string()
-            } else {
-                format!("state->regs[{idx}]")
-            };
-            self.write_line(&format!(
-                "preflight_local_reg_write_unchecked(&preflight, {idx}, {tmp}, {previous});"
-            ));
-            if self.hot_regs.contains(&idx) {
-                let name = Self::abi_name(idx);
-                self.write_line(&format!("{name} = {tmp};"));
-            } else {
-                self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
-            }
+            self.count_checkpoint_slots(1);
             return;
         }
         self.count_checkpoint_slots(1);
@@ -453,25 +354,25 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str, &'static str) {
+    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str) {
         match (width, signed) {
-            (1, false) => ("read_mem_u8", "trace_read_mem_u8", "uint32_t"),
-            (1, true) => ("read_mem_i8", "trace_read_mem_i8", "int32_t"),
-            (2, false) => ("read_mem_u16", "trace_read_mem_u16", "uint32_t"),
-            (2, true) => ("read_mem_i16", "trace_read_mem_i16", "int32_t"),
-            (4, false) => ("read_mem_u32", "trace_read_mem_u32", "uint32_t"),
-            (4, true) => ("read_mem_i32", "trace_read_mem_i32", "int32_t"),
-            (8, _) => ("read_mem_u64", "trace_read_mem_u64", "uint64_t"),
+            (1, false) => ("read_mem_u8", "uint32_t"),
+            (1, true) => ("read_mem_i8", "int32_t"),
+            (2, false) => ("read_mem_u16", "uint32_t"),
+            (2, true) => ("read_mem_i16", "int32_t"),
+            (4, false) => ("read_mem_u32", "uint32_t"),
+            (4, true) => ("read_mem_i32", "int32_t"),
+            (8, _) => ("read_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
 
-    fn write_mem_helper(width: u8) -> (&'static str, &'static str, &'static str) {
+    fn write_mem_helper(width: u8) -> (&'static str, &'static str) {
         match width {
-            1 => ("write_mem_u8", "trace_write_mem_u8", "uint8_t"),
-            2 => ("write_mem_u16", "trace_write_mem_u16", "uint16_t"),
-            4 => ("write_mem_u32", "trace_write_mem_u32", "uint32_t"),
-            8 => ("write_mem_u64", "trace_write_mem_u64", "uint64_t"),
+            1 => ("write_mem_u8", "uint8_t"),
+            2 => ("write_mem_u16", "uint16_t"),
+            4 => ("write_mem_u32", "uint32_t"),
+            8 => ("write_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
@@ -500,18 +401,12 @@ impl<'a> EmitContext<'a> {
         );
         let addr = Self::addr_expr(base, offset);
         let var = self.next_var();
-        let (read_func, trace_func, var_ty) = Self::read_mem_helper(width, signed);
+        let (read_func, var_ty) = Self::read_mem_helper(width, signed);
         self.uses_raw_memory = true;
 
         self.emit_memory_bounds_trap(&addr, width);
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
-        if self.mode.writes_full_events() {
-            self.flush_value_trace_local();
-            self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
-            self.reload_value_trace_local();
-        } else {
-            self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
-        }
+        self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
@@ -527,30 +422,21 @@ impl<'a> EmitContext<'a> {
             "metered memory write emitted without page tracking"
         );
         let addr = Self::addr_expr(base, offset);
-        let (write_func, trace_func, cast_ty) = Self::write_mem_helper(width);
+        let (write_func, cast_ty) = Self::write_mem_helper(width);
         self.uses_raw_memory = true;
 
         self.emit_memory_bounds_trap(&addr, width);
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
-        if self.mode.writes_full_events() {
-            let value = self.next_var();
-            self.write_line(&format!("{cast_ty} {value} = ({cast_ty})({val});"));
-            self.flush_value_trace_local();
-            self.write_line(&format!("{trace_func}(state, {addr}, {value});"));
-            self.reload_value_trace_local();
-            self.write_line(&format!("{write_func}(memory, {addr}, {value});"));
-        } else {
-            self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
+        self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
+        self.write_line(&format!(
+            "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+        ));
+        if self.mode.uses_checkpoint_local() {
             self.write_line(&format!(
-                "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {width}u);"
             ));
-            if self.mode.uses_checkpoint_local() {
-                self.write_line(&format!(
-                    "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {width}u);"
-                ));
-            }
         }
     }
 
@@ -566,41 +452,20 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(addr, 8);
         }
-        if self.mode.writes_full_events() {
-            let value = self.next_var();
-            self.write_line(&format!("uint64_t {value} = (uint64_t)({val});"));
-            self.flush_value_trace_local();
+        self.count_checkpoint_slots(1);
+        self.write_line(&format!(
+            "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
+        ));
+        if self.mode.uses_checkpoint_local() {
             self.write_line(&format!(
-                "trace_write_mem_block_u64(state, {addr}, {value});"
+                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, 8u);"
             ));
-            self.reload_value_trace_local();
-            self.write_line(&format!("write_mem_u64(memory, {addr}, {value});"));
-        } else {
-            self.count_checkpoint_slots(1);
-            self.write_line(&format!(
-                "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
-            ));
-            if self.mode.uses_checkpoint_local() {
-                self.write_line(&format!(
-                    "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, 8u);"
-                ));
-            }
         }
     }
 
     /// Emit a fail-before-mutation capacity and timestamp-headroom check.
-    pub fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
-        if self.mode.writes_full_events() {
-            self.preflight_dynamic_reserve = true;
-            let args = self.tail_call_args();
-            self.flush_value_trace_local();
-            self.write_line(&format!(
-                "if (unlikely(!trace_reserve_memory_writes(state, {writes}, {slots}))) {{"
-            ));
-            self.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
-            self.write_line("}");
-            self.reload_value_trace_local();
-        } else if self.mode.uses_checkpoint_local() {
+    pub fn reserve_preflight_writes(&mut self, _writes: &str, slots: &str) {
+        if self.mode.uses_checkpoint_local() {
             assert!(
                 self.checkpoint_pending_dynamic_slots.is_none()
                     && !self.checkpoint_dynamic_schedule,
@@ -763,35 +628,13 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// Emit a PC read when value tracing is enabled.
-    pub fn trace_pc(&mut self, pc: u64) {
-        if self.mode.writes_full_events() {
-            self.write_line(&format!(
-                "preflight_local_trace_pc(&preflight, 0x{pc:08x}ull);"
-            ));
-        }
-    }
-
     pub(crate) fn flush_preflight_local(&mut self) {
         match self.mode {
-            EmitMode::ValueTrace => self.write_line("preflight_local_flush(state, &preflight);"),
-            EmitMode::CheckpointPreflight => {
+            EmitMode::Preflight => {
                 self.write_line("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */");
                 self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
             }
             _ => {}
-        }
-    }
-
-    fn flush_value_trace_local(&mut self) {
-        if self.mode.writes_full_events() {
-            self.write_line("preflight_local_flush(state, &preflight);");
-        }
-    }
-
-    fn reload_value_trace_local(&mut self) {
-        if self.mode.writes_full_events() {
-            self.write_line("preflight_local_reload(&preflight, state);");
         }
     }
 
@@ -807,11 +650,9 @@ impl<'a> EmitContext<'a> {
 
     pub fn emit_call(&mut self, name: &str, args: &[&str]) {
         self.flush_page_locals();
-        self.flush_value_trace_local();
         self.consume_checkpoint_call_slots();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
-        self.reload_value_trace_local();
         self.reload_page_locals();
     }
 
@@ -822,12 +663,10 @@ impl<'a> EmitContext<'a> {
 
     pub fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
-        self.flush_value_trace_local();
         self.consume_checkpoint_call_slots();
         let tmp = self.next_var();
         let args_str = args.join(", ");
         self.write_line(&format!("{ret_ty} {tmp} = {name}({args_str});"));
-        self.reload_value_trace_local();
         self.reload_page_locals();
         tmp
     }
@@ -838,10 +677,7 @@ impl<'a> EmitContext<'a> {
         name: &str,
         args: &[&str],
     ) -> Option<String> {
-        if matches!(
-            self.mode,
-            EmitMode::ValueTrace | EmitMode::CheckpointPreflight | EmitMode::Direct
-        ) {
+        if matches!(self.mode, EmitMode::Preflight | EmitMode::Direct) {
             self.emit_call(name, args);
             None
         } else {
@@ -853,10 +689,7 @@ impl<'a> EmitContext<'a> {
         if chip_idx == u32::MAX {
             return;
         }
-        if !matches!(
-            self.mode,
-            EmitMode::ValueTrace | EmitMode::CheckpointPreflight | EmitMode::Direct
-        ) {
+        if !matches!(self.mode, EmitMode::Preflight | EmitMode::Direct) {
             let num_airs = self
                 .num_airs
                 .expect("metered code generation requires the AIR count");
@@ -866,7 +699,7 @@ impl<'a> EmitContext<'a> {
             }
         }
         match self.mode {
-            EmitMode::ValueTrace | EmitMode::CheckpointPreflight | EmitMode::Direct => {}
+            EmitMode::Preflight | EmitMode::Direct => {}
             EmitMode::Metered { .. } => {
                 self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
             }
@@ -891,12 +724,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
-        if chip_idx == u32::MAX
-            || matches!(
-                self.mode,
-                EmitMode::ValueTrace | EmitMode::CheckpointPreflight | EmitMode::Direct
-            )
-        {
+        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::Preflight | EmitMode::Direct) {
             return;
         }
         self.write_line(&format!("if (({count_expr}) != 0u) {{"));
@@ -928,10 +756,6 @@ impl<'a> EmitContext<'a> {
         num_dwords: &str,
         addr_space: PageAddressSpace,
     ) {
-        assert!(
-            !self.mode.writes_full_events(),
-            "page-only access is invalid when values are being traced"
-        );
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
@@ -1069,8 +893,7 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn flush_before_control_transfer(&mut self) {
         match self.mode {
-            EmitMode::ValueTrace => self.write_line("preflight_local_flush(state, &preflight);"),
-            EmitMode::CheckpointPreflight => {
+            EmitMode::Preflight => {
                 self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
             }
             _ => {}
@@ -1141,20 +964,10 @@ mod tests {
 
     use super::{BlockAbi, EmitContext, EmitMode};
 
-    fn value_trace_ctx() -> EmitContext<'static> {
-        EmitContext::new(
-            HashSet::new(),
-            EmitMode::ValueTrace,
-            BlockAbi::Plain,
-            None,
-            None,
-        )
-    }
-
     fn checkpoint_ctx() -> EmitContext<'static> {
         EmitContext::new(
             HashSet::new(),
-            EmitMode::CheckpointPreflight,
+            EmitMode::Preflight,
             BlockAbi::Plain,
             None,
             None,
@@ -1162,47 +975,7 @@ mod tests {
     }
 
     #[test]
-    fn value_trace_keeps_x0_read_and_disabled_write_slots() {
-        let mut ctx = value_trace_ctx();
-        assert_eq!(ctx.read_reg(0), "0ull");
-        ctx.write_reg(0, "123ull");
-
-        assert_eq!(
-            ctx.buf()
-                .matches("preflight_local_reg_read_unchecked(&preflight, 0, 0ull);")
-                .count(),
-            1
-        );
-        assert_eq!(
-            ctx.buf()
-                .matches("preflight_local_timestamp_unchecked(&preflight);")
-                .count(),
-            1
-        );
-        assert_eq!(ctx.preflight_local_budget(), (1, 0, 2, false));
-    }
-
-    #[test]
-    fn value_trace_register_write_captures_previous_value() {
-        let mut ctx = value_trace_ctx();
-        ctx.write_reg(3, "123ull");
-
-        assert!(ctx
-            .buf()
-            .contains("preflight_local_reg_write_unchecked(&preflight, 3, _v0, state->regs[3]);"));
-        assert_eq!(ctx.preflight_local_budget(), (1, 1, 1, false));
-    }
-
-    #[test]
-    fn advance_timestamp_emits_only_full_events_and_counts_checkpoints() {
-        let mut tracing = value_trace_ctx();
-        tracing.advance_timestamp(3);
-        assert_eq!(
-            tracing.buf(),
-            "        preflight_local_advance_timestamp_unchecked(&preflight, 3u);\n"
-        );
-        assert_eq!(tracing.preflight_local_budget(), (0, 0, 3, false));
-
+    fn advance_timestamp_counts_checkpoint_slots() {
         let mut checkpoint = checkpoint_ctx();
         checkpoint.advance_timestamp(3);
         assert!(checkpoint.buf().is_empty());
@@ -1239,13 +1012,6 @@ mod tests {
             .buf()
             .contains("CHECKPOINT_PREFLIGHT_FINISH_BLOCK"));
 
-        let mut value_trace = value_trace_ctx();
-        value_trace.flush_before_control_transfer();
-        assert_eq!(
-            value_trace.buf(),
-            "        preflight_local_flush(state, &preflight);\n"
-        );
-
         for mode in [
             EmitMode::Direct,
             EmitMode::Metered {
@@ -1274,11 +1040,6 @@ mod tests {
         checkpoint.advance_checkpoint_timestamp(12);
         assert!(checkpoint.buf().is_empty());
         assert_eq!(checkpoint.checkpoint_preflight_budget(), (12, 0));
-
-        let mut value_trace = value_trace_ctx();
-        value_trace.advance_checkpoint_timestamp(12);
-        assert!(value_trace.buf().is_empty());
-        assert_eq!(value_trace.preflight_local_budget(), (0, 0, 0, false));
 
         for mode in [
             EmitMode::Direct,
@@ -1480,18 +1241,6 @@ mod tests {
     }
 
     #[test]
-    fn aligned_block_write_is_one_value_trace_event() {
-        let mut ctx = value_trace_ctx();
-        ctx.write_aligned_mem_block("addr", "value");
-
-        assert!(ctx
-            .buf()
-            .contains("trace_write_mem_block_u64(state, addr, _v0);"));
-        assert!(ctx.buf().contains("write_mem_u64(memory, addr, _v0);"));
-        assert!(!ctx.buf().contains("trace_write_mem_u64("));
-    }
-
-    #[test]
     fn aligned_block_write_is_an_ordinary_raw_write_outside_preflight() {
         let mut ctx = EmitContext::new(
             HashSet::new(),
@@ -1555,18 +1304,6 @@ mod tests {
         );
         assert_eq!(ctx.buf().matches("write_mem_u64(").count(), 1);
         assert!(!ctx.buf().contains("trace_page_access("));
-    }
-
-    #[test]
-    fn value_trace_reserves_whole_instruction_before_mutation() {
-        let mut ctx = value_trace_ctx();
-        ctx.reserve_preflight_writes("5u", "13u");
-
-        assert!(ctx
-            .buf()
-            .contains("!trace_reserve_memory_writes(state, 5u, 13u)"));
-        assert!(ctx.buf().contains("return rv_trap("));
-        assert_eq!(ctx.preflight_local_budget(), (0, 0, 0, true));
     }
 
     fn metered_memory_ctx() -> EmitContext<'static> {

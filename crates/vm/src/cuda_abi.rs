@@ -138,43 +138,6 @@ pub mod rvr_postflight {
     use super::*;
 
     extern "C" {
-        fn _rvr_memory_index_get_temp_bytes(
-            num_entries: usize,
-            h_temp_bytes_out: *mut usize,
-            stream: cudaStream_t,
-        ) -> i32;
-
-        fn _rvr_memory_index_sort(
-            memory: DeviceBufferView,
-            seeds: DeviceBufferView,
-            address_spaces: DeviceBufferView,
-            address_space_offset: u32,
-            address_space_height: u32,
-            pointer_max_bits: u32,
-            keys_in: *mut u64,
-            keys_out: *mut u64,
-            temp_storage: *mut std::ffi::c_void,
-            temp_storage_bytes: usize,
-            error: *mut u32,
-            stream: cudaStream_t,
-        ) -> i32;
-
-        fn _rvr_memory_index_scatter(
-            memory: DeviceBufferView,
-            num_seeds: usize,
-            sorted_keys: *const u64,
-            num_entries: usize,
-            predecessors: *mut u32,
-            touched_flags: *mut u32,
-            touched_positions: *mut u32,
-            touched_blocks: *mut std::ffi::c_void,
-            num_touched_blocks: *mut u32,
-            temp_storage: *mut std::ffi::c_void,
-            temp_storage_bytes: usize,
-            error: *mut u32,
-            stream: cudaStream_t,
-        ) -> i32;
-
         fn _rvr_memory_chronology_get_temp_bytes(
             num_entries: usize,
             h_temp_bytes_out: *mut usize,
@@ -250,82 +213,6 @@ pub mod rvr_postflight {
             error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn memory_index_get_temp_bytes(
-        num_entries: usize,
-        h_temp_bytes_out: &mut usize,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_memory_index_get_temp_bytes(
-            num_entries,
-            h_temp_bytes_out,
-            stream,
-        ))
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn memory_index_sort(
-        memory: DeviceBufferView,
-        seeds: DeviceBufferView,
-        address_spaces: DeviceBufferView,
-        address_space_offset: u32,
-        address_space_height: u32,
-        pointer_max_bits: u32,
-        keys_in: &DeviceBuffer<u64>,
-        keys_out: &DeviceBuffer<u64>,
-        temp_storage: &DeviceBuffer<u8>,
-        temp_storage_bytes: usize,
-        error: &DeviceBuffer<u32>,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_memory_index_sort(
-            memory,
-            seeds,
-            address_spaces,
-            address_space_offset,
-            address_space_height,
-            pointer_max_bits,
-            keys_in.as_mut_ptr(),
-            keys_out.as_mut_ptr(),
-            temp_storage.as_mut_raw_ptr(),
-            temp_storage_bytes,
-            error.as_mut_ptr(),
-            stream,
-        ))
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn memory_index_scatter(
-        memory: DeviceBufferView,
-        num_seeds: usize,
-        sorted_keys: &DeviceBuffer<u64>,
-        num_entries: usize,
-        predecessors: &DeviceBuffer<u32>,
-        touched_flags: &DeviceBuffer<u32>,
-        touched_positions: &DeviceBuffer<u32>,
-        touched_blocks: *mut std::ffi::c_void,
-        num_touched_blocks: &DeviceBuffer<u32>,
-        temp_storage: &DeviceBuffer<u8>,
-        temp_storage_bytes: usize,
-        error: &DeviceBuffer<u32>,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_memory_index_scatter(
-            memory,
-            num_seeds,
-            sorted_keys.as_ptr(),
-            num_entries,
-            predecessors.as_mut_ptr(),
-            touched_flags.as_mut_ptr(),
-            touched_positions.as_mut_ptr(),
-            touched_blocks,
-            num_touched_blocks.as_mut_ptr(),
-            temp_storage.as_mut_raw_ptr(),
-            temp_storage_bytes,
-            error.as_mut_ptr(),
-            stream,
-        ))
     }
 
     pub unsafe fn memory_chronology_get_temp_bytes(

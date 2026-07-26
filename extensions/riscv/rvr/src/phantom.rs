@@ -37,10 +37,6 @@ impl ExtInstr for HintInputInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
-        true
-    }
 }
 
 /// PRINT_STR: print a UTF-8 string from guest memory to host stdout.
@@ -73,10 +69,6 @@ impl ExtInstr for PrintStrInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
-        true
-    }
 }
 
 /// HINT_RANDOM: fill the hint stream with `num_words_reg * 8` random bytes
@@ -106,10 +98,6 @@ impl ExtInstr for HintRandomInstr {
     }
 
     fn supports_preflight(&self) -> bool {
-        true
-    }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
         true
     }
 }

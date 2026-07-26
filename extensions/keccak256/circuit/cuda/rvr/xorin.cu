@@ -1,5 +1,4 @@
 #include "fp.h"
-#include "arch/rvr/preflight.cuh"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"

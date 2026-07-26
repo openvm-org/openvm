@@ -1,19 +1,7 @@
-#include "arch/rvr/preflight.cuh"
+#include "arch/rvr/replay.cuh"
 #include "fp.h"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
-
-template <typename T> struct DeviceBufferView {
-    T *ptr;
-    size_t size;
-
-    __device__ __host__ __forceinline__ T *data() const { return ptr; }
-    __device__ __host__ __forceinline__ size_t len() const { return size / sizeof(T); }
-    __device__ __host__ __forceinline__ T &operator[](size_t index) const {
-        assert(index < len());
-        return ptr[index];
-    }
-};
 
 namespace {
 
@@ -199,17 +187,6 @@ __device__ __forceinline__ bool matches_checkpoint(
     return true;
 }
 
-__device__ __forceinline__ RvrReplayInstruction const *resolve_instruction(
-    DeviceBufferConstView<RvrReplayInstruction> instructions,
-    uint32_t pc_base,
-    uint32_t pc
-) {
-    if (pc < pc_base || (pc - pc_base) % 4 != 0) return nullptr;
-    size_t index = (pc - pc_base) / 4;
-    if (index >= instructions.len() || instructions[index].words[0] == UINT32_MAX) return nullptr;
-    return &instructions[index];
-}
-
 __device__ __forceinline__ bool opcode_in_family(
     uint32_t opcode, uint32_t base, uint32_t count, uint32_t &local
 ) {
@@ -341,6 +318,14 @@ __device__ __forceinline__ bool rr_uses_immediate_as(
            opcode_in_family(opcode, opcodes.divrem_w, 4, local);
 }
 
+__device__ __forceinline__ bool is_rr_opcode(
+    uint32_t opcode, RvrCheckpointOpcodeBases const &opcodes
+) {
+    bool matched;
+    execute_rr_result(opcode, opcodes, 0, 0, matched);
+    return matched;
+}
+
 __device__ __forceinline__ uint64_t execute_ri_result(
     uint32_t opcode,
     RvrCheckpointOpcodeBases const &opcodes,
@@ -390,6 +375,15 @@ __device__ __forceinline__ uint64_t execute_ri_result(
     }
     matched = false;
     return 0;
+}
+
+__device__ __forceinline__ bool is_ri_opcode(
+    uint32_t opcode, RvrCheckpointOpcodeBases const &opcodes
+) {
+    bool matched;
+    bool valid;
+    execute_ri_result(opcode, opcodes, 0, 0, matched, valid);
+    return matched;
 }
 
 struct LoadStoreInstruction {
@@ -1091,7 +1085,7 @@ __device__ bool replay_chunk(
     // the end-anchor comparison. Variable-length paths (hint store, access
     // schedules) bound their own timestamp advance explicitly.
     for (uint32_t local_step = 0; local_step < expected_steps; local_step++) {
-        auto instruction = resolve_instruction(instructions, pc_base, state.pc);
+        auto instruction = resolve_replay_instruction(instructions, pc_base, state.pc);
         if (instruction == nullptr) {
             preflight_set_error(error, ERROR_BAD_PC);
             return false;
@@ -1142,6 +1136,9 @@ __device__ bool replay_chunk(
             state.regs[rd] = result;
             state.pc += 4;
             state.timestamp += 2;
+        } else if (is_rr_opcode(opcode, opcodes) || is_ri_opcode(opcode, opcodes)) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
         } else if (opcode >= opcodes.hint_store && opcode < opcodes.hint_store + 2) {
             HintStoreInstruction decoded{};
             if (!validate_hint_store(*instruction, opcodes, register_as, memory_as,

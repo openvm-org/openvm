@@ -296,7 +296,7 @@ mod tests {
         // transcript on failure. This exercises that public failure boundary with the same invalid
         // setup program. Dirty-page state is intentionally private and cannot be observed after the
         // Consumed state returns `Err`; preflight merges it only on success.
-        let checkpoint = executor.preflight_instance(&openvm_exe, None).unwrap();
+        let checkpoint = executor.preflight_instance(&openvm_exe).unwrap();
         let result = checkpoint.execute(vec![], PreflightLimits::new(1_000_000, 1024, 1024));
         match result {
             Err(ExecutionError::RvrExecution(message)) => {

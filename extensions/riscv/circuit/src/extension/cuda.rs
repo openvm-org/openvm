@@ -11,6 +11,8 @@ use openvm_circuit::{
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use {openvm_circuit::arch::GenerationError, openvm_stark_backend::prover::ProvingContext};
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::{
@@ -21,7 +23,7 @@ use {
             },
             PreflightExecution,
         },
-        GenerationError, VirtualMachine, VmBuilder,
+        VirtualMachine, VmBuilder,
     },
     openvm_circuit::system::cuda::{
         phantom::PhantomChipGPU, poseidon2::Poseidon2PeripheryChipGPU, SystemChipInventoryGPU,
@@ -39,7 +41,7 @@ use {
         Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
         ShiftWOpcode,
     },
-    openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
+    openvm_stark_backend::prover::AirProvingContext,
 };
 
 use crate::{
@@ -276,8 +278,9 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// inventory order and lifetime fencing, while RV64IM owns its opcode-to-
     /// producer mapping. This avoids a generic trace-generator framework and
     /// makes skipping [`Self::finish`] impossible on the production entry path.
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn generate_proving_ctx<VB>(
-        mut self,
+        self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
@@ -287,19 +290,22 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
+        vm.generate_preflight_proving_ctx(
             self.program,
             self.transcript,
             self.replay_plan,
-            |insertion_idx, chip| {
-                self.generate_for_chip(insertion_idx, chip)
+            self,
+            |tracegen, insertion_idx, chip| {
+                tracegen
+                    .generate_for_chip(insertion_idx, chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
             },
-        )?;
-        self.finish()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        vm.complete_preflight_tracegen_session();
-        Ok(ctx)
+            |tracegen| {
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
     }
 
     /// Generates one extension AIR in the VM inventory's normal reverse order.

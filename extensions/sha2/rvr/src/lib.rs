@@ -86,7 +86,7 @@ impl ExtInstr for Sha256Instr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -136,7 +136,7 @@ impl ExtInstr for Sha512Instr {
         CfgEffect::None
     }
 
-    fn supports_checkpoint_preflight(&self) -> bool {
+    fn supports_preflight(&self) -> bool {
         true
     }
 }
@@ -336,8 +336,7 @@ mod tests {
         remaining_slots: u32,
         residuals: usize,
     ) {
-        assert!(instr.supports_checkpoint_preflight());
-        assert!(!instr.supports_preflight());
+        assert!(instr.supports_preflight());
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
         assert_eq!(

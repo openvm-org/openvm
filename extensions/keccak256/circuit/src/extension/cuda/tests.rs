@@ -2,7 +2,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             cuda::{GpuPostflightProgram, PostflightAccessRegistry, PostflightAccessSpan},
-            FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
+            PreflightEndpoint, PreflightEventLog, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
     },
@@ -148,7 +148,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Keccak256Rv64GpuBuilder, config.clone())
@@ -311,7 +311,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         })
         .collect();
     let zero_exe = VmExe::new(zero_program.clone()).with_init_memory(zero_memory);
-    let zero_checkpoint = executor.preflight_instance(&zero_exe, None).unwrap();
+    let zero_checkpoint = executor.preflight_instance(&zero_exe).unwrap();
     let zero_state = zero_checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let zero_cached_program = vm.commit_program_on_device(&zero_program);
     vm.load_program(zero_cached_program);
@@ -353,7 +353,7 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
-    let transcript = FullLogPreflightTranscript {
+    let transcript = PreflightEventLog {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,

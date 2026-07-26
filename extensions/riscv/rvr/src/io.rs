@@ -62,10 +62,6 @@ impl ExtInstr for HintStoreWInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
-        true
-    }
 }
 
 /// HINT_BUFFER: pop `8 * reg[num_words_reg]` bytes from the hint stream and
@@ -129,10 +125,6 @@ impl ExtInstr for HintBufferInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
-        true
-    }
 }
 
 /// Store the low `width` bytes of `src_reg` at `ptr_reg + offset` in the
@@ -189,10 +181,6 @@ impl ExtInstr for RevealInstr {
     }
 
     fn supports_preflight(&self) -> bool {
-        true
-    }
-
-    fn supports_checkpoint_preflight(&self) -> bool {
         true
     }
 }
@@ -616,7 +604,6 @@ mod tests {
         };
 
         let mut ctx = TestEmitCtx::default();
-        assert!(instr.supports_preflight());
         instr.emit_c(&mut ctx);
         assert_eq!(
             ctx.lines[0],
@@ -679,7 +666,6 @@ mod tests {
             offset: 12,
             width: MemWidth::Word,
         };
-        assert!(instr.supports_preflight());
         instr.emit_c(&mut ctx);
 
         assert_eq!(ctx.lines[0], "reserve_preflight_writes(0u, 2u);");
@@ -699,7 +685,6 @@ mod tests {
         let instr = HintStoreWInstr {
             ptr_reg: Reg::new(5),
         };
-        assert!(instr.supports_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
@@ -728,7 +713,6 @@ mod tests {
             num_words_reg: Reg::new(6),
             chip_idx: None,
         };
-        assert!(instr.supports_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
