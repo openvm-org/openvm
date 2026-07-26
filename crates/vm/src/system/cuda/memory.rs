@@ -26,15 +26,27 @@ use openvm_stark_backend::{
 };
 use tracing::instrument;
 
-/// Chunk size for the parallel pack into the upload staging buffer.
-const UPLOAD_PACK_CHUNK: usize = 8 << 20;
-
 use super::{
     boundary::BoundaryChipGPU,
     merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU,
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
+
+/// Chunk size for the parallel pack into the upload staging buffer.
+const UPLOAD_PACK_CHUNK: usize = 8 << 20;
+
+#[inline]
+fn copy_into_upload_staging(dst: &mut [u8], src: &[u8]) {
+    debug_assert_eq!(dst.len(), src.len());
+    if src.len() <= UPLOAD_PACK_CHUNK {
+        dst.copy_from_slice(src);
+    } else {
+        dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+            .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
+            .for_each(|(dst, src)| dst.copy_from_slice(src));
+    }
+}
 
 // The CUDA merge kernel in `inventory.cu` is hardcoded to a 2-way merge of
 // `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so the only
@@ -226,9 +238,7 @@ impl MemoryInventoryGPU {
                 for (start, end) in runs {
                     let dst = &mut staging[offset..offset + (end - start)];
                     offset += end - start;
-                    dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
-                        .zip(raw_mem[start..end].par_chunks(UPLOAD_PACK_CHUNK))
-                        .for_each(|(d, s)| d.copy_from_slice(s));
+                    copy_into_upload_staging(dst, &raw_mem[start..end]);
                     // SAFETY: runs are clamped to raw_mem.len() and buf has the same
                     // length; dst is exactly end-start bytes of the staging.
                     unsafe {
@@ -281,9 +291,7 @@ impl MemoryInventoryGPU {
         let src: &[u8] =
             unsafe { std::slice::from_raw_parts(touched_memory.as_ptr() as *const u8, in_bytes) };
         let dst = &mut h_in[align_offset..align_offset + in_bytes];
-        dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
-            .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
-            .for_each(|(d, s)| d.copy_from_slice(s));
+        copy_into_upload_staging(dst, src);
         // SAFETY: 4-aligned by `align_offset`, within the buffer.
         let in_words: &[u32] = unsafe {
             std::slice::from_raw_parts(
