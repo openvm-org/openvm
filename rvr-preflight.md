@@ -114,6 +114,14 @@ compiled metered and preflight execution instances and the immutable GPU
 program; there is no second public prover type, execution mode, artifact
 framework, or proof-record store.
 
+App proving-key generation has not moved between CPU and GPU. As on
+`develop-v2.1.0`, `AppProvingKey::keygen` uses the CPU engine to construct
+backend-independent AIR and proving-key metadata once, and the SDK caches the
+result. `new_local_prover` then creates the selected proving engine and
+transports that key to its device before committing the program. With the CUDA
+SDK builder, trace generation and proving remain GPU work. Compiled executor
+preparation is a separate fixed-program cost and is not key generation.
+
 Successful proofs and failures before a trace-generation session begins
 leave the fixed-program prover reusable. A failure while that session is active is
 terminal: producer lookup counts are not transactional, so the VM remains
@@ -440,66 +448,66 @@ during trace generation versus 1.5 GiB during proving, and BLS12-381 used about
 560 MiB versus 2.2 GiB. These small tests validate lifetimes but do not replace
 the full-workload GPU-memory gate.
 
-The exact-source legacy and compiled-preflight Reth proofs used the same
-release binary, input, 15 GiB segmentation estimate, and PID-scoped 0.2-second
-GPU sampler. The compiled preflight proof verified all 55 segments and the
-expected output:
+The definitive Reth comparison used OpenVM `c215dbf3ac`, openvm-eth
+`3ab635e6`, block `24001988`, the same cached RPC input and guest ELF, the same
+CUDA runner class, and the same proof configuration. The only execution-mode
+difference was compiled preflight versus the legacy interpreter. Both runs
+retired exactly 664,625,965 guest instructions, produced 74 segments, verified
+the app proof, and reached the same GPU-memory peak.
 
 ```text
-OpenVM       13cddd7cefb2cccbe52ed5864d874403d436e9cf
-stark-backend be2b6983cbd70976b37acbb72ceb1b3593dc67ae
-openvm-eth   a8f6ad8a61ec7f874cab458ff3c3caf3d7d90a34
-rvr-openvm   604ad55aa9cd7a5a9639f45ec7c27a22915b48a0
-input SHA-256 97097c091120b2c09657917d4d3b95c61ec2e3dd25b3b210414f087d80c5a898
+phase                                      interpreter   compiled preflight
+guest instructions / segments        664,625,965 / 74   664,625,965 / 74
+one-time executor preparation                0.041 s          744.256 s
+  compile metered                            0.041 s          347.492 s
+  compile preflight                                -          396.724 s
+  immutable program upload                         -            0.020 s
+reusable app-prove span                     65.061 s           48.817 s
+sum of segment proof spans                  61.529 s           47.692 s
+metered execution                            3.391 s            1.059 s
+serial preflight                            14.518 s            1.040 s
+postflight                                       -             1.644 s
+trace generation                             2.376 s            1.095 s
+initial-memory upload                        1.206 s            1.215 s
+backend proving excluding tracegen          43.313 s           42.538 s
+other orchestration and timer rounding       0.257 s            0.226 s
+peak GPU memory                              15.80 GB           15.80 GB
 ```
 
-```text
-phase                               legacy records   compiled preflight
-guest instructions / segments      501,246,918 / 55   501,246,918 / 55
-one-time executor preparation          133.576 s          278.097 s
-reusable app proof                     103.075 s           68.695 s
-metered execution                        1.457 s            1.472 s
-serial preflight                        31.287 s            1.385 s
-postflight                                   -             2.907 s
-trace generation                         5.312 s            2.709 s
-proving excluding tracegen              62.605 s           58.046 s
-sum of the timed phases above          100.661 s           66.519 s
-warm process wall                      122.714 s           84.976 s
+Compilation is deliberately outside the reusable app-proof span and happens
+once per prepared fixed-program prover. It is not paid per input or per
+segment. The CI runner compiled more slowly than the standalone CUDA host, so
+the standalone exact-mode table remains the better generated-code compilation
+comparison.
 
-postflight allocation peak                                2.518 GiB
-preflight tracegen allocation peak                        5.907 GiB
-legacy proving allocation peak          15.069 GiB
-compiled proving allocation peak                          15.077 GiB
-PID-scoped process peak                 16,428 MiB       16,440 MiB
-PID-scoped process peak delta                                +12 MiB
-```
+Within the reusable proof, serial preflight is 14.0 times faster and trace
+generation is 53.9% faster. The new 1.644-second postflight phase does not erase
+those gains: the app-prove span is 25.0% faster and the sum of segment proof
+spans is 22.5% faster. Frontend work measured as app-prove time minus backend
+proving fell from 21.748 seconds to 6.279 seconds, a 71.1% reduction.
 
-Postflight and trace generation remain well below proving, and replay buffers
-are not retained at the proving peak. Serial preflight is 22.6 times faster,
-trace generation is 49.0% faster, the timed phase sum is 33.9% faster, and the
-reusable app proof is 33.4% faster. The reusable app-proof value is a direct
-metric. The legacy reusable proof and both warm process values subtract their
-one-time preparation from otherwise exact runs because the legacy benchmark
-does not expose a separately reusable prover.
+Postflight peaked at 2.79 GB and trace generation at 5.96 GB, while proving
+remained the peak phase at 14.73 GB of attributed allocation. The process peak
+reported by `nvidia-smi` was exactly 15.80 GB in both runs, so replay scratch
+did not move the global peak out of proving.
 
-The identical PID-scoped process peak increased by 12 MiB, about 0.07%, and
-remained in proving rather than moving to expansion or trace generation. The
-allocator's proving peak increased by about 8 MiB. Both paths exceed a strict
-15.0 GiB process cap because the 15 GiB segmentation value estimates proof
-buffers rather than the CUDA context and allocator pool. Packing that requires
-a lower segmentation limit, but postflight replay is not responsible for the
-existing proving peak.
+The transcript contained 1,274,139 checkpoints, 180,895,403 residual words,
+and 1,783,535,920 payload bytes, or 2.68 bytes per guest instruction.
 
-The definitive reusable run verified every segment, endpoint continuity, the
-final public-values Merkle proof, and the output
-`b0c6920a15b5f11db176fcd1b22754fe845f9f5b24a245f1c67b997f353f3878`
-followed by the expected zero half. The preparation and proof spans were
-siblings: `compile_metered` took 133.412 seconds,
-`compile_preflight` took 144.583 seconds, immutable program upload
-took 50 milliseconds, and no compilation or upload occurred inside the
-68.695-second app-proof span. The checkpoint transcript contained 962,366
-checkpoints and 129,268,505 residual words, or 1,288,212,664 logical payload
-bytes and 2.57 bytes per guest instruction.
+The matching workflow runs are:
+
+- compiled preflight:
+  [30197418677](https://github.com/axiom-crypto/openvm-eth/actions/runs/30197418677);
+- legacy interpreter:
+  [30197836673](https://github.com/axiom-crypto/openvm-eth/actions/runs/30197836673).
+
+[PR 3020](https://github.com/openvm-org/openvm/pull/3020) was also
+[run](https://github.com/axiom-crypto/openvm-eth/actions/runs/30197475225)
+on the same block as an external reference. It retired 664,649,751
+instructions, 23,786 more than the matched pair, so it is not used as the
+authoritative before/after baseline. Its 74 segment proof reported 7.919
+seconds of preflight, 13.497 seconds of trace generation, 66.101 seconds across
+app segment proof spans, and 16.18 GB peak GPU memory.
 
 One-time compilation remains an optimization target, not a proof-time cost.
 The clean host release build used the repository's existing fat-LTO profile and
@@ -517,6 +525,34 @@ compile-time gate for pure, metered, and preflight execution.
 3. Decide separately whether legacy CPU/interpreter support is migrated far
    enough to remove `RecordArena` from shared builder traits. The compiled
    proving path already avoids it.
+
+## Review stack
+
+The implementation is large because every active AIR must consume the same
+read-only history. Review should be split by dependency and ownership, not by
+arbitrary line count. A ten-change stack keeps each boundary concrete:
+
+1. compiled preflight executor, transcript contract, and differential execution
+   tests;
+2. postflight expansion, chronology, system traces, continuation state, and
+   shared GPU validation;
+3. RV64 ALU, branch, jump, and control-flow trace generation;
+4. RV64 load/store, IO, multiplication, and division trace generation;
+5. Keccak-256 and SHA-2;
+6. bigint and Int256;
+7. modular arithmetic and field expressions;
+8. ECC and curve operations;
+9. deferral and pairing, including hint materialization;
+10. SDK integration, production metrics, performance evidence, and this design
+    document.
+
+Small correctness prerequisites that are independently reviewable should land
+before the relevant layer: the aligned four-cell memory contract, typed
+out-of-bounds failures, x0 equality behavior, repeated-curve fixtures,
+field-expression serialization, malformed pairing-pointer rejection, and GPU
+peak-memory instrumentation. The history can be rewritten into this stack
+before review; it need not be rewritten while performance and correctness work
+is still active.
 
 ## Performance and maintainability gates
 
