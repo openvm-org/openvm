@@ -62,7 +62,7 @@ fn ec_double_setup_words(
     if curve.modulus == Default::default()
         || curve.a >= curve.modulus
         || curve.modulus.bits().div_ceil(8) as usize > coordinate_bytes
-        || coordinate_bytes % std::mem::size_of::<u64>() != 0
+        || !coordinate_bytes.is_multiple_of(std::mem::size_of::<u64>())
     {
         return Err(GpuPostflightError::InvalidAccessSchedule(format!(
             "invalid setup constants for curve {}",

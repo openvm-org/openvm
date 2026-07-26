@@ -240,44 +240,41 @@ where
 
 impl AppProverBackend<BabyBearPoseidon2Engine> for SdkVmCpuBuilder {}
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", not(feature = "rvr")))]
+impl AppProverBackend<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 impl AppProverBackend<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
     fn configure(sdk: &GpuSdk, app: &mut AppProver<GpuBabyBearPoseidon2Engine, Self>) {
-        #[cfg(feature = "rvr")]
-        {
-            let executor = sdk.executor.clone();
-            app.prepare_with(move |app| {
-                let _prepare =
-                    tracing::info_span!("prepare_preflight", group = "app_proof").entered();
-                let exe = app.exe();
-                let metered_ctx = app.vm().build_metered_ctx(&exe);
-                let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
-                let metered = executor
-                    .metered_rvr_instance(
-                        &exe,
-                        &executor_idx_to_air_idx,
-                        metered_ctx.trace_heights.len(),
-                        None,
+        let executor = sdk.executor.clone();
+        app.prepare_with(move |app| {
+            let _prepare = tracing::info_span!("prepare_preflight", group = "app_proof").entered();
+            let exe = app.exe();
+            let metered_ctx = app.vm().build_metered_ctx(&exe);
+            let executor_idx_to_air_idx = app.vm().executor_idx_to_air_idx();
+            let metered = executor
+                .metered_rvr_instance(
+                    &exe,
+                    &executor_idx_to_air_idx,
+                    metered_ctx.trace_heights.len(),
+                    None,
+                )
+                .map_err(VirtualMachineError::from)?
+                .into_owned();
+            let preflight = executor
+                .preflight_instance(&exe, None)
+                .map_err(VirtualMachineError::from)?
+                .into_owned();
+            let gpu_program = tracing::info_span!("upload_preflight_program")
+                .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(app.vm(), &exe.program))
+                .map_err(|error| {
+                    VirtualMachineError::Generation(
+                        openvm_circuit::arch::GenerationError::ExtensionTracegen(error.to_string()),
                     )
-                    .map_err(VirtualMachineError::from)?
-                    .into_owned();
-                let preflight = executor
-                    .preflight_instance(&exe, None)
-                    .map_err(VirtualMachineError::from)?
-                    .into_owned();
-                let gpu_program = tracing::info_span!("upload_preflight_program")
-                    .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(app.vm(), &exe.program))
-                    .map_err(|error| {
-                        VirtualMachineError::Generation(
-                            openvm_circuit::arch::GenerationError::ExtensionTracegen(
-                                error.to_string(),
-                            ),
-                        )
-                    })?;
-                app.use_compiled_preflight(metered, metered_ctx, preflight, gpu_program);
-                Ok(())
-            });
-        }
+                })?;
+            app.use_compiled_preflight(metered, metered_ctx, preflight, gpu_program);
+            Ok(())
+        });
     }
 }
 

@@ -64,7 +64,7 @@ pub(crate) struct RvrReplayStep {
 }
 
 const _: () = assert!(size_of::<PostflightInstruction>() == 32);
-const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == 8 * size_of::<u32>());
+const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == size_of::<[u32; 8]>());
 
 /// Four native field cells in the raw Montgomery representation used by CUDA.
 #[repr(C)]
@@ -1579,6 +1579,7 @@ struct GpuMemoryIndex {
     num_touched_blocks: usize,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_gpu_memory_chronology(
     memory: &DeviceBuffer<PreflightMemoryEvent>,
     write_masks: &DeviceBuffer<u8>,
@@ -2853,8 +2854,10 @@ mod tests {
 
     #[test]
     fn gpu_chronology_keeps_narrow_u16_only_path() {
-        let mut config = MemoryConfig::default();
-        config.addr_space_height = 1;
+        let mut config = MemoryConfig {
+            addr_space_height: 1,
+            ..Default::default()
+        };
         config.addr_spaces.truncate(3);
         config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 4;
         let mut initial_memory = vec![Vec::new(), Vec::new(), vec![0u8; 8]];

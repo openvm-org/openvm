@@ -385,13 +385,13 @@ fn commit_bytes_to_field_values(bytes: &[u8; DEFERRAL_COMMIT_NUM_BYTES]) -> [u32
 unsafe fn deferral_memory<'a, F: PrimeField32>(
     io: &'a mut OpenVmIoState<'_>,
 ) -> Option<&'a mut [F]> {
-    if io.deferral_memory_len_bytes % size_of::<F>() != 0 {
+    if !io.deferral_memory_len_bytes.is_multiple_of(size_of::<F>()) {
         return None;
     }
     if io.deferral_memory_len_bytes == 0 {
         return Some(&mut []);
     }
-    if io.deferral_memory.is_null() || io.deferral_memory.addr() % align_of::<F>() != 0 {
+    if io.deferral_memory.is_null() || !io.deferral_memory.addr().is_multiple_of(align_of::<F>()) {
         return None;
     }
     Some(unsafe {
@@ -428,16 +428,11 @@ unsafe fn prepare_deferral_accumulator_update<F: PrimeField32>(
     input_commit: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
     output_commit: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
 ) -> Option<DeferralAccumulatorUpdate<F>> {
-    let Some(input_acc_ptr) = 2usize
+    let input_acc_ptr = 2usize
         .checked_mul(def_idx as usize)
-        .and_then(|value| value.checked_mul(VM_DIGEST_WIDTH))
-    else {
-        return None;
-    };
-    let output_acc_ptr = input_acc_ptr + VM_DIGEST_WIDTH;
-    let Some(end) = output_acc_ptr.checked_add(VM_DIGEST_WIDTH) else {
-        return None;
-    };
+        .and_then(|value| value.checked_mul(VM_DIGEST_WIDTH))?;
+    let output_acc_ptr = input_acc_ptr.checked_add(VM_DIGEST_WIDTH)?;
+    let end = output_acc_ptr.checked_add(VM_DIGEST_WIDTH)?;
     let byte_start = input_acc_ptr.checked_mul(size_of::<F>())?;
     let byte_len = (end - input_acc_ptr).checked_mul(size_of::<F>())?;
     if !io.can_mark_checkpoint_deferral_write(byte_start, byte_len) {

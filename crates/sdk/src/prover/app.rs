@@ -182,6 +182,7 @@ where
         self.instance.vm.config()
     }
 
+    #[cfg(feature = "rvr")]
     pub(crate) fn prepare_with(
         &mut self,
         prepare: impl FnOnce(&mut Self) -> Result<(), VirtualMachineError> + Send + 'static,

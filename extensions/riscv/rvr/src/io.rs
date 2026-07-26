@@ -355,7 +355,7 @@ extern "C" fn host_hint_prepare(ctx: *mut c_void, dest_addr: u64, num_words: u32
     let num_words = num_words as usize;
     if num_words == 0
         || num_words > MAX_HINT_BUFFER_DWORDS
-        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES as u64)
+        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES)
         || io.memory_ptr.is_null()
     {
         return false;
