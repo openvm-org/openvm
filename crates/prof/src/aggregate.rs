@@ -229,11 +229,21 @@ impl GroupedMetrics {
                 }
             }
 
-            // Preflight execution is nested in each segment's total proof span
-            // but remains serial in the driver. Remove it from its paired
-            // segment before scheduling, then add its sum once.
             if metrics.contains_key(PROOF_TIME_LABEL) {
-                let (proof_times_ms, serial_preflight_ms) = parallel_proof_times_ms(metrics);
+                // Application segments are produced by one serial preflight driver.
+                // Recursion proofs are independent tasks, so their complete proof
+                // durations, including preflight, remain parallelizable.
+                let (proof_times_ms, serial_preflight_ms) = if is_app_proof_group(group_name) {
+                    parallel_proof_times_ms(metrics)
+                } else {
+                    (
+                        metrics[PROOF_TIME_LABEL]
+                            .iter()
+                            .map(|(value, _)| *value)
+                            .collect(),
+                        0.0,
+                    )
+                };
                 group_time += serial_preflight_ms / 1000.0;
                 let times_s: Vec<f64> = proof_times_ms.into_iter().map(|ms| ms / 1000.0).collect();
                 group_time += schedule_parallel(&times_s, num_parallel);
@@ -810,6 +820,10 @@ pub const PREPARE_PREFLIGHT_TIME_LABEL: &str = "prepare_preflight_time_ms";
 pub const UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL: &str = "upload_preflight_program_time_ms";
 pub const APP_PROVE_TIME_LABEL: &str = "app_prove_time_ms";
 pub const POSTFLIGHT_TIME_LABEL: &str = "postflight_time_ms";
+pub const POSTFLIGHT_REPLAY_COUNT_TIME_LABEL: &str = "postflight_replay_count_time_ms";
+pub const POSTFLIGHT_REPLAY_EMIT_TIME_LABEL: &str = "postflight_replay_emit_time_ms";
+pub const POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL: &str = "postflight_memory_chronology_time_ms";
+pub const POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL: &str = "postflight_program_index_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
 pub const SET_INITIAL_MEMORY_TIME_LABEL: &str = "set_initial_memory_time_ms";
@@ -883,6 +897,10 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     POSTFLIGHT_TIME_LABEL,
+    POSTFLIGHT_REPLAY_COUNT_TIME_LABEL,
+    POSTFLIGHT_REPLAY_EMIT_TIME_LABEL,
+    POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL,
+    POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
     SET_INITIAL_MEMORY_TIME_LABEL,
@@ -1002,6 +1020,61 @@ mod tests {
                 .val,
             60.0
         );
+    }
+
+    #[test]
+    fn recursion_preflight_remains_part_of_each_parallel_proof() {
+        let indexed_labels = |idx: usize| Labels(vec![("idx".to_string(), idx.to_string())]);
+        let metrics = HashMap::from([
+            (
+                PROOF_TIME_LABEL.to_string(),
+                vec![
+                    (100.0, indexed_labels(0)),
+                    (120.0, indexed_labels(1)),
+                    (80.0, indexed_labels(2)),
+                ],
+            ),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![
+                    (10.0, indexed_labels(0)),
+                    (20.0, indexed_labels(1)),
+                    (30.0, indexed_labels(2)),
+                ],
+            ),
+        ]);
+        let grouped = GroupedMetrics {
+            by_group: HashMap::from([("leaf".to_string(), metrics)]),
+            ungrouped: HashMap::new(),
+        };
+
+        let aggregate = grouped.aggregate(2);
+
+        assert_close(aggregate.total_proof_time.val, 0.3);
+        assert_close(aggregate.total_par_proof_time.val, 0.12);
+        assert_close(aggregate.bounded_par_by_group["leaf"].val, 0.18);
+    }
+
+    #[test]
+    fn report_includes_preflight_pipeline_breakdown() {
+        for metric in [
+            COMPILE_PREFLIGHT_TIME_LABEL,
+            PREPARE_PREFLIGHT_TIME_LABEL,
+            UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
+            EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL,
+            EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
+            EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
+            POSTFLIGHT_TIME_LABEL,
+            POSTFLIGHT_REPLAY_COUNT_TIME_LABEL,
+            POSTFLIGHT_REPLAY_EMIT_TIME_LABEL,
+            POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL,
+            POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL,
+        ] {
+            assert!(
+                AGGREGATED_METRIC_NAMES.contains(&metric),
+                "{metric} is missing from the benchmark report"
+            );
+        }
     }
 
     #[test]
