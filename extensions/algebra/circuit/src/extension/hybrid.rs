@@ -201,13 +201,12 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             ModularReplay::FieldExpr(replay) => replay.opcode_base(),
             ModularReplay::AddSub(replay) => replay.opcode_base(),
         };
-        Ok(self
-            .cpu
+        self.cpu
             .inner
             .local_opcode_idx
             .iter()
             .map(|&local| checked_replay_opcode(opcode_base, local))
-            .collect::<Result<Vec<_>, _>>()?)
+            .collect::<Result<Vec<_>, _>>()
     }
 }
 
@@ -619,11 +618,11 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
                 "Fp2 chip was constructed without checkpoint replay".to_string(),
             )
         })?;
-        Ok(replay
+        replay
             .local_opcodes()
             .iter()
             .map(|&local| checked_replay_opcode(replay.opcode_base(), local))
-            .collect::<Result<Vec<_>, _>>()?)
+            .collect::<Result<Vec<_>, _>>()
     }
 }
 
@@ -1137,11 +1136,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        for (i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
+        // Only replay opcode selection needs the modulus index.
+        #[cfg(feature = "rvr")]
+        let supported_moduli = extension.supported_moduli.iter().enumerate();
+        #[cfg(not(feature = "rvr"))]
+        let supported_moduli = extension.supported_moduli.iter().map(|entry| ((), entry));
+
+        for (_modulus_idx, (_, modulus)) in supported_moduli {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             #[cfg(feature = "rvr")]
-            let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
+            let start_offset = Fp2Opcode::CLASS_OFFSET + _modulus_idx * Fp2Opcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
