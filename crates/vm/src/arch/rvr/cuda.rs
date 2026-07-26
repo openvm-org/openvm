@@ -60,6 +60,7 @@ pub(crate) struct RvrReplayStep {
 
 const _: () = assert!(size_of::<PostflightInstruction>() == 32);
 const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == size_of::<[u32; 8]>());
+const _: () = assert!(RV64_REGISTER_AS == ADDR_SPACE_OFFSET);
 
 /// Four native field cells in the raw Montgomery representation used by CUDA.
 #[repr(C)]
@@ -1536,6 +1537,7 @@ fn build_gpu_memory_chronology(
             address_spaces,
             initial_memory.view(),
             field_values.view(),
+            RV64_REGISTER_AS,
             &sorted_keys,
             &workspace,
             &predecessors,
