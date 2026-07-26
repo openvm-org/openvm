@@ -20,15 +20,15 @@ use crate::{
     poseidon2::DeferralPoseidon2Cols,
 };
 
-pub struct DeferralPoseidon2ProducerBuffer {
-    pub records: DeviceBuffer<F>,
-    pub counts: DeviceBuffer<DeferralPoseidon2Count>,
-    pub idx: DeviceBuffer<u32>,
-    pub expected_records: usize,
+pub(crate) struct DeferralPoseidon2ProducerBuffer {
+    pub(crate) records: DeviceBuffer<F>,
+    pub(crate) counts: DeviceBuffer<DeferralPoseidon2Count>,
+    pub(crate) idx: DeviceBuffer<u32>,
+    pub(crate) expected_records: usize,
 }
 
 impl DeferralPoseidon2ProducerBuffer {
-    pub fn new(expected_records: usize, device_ctx: &GpuDeviceCtx) -> Self {
+    pub(crate) fn new(expected_records: usize, device_ctx: &GpuDeviceCtx) -> Self {
         assert!(expected_records > 0);
         let idx = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
         idx.fill_zero_on(device_ctx).unwrap();
@@ -48,19 +48,19 @@ impl DeferralPoseidon2ProducerBuffer {
 }
 
 #[derive(Clone, Default)]
-pub struct DeferralPoseidon2SharedBuffer {
+pub(crate) struct DeferralPoseidon2SharedBuffer {
     producers: Arc<Mutex<Vec<DeferralPoseidon2ProducerBuffer>>>,
 }
 
 impl DeferralPoseidon2SharedBuffer {
-    pub fn push(&self, buffer: DeferralPoseidon2ProducerBuffer) {
+    pub(crate) fn push(&self, buffer: DeferralPoseidon2ProducerBuffer) {
         self.producers.lock().unwrap().push(buffer);
     }
 }
 
 pub struct DeferralPoseidon2ChipGpu {
     pub device_ctx: GpuDeviceCtx,
-    pub shared: DeferralPoseidon2SharedBuffer,
+    pub(crate) shared: DeferralPoseidon2SharedBuffer,
     pub sbox_registers: usize,
 }
 
@@ -73,7 +73,7 @@ impl DeferralPoseidon2ChipGpu {
         }
     }
 
-    pub fn shared_buffer(&self) -> DeferralPoseidon2SharedBuffer {
+    pub(crate) fn shared_buffer(&self) -> DeferralPoseidon2SharedBuffer {
         self.shared.clone()
     }
 

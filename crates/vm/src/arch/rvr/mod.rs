@@ -35,9 +35,8 @@ pub mod state;
 
 pub use compile::{
     build_pc_to_chip, compile, compile_metered, compile_metered_cost,
-    compile_metered_segment_boundary, compile_preflight, compile_with_instret_tracking,
-    compile_with_options, load_compiled_from_path, ChipMapping, CompileError, CompileOptions,
-    RvrCompiled,
+    compile_metered_segment_boundary, compile_with_instret_tracking, compile_with_options,
+    load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 #[cfg(all(feature = "cuda", any(test, feature = "test-utils")))]

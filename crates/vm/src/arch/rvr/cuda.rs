@@ -44,7 +44,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct PostflightInstruction {
+pub(crate) struct PostflightInstruction {
     /// Global opcode followed by the seven canonical instruction operands.
     pub words: [u32; 8],
 }

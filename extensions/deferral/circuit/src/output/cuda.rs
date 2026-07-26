@@ -47,7 +47,7 @@ pub struct DeferralOutputChipGpu {
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
     pub num_deferral_circuits: usize,
-    pub poseidon2: DeferralPoseidon2SharedBuffer,
+    pub(crate) poseidon2: DeferralPoseidon2SharedBuffer,
 }
 
 #[cfg(feature = "rvr")]
@@ -337,7 +337,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
 
 #[cfg(all(test, feature = "rvr"))]
 mod tests {
-    use openvm_circuit::{arch::rvr::cuda::PostflightInstruction, utils::test_gpu_engine};
+    use openvm_circuit::utils::test_gpu_engine;
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
@@ -360,9 +360,7 @@ mod tests {
         program_index: u32,
     ) -> u32 {
         let opcode = DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32;
-        let instruction = PostflightInstruction {
-            words: [opcode, 8, 16, 0, RV64_REGISTER_AS, RV64_MEMORY_AS, 0, 0],
-        };
+        let instruction = [opcode, 8, 16, 0, RV64_REGISTER_AS, RV64_MEMORY_AS, 0, 0];
         let mut memory = [PreflightMemoryEvent::default(); 11];
         memory[6] = PreflightMemoryEvent {
             timestamp: 7,

@@ -38,7 +38,7 @@ pub struct DeferralCallChipGpu {
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
     pub num_deferral_circuits: usize,
-    pub poseidon2: DeferralPoseidon2SharedBuffer,
+    pub(crate) poseidon2: DeferralPoseidon2SharedBuffer,
 }
 
 #[cfg(feature = "rvr")]
