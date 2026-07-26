@@ -27,6 +27,7 @@ enum ValueOpcode {
     IntMul = 7,
     Select = 8,
     SaveVariable = 9,
+    LoadOutput = 10,
 }
 
 #[repr(u32)]
@@ -143,6 +144,7 @@ struct DeviceFieldExprProgram {
     opcode_metadata: Vec<OpcodeMetadata>,
     setup_value_limbs: Vec<u32>,
     output_indices: Vec<u32>,
+    dummy_outputs: Vec<u32>,
     aux_words_per_thread: usize,
 }
 
@@ -585,6 +587,22 @@ fn build_device_program_inner(
         ));
     }
     let montgomery_r = (BigUint::one() << checked_mul(32, u32_limbs)?) % &builder.prime;
+    let mut output_positions = vec![None; builder.num_variables];
+    let output_indices = expr
+        .program()
+        .output_indices()
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(position, index)| {
+            if index >= builder.num_variables {
+                Err(FieldExpressionTraceError::InvalidProgramOutput(index))
+            } else {
+                output_positions[index].get_or_insert(position);
+                to_u32(index)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let value_slot_base = builder
         .num_input
@@ -615,7 +633,20 @@ fn build_device_program_inner(
     }
     for (variable, compute) in builder.computes.iter().enumerate() {
         serializer.next_value_slot = serializer.value_slot_base;
-        let source = serializer.emit_value(compute, ValueGuard::default())?;
+        // Output variables are already present in the read-only execution transcript.
+        // Load them directly; the constraint tape below validates their relation to the inputs.
+        let source = if let Some(output_position) = output_positions[variable] {
+            let source = serializer.allocate_value_slot()?;
+            serializer.value_ops.push(ValueOp {
+                opcode: ValueOpcode::LoadOutput as u32,
+                dst: source,
+                a: output_position,
+                ..Default::default()
+            });
+            source
+        } else {
+            serializer.emit_value(compute, ValueGuard::default())?
+        };
         let slot = builder
             .num_input
             .checked_add(variable)
@@ -732,20 +763,20 @@ fn build_device_program_inner(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| FieldExpressionTraceError::ProgramTooLarge)?;
     let setup_value_limbs = fixed_byte_limbs(expr.program().setup_values(), builder.num_limbs)?;
-    let output_indices = expr
-        .program()
-        .output_indices()
-        .iter()
-        .copied()
-        .map(|index| {
-            if index >= builder.num_variables {
-                Err(FieldExpressionTraceError::InvalidProgramOutput(index))
-            } else {
-                to_u32(index)
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
+    let dummy_outputs = if should_finalize {
+        let inputs = vec![BigUint::zero(); builder.num_input];
+        let flags = vec![false; builder.num_flags];
+        let mut variables = vec![BigUint::zero(); builder.num_variables];
+        for (index, compute) in builder.computes.iter().enumerate() {
+            variables[index] = compute.compute(&inputs, &variables, &flags, &builder.prime);
+        }
+        output_indices
+            .iter()
+            .flat_map(|&index| biguint_to_u32_limbs(&variables[index as usize], u32_limbs))
+            .collect()
+    } else {
+        Vec::new()
+    };
     Ok(DeviceFieldExprProgram {
         num_limbs: builder.num_limbs,
         limb_bits: builder.limb_bits,
@@ -773,6 +804,7 @@ fn build_device_program_inner(
         opcode_metadata,
         setup_value_limbs,
         output_indices,
+        dummy_outputs,
         aux_words_per_thread,
     })
 }
@@ -1004,6 +1036,7 @@ impl DeviceFieldExprProgram {
         blob.extend(&self.setup_value_limbs);
         blob[H_OUTPUT_INDICES_OFFSET] = to_u32(blob.len())?;
         blob.extend(&self.output_indices);
+        blob.extend(&self.dummy_outputs);
         blob[H_MONTGOMERY_INVERSE] = self.montgomery_inverse;
         Ok(blob)
     }
@@ -1015,9 +1048,9 @@ mod tests {
     use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 
     use super::{
-        build_device_program, serialize_field_expr, ValueOpcode, H_AUX_WORDS_PER_THREAD,
-        H_CORE_WIDTH, H_MAX_QUOTIENT_LIMBS, H_NUM_OPCODE_METADATA, H_NUM_OUTPUTS,
-        H_NUM_SETUP_VALUES, H_OPCODE_METADATA_OFFSET, H_OUTPUT_INDICES_OFFSET,
+        biguint_to_u32_limbs, build_device_program, serialize_field_expr, ValueOpcode,
+        H_AUX_WORDS_PER_THREAD, H_CORE_WIDTH, H_MAX_QUOTIENT_LIMBS, H_NUM_OPCODE_METADATA,
+        H_NUM_OUTPUTS, H_NUM_SETUP_VALUES, H_OPCODE_METADATA_OFFSET, H_OUTPUT_INDICES_OFFSET,
         H_SETUP_VALUES_OFFSET, NO_FLAG,
     };
     use crate::{
@@ -1095,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn guards_division_in_inactive_select_branches() {
+    fn loads_output_without_replaying_its_division() {
         let prime = secp256k1_coord_prime();
         let (range_checker, builder) = setup(&prime);
         let lhs = ExprBuilder::new_input(builder.clone());
@@ -1132,13 +1165,35 @@ mod tests {
         );
 
         let program = build_device_program(&filler).unwrap();
-        let division = program
+        assert!(program
             .value_ops
             .iter()
-            .find(|op| op.opcode == ValueOpcode::Div as u32)
+            .all(|op| op.opcode != ValueOpcode::Div as u32));
+        let load = program
+            .value_ops
+            .iter()
+            .find(|op| op.opcode == ValueOpcode::LoadOutput as u32)
             .unwrap();
-        assert_eq!(division.guard_true, 1 << div_flag);
-        assert_eq!(division.guard_false, 1 << mul_flag);
+        assert_eq!(load.a, 0);
+    }
+
+    #[test]
+    fn serializes_outputs_for_finalized_dummy_rows() {
+        let prime = secp256k1_coord_prime();
+        let (range_checker, builder) = setup(&prime);
+        let input = ExprBuilder::new_input(builder.clone());
+        let constant = ExprBuilder::new_const(builder.clone(), BigUint::from(7u32));
+        let mut output = input + constant;
+        output.save_output();
+        let program = FieldExpressionProgram::new(builder.borrow().clone(), false);
+        let expr = FieldExpr::new(program, range_checker.bus());
+        let filler = FieldExpressionFiller::new((), expr, vec![7], Vec::new(), range_checker, true);
+
+        let program = build_device_program(&filler).unwrap();
+        assert_eq!(
+            program.dummy_outputs,
+            biguint_to_u32_limbs(&BigUint::from(7u32), program.u32_limbs)
+        );
     }
 
     #[test]
@@ -1148,7 +1203,7 @@ mod tests {
         let lhs = ExprBuilder::new_input(builder.clone());
         let rhs = ExprBuilder::new_input(builder.clone());
         let (output_index, output) = builder.borrow_mut().new_var();
-        let mut output = FieldVariable::from_var(builder.clone(), output);
+        let output = FieldVariable::from_var(builder.clone(), output);
         let flag = builder.borrow_mut().new_flag();
         builder
             .borrow_mut()
@@ -1165,7 +1220,6 @@ mod tests {
                 Box::new(lhs.expr),
             ),
         );
-        output.save_output();
         let program = FieldExpressionProgram::new(builder.borrow().clone(), true);
         let expr = FieldExpr::new(program, range_checker.bus());
         let filler =
@@ -1189,9 +1243,9 @@ mod tests {
         let lhs = ExprBuilder::new_input(builder.clone());
         let rhs = ExprBuilder::new_input(builder.clone());
         let mut sum = lhs.clone() + rhs.clone();
-        sum.save_output();
+        sum.save();
         let mut product = lhs * rhs;
-        product.save_output();
+        product.save();
         let program = FieldExpressionProgram::new(builder.borrow().clone(), false);
         let expr = FieldExpr::new(program, range_checker.bus());
         let filler = FieldExpressionFiller::new((), expr, vec![7], Vec::new(), range_checker, true);

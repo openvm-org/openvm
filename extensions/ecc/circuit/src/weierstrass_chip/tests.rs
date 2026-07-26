@@ -219,6 +219,54 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
+fn repeat_vec_heap_transcript(
+    instruction: Instruction<F>,
+    transcript: PreflightEventLog,
+    repetitions: usize,
+) -> (Program<F>, PreflightEventLog) {
+    assert!(repetitions > 0);
+    let first_timestamp = transcript.program_log[0].timestamp;
+    let timestamp_step = transcript.program_log[1].timestamp - first_timestamp;
+    let mut memory_log = Vec::with_capacity(transcript.memory_log.len() * repetitions);
+    let mut program_log = Vec::with_capacity(repetitions + 2);
+    for repetition in 0..repetitions {
+        let timestamp_shift = repetition as u32 * timestamp_step;
+        program_log.push(PreflightProgramEvent {
+            pc: repetition as u32 * 4,
+            timestamp: first_timestamp + timestamp_shift,
+        });
+        memory_log.extend(transcript.memory_log.iter().copied().map(|mut event| {
+            event.timestamp += timestamp_shift;
+            event
+        }));
+    }
+    let final_pc = repetitions as u32 * 4;
+    let final_timestamp = first_timestamp + repetitions as u32 * timestamp_step;
+    program_log.extend([
+        PreflightProgramEvent {
+            pc: final_pc,
+            timestamp: final_timestamp,
+        },
+        PreflightProgramEvent {
+            pc: final_pc,
+            timestamp: final_timestamp,
+        },
+    ]);
+    let terminate =
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
+    let mut instructions = vec![instruction; repetitions];
+    instructions.push(terminate);
+    (
+        Program::from_instructions(&instructions),
+        PreflightEventLog {
+            program_log,
+            memory_log,
+            initial_write_log: transcript.initial_write_log,
+        },
+    )
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn field_expression_output(
     program: &FieldExpressionProgram,
     input_bytes: &[u8],
@@ -1645,6 +1693,7 @@ mod ec_double_tests {
         modulus: BigUint,
         a: BigUint,
         is_setup: bool,
+        rows: usize,
     ) {
         let offset = Rv64WeierstrassOpcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {
@@ -1696,15 +1745,17 @@ mod ec_double_tests {
         );
         // This isolated chip proof still needs the harness's memory lookup
         // counterpart. The chip trace itself remains the replay-derived context below.
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &instruction,
-            0,
-        );
+        for row in 0..rows {
+            tester.execute_with_pc(
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &instruction,
+                row as u32 * 4,
+            );
+        }
         let device_ctx = tester.range_checker().device_ctx.clone();
-        let (program, mut transcript) = make_vec_heap_transcript::<1, BLOCKS>(
-            instruction,
+        let (_, transcript) = make_vec_heap_transcript::<1, BLOCKS>(
+            instruction.clone(),
             rs_ptrs,
             rd_ptr,
             rs_vals,
@@ -1712,6 +1763,7 @@ mod ec_double_tests {
             &input_bytes,
             &output_bytes,
         );
+        let (program, mut transcript) = repeat_vec_heap_transcript(instruction, transcript, rows);
         let gpu_program = GpuPostflightProgram::upload(
             &program,
             &openvm_circuit::arch::MemoryConfig::default(),
@@ -1754,13 +1806,26 @@ mod ec_double_tests {
                 secp256k1_coord_prime(),
                 BigUint::zero(),
                 is_setup,
+                1,
             );
             run_preflight_ec_double::<ECC_BLOCKS_48, NUM_LIMBS_48>(
                 BLS12_381_MODULUS.clone(),
                 BigUint::zero(),
                 is_setup,
+                1,
             );
         }
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[test]
+    fn weierstrass_double_preflight_fills_finalized_padding_row() {
+        run_preflight_ec_double::<ECC_BLOCKS_32, NUM_LIMBS_32>(
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            false,
+            3,
+        );
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////

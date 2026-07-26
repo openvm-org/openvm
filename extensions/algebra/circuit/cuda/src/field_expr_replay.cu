@@ -27,7 +27,7 @@ static constexpr uint32_t MAX_U32_LIMBS = 12;
 
 // Value-phase opcodes
 enum { VOP_LOAD_INPUT = 0, VOP_CONST, VOP_ADD, VOP_SUB, VOP_MUL, VOP_DIV,
-       VOP_INTADD, VOP_INTMUL, VOP_SELECT, VOP_SAVE_VAR };
+       VOP_INTADD, VOP_INTMUL, VOP_SELECT, VOP_SAVE_VAR, VOP_LOAD_OUTPUT };
 // Limb-phase opcodes
 enum { LOP_INPUT = 0, LOP_VAR, LOP_CONST, LOP_ADD, LOP_SUB, LOP_MUL,
        LOP_INTADD, LOP_INTMUL, LOP_SELECT };
@@ -105,6 +105,7 @@ struct FieldExprProg {
     const uint32_t *optab;
     const uint32_t *setup_values;
     const uint32_t *outputs;
+    const uint32_t *dummy_outputs;
 };
 
 __device__ __forceinline__ void load_prog(
@@ -144,6 +145,7 @@ __device__ __forceinline__ void load_prog(
     s.optab = blob + blob[H_OFF_OPTAB];
     s.setup_values = blob + blob[H_OFF_SETUP_VALUES];
     s.outputs = blob + blob[H_OFF_OUTPUTS];
+    s.dummy_outputs = s.outputs + s.n_outputs;
 }
 
 static __device__ bool checked_segment(
@@ -203,7 +205,9 @@ static __device__ bool validate_and_load_prog(
         static_cast<uint64_t>(blob[H_OFF_OUTPUTS]) !=
             static_cast<uint64_t>(blob[H_OFF_SETUP_VALUES]) +
                 static_cast<uint64_t>(s.n_setup_values) * s.num_limbs ||
-        static_cast<uint64_t>(blob[H_OFF_OUTPUTS]) + s.n_outputs != blob_words) {
+        static_cast<uint64_t>(blob[H_OFF_OUTPUTS]) + s.n_outputs +
+                static_cast<uint64_t>(s.should_finalize) * s.n_outputs * s.k !=
+            blob_words) {
         return false;
     }
     if ((s.p[0] & 1) == 0) return false;
@@ -227,7 +231,7 @@ static __device__ bool validate_and_load_prog(
         const uint32_t *op = s.vops + 7 * index;
         uint32_t code = op[0], flag = op[1], guard_true = op[2], guard_false = op[3];
         uint32_t dst = op[4], a = op[5], b = op[6];
-        if (code > VOP_SAVE_VAR || dst >= s.num_slots ||
+        if (code > VOP_LOAD_OUTPUT || dst >= s.num_slots ||
             ((guard_true | guard_false) & ~valid_flag_mask) != 0) {
             return false;
         }
@@ -240,7 +244,8 @@ static __device__ bool validate_and_load_prog(
             ((code == VOP_INTADD || code == VOP_INTMUL) &&
              (a >= s.num_slots || b >= mont_values)) ||
             (code == VOP_SELECT && flag >= s.num_flags) ||
-            (code == VOP_SAVE_VAR && a >= s.num_vars)) {
+            (code == VOP_SAVE_VAR && a >= s.num_vars) ||
+            (code == VOP_LOAD_OUTPUT && a >= s.n_outputs)) {
             return false;
         }
     }
@@ -339,6 +344,7 @@ static __device__ __forceinline__ uint32_t sub_u32_limbs(
 
 // The serializer reserves 3*k+2 value-workspace words: 2*k+2 for Montgomery
 // reduction and k for a canonical input, inverse, or the integer one.
+template <uint32_t K>
 static __device__ void mont_mul(
     const FieldExprProg &s,
     const uint32_t *a,
@@ -347,8 +353,8 @@ static __device__ void mont_mul(
     uint32_t *workspace
 ) {
     uint32_t *t = workspace;
-    uint32_t *sub = workspace + s.k + 2;
-    const uint32_t k = s.k;
+    uint32_t *sub = workspace + K + 2;
+    constexpr uint32_t k = K;
     for (uint32_t i = 0; i < k + 2; i++) t[i] = 0;
     for (uint32_t i = 0; i < k; i++) {
         uint64_t carry = 0;
@@ -380,6 +386,7 @@ static __device__ void mont_mul(
     for (uint32_t j = 0; j < k; j++) r[j] = ge ? sub[j] : t[j];
 }
 
+template <uint32_t K>
 static __device__ void add_mod(
     const FieldExprProg &s,
     const uint32_t *a,
@@ -387,7 +394,7 @@ static __device__ void add_mod(
     uint32_t *r,
     uint32_t *workspace
 ) {
-    const uint32_t k = s.k;
+    constexpr uint32_t k = K;
     uint32_t *sum = workspace;
     uint32_t *sub = workspace + k;
     uint64_t carry = 0;
@@ -401,10 +408,11 @@ static __device__ void add_mod(
     for (uint32_t j = 0; j < k; j++) r[j] = ge ? sub[j] : sum[j];
 }
 
+template <uint32_t K>
 static __device__ void sub_mod(
     const FieldExprProg &s, const uint32_t *a, const uint32_t *b, uint32_t *r
 ) {
-    const uint32_t k = s.k;
+    constexpr uint32_t k = K;
     uint32_t borrow = sub_u32_limbs(a, b, r, k);
     if (borrow) {
         uint64_t carry = 0;
@@ -422,22 +430,23 @@ static __device__ bool limbs_are_zero(const uint32_t *value, uint32_t len) {
     return aggregate == 0;
 }
 
+template <uint32_t K>
 static __device__ void mont_inv(
     const FieldExprProg &s,
     const uint32_t *a,
     uint32_t *r,
     uint32_t *mont_workspace
 ) {
-    const uint32_t k = s.k;
+    constexpr uint32_t k = K;
     bool started = false;
     for (int bit = static_cast<int>(32 * k) - 1; bit >= 0; bit--) {
-        if (started) mont_mul(s, r, r, r, mont_workspace);
+        if (started) mont_mul<K>(s, r, r, r, mont_workspace);
         if ((s.pm2[bit / 32] >> (bit % 32)) & 1) {
             if (!started) {
                 for (uint32_t j = 0; j < k; j++) r[j] = a[j];
                 started = true;
             } else {
-                mont_mul(s, r, a, r, mont_workspace);
+                mont_mul<K>(s, r, a, r, mont_workspace);
             }
         }
     }
@@ -461,6 +470,7 @@ __device__ __forceinline__ uint32_t f_of_i64(int64_t v) {
 // Fill the core sub-row (validated logic; see device_program.rs reference interpreter).
 // `core_row` must point at the first core column. When `is_dummy`, inputs are zero,
 // flags false, range checks skipped, is_valid = 0 (mirrors fill_dummy_trace_row).
+template <uint32_t K>
 static __device__ bool field_expr_fill_core_row(
     const FieldExprProg &s,
     RowSlice core_row,
@@ -471,7 +481,8 @@ static __device__ bool field_expr_fill_core_row(
     uint32_t *my_aux,
     bool is_dummy,
     uint32_t *err) {
-    const uint32_t k = s.k, nl = s.num_limbs, lb = s.limb_bits;
+    constexpr uint32_t k = K;
+    const uint32_t nl = s.num_limbs, lb = s.limb_bits;
     uint32_t *var_canon = my_aux; // num_vars * k, retained between phases
     uint32_t *workspace = var_canon + s.num_vars * k;
     uint32_t *slots = workspace; // num_slots * k
@@ -541,7 +552,7 @@ static __device__ bool field_expr_fill_core_row(
                             static_cast<uint32_t>(src[i]) << ((i * lb) % 32);
                     }
                 }
-                mont_mul(s, value_extra, s.r2, d, mont_workspace);
+                mont_mul<K>(s, value_extra, s.r2, d, mont_workspace);
                 break;
             }
             case VOP_CONST: {
@@ -549,11 +560,13 @@ static __device__ bool field_expr_fill_core_row(
                 break;
             }
             case VOP_ADD:
-                add_mod(s, slots + a * k, slots + b * k, d, mont_workspace);
+                add_mod<K>(s, slots + a * k, slots + b * k, d, mont_workspace);
                 break;
-            case VOP_SUB: sub_mod(s, slots + a * k, slots + b * k, d); break;
+            case VOP_SUB:
+                sub_mod<K>(s, slots + a * k, slots + b * k, d);
+                break;
             case VOP_MUL:
-                mont_mul(s, slots + a * k, slots + b * k, d, mont_workspace);
+                mont_mul<K>(s, slots + a * k, slots + b * k, d, mont_workspace);
                 break;
             case VOP_DIV: {
                 const uint32_t *pa = slots + a * k;
@@ -562,15 +575,15 @@ static __device__ bool field_expr_fill_core_row(
                     preflight_set_error(err, FIELD_EXPR_ACTIVE_ZERO_DIVISOR);
                     return false;
                 }
-                mont_inv(s, pb, value_extra, mont_workspace);
-                mont_mul(s, pa, value_extra, d, mont_workspace);
+                mont_inv<K>(s, pb, value_extra, mont_workspace);
+                mont_mul<K>(s, pa, value_extra, d, mont_workspace);
                 break;
             }
             case VOP_INTADD:
-                add_mod(s, slots + a * k, s.mont + b * k, d, mont_workspace);
+                add_mod<K>(s, slots + a * k, s.mont + b * k, d, mont_workspace);
                 break;
             case VOP_INTMUL:
-                mont_mul(s, slots + a * k, s.mont + b * k, d, mont_workspace);
+                mont_mul<K>(s, slots + a * k, s.mont + b * k, d, mont_workspace);
                 break;
             case VOP_SELECT: {
                 const uint32_t *src = (flags & (uint32_t(1) << flag)) != 0
@@ -582,8 +595,30 @@ static __device__ bool field_expr_fill_core_row(
             case VOP_SAVE_VAR: {
                 const uint32_t *pb = slots + b * k;
                 for (uint32_t j = 0; j < k; j++) value_extra[j] = j == 0 ? 1 : 0;
-                mont_mul(s, pb, value_extra, var_canon + a * k, mont_workspace);
+                mont_mul<K>(
+                    s, pb, value_extra, var_canon + a * k, mont_workspace
+                );
                 for (uint32_t j = 0; j < k; j++) d[j] = pb[j];
+                break;
+            }
+            case VOP_LOAD_OUTPUT: {
+                if (is_dummy) {
+                    for (uint32_t j = 0; j < k; j++) {
+                        value_extra[j] = s.dummy_outputs[a * k + j];
+                    }
+                } else {
+                    for (uint32_t j = 0; j < k; j++) value_extra[j] = 0;
+                    const uint8_t *src = logged_output + a * nl;
+                    for (uint32_t i = 0; i < nl; i++) {
+                        value_extra[i * lb / 32] |=
+                            static_cast<uint32_t>(src[i]) << ((i * lb) % 32);
+                    }
+                    if (sub_u32_limbs(value_extra, s.p, d, k) == 0) {
+                        preflight_set_error(err, FIELD_EXPR_OUTPUT_MISMATCH);
+                        return false;
+                    }
+                }
+                mont_mul<K>(s, value_extra, s.r2, d, mont_workspace);
                 break;
             }
             default:
@@ -769,6 +804,10 @@ static __device__ bool field_expr_fill_core_row(
             carry_col++;
             if (!is_dummy) rc.add_count((uint32_t)(carry_acc + carry_min_abs), carry_bits);
         }
+        if (!is_dummy && carry_acc != 0) {
+            preflight_set_error(err, FIELD_EXPR_OUTPUT_MISMATCH);
+            return false;
+        }
     }
     for (uint32_t f = 0; f < s.num_flags; f++) {
         core_row[carry_col + f] =
@@ -791,6 +830,7 @@ static __global__ void validate_field_expr_replay(
     size_t aux_words,
     uint32_t *error
 ) {
+    constexpr uint32_t K = BLOCKS <= 6 ? 2 * BLOCKS : BLOCKS;
     FieldExprProg s;
     if (!validate_and_load_prog(blob, blob_words, s)) {
         preflight_set_error(error, FIELD_EXPR_BAD_BLOB);
@@ -800,7 +840,7 @@ static __global__ void validate_field_expr_replay(
         sizeof(Rv64VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
     constexpr size_t INPUT_BYTES = NUM_READS * BLOCKS * MEMORY_BLOCK_BYTES;
     constexpr size_t OUTPUT_BYTES = BLOCKS * MEMORY_BLOCK_BYTES;
-    if (width != ADAPTER_WIDTH + s.width ||
+    if (s.k != K || width != ADAPTER_WIDTH + s.width ||
         static_cast<uint64_t>(s.num_input) * s.num_limbs != INPUT_BYTES ||
         static_cast<uint64_t>(s.n_outputs) * s.num_limbs != OUTPUT_BYTES ||
         projection_len > height || aux_words != s.aux_words) {
@@ -826,6 +866,7 @@ static __global__ void field_expr_replay_tracegen(
     uint32_t timestamp_max_bits,
     uint32_t *error
 ) {
+    constexpr uint32_t K = BLOCKS <= 6 ? 2 * BLOCKS : BLOCKS;
     constexpr size_t ADAPTER_WIDTH =
         sizeof(Rv64VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
     __shared__ FieldExprProg shared_program;
@@ -852,7 +893,7 @@ static __global__ void field_expr_replay_tracegen(
                 reinterpret_cast<const uint8_t *>(&input.heap_reads[0][0][0]);
             const uint8_t *logged_output =
                 reinterpret_cast<const uint8_t *>(&input.writes[0][0]);
-            if (!field_expr_fill_core_row(
+            if (!field_expr_fill_core_row<K>(
                     s,
                     row.slice_from(ADAPTER_WIDTH),
                     input_limbs,
@@ -870,7 +911,7 @@ static __global__ void field_expr_replay_tracegen(
             );
         } else {
             if (s.should_finalize &&
-                !field_expr_fill_core_row(
+                !field_expr_fill_core_row<K>(
                     s,
                     row.slice_from(ADAPTER_WIDTH),
                     nullptr,
