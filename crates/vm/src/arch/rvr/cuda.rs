@@ -1456,14 +1456,16 @@ fn build_gpu_memory_chronology(
     }
 
     let num_entries = memory.len();
-    let workspace = gpu_buffer::<u64>(num_entries, device_ctx);
+    // Chronology count/sort uses one u64 per event. Value resolution reuses
+    // the same allocation as one 16-byte scan element per event.
+    let workspace = gpu_buffer::<u64>(2 * num_entries, device_ctx);
     let sorted_keys = gpu_buffer::<u64>(num_entries, device_ctx);
     let predecessors = gpu_buffer::<u32>(num_entries, device_ctx);
     let initial_memory = upload(initial_memory, device_ctx)?;
     // Keep the U16-only allocation exactly as before. Field metadata extends
     // this tiny counter buffer only when a field sidecar actually exists.
     let count_len = if field_values.is_empty() { 2 } else { 6 };
-    let counts = upload(&vec![0u32; count_len], device_ctx)?;
+    let device_counts = upload(&vec![0u32; count_len], device_ctx)?;
     let mut temp_bytes = 0usize;
     unsafe {
         rvr_postflight::memory_chronology_get_temp_bytes(
@@ -1486,14 +1488,15 @@ fn build_gpu_memory_chronology(
             !field_values.is_empty(),
             &workspace,
             &sorted_keys,
-            &counts,
+            &device_counts,
             &temp_storage,
             temp_bytes,
             error,
             device_ctx.stream.as_raw(),
         )?;
     }
-    let counts = counts.to_host_on(device_ctx)?;
+    let counts = device_counts.to_host_on(device_ctx)?;
+    drop(device_counts);
     let (num_seeds, num_touched) = (counts[0], counts[1]);
     let (field_begin, field_end, field_seed_base, num_field_seeds) = if let [_, _, field_begin, field_end, field_seed_base, num_field_seeds] =
         counts.as_slice()
@@ -1554,6 +1557,10 @@ fn build_gpu_memory_chronology(
             "checkpoint GPU memory chronology failed with code {resolve_error}"
         )));
     }
+    // The error copy fences chronology. Release every sort/scan-only
+    // allocation before trace generation receives the retained logs and
+    // predecessor index.
+    drop((workspace, sorted_keys, initial_memory, temp_storage));
     Ok((
         seeds,
         field_seeds,
@@ -1897,7 +1904,7 @@ mod tests {
         copy::{MemCopyD2H, MemCopyH2D},
         stream::GpuDeviceCtx,
     };
-    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+    use openvm_instructions::riscv::RV64_MEMORY_AS;
     use p3_baby_bear::BabyBear;
     use rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,

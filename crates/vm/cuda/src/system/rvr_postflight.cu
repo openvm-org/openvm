@@ -24,6 +24,8 @@ static constexpr uint32_t ERROR_FIELD_REFERENCE = 119;
 static constexpr uint32_t MEMORY_CELL_U16 = 1;
 static constexpr uint32_t MEMORY_CELL_FIELD32 = 2;
 static constexpr uint8_t FIELD_FULL_WRITE_MASK = 0xff;
+static constexpr int BLOCK_KEY_BEGIN_BIT = 32;
+static constexpr int BLOCK_KEY_END_BIT = 64;
 
 struct RvrMemoryAddressSpace {
     uint64_t num_cells;
@@ -32,15 +34,19 @@ struct RvrMemoryAddressSpace {
 };
 
 static_assert(sizeof(RvrMemoryAddressSpace) == 16);
+static_assert(offsetof(PreflightMemoryEvent, value) % alignof(uint32_t) == 0);
 using RvrTouchedBlock = MemoryTouchedBlock;
+using AliasedU32 = uint32_t __attribute__((may_alias));
 
-struct ByteQuad {
-    uint32_t bytes;
+struct ValueChunk {
+    uint64_t bytes;
     uint32_t valid;
+    uint32_t padding;
 };
 
-static_assert(sizeof(ByteQuad) == sizeof(uint64_t));
-static constexpr uint32_t BYTE_QUAD_DIRTY = 1u << 31;
+static_assert(sizeof(ValueChunk) == 2 * sizeof(uint64_t));
+static constexpr uint32_t VALUE_CHUNK_DIRTY = 1u << 31;
+static constexpr uint32_t VALUE_CHUNK_VALID = 0xff;
 
 struct BlockKeyEqual {
     __host__ __device__ __forceinline__ bool operator()(uint64_t lhs, uint64_t rhs) const {
@@ -49,15 +55,15 @@ struct BlockKeyEqual {
 };
 
 struct LastWriteWins {
-    __host__ __device__ __forceinline__ ByteQuad
-    operator()(ByteQuad prefix, ByteQuad current) const {
-        ByteQuad result = prefix;
-        for (uint32_t lane = 0; lane < 4; ++lane) {
+    __host__ __device__ __forceinline__ ValueChunk
+    operator()(ValueChunk prefix, ValueChunk current) const {
+        ValueChunk result = prefix;
+        for (uint32_t lane = 0; lane < 8; ++lane) {
             uint32_t bit = 1u << lane;
             if ((current.valid & bit) != 0) {
                 uint32_t shift = 8 * lane;
-                result.bytes = (result.bytes & ~(0xffu << shift)) |
-                               (current.bytes & (0xffu << shift));
+                uint64_t mask = uint64_t{0xff} << shift;
+                result.bytes = (result.bytes & ~mask) | (current.bytes & mask);
             }
         }
         result.valid |= current.valid;
@@ -455,7 +461,7 @@ __global__ void scatter_chronology_metadata(
     }
 }
 
-__global__ void prepare_byte_quads(
+__global__ void prepare_value_chunks(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
@@ -465,7 +471,7 @@ __global__ void prepare_byte_quads(
     size_t sorted_offset,
     size_t num_entries,
     uint32_t byte_offset,
-    ByteQuad *quads,
+    ValueChunk *chunks,
     uint32_t *error
 ) {
     size_t pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
@@ -476,26 +482,29 @@ __global__ void prepare_byte_quads(
     bool head = sorted_pos == 0 || uint32_t(sorted_keys[sorted_pos - 1] >> 32) != key;
     auto const &event = memory[ordinal];
     auto const &config = address_spaces[preflight_address_space(event)];
-    ByteQuad quad{0, 0};
+    ValueChunk chunk{0, 0, 0};
     if (head) {
-        uint8_t initial[4];
-        if (!initial_quad(
-                preflight_address_space(event),
-                event.pointer,
-                byte_offset,
-                address_spaces,
-                initial_memory,
-                initial
-            )) {
-            preflight_set_error(error, ERROR_INITIAL_MEMORY);
-            quads[sorted_pos] = quad;
-            return;
-        }
 #pragma unroll
-        for (uint32_t lane = 0; lane < 4; ++lane) {
-            quad.bytes |= uint32_t(initial[lane]) << (8 * lane);
+        for (uint32_t quad = 0; quad < 2; ++quad) {
+            uint8_t initial[4];
+            if (!initial_quad(
+                    preflight_address_space(event),
+                    event.pointer,
+                    byte_offset + 4 * quad,
+                    address_spaces,
+                    initial_memory,
+                    initial
+                )) {
+                preflight_set_error(error, ERROR_INITIAL_MEMORY);
+                chunks[sorted_pos] = chunk;
+                return;
+            }
+#pragma unroll
+            for (uint32_t lane = 0; lane < 4; ++lane) {
+                chunk.bytes |= uint64_t(initial[lane]) << (8 * (4 * quad + lane));
+            }
         }
-        quad.valid = 0xf;
+        chunk.valid = VALUE_CHUNK_VALID;
     }
     uint8_t mask;
     uint8_t const *patch;
@@ -503,32 +512,33 @@ __global__ void prepare_byte_quads(
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len()) {
             preflight_set_error(error, ERROR_FIELD_REFERENCE);
-            quads[sorted_pos] = quad;
+            chunks[sorted_pos] = chunk;
             return;
         }
-        mask = write_masks[ordinal] == FIELD_FULL_WRITE_MASK ? 0xf : 0;
+        mask = write_masks[ordinal] == FIELD_FULL_WRITE_MASK ? VALUE_CHUNK_VALID : 0;
         patch = reinterpret_cast<uint8_t const *>(&field_values[reference]);
     } else {
-        mask = write_masks[ordinal] >> byte_offset;
+        mask = write_masks[ordinal];
         patch = reinterpret_cast<uint8_t const *>(event.value);
     }
 #pragma unroll
-    for (uint32_t lane = 0; lane < 4; ++lane) {
+    for (uint32_t lane = 0; lane < 8; ++lane) {
         uint32_t bit = 1u << lane;
         if ((mask & bit) != 0) {
             uint32_t shift = 8 * lane;
-            quad.bytes = (quad.bytes & ~(0xffu << shift)) |
-                         (uint32_t(patch[byte_offset + lane]) << shift);
-            quad.valid |= bit;
+            uint64_t lane_mask = uint64_t{0xff} << shift;
+            chunk.bytes = (chunk.bytes & ~lane_mask) |
+                          (uint64_t(patch[byte_offset + lane]) << shift);
+            chunk.valid |= bit;
         }
     }
     if (write_masks[ordinal] != 0) {
-        quad.valid |= BYTE_QUAD_DIRTY;
+        chunk.valid |= VALUE_CHUNK_DIRTY;
     }
-    quads[sorted_pos] = quad;
+    chunks[sorted_pos] = chunk;
 }
 
-__global__ void scatter_byte_quads(
+__global__ void scatter_value_chunks(
     DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferView<RvrFieldBlock> field_values,
@@ -536,34 +546,37 @@ __global__ void scatter_byte_quads(
     size_t sorted_offset,
     size_t num_entries,
     uint32_t byte_offset,
-    ByteQuad const *quads,
+    ValueChunk const *chunks,
     uint32_t *error
 ) {
     size_t pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (pos >= num_entries) return;
     size_t sorted_pos = sorted_offset + pos;
-    uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
-    auto const &quad = quads[sorted_pos];
-    if ((quad.valid & 0xf) != 0xf) {
+    auto const &chunk = chunks[sorted_pos];
+    if ((chunk.valid & VALUE_CHUNK_VALID) != VALUE_CHUNK_VALID) {
         preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
         return;
     }
+    uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
     auto const &event = memory[ordinal];
     auto const &config = address_spaces[preflight_address_space(event)];
-    uint8_t *bytes;
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len()) {
             preflight_set_error(error, ERROR_FIELD_REFERENCE);
             return;
         }
-        bytes = reinterpret_cast<uint8_t *>(&field_values[reference]);
+        auto *words = field_values[reference].values;
+        uint32_t word_offset = byte_offset / sizeof(uint32_t);
+        words[word_offset] = uint32_t(chunk.bytes);
+        words[word_offset + 1] = uint32_t(chunk.bytes >> 32);
     } else {
-        bytes = reinterpret_cast<uint8_t *>(memory[ordinal].value);
-    }
-#pragma unroll
-    for (uint32_t lane = 0; lane < 4; ++lane) {
-        bytes[byte_offset + lane] = uint8_t(quad.bytes >> (8 * lane));
+        // The transcript ABI aligns this fixed eight-byte payload to one
+        // word. Store it as two words so replay resolution does not expand
+        // back into eight independent byte stores.
+        auto *words = reinterpret_cast<AliasedU32 *>(memory[ordinal].value);
+        words[0] = uint32_t(chunk.bytes);
+        words[1] = uint32_t(chunk.bytes >> 32);
     }
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
@@ -578,7 +591,7 @@ __global__ void finalize_chronology_touched(
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<RvrFieldBlock> field_values,
     uint64_t const *sorted_keys,
-    ByteQuad const *quads,
+    ValueChunk const *chunks,
     RvrTouchedBlock *touched,
     size_t num_touched,
     uint32_t *error
@@ -602,7 +615,7 @@ __global__ void finalize_chronology_touched(
         preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
         return;
     }
-    record.is_dirty = uint32_t((quads[sorted_pos].valid & BYTE_QUAD_DIRTY) != 0);
+    record.is_dirty = uint32_t((chunks[sorted_pos].valid & VALUE_CHUNK_DIRTY) != 0);
     auto const &event = memory[ordinal];
     auto const &config = address_spaces[preflight_address_space(event)];
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
@@ -640,8 +653,8 @@ extern "C" int _rvr_memory_chronology_get_temp_bytes(
             static_cast<uint64_t *>(nullptr),
             static_cast<uint64_t *>(nullptr),
             num_entries,
-            0,
-            64,
+            BLOCK_KEY_BEGIN_BIT,
+            BLOCK_KEY_END_BIT,
             stream
         );
         cub::DeviceScan::ExclusiveSum(
@@ -656,8 +669,8 @@ extern "C" int _rvr_memory_chronology_get_temp_bytes(
             nullptr,
             chronology_temp_bytes,
             static_cast<uint64_t *>(nullptr),
-            static_cast<ByteQuad *>(nullptr),
-            static_cast<ByteQuad *>(nullptr),
+            static_cast<ValueChunk *>(nullptr),
+            static_cast<ValueChunk *>(nullptr),
             LastWriteWins{},
             num_entries,
             BlockKeyEqual{},
@@ -727,8 +740,13 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
             workspace,
             sorted_keys,
             num_entries,
-            0,
-            64,
+            // The low half is the input ordinal. The memory log is already in
+            // strict timestamp order, and CUB's radix sort is stable, so
+            // sorting only the block-key half preserves chronology within
+            // each block without spending radix passes on an already ordered
+            // tiebreaker.
+            BLOCK_KEY_BEGIN_BIT,
+            BLOCK_KEY_END_BIT,
             stream
         );
         err != cudaSuccess) {
@@ -807,49 +825,47 @@ extern "C" int _rvr_memory_chronology_resolve(
     );
     if (int err = CHECK_KERNEL(); err) return err;
 
-    auto *quads = reinterpret_cast<ByteQuad *>(workspace);
-    for (uint32_t byte_offset = 0; byte_offset < 8; byte_offset += 4) {
-        prepare_byte_quads<<<grid, block, 0, stream>>>(
-            DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
-            write_masks,
-            address_spaces,
-            initial_memory,
-            DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+    auto *chunks = reinterpret_cast<ValueChunk *>(workspace);
+    prepare_value_chunks<<<grid, block, 0, stream>>>(
+        DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
+        write_masks,
+        address_spaces,
+        initial_memory,
+        DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+        sorted_keys,
+        0,
+        num_entries,
+        0,
+        chunks,
+        error
+    );
+    if (int err = CHECK_KERNEL(); err) return err;
+    if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
+            temp_storage,
+            temp_storage_bytes,
             sorted_keys,
-            0,
+            chunks,
+            chunks,
+            LastWriteWins{},
             num_entries,
-            byte_offset,
-            quads,
-            error
+            BlockKeyEqual{},
+            stream
         );
-        if (int err = CHECK_KERNEL(); err) return err;
-        if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
-                temp_storage,
-                temp_storage_bytes,
-                sorted_keys,
-                quads,
-                quads,
-                LastWriteWins{},
-                num_entries,
-                BlockKeyEqual{},
-                stream
-            );
-            err != cudaSuccess) {
-            return err;
-        }
-        scatter_byte_quads<<<grid, block, 0, stream>>>(
-            memory,
-            address_spaces,
-            field_values,
-            sorted_keys,
-            0,
-            num_entries,
-            byte_offset,
-            quads,
-            error
-        );
-        if (int err = CHECK_KERNEL(); err) return err;
+        err != cudaSuccess) {
+        return err;
     }
+    scatter_value_chunks<<<grid, block, 0, stream>>>(
+        memory,
+        address_spaces,
+        field_values,
+        sorted_keys,
+        0,
+        num_entries,
+        0,
+        chunks,
+        error
+    );
+    if (int err = CHECK_KERNEL(); err) return err;
 
     if (field_end < field_begin || field_end > num_entries ||
         size_t(field_end - field_begin) != field_values.len()) {
@@ -858,48 +874,46 @@ extern "C" int _rvr_memory_chronology_resolve(
     size_t num_field_entries = field_end - field_begin;
     if (num_field_entries != 0) {
         auto [field_grid, field_block] = kernel_launch_params(num_field_entries);
-        for (uint32_t byte_offset = 8; byte_offset < 16; byte_offset += 4) {
-            prepare_byte_quads<<<field_grid, field_block, 0, stream>>>(
-                DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
-                write_masks,
-                address_spaces,
-                initial_memory,
-                DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
-                sorted_keys,
-                field_begin,
+        prepare_value_chunks<<<field_grid, field_block, 0, stream>>>(
+            DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
+            write_masks,
+            address_spaces,
+            initial_memory,
+            DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+            sorted_keys,
+            field_begin,
+            num_field_entries,
+            8,
+            chunks,
+            error
+        );
+        if (int err = CHECK_KERNEL(); err) return err;
+        if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
+                temp_storage,
+                temp_storage_bytes,
+                sorted_keys + field_begin,
+                chunks + field_begin,
+                chunks + field_begin,
+                LastWriteWins{},
                 num_field_entries,
-                byte_offset,
-                quads,
-                error
+                BlockKeyEqual{},
+                stream
             );
-            if (int err = CHECK_KERNEL(); err) return err;
-            if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
-                    temp_storage,
-                    temp_storage_bytes,
-                    sorted_keys + field_begin,
-                    quads + field_begin,
-                    quads + field_begin,
-                    LastWriteWins{},
-                    num_field_entries,
-                    BlockKeyEqual{},
-                    stream
-                );
-                err != cudaSuccess) {
-                return err;
-            }
-            scatter_byte_quads<<<field_grid, field_block, 0, stream>>>(
-                memory,
-                address_spaces,
-                field_values,
-                sorted_keys,
-                field_begin,
-                num_field_entries,
-                byte_offset,
-                quads,
-                error
-            );
-            if (int err = CHECK_KERNEL(); err) return err;
+            err != cudaSuccess) {
+            return err;
         }
+        scatter_value_chunks<<<field_grid, field_block, 0, stream>>>(
+            memory,
+            address_spaces,
+            field_values,
+            sorted_keys,
+            field_begin,
+            num_field_entries,
+            8,
+            chunks,
+            error
+        );
+        if (int err = CHECK_KERNEL(); err) return err;
     }
 
     if (touched.len() != 0) {
@@ -909,7 +923,7 @@ extern "C" int _rvr_memory_chronology_resolve(
             address_spaces,
             DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
             sorted_keys,
-            quads,
+            chunks,
             touched.ptr,
             touched.len(),
             error
