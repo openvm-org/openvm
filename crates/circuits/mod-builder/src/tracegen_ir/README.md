@@ -1,4 +1,4 @@
-# Design
+# Design for GPU tracegen of mod-builder
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -87,18 +87,4 @@ The encoder and CUDA decoder share a generated ABI:
                          │           │
                          ▼           ▼
                       encode()    field_expr.cu
-```
-
-The runtime data flow is:
-
-```text
-Dense execution record
-[adapter record | opcode byte | input limbs]
-                      │
-                      ▼
-             CUDA interprets TracegenIr
-                      │
-                      ▼
-Proof trace row
-[adapter columns | is_valid | inputs | vars | quotients | carries | flags]
 ```

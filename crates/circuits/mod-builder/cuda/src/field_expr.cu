@@ -2,10 +2,10 @@
 // Interprets the trace-generation IR encoded by tracegen_ir (see that module
 // for the semantics contract). One thread per row, grid-stride.
 //
-// The core-column interpreter is validated bit-exact against
-// FieldExpressionFiller::fill_trace_row (rows and range-checker histograms) on
-// EcAddNe, MulDiv (flags/Select/Div-under-Select/setup rows) and IntMul/IntAdd
-// expressions. Adapter columns use the shared Rv64VecHeapAdapter device fill.
+// Validated bit-exact against the CPU tracegen (FieldExpressionFiller) by the
+// cuda-gated chip tests in the algebra and ecc circuit extensions (modular,
+// Fp2, and Weierstrass chips), which compare full GPU and CPU traces
+// element-wise. Adapter columns use the shared Rv64VecHeapAdapter device fill.
 #include "launcher.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
