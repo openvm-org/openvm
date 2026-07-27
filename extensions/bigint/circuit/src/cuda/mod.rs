@@ -1,12 +1,25 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::utils::next_power_of_two_or_zero;
+use openvm_bigint_transpiler::{
+    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
+    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+};
+use openvm_circuit::{
+    arch::cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, cuda_abi::UInt2,
     range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterCols, Rv64VecHeapBranchU16AdapterCols, Rv64VecHeapU16AdapterCols,
 };
@@ -18,25 +31,10 @@ use openvm_riscv_circuit::{
     ShiftLogicalCoreCols, ShiftLogicalCoreRecord, ShiftRightArithmeticCoreCols,
     ShiftRightArithmeticCoreRecord,
 };
-use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_bigint_transpiler::{
-        Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-        Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
-    },
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    },
-    openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode,
-    },
-    openvm_riscv_transpiler::{
-        BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode,
-        ShiftOpcode,
-    },
+use openvm_riscv_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
+use openvm_stark_backend::prover::AirProvingContext;
 
 mod cuda_abi;
 
@@ -139,7 +137,6 @@ pub struct Multiplication256ChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 fn int256_family_range<const N: usize>(
     replay_plan: &GpuPostflightPlan,
     opcodes: [openvm_instructions::VmOpcode; N],
@@ -168,7 +165,6 @@ fn int256_family_range<const N: usize>(
     Ok(start..end)
 }
 
-#[cfg(feature = "rvr")]
 macro_rules! int256_replay_common_args {
     ($program:expr, $transcript:expr, $replay_plan:expr, $range:expr) => {
         (
@@ -186,7 +182,6 @@ macro_rules! int256_replay_common_args {
     };
 }
 
-#[cfg(feature = "rvr")]
 impl AddSub256ChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
@@ -243,7 +238,6 @@ impl AddSub256ChipGpu {
     }
 }
 
-#[cfg(feature = "rvr")]
 impl BitwiseLogic256ChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
@@ -302,7 +296,6 @@ impl BitwiseLogic256ChipGpu {
     }
 }
 
-#[cfg(feature = "rvr")]
 macro_rules! impl_int256_u16_replay {
     ($chip:ty, $width:expr, $opcodes:expr, $base:expr, $kind:expr) => {
         impl $chip {
@@ -352,7 +345,6 @@ macro_rules! impl_int256_u16_replay {
     };
 }
 
-#[cfg(feature = "rvr")]
 impl_int256_u16_replay!(
     LessThan256ChipGpu,
     LessThanCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
@@ -370,7 +362,6 @@ impl_int256_u16_replay!(
     cuda_abi::replay::U16Kind::LessThan
 );
 
-#[cfg(feature = "rvr")]
 impl_int256_u16_replay!(
     ShiftLogical256ChipGpu,
     ShiftLogicalCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
@@ -388,7 +379,6 @@ impl_int256_u16_replay!(
     cuda_abi::replay::U16Kind::ShiftLogical
 );
 
-#[cfg(feature = "rvr")]
 impl_int256_u16_replay!(
     ShiftRightArithmetic256ChipGpu,
     ShiftRightArithmeticCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
@@ -403,7 +393,6 @@ impl_int256_u16_replay!(
     cuda_abi::replay::U16Kind::ShiftRightArithmetic
 );
 
-#[cfg(feature = "rvr")]
 impl_int256_u16_replay!(
     BranchEqual256ChipGpu,
     BranchEqualCoreCols::<F, INT256_NUM_U16_LIMBS>::width()
@@ -416,7 +405,6 @@ impl_int256_u16_replay!(
     cuda_abi::replay::U16Kind::BranchEqual
 );
 
-#[cfg(feature = "rvr")]
 impl_int256_u16_replay!(
     BranchLessThan256ChipGpu,
     BranchLessThanCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
@@ -431,7 +419,6 @@ impl_int256_u16_replay!(
     cuda_abi::replay::U16Kind::BranchLessThan
 );
 
-#[cfg(feature = "rvr")]
 impl Multiplication256ChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,

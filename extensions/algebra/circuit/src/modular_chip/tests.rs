@@ -867,8 +867,9 @@ mod is_equal_tests {
     };
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
-        openvm_circuit::arch::rvr::{
-            cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog,
+        openvm_circuit::arch::{
+            cuda::postflight::GpuPostflightProgram,
+            rvr::{PreflightEndpoint, PreflightEventLog},
         },
         openvm_instructions::SystemOpcode,
         rvr_state::{

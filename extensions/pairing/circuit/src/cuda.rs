@@ -3,21 +3,17 @@
 //! [openvm_ecc_circuit] crates export.
 use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
 use openvm_circuit::{
-    arch::{AirInventory, ChipInventoryError, VmBuilder, VmChipComplex, VmProverExtension},
+    arch::{
+        cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
+        AirInventory, ChipInventoryError, GenerationError, VirtualMachine, VmBuilder,
+        VmChipComplex, VmProverExtension,
+    },
     system::cuda::SystemChipInventoryGPU,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_ecc_circuit::EccProverExt;
+use openvm_ecc_circuit::{EccProverExt, WeierstrassPreflightGpuTracegen};
+use openvm_stark_backend::prover::ProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::{
-        rvr::cuda::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
-        GenerationError, VirtualMachine,
-    },
-    openvm_ecc_circuit::WeierstrassPreflightGpuTracegen,
-    openvm_stark_backend::prover::ProvingContext,
-};
 
 use crate::{PairingProverExt, Rv64PairingConfig};
 
@@ -26,7 +22,6 @@ pub struct Rv64PairingGpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-#[cfg(feature = "rvr")]
 impl Rv64PairingGpuBuilder {
     /// Runs the concrete system/RV64 + modular/Fp2 + Weierstrass inventory walk.
     /// Pairing hints use the existing system PHANTOM producer and add no AIR.
@@ -77,9 +72,10 @@ mod tests {
     };
     use openvm_circuit::{
         arch::{
+            cuda::postflight::GpuPostflightProgram,
             rvr::{
-                cuda::{CheckpointReplayProgram, GpuPostflightProgram},
-                PreflightEndpoint, PreflightEventLog, PreflightLimits,
+                cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightEventLog,
+                PreflightLimits,
             },
             VirtualMachine, VmExecutor,
         },

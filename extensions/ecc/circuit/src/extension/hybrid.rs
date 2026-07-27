@@ -1,15 +1,27 @@
 //! GPU prover extension. Preflight replay uses native GPU trace generation for recognized
 //! fields and a CPU postflight projection for other field expressions.
 
-use openvm_algebra_circuit::Rv64ModularHybridBuilder;
+use std::{any::Any, collections::BTreeSet, sync::Arc};
+
+use openvm_algebra_circuit::{
+    cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
+    ModularExtension, Rv64ModularHybridBuilder,
+};
 use openvm_circuit::{
-    arch::*,
+    arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        GenerationError, VirtualMachine, *,
+    },
     system::{
         cuda::{extensions::get_inventory_range_checker, SystemChipInventoryGPU},
         memory::SharedMemoryHelper,
     },
 };
-use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
+use openvm_circuit_primitives::{
+    hybrid_chip::cpu_proving_ctx_to_gpu, var_range::VariableRangeCheckerChipGPU,
+};
 use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
@@ -18,25 +30,13 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_backend::prover::AirProvingContext;
+use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
+use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
-    openvm_algebra_circuit::{
-        cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
-        ModularExtension,
-    },
-    openvm_circuit::arch::{
-        rvr::cuda::{
-            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-            PostflightAccessRegistry, PostflightAccessSpan,
-        },
-        GenerationError, VirtualMachine,
-    },
-    openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
-    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::prover::ProvingContext,
-    std::{any::Any, collections::BTreeSet, sync::Arc},
+    crate::CurveConfig,
+    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
 };
 #[cfg(all(feature = "rvr", test))]
 use {
@@ -45,8 +45,6 @@ use {
     openvm_stark_backend::p3_field::PrimeField32,
 };
 
-#[cfg(feature = "rvr")]
-use crate::CurveConfig;
 use crate::{
     get_ec_addne_chip, get_ec_double_chip,
     weierstrass_chip::{
@@ -113,7 +111,6 @@ mod checkpoint_tests {
 pub struct HybridWeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize> {
     cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
     device_ctx: GpuDeviceCtx,
-    #[cfg(feature = "rvr")]
     replay: Option<FieldExprReplayChip<NUM_READS, BLOCKS>>,
 }
 
@@ -122,12 +119,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
         Self {
             cpu,
             device_ctx,
-            #[cfg(feature = "rvr")]
             replay: None,
         }
     }
 
-    #[cfg(feature = "rvr")]
     pub fn new_with_replay(
         cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
         device_ctx: GpuDeviceCtx,
@@ -143,7 +138,6 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
         }
     }
 
-    #[cfg(feature = "rvr")]
     fn local_opcodes() -> Result<[usize; 2], GpuPostflightError> {
         match NUM_READS {
             2 => Ok([
@@ -160,12 +154,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
         }
     }
 
-    #[cfg(feature = "rvr")]
     pub fn opcode_base(&self) -> Option<usize> {
         self.replay.as_ref().map(|replay| replay.opcode_base())
     }
 
-    #[cfg(feature = "rvr")]
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -189,7 +181,6 @@ pub struct EccHybridProverExt;
 ///
 /// Multiple configured curves may have the same Rust chip type, so coverage is
 /// tracked by each chip's concrete opcode base rather than by downcast type.
-#[cfg(feature = "rvr")]
 pub struct WeierstrassPreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
@@ -198,8 +189,8 @@ pub struct WeierstrassPreflightGpuTracegen<'a> {
     pending_opcodes: BTreeSet<u32>,
 }
 
-#[cfg(feature = "rvr")]
 impl<'a> WeierstrassPreflightGpuTracegen<'a> {
+    #[cfg(feature = "rvr")]
     #[doc(hidden)]
     pub fn register_postflight_access_schedules(
         registry: &mut PostflightAccessRegistry,
@@ -318,7 +309,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     }
 
     /// Uploads one concrete RV64+Algebra+Weierstrass checkpoint program.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
@@ -344,7 +335,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,
@@ -542,15 +533,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                #[cfg(feature = "rvr")]
                 let addne = HybridWeierstrassChip::new_with_replay(
                     addne,
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                #[cfg(not(feature = "rvr"))]
-                let addne = HybridWeierstrassChip::new(addne, device_ctx.clone());
                 inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
                     let trace =
                         generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
@@ -568,15 +556,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                #[cfg(feature = "rvr")]
                 let double = HybridWeierstrassChip::new_with_replay(
                     double,
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                #[cfg(not(feature = "rvr"))]
-                let double = HybridWeierstrassChip::new(double, device_ctx.clone());
                 inventory.add_postflight_executor_chip(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
@@ -599,15 +584,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                #[cfg(feature = "rvr")]
                 let addne = HybridWeierstrassChip::new_with_replay(
                     addne,
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                #[cfg(not(feature = "rvr"))]
-                let addne = HybridWeierstrassChip::new(addne, device_ctx.clone());
                 inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
                     let trace =
                         generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
@@ -625,15 +607,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                #[cfg(feature = "rvr")]
                 let double = HybridWeierstrassChip::new_with_replay(
                     double,
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                #[cfg(not(feature = "rvr"))]
-                let double = HybridWeierstrassChip::new(double, device_ctx.clone());
                 inventory.add_postflight_executor_chip(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;

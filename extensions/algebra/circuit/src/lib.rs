@@ -31,7 +31,7 @@ pub const FP2_BLOCKS_32: usize = 2 * MODULAR_BLOCKS_32;
 /// Blocks for Fp2 with 48-limb base field: 2 * 6 = 12 blocks
 pub const FP2_BLOCKS_48: usize = 2 * MODULAR_BLOCKS_48;
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 pub mod cuda;
 pub mod fp2_chip;
 pub mod modular_chip;

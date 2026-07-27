@@ -1,5 +1,16 @@
+use std::any::Any;
+
+use openvm_bigint_transpiler::{
+    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
+    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+};
 use openvm_circuit::{
-    arch::to_byte_ptr_bits,
+    arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        to_byte_ptr_bits,
+    },
     system::cuda::{
         extensions::{
             get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
@@ -9,39 +20,36 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerChipGPU;
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
+use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
-    openvm_bigint_transpiler::{
-        Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-        Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
-    },
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-        PostflightAccessRegistry, PostflightAccessSpan,
-    },
-    openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode},
-    openvm_stark_backend::prover::AirProvingContext,
-    std::any::Any,
+    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+    openvm_instructions::riscv::RV64_MEMORY_AS,
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{
         rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
-        GenerationError, MemoryConfig, VirtualMachine,
+        MemoryConfig,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::program::Program,
+    openvm_stark_backend::p3_field::PrimeField32,
+};
+#[cfg(any(test, feature = "test-utils"))]
+use {
+    openvm_circuit::arch::{GenerationError, VirtualMachine},
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
+    openvm_stark_backend::prover::ProvingContext,
 };
 
 use super::*;
 
 pub struct Int256GpuProverExt;
 
-#[cfg(feature = "rvr")]
 pub struct Int256PreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
@@ -56,7 +64,6 @@ pub struct Int256PreflightGpuTracegen<'a> {
     pending_shift_arithmetic: bool,
 }
 
-#[cfg(feature = "rvr")]
 impl<'a> Int256PreflightGpuTracegen<'a> {
     fn opcodes<T: LocalOpcode>(opcodes: impl IntoIterator<Item = T>) -> Vec<u32> {
         opcodes
@@ -78,6 +85,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
+    #[cfg(feature = "rvr")]
     pub fn register_postflight_access_schedules(
         registry: &mut PostflightAccessRegistry,
     ) -> Result<(), GpuPostflightError> {
@@ -115,7 +123,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         Ok(())
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn upload_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
@@ -133,7 +141,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,

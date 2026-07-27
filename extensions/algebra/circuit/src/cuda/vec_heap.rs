@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        rvr::cuda::{
+        cuda::postflight::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
         VmChipWrapper,

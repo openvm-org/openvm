@@ -1,8 +1,8 @@
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_cuda_builder::{cuda_available, CudaBuilder};
 
 fn main() {
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[cfg(feature = "cuda")]
     {
         if !cuda_available() {
             return;
