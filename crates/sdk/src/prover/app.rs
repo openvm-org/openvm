@@ -1,15 +1,13 @@
 use std::sync::{Arc, OnceLock};
 
 use getset::Getters;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::ContinuationProverFn;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
-        PostflightTracegen, Streams, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
-        VmBuilder, VmChipComplex, VmExecutionConfig, VmInstance, VmVerificationError,
+        verify_segments, ContinuationProverBuilder, ContinuationProverFn, ContinuationVmProof,
+        Executor, MeteredExecutor, Streams, VerifiedExecutionPayload, VirtualMachine,
+        VirtualMachineError, VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
     },
     system::{
         memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
@@ -42,14 +40,13 @@ where
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     app_exe_commit: OnceLock<Digest>,
-    #[cfg(feature = "cuda")]
-    prove_app: Option<ContinuationProverFn<E, VB>>,
+    prove_app: ContinuationProverFn<E, VB>,
 }
 
 impl<E, VB> AppProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
     Val<E::SC>: PrimeField32,
 {
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
@@ -77,7 +74,6 @@ where
             instance,
             app_vm_vk,
             app_exe_commit: OnceLock::new(),
-            #[cfg(feature = "cuda")]
             prove_app: VB::continuation_prover(),
         }
     }
@@ -125,36 +121,19 @@ where
     where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-        VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
     {
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),
         );
         let input: Streams = input.into();
-        #[cfg(feature = "cuda")]
-        let proof = match self.prove_app.as_mut() {
-            Some(prove) => prove(&mut self.instance, input, self.program_name.as_deref())?,
-            None => {
-                let _prove_span = info_span!(
-                    "app_prove",
-                    group = "app_proof",
-                    program = self.program_name.as_deref().unwrap_or("")
-                )
-                .entered();
-                ContinuationVmProver::prove(&mut self.instance, input)?
-            }
-        };
-        #[cfg(not(feature = "cuda"))]
-        let proof = {
-            let _prove_span = info_span!(
-                "app_prove",
-                group = "app_proof",
-                program = self.program_name.as_deref().unwrap_or("")
-            )
-            .entered();
-            ContinuationVmProver::prove(&mut self.instance, input)?
-        };
+        let _prove_span = info_span!(
+            "app_prove",
+            group = "app_proof",
+            program = self.program_name.as_deref().unwrap_or("")
+        )
+        .entered();
+        let proof = (self.prove_app)(&mut self.instance, input)?;
         #[cfg(debug_assertions)]
         let _ = verify_app_proof_inner::<E>(
             &self.app_vm_vk,

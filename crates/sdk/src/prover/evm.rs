@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, Executor, MeteredExecutor, PostflightTracegen, VmBuilder,
-    VmChipComplex, VmExecutionConfig,
+    instructions::exe::VmExe, ContinuationProverBuilder, Executor, MeteredExecutor, VmBuilder,
+    VmExecutionConfig,
 };
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
@@ -37,7 +37,7 @@ where
 impl<E, VB> EvmProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
+    VB: ContinuationProverBuilder<E> + Clone,
     Val<SC>: PrimeField32,
 {
     pub fn new(
@@ -71,7 +71,6 @@ where
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
             Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
-        VmChipComplex<SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<SC, E::PB>,
     {
         #[cfg(test)]
         {
@@ -103,7 +102,6 @@ where
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
             Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
-        VmChipComplex<SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<SC, E::PB>,
     {
         let (stark_proof, mut internal_metadata) = self.stark_prover.prove(input, def_inputs)?;
         self.prove_root_from_vm_stark_proof(stark_proof, &mut internal_metadata)
@@ -118,7 +116,6 @@ where
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
             Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
-        VmChipComplex<SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<SC, E::PB>,
     {
         let root_proof = self.prove_root(input, def_inputs)?;
         let evm_proof = self
