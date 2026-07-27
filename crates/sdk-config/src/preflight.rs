@@ -7,17 +7,13 @@ use openvm_circuit::arch::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     instructions::program::Program,
-    GenerationError, VirtualMachine,
+    prepare_gpu_postflight, GenerationError, Postflight, PostflightTracegen, PreflightOutput,
+    VirtualMachine,
 };
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     rvr::cuda::{CheckpointReplayProgram, PostflightAccessRegistry},
     PreflightExecution,
-};
-#[cfg(any(test, feature = "test-utils"))]
-use openvm_circuit::{
-    arch::{instructions::exe::VmExe, Postflight, PreflightOutput},
-    utils::{prepare_gpu_test_tracegen, TestPreflightTracegen},
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
@@ -30,7 +26,6 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ProvingContext},
     StarkEngine,
 };
-#[cfg(any(test, feature = "test-utils"))]
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{SdkVmConfig, SdkVmGpuBuilder};
@@ -174,18 +169,17 @@ impl SdkVmGpuBuilder {
     }
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-impl TestPreflightTracegen<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
+impl PostflightTracegen<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type Prepared = GpuPostflightProgram;
 
-    fn prepare_test_tracegen(
+    fn prepare_postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        exe: &VmExe<BabyBear>,
+        program: &Program<BabyBear>,
     ) -> Result<Self::Prepared, GenerationError> {
-        prepare_gpu_test_tracegen(vm, exe)
+        prepare_gpu_postflight(vm, program)
     }
 
-    fn generate_test_proving_ctx(
+    fn generate_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Self::Prepared,
         output: &PreflightOutput,

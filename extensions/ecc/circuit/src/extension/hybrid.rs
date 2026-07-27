@@ -7,8 +7,6 @@ use openvm_algebra_circuit::{
     cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
     ModularExtension, Rv64ModularHybridBuilder,
 };
-#[cfg(any(test, feature = "test-utils"))]
-use openvm_circuit::utils::{prepare_gpu_test_tracegen, TestPreflightTracegen};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -30,9 +28,7 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
-#[cfg(any(test, feature = "test-utils"))]
-use openvm_instructions::exe::VmExe;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{program::Program, LocalOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
@@ -45,7 +41,6 @@ use {
 #[cfg(all(feature = "rvr", test))]
 use {
     openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
-    openvm_instructions::program::Program,
     openvm_stark_backend::p3_field::PrimeField32,
 };
 
@@ -638,18 +633,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
 #[derive(Clone)]
 pub struct Rv64WeierstrassHybridBuilder;
 
-#[cfg(any(test, feature = "test-utils"))]
-impl TestPreflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBuilder {
     type Prepared = GpuPostflightProgram;
 
-    fn prepare_test_tracegen(
+    fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        exe: &VmExe<F>,
+        program: &Program<F>,
     ) -> Result<Self::Prepared, GenerationError> {
-        prepare_gpu_test_tracegen(vm, exe)
+        prepare_gpu_postflight(vm, program)
     }
 
-    fn generate_test_proving_ctx(
+    fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
         program: &Self::Prepared,
         output: &PreflightOutput,

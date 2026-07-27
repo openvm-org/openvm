@@ -5,42 +5,36 @@ use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
-        AirInventory, ChipInventoryError, GenerationError, VirtualMachine, VmBuilder,
-        VmChipComplex, VmProverExtension,
+        prepare_gpu_postflight, AirInventory, ChipInventoryError, GenerationError, Postflight,
+        PostflightTracegen, PreflightOutput, VirtualMachine, VmBuilder, VmChipComplex,
+        VmProverExtension,
     },
     system::cuda::SystemChipInventoryGPU,
 };
-#[cfg(any(test, feature = "test-utils"))]
-use openvm_circuit::{
-    arch::{Postflight, PreflightOutput},
-    utils::{prepare_gpu_test_tracegen, TestPreflightTracegen},
-};
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_ecc_circuit::{EccProverExt, WeierstrassPreflightGpuTracegen};
-#[cfg(any(test, feature = "test-utils"))]
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::program::Program;
 use openvm_stark_backend::prover::ProvingContext;
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-#[cfg(any(test, feature = "test-utils"))]
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+};
 
 use crate::{PairingProverExt, Rv64PairingConfig};
 
 #[derive(Clone)]
 pub struct Rv64PairingGpuBuilder;
 
-#[cfg(any(test, feature = "test-utils"))]
-impl TestPreflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
     type Prepared = GpuPostflightProgram;
 
-    fn prepare_test_tracegen(
+    fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        exe: &VmExe<BabyBear>,
+        program: &Program<BabyBear>,
     ) -> Result<Self::Prepared, GenerationError> {
-        prepare_gpu_test_tracegen(vm, exe)
+        prepare_gpu_postflight(vm, program)
     }
 
-    fn generate_test_proving_ctx(
+    fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
         program: &Self::Prepared,
         output: &PreflightOutput,

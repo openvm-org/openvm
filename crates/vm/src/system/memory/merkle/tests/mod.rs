@@ -906,7 +906,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     };
 
     use crate::{
-        arch::{Postflight, Streams, SystemConfig, VirtualMachine, VmState},
+        arch::{Postflight, PostflightTracegen, Streams, SystemConfig, VirtualMachine, VmState},
         system::{
             memory::{online::GuestMemory, AddressMap},
             SystemCpuBuilder,
@@ -957,9 +957,8 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         output.exit_code,
     )
     .unwrap();
-    let mut ctx = vm
-        .generate_proving_ctx_from_postflight(&postflight)
-        .unwrap();
+    SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
+    let mut ctx = vm.generate_proving_ctx(&(), &output, &postflight).unwrap();
 
     // Overwrite the merkle + poseidon2 contexts with the fraudulent ones.
     // `prove` requires `per_air` to be sorted by AIR id, so we re-sort after

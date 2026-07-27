@@ -5,8 +5,9 @@ use openvm_circuit::{
         cuda::postflight::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
-        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, GenerationError,
-        VirtualMachine, VmBuilder, VmChipComplex, VmProverExtension,
+        prepare_gpu_postflight, to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError,
+        GenerationError, Postflight, PostflightTracegen, PreflightOutput, VirtualMachine,
+        VmBuilder, VmChipComplex, VmProverExtension,
     },
     system::cuda::{
         extensions::{
@@ -16,12 +17,14 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{program::Program, LocalOpcode};
 use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+};
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
@@ -36,15 +39,6 @@ use {
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::program::Program,
     openvm_stark_backend::p3_field::PrimeField32,
-};
-#[cfg(any(test, feature = "test-utils"))]
-use {
-    openvm_circuit::{
-        arch::{Postflight, PreflightOutput},
-        utils::{prepare_gpu_test_tracegen, TestPreflightTracegen},
-    },
-    openvm_instructions::exe::VmExe,
-    openvm_stark_sdk::p3_baby_bear::BabyBear,
 };
 
 use super::*;
@@ -330,18 +324,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Sha2> for Sha2GpuProverExt {
 
 pub struct Sha2Rv64GpuBuilder;
 
-#[cfg(any(test, feature = "test-utils"))]
-impl TestPreflightTracegen<GpuBabyBearPoseidon2Engine> for Sha2Rv64GpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Sha2Rv64GpuBuilder {
     type Prepared = GpuPostflightProgram;
 
-    fn prepare_test_tracegen(
+    fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        exe: &VmExe<BabyBear>,
+        program: &Program<BabyBear>,
     ) -> Result<Self::Prepared, GenerationError> {
-        prepare_gpu_test_tracegen(vm, exe)
+        prepare_gpu_postflight(vm, program)
     }
 
-    fn generate_test_proving_ctx(
+    fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
         program: &Self::Prepared,
         output: &PreflightOutput,
