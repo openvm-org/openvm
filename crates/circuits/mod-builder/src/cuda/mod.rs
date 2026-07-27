@@ -6,10 +6,7 @@
 //! The interpreter is validated bit-exact against the CPU tracegen
 //! ([`FieldExpressionFiller`]) by the `cuda`-gated chip tests in the algebra and
 //! ecc circuit extensions (modular, Fp2, and Weierstrass chips), which compare
-//! full GPU and CPU traces element-wise. The ignored `dump_gpu_vectors` test in
-//! `crate::tracegen_ir` additionally dumps CPU-generated reference vectors
-//! (blob, records, expected rows, range-checker counts) for out-of-band kernel
-//! validation.
+//! full GPU and CPU traces element-wise.
 
 use std::sync::Arc;
 
