@@ -85,6 +85,6 @@ extern "C" int _shift_right_arithmetic_imm_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/shift_right_arithmetic_imm.inc.cuh"
 #endif

@@ -1,21 +1,23 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::{arch::BLOCK_FE_WIDTH, utils::next_power_of_two_or_zero};
+use openvm_circuit::{
+    arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        BLOCK_FE_WIDTH,
+    },
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    },
-    openvm_instructions::{
-        riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
-        LocalOpcode,
-    },
-    openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode},
+use openvm_instructions::{
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    LocalOpcode,
 };
+use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use super::ShiftLogicalImmCoreCols;
 use crate::{
@@ -31,7 +33,6 @@ pub struct Rv64ShiftLogicalImmChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 impl Rv64ShiftLogicalImmChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
@@ -94,7 +95,6 @@ pub struct Rv64ShiftWLogicalImmChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 impl Rv64ShiftWLogicalImmChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,

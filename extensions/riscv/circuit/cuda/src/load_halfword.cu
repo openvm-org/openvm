@@ -66,6 +66,6 @@ extern "C" int _rv64_load_halfword_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/load_halfword.inc.cuh"
 #endif

@@ -73,6 +73,6 @@ extern "C" int _add_sub_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/add_sub.inc.cuh"
 #endif

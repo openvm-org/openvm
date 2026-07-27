@@ -1,18 +1,17 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::utils::next_power_of_two_or_zero;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
+use openvm_circuit::{
+    arch::cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
-    openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
-    openvm_riscv_transpiler::Rv64JalLuiOpcode,
+    utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
+use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_riscv_transpiler::Rv64JalLuiOpcode;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{adapters::Rv64CondRdWriteAdapterCols, cuda_abi::jal_lui_cuda, Rv64JalLuiCoreCols};
 
@@ -22,7 +21,6 @@ pub struct Rv64JalLuiChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 impl Rv64JalLuiChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,

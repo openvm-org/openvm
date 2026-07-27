@@ -8,26 +8,22 @@ fn main() {
             return; // Skip CUDA compilation
         }
 
-        let mut builder: CudaBuilder = CudaBuilder::new()
+        let builder: CudaBuilder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("cuda/include")
+            .include("cuda/rvr/include")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
+            .include("../../../crates/vm/cuda/rvr/include")
             .include("../../riscv-adapters/cuda/include")
             .watch("../../../crates/circuits/primitives/cuda")
+            .watch("../../../crates/vm/cuda/rvr/include")
             .watch("../../riscv-adapters/cuda")
+            .watch("cuda/rvr")
             .watch("cuda/src")
             .library_name("tracegen_gpu_rv64im")
-            .files_from_glob("cuda/src/**/*.cu");
-
-        if cfg!(feature = "rvr") {
-            builder = builder
-                .include("cuda/rvr/include")
-                .include("../../../crates/vm/cuda/rvr/include")
-                .watch("cuda/rvr")
-                .watch("../../../crates/vm/cuda/rvr/include")
-                .flag("-DOPENVM_RVR_REPLAY");
-        }
+            .files_from_glob("cuda/src/**/*.cu")
+            .flag("-DOPENVM_PREFLIGHT_REPLAY");
 
         builder.emit_link_directives();
         builder.build();

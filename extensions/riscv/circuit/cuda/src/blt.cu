@@ -70,6 +70,6 @@ extern "C" int _blt_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/blt.inc.cuh"
 #endif
