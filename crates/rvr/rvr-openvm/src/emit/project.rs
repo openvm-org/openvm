@@ -1295,8 +1295,12 @@ impl CProject {
         ext_sources: &[String],
         vendor_sources: &[String],
         ext_cflags: &[String],
+        requires_cxx_linker: bool,
     ) -> Vec<String> {
         let mut args = self.make_args();
+        if requires_cxx_linker {
+            args.push("LINKER_DRIVER_MODE=--driver-mode=g++".to_string());
+        }
         if !ext_sources.is_empty() {
             args.push(format!("EXT_SRCS={}", ext_sources.join(" ")));
         }

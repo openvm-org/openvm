@@ -3884,6 +3884,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "link-cplusplus"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f78c730aaa7d0b9336a299029ea49f9ee53b0ed06e9202e8cb7db9bae7b8c82"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "linked_list_allocator"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3985,6 +3994,17 @@ checksum = "8ea1f30cedd69f0a2954655f7188c6a834246d2bcf1e315e2ac40c4b24dc9519"
 dependencies = [
  "cfg-if 1.0.1",
  "rayon",
+]
+
+[[package]]
+name = "mcl_rust"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88499fcb43004fcd168d24b108c003a54d8f53d72f31bb3d1910df33138e59fb"
+dependencies = [
+ "cmake",
+ "getrandom 0.2.16",
+ "link-cplusplus",
 ]
 
 [[package]]
@@ -5272,6 +5292,7 @@ dependencies = [
  "hex-literal",
  "itertools 0.14.0",
  "lazy_static",
+ "mcl_rust",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm",
