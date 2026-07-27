@@ -58,6 +58,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 - [`openvm`](../../crates/toolchain/openvm): The OpenVM standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
 - [`openvm-platform`](../../crates/toolchain/platform): Rust runtime for RV64IM target using OpenVM intrinsic for system termination. This crate is re-exported by the `openvm` crate.
+- [`openvm-mem`](../../crates/toolchain/mem): libc memory intrinsics (`memcpy`, `memset`, `memmove`, `memcmp`, `bcmp`) that guest code links against, written for OpenVM's uniform-cost misaligned accesses. Pulled in by the `openvm` crate.
 - [`openvm-build`](../../crates/toolchain/build): Library of build tools for compiling Rust to the RISC-V target, built on top of `cargo`.
 - [`openvm-transpiler`](../../crates/toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into OpenVM executable with OpenVM instructions. This crate contains the `TranspilerExtension` trait and a `Transpiler` struct which supports adding custom `TranspilerExtension` implementations.
 - [`openvm-instructions`](../../crates/toolchain/instructions): OpenVM instruction struct and trait definitions. Also includes some system instruction definitions.
