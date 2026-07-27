@@ -32,15 +32,29 @@ impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
     /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
     fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+        self.generate_proving_ctx_with_frequencies(&self.filtered_exec_frequencies)
+    }
+}
+
+impl<SC: StarkProtocolConfig> ProgramChip<SC> {
+    /// Generates the execution-frequency trace against the loaded program.
+    ///
+    /// The frequencies are an execution result, so callers using immutable
+    /// preflight history should pass them directly instead of storing them on
+    /// the reusable program chip.
+    pub(crate) fn generate_proving_ctx_with_frequencies(
+        &self,
+        filtered_exec_frequencies: &[u32],
+    ) -> AirProvingContext<CpuBackend<SC>> {
         let cached = self
             .cached
             .clone()
             .expect("cached program trace must be loaded");
-        assert!(self.filtered_exec_frequencies.len() <= cached.height());
+        assert!(filtered_exec_frequencies.len() <= cached.height());
         let mut freqs = Val::<SC>::zero_vec(cached.height());
         freqs
             .par_iter_mut()
-            .zip(self.filtered_exec_frequencies.par_iter())
+            .zip(filtered_exec_frequencies.par_iter())
             .for_each(|(f, x)| *f = Val::<SC>::from_u32(*x));
         let common_trace = RowMajorMatrix::new(freqs, 1);
         AirProvingContext {

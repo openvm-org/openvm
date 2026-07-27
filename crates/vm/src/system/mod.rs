@@ -27,7 +27,7 @@ use crate::{
         vm_poseidon2_config, AirInventory, AirInventoryError, AirRefWithColumns, BusIndexManager,
         ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
-        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
+        Postflight, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
         VmExecutionConfig, VmField, BLOCK_FE_WIDTH, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID,
         PROGRAM_AIR_ID,
     },
@@ -348,6 +348,33 @@ where
             connector_chip,
             memory_controller,
         }
+    }
+
+    /// Generates system traces directly from immutable preflight history.
+    ///
+    /// System traces stay first and in AIR order: program, connector, then
+    /// memory boundary and Merkle traces.
+    pub fn generate_proving_ctx_from_postflight(
+        &mut self,
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
+        let program_ctx = self
+            .program_chip
+            .generate_proving_ctx_with_frequencies(postflight.filtered_exec_frequencies());
+
+        self.connector_chip.begin(postflight.from_state());
+        self.connector_chip
+            .end(postflight.to_state(), postflight.exit_code());
+        let connector_ctx = self.connector_chip.generate_proving_ctx(());
+
+        let memory_ctxs = self
+            .memory_controller
+            .generate_proving_ctx(postflight.touched_memory().to_vec());
+
+        [program_ctx, connector_ctx]
+            .into_iter()
+            .chain(memory_ctxs)
+            .collect()
     }
 }
 
