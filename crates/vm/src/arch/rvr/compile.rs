@@ -659,6 +659,7 @@ fn compile_impl<F: PrimeField32>(
             &ext_sources,
             &vendor_sources,
             &ext_cflags,
+            opts.extensions.requires_cxx_linker(),
         ),
         &toolchain,
     )?;
