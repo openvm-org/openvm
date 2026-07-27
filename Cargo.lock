@@ -1234,6 +1234,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
+dependencies = [
+ "serde",
+ "unty",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1729,7 +1739,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35584c5fcba8059780748866387fb97c5a203bcfc563fc3d0790af406727a117"
 dependencies = [
  "anyhow",
- "bincode",
+ "bincode 1.3.3",
  "colored",
  "glob",
  "libc",
@@ -1793,7 +1803,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1941,7 +1951,7 @@ dependencies = [
  "crc",
  "digest 0.10.7",
  "rustversion",
- "spin 0.10.1",
+ "spin 0.10.0",
 ]
 
 [[package]]
@@ -2554,7 +2564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2658,7 +2668,7 @@ version = "0.10.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1657b4441c3403d9f7b3409e47575237dac27b1b5726df654a6ecbf92f0f7577"
 dependencies = [
- "spin 0.9.9",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -2915,8 +2925,8 @@ dependencies = [
 [[package]]
 name = "halo2-axiom"
 version = "0.5.3"
-source = "git+https://github.com/axiom-crypto/halo2.git?branch=main#5e4f0e524956f23b50d51b3a2f7bb07834948598"
 dependencies = [
+ "bincode 2.0.1",
  "blake2b_simd",
  "crossbeam",
  "ff 0.13.1",
@@ -2929,6 +2939,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rayon",
  "rustc-hash 1.1.0",
+ "serde",
  "sha3",
  "tracing",
 ]
@@ -2936,7 +2947,6 @@ dependencies = [
 [[package]]
 name = "halo2-axiom-gpu"
 version = "1.0.0"
-source = "git+https://github.com/axiom-crypto/halo2-gpu.git?branch=main#9ebf6979dd439b3b117273aa0704262caf041b93"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2976,7 +2986,6 @@ dependencies = [
 [[package]]
 name = "halo2-base"
 version = "0.5.4"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?branch=main#b90c962a5e3bcfb01d1ce06466e5de08261b5c4e"
 dependencies = [
  "getset",
  "halo2-axiom",
@@ -2997,7 +3006,6 @@ dependencies = [
 [[package]]
 name = "halo2-ecc"
 version = "0.5.4"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?branch=main#b90c962a5e3bcfb01d1ce06466e5de08261b5c4e"
 dependencies = [
  "halo2-base",
  "itertools 0.11.0",
@@ -3571,7 +3579,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3728,7 +3736,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
- "spin 0.9.9",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -4644,7 +4652,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -4691,7 +4699,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -4716,7 +4724,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -4743,7 +4751,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "cc",
  "glob",
@@ -4752,7 +4760,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "bytesize",
  "ctor",
@@ -5007,7 +5015,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
- "spin 0.10.1",
+ "spin 0.10.0",
  "tiny-keccak",
 ]
 
@@ -5528,7 +5536,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -5563,7 +5571,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -5837,7 +5845,7 @@ dependencies = [
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-util",
- "spin 0.10.1",
+ "spin 0.10.0",
  "tracing",
 ]
 
@@ -5940,7 +5948,7 @@ dependencies = [
  "paste",
  "rand 0.9.2",
  "serde",
- "spin 0.10.1",
+ "spin 0.10.0",
  "tracing",
 ]
 
@@ -7028,7 +7036,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7478,7 +7486,6 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "snark-verifier"
 version = "0.2.6"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?branch=main#68706ddce8b0e1d11ba87813b779419db3190453"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -7499,9 +7506,8 @@ dependencies = [
 [[package]]
 name = "snark-verifier-sdk"
 version = "0.2.6"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?branch=main#68706ddce8b0e1d11ba87813b779419db3190453"
 dependencies = [
- "bincode",
+ "bincode 1.3.3",
  "ethereum-types",
  "getset",
  "halo2-base",
@@ -7530,18 +7536,18 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.9.9"
+version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api",
 ]
 
 [[package]]
 name = "spin"
-version = "0.10.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "023a211cb3138dbc438680b32560ad89f699977624c9f8dbb95a47d5b4c07dd3"
+checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
 dependencies = [
  "lock_api",
 ]
@@ -7724,7 +7730,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8239,6 +8245,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "unty"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
 name = "url"
 version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8448,7 +8460,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

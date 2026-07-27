@@ -273,3 +273,23 @@ blstrs = { version = "0.7.1", default-features = true }
 
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
+
+
+[patch."https://github.com/axiom-crypto/halo2-gpu.git"]
+halo2-axiom-gpu = { path = "../halo2-gpu/halo2_proofs" }
+
+[patch."https://github.com/axiom-crypto/halo2-lib.git"]
+halo2-base = { path = "../halo2-lib/halo2-base" }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc" }
+
+[patch."https://github.com/axiom-crypto/snark-verifier.git"]
+snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
+snark-verifier = { path = "../snark-verifier/snark-verifier" }
+
+[patch."https://github.com/axiom-crypto/halo2.git"]
+halo2-axiom = { path = "../halo2/halo2_proofs" }
+
+[patch.crates-io]
+halo2-base = { path = "../halo2-lib/halo2-base" }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc" }
+halo2-axiom = { path = "../halo2/halo2_proofs" }

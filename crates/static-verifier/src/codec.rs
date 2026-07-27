@@ -34,6 +34,8 @@ impl Decode for StaticVerifierProvingKey {
             circuit,
             pinning,
             shape,
+            #[cfg(feature = "halo2-gpu")]
+            graph_prover: Default::default(),
         })
     }
 }
