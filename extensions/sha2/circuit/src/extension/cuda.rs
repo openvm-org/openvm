@@ -297,7 +297,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Sha2> for Sha2GpuProverExt {
             range_checker_gpu.clone(),
             byte_ptr_max_bits as u32,
         );
-        inventory.add_periphery_chip(sha256_block_gpu);
+        inventory.add_periphery_chip_with_height(sha256_block_gpu, None);
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
@@ -314,7 +314,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Sha2> for Sha2GpuProverExt {
             range_checker_gpu.clone(),
             byte_ptr_max_bits as u32,
         );
-        inventory.add_periphery_chip(sha512_block_gpu);
+        inventory.add_periphery_chip_with_height(sha512_block_gpu, None);
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
