@@ -15,7 +15,9 @@ use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT
 use thiserror::Error;
 
 #[cfg(test)]
-use super::{cuda::RvrReplayStep, PreflightEndpoint, PreflightEventLog};
+use super::{PreflightEndpoint, PreflightEventLog};
+#[cfg(test)]
+use crate::arch::cuda::postflight::GpuReplayStep;
 use crate::{
     arch::{
         postflight::memory_key, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
@@ -106,7 +108,7 @@ fn build_step_memory_starts(
 #[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct ReplayData {
-    steps: Vec<RvrReplayStep>,
+    steps: Vec<GpuReplayStep>,
     opcode_ranges: BTreeMap<u32, Range<usize>>,
 }
 
@@ -138,13 +140,13 @@ impl ReplayData {
             .iter()
             .map(|(&opcode, range)| (opcode, range.start))
             .collect::<BTreeMap<_, _>>();
-        let mut steps = vec![RvrReplayStep::default(); step_memory_starts.len()];
+        let mut steps = vec![GpuReplayStep::default(); step_memory_starts.len()];
         for (program_index, &memory_start) in step_memory_starts.iter().enumerate() {
             let opcode = resolve_opcode(pc_base, opcodes, &transcript.program_log[program_index])?;
             let destination = next
                 .get_mut(&opcode)
                 .expect("opcode count was collected in the first pass");
-            steps[*destination] = RvrReplayStep {
+            steps[*destination] = GpuReplayStep {
                 program_index: u32::try_from(program_index).map_err(|_| {
                     PreflightIndexError::new("program log has more than u32::MAX entries")
                 })?,
@@ -158,7 +160,7 @@ impl ReplayData {
         })
     }
 
-    pub(crate) fn steps(&self) -> &[RvrReplayStep] {
+    pub(crate) fn steps(&self) -> &[GpuReplayStep] {
         &self.steps
     }
 
@@ -693,7 +695,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             replay.steps,
-            vec![RvrReplayStep {
+            vec![GpuReplayStep {
                 program_index: 0,
                 memory_start: 0
             }]

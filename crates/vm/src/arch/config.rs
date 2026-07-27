@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 use rvr_openvm_lift::RvrExtensions;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use super::ContinuationProverFn;
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
 use crate::{
@@ -151,7 +151,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
     type SystemChipInventory: SystemChipComplex<E::PB>;
 
     /// Returns a backend-specific continuation proving driver, when one is available.
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[cfg(feature = "cuda")]
     fn continuation_prover() -> Option<ContinuationProverFn<E, Self>> {
         None
     }

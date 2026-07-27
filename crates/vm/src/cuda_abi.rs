@@ -133,18 +133,17 @@ pub mod phantom {
     }
 }
 
-#[cfg(feature = "rvr")]
-pub mod rvr_postflight {
+pub mod postflight {
     use super::*;
 
     extern "C" {
-        fn _rvr_memory_chronology_get_temp_bytes(
+        fn _postflight_memory_chronology_get_temp_bytes(
             num_entries: usize,
             h_temp_bytes_out: *mut usize,
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rvr_memory_chronology_sort_and_count(
+        fn _postflight_memory_chronology_sort_and_count(
             memory: DeviceBufferView,
             write_masks: DeviceBufferView,
             field_values: DeviceBufferView,
@@ -163,7 +162,7 @@ pub mod rvr_postflight {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rvr_memory_chronology_resolve(
+        fn _postflight_memory_chronology_resolve(
             memory: DeviceBufferView,
             write_masks: DeviceBufferView,
             address_spaces: DeviceBufferView,
@@ -185,13 +184,13 @@ pub mod rvr_postflight {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rvr_program_index_get_temp_bytes(
+        fn _postflight_program_index_get_temp_bytes(
             num_steps: usize,
             h_temp_bytes_out: *mut usize,
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rvr_program_index(
+        fn _postflight_program_index(
             instructions: DeviceBufferView,
             dense_program_rows: DeviceBufferView,
             pc_base: u32,
@@ -221,7 +220,7 @@ pub mod rvr_postflight {
         h_temp_bytes_out: &mut usize,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_memory_chronology_get_temp_bytes(
+        CudaError::from_result(_postflight_memory_chronology_get_temp_bytes(
             num_entries,
             h_temp_bytes_out,
             stream,
@@ -247,7 +246,7 @@ pub mod rvr_postflight {
         error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_memory_chronology_sort_and_count(
+        CudaError::from_result(_postflight_memory_chronology_sort_and_count(
             memory,
             write_masks,
             field_values,
@@ -289,7 +288,7 @@ pub mod rvr_postflight {
         error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_memory_chronology_resolve(
+        CudaError::from_result(_postflight_memory_chronology_resolve(
             memory,
             write_masks,
             address_spaces,
@@ -317,7 +316,7 @@ pub mod rvr_postflight {
         h_temp_bytes_out: &mut usize,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_program_index_get_temp_bytes(
+        CudaError::from_result(_postflight_program_index_get_temp_bytes(
             num_steps,
             h_temp_bytes_out,
             stream,
@@ -348,7 +347,7 @@ pub mod rvr_postflight {
         error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_program_index(
+        CudaError::from_result(_postflight_program_index(
             instructions,
             dense_program_rows,
             pc_base,

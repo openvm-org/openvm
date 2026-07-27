@@ -64,15 +64,14 @@ impl SystemChipInventoryGPU {
 
     /// Generates every system AIR directly from one validated postflight segment.
     ///
-    /// The initial memory image must already have been transported before RVR
-    /// consumes and mutates the host state.
-    #[cfg(feature = "rvr")]
+    /// The initial memory image must already have been transported before
+    /// preflight mutates the host state.
     pub fn generate_proving_ctx_from_postflight(
         &mut self,
-        program: &crate::arch::rvr::cuda::GpuPostflightProgram,
-        transcript: &crate::arch::rvr::cuda::GpuPostflightTranscript,
-        replay_plan: &crate::arch::rvr::cuda::GpuPostflightPlan,
-    ) -> Result<Vec<AirProvingContext<GpuBackend>>, crate::arch::rvr::cuda::GpuPostflightError>
+        program: &crate::arch::cuda::postflight::GpuPostflightProgram,
+        transcript: &crate::arch::cuda::postflight::GpuPostflightTranscript,
+        replay_plan: &crate::arch::cuda::postflight::GpuPostflightPlan,
+    ) -> Result<Vec<AirProvingContext<GpuBackend>>, crate::arch::cuda::postflight::GpuPostflightError>
     {
         program.ensure_replay_inputs(transcript, replay_plan, &self.program.device_ctx)?;
         let program_ctx = {

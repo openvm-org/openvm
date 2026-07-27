@@ -7,7 +7,7 @@
 //!
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use std::any::Any;
 #[cfg(feature = "metrics")]
 use std::collections::BTreeMap;
@@ -17,9 +17,9 @@ use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_cpu_backend::CpuBackend;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_cuda_common::memory_manager::MemTracker;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
@@ -30,7 +30,7 @@ use openvm_instructions::{
 };
 #[cfg(feature = "metrics")]
 use openvm_instructions::{LocalOpcode, SystemOpcode};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
@@ -54,11 +54,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::cuda::{
-    CheckpointReplayProgram, GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
-    GpuPostflightTranscript, PostflightOpcodeBases,
+#[cfg(feature = "cuda")]
+use super::cuda::postflight::{
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::rvr::cuda::{CheckpointReplayProgram, PostflightOpcodeBases};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::rvr::PreflightExecution;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile::compile_preflight,
@@ -68,10 +71,7 @@ use super::rvr::{
     RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::{PreflightEndpoint, PreflightExecution};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use super::ExecutionState;
 #[cfg(feature = "metrics")]
 use super::InterpreterExecutor;
@@ -90,7 +90,7 @@ use super::{
     VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use crate::system::cuda::SystemChipInventoryGPU;
 use crate::{
     arch::deferral::DeferralState,
@@ -1401,7 +1401,13 @@ where
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let memory = MemTracker::start_and_reset_peak("postflight");
         let result = (|| {
-            let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
+            let system = &self.chip_complex.system;
+            program.program().validate_system_inputs(
+                &system.program.device_ctx,
+                &system.memory_inventory.device_ctx,
+                &system.memory_inventory.initial_memory,
+            )?;
+            let initial_memory = &system.memory_inventory.initial_memory;
             let initial_registers =
                 initial_memory
                     .get(RV64_REGISTER_AS as usize)
@@ -1434,7 +1440,13 @@ where
         memory.emit_metrics();
         result
     }
+}
 
+#[cfg(feature = "cuda")]
+impl<VB> VirtualMachine<BabyBearPoseidon2GpuEngine, VB>
+where
+    VB: VmBuilder<BabyBearPoseidon2GpuEngine, SystemChipInventory = SystemChipInventoryGPU>,
+{
     /// Derives the standard GPU replay indexes from history produced by
     /// interpreter preflight.
     #[doc(hidden)]
@@ -1446,16 +1458,17 @@ where
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let memory = MemTracker::start_and_reset_peak("postflight");
         let result = (|| {
-            let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
+            let system = &self.chip_complex.system;
+            program.validate_system_inputs(
+                &system.program.device_ctx,
+                &system.memory_inventory.device_ctx,
+                &system.memory_inventory.initial_memory,
+            )?;
+            let initial_memory = &system.memory_inventory.initial_memory;
             let initial_memory_images = initial_memory
                 .iter()
                 .map(|image| image.view())
                 .collect::<Vec<_>>();
-            let endpoint = if output.exit_code.is_some() {
-                PreflightEndpoint::Terminated
-            } else {
-                PreflightEndpoint::Suspended
-            };
             let from = output.history.program.first().ok_or_else(|| {
                 GpuPostflightError::InvalidTranscript(
                     "preflight history must contain a program event".to_string(),
@@ -1464,7 +1477,6 @@ where
             let to = output.history.program.last().unwrap();
             program.upload_history(
                 &output.history,
-                endpoint,
                 (
                     ExecutionState::new(from.pc, from.timestamp),
                     ExecutionState::new(to.pc, to.timestamp),
@@ -1630,7 +1642,7 @@ pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
 }
 
 /// Optional backend-specific continuation proving driver.
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 pub type ContinuationProverFn<E, VB> = Box<
     dyn FnMut(
             &mut VmInstance<E, VB>,
