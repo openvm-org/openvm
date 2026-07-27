@@ -1,21 +1,20 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::utils::next_power_of_two_or_zero;
+use openvm_circuit::{
+    arch::cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
     var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
+use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_riscv_transpiler::MulHOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    },
-    openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
-    openvm_riscv_transpiler::MulHOpcode,
-};
 
 use crate::{
     adapters::{Rv64MultAdapterCols, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
@@ -31,7 +30,6 @@ pub struct Rv64MulHChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 impl Rv64MulHChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,

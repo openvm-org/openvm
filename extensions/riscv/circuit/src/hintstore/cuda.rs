@@ -1,22 +1,21 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::utils::next_power_of_two_or_zero;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
+use openvm_circuit::{
+    arch::cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
-    openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D},
-    openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode,
-    },
-    openvm_riscv_transpiler::Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
+    utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
+use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
+use openvm_riscv_transpiler::Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::Rv64HintStoreCols;
 
@@ -27,7 +26,6 @@ pub struct Rv64HintStoreChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 impl Rv64HintStoreChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,

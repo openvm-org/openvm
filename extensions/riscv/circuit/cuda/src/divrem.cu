@@ -83,6 +83,6 @@ extern "C" int _rv64_div_rem_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/divrem.inc.cuh"
 #endif

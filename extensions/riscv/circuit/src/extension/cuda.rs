@@ -1,36 +1,39 @@
-#[cfg(feature = "rvr")]
-use std::any::Any;
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
-use openvm_circuit::{
-    arch::{to_byte_ptr_bits, ChipInventory, ChipInventoryError, VmProverExtension},
-    system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
-};
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
-use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-        PostflightOpcodeBases,
+use openvm_circuit::arch::rvr::cuda::PostflightOpcodeBases;
+use openvm_circuit::{
+    arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        to_byte_ptr_bits, ChipInventory, ChipInventoryError, VmProverExtension,
     },
-    openvm_circuit::system::cuda::{phantom::PhantomChipGPU, poseidon2::Poseidon2PeripheryChipGPU},
-    openvm_circuit_primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-        Chip,
+    system::cuda::{
+        extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+        phantom::PhantomChipGPU,
+        poseidon2::Poseidon2PeripheryChipGPU,
     },
-    openvm_cuda_backend::base::DeviceMatrix,
-    openvm_instructions::{LocalOpcode, SystemOpcode},
-    openvm_riscv_transpiler::{
-        BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-        BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
-        MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
-        Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-        ShiftWOpcode,
-    },
-    openvm_stark_backend::prover::AirProvingContext,
 };
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
+    var_range::VariableRangeCheckerChipGPU,
+    Chip,
+};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
+};
+use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_riscv_transpiler::{
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
+};
+use openvm_stark_backend::prover::AirProvingContext;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::{
@@ -76,7 +79,6 @@ pub struct Rv64ImGpuProverExt;
 /// remains pending until the VM's reverse inventory walk reaches its concrete chip.
 /// This makes a missing/mismatched chip fail closed instead of silently
 /// producing a dummy trace.
-#[cfg(feature = "rvr")]
 pub struct Rv64ImPreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
@@ -84,8 +86,8 @@ pub struct Rv64ImPreflightGpuTracegen<'a> {
     pending_opcodes: std::collections::BTreeSet<u32>,
 }
 
-#[cfg(feature = "rvr")]
 impl<'a> Rv64ImPreflightGpuTracegen<'a> {
+    #[cfg(feature = "rvr")]
     #[doc(hidden)]
     pub fn postflight_opcode_bases() -> PostflightOpcodeBases {
         PostflightOpcodeBases {
@@ -120,7 +122,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// first become unresolved block intents; the VM chronology pass resolves
     /// those intents before the ordinary transcript indexes and unchanged
     /// trace generators consume them.
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,
@@ -182,6 +184,13 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
             replay_plan,
             pending_opcodes,
         })
+    }
+
+    /// Returns whether the standard RV64/system replay path owns `opcode`.
+    #[doc(hidden)]
+    pub fn owns_opcode(opcode: u32) -> bool {
+        opcode == SystemOpcode::TERMINATE.global_opcode().as_usize() as u32
+            || Self::supports_opcode(opcode)
     }
 
     fn supports_opcode(opcode: u32) -> bool {
@@ -828,5 +837,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverEx
     }
 }
 
+#[cfg(test)]
+mod history_tests;
 #[cfg(all(test, feature = "rvr"))]
 mod tests;

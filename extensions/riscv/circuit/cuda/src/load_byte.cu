@@ -97,6 +97,6 @@ extern "C" int _rv64_load_byte_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/load_byte.inc.cuh"
 #endif

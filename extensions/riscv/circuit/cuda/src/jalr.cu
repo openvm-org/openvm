@@ -156,6 +156,6 @@ extern "C" int _jalr_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/jalr.inc.cuh"
 #endif

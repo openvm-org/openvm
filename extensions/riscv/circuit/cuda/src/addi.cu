@@ -69,6 +69,6 @@ extern "C" int _addi_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/addi.inc.cuh"
 #endif

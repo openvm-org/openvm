@@ -1,23 +1,22 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::utils::next_power_of_two_or_zero;
+use openvm_circuit::{
+    arch::cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    },
-    openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode, PUBLIC_VALUES_AS,
-    },
-    openvm_riscv_transpiler::Rv64LoadStoreOpcode,
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use super::StoreByteCoreCols;
 use crate::{
@@ -33,7 +32,6 @@ pub struct Rv64StoreByteChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-#[cfg(feature = "rvr")]
 impl Rv64StoreByteChipGpu {
     /// Replays RV64I main-memory and RV64IO public-values STOREB rows.
     pub fn generate_proving_ctx_from_postflight(

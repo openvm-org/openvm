@@ -71,6 +71,6 @@ extern "C" int _rv64_less_than_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/less_than.inc.cuh"
 #endif

@@ -79,6 +79,6 @@ extern "C" int _rv64_shift_logical_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/shift_logical.inc.cuh"
 #endif

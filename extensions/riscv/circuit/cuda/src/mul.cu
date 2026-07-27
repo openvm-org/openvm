@@ -86,6 +86,6 @@ extern "C" int _mul_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/mul.inc.cuh"
 #endif
