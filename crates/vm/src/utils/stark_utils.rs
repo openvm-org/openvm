@@ -14,15 +14,59 @@ use crate::arch::VmState;
 use crate::system::memory::online::{GuestMemory, LinearMemory};
 use crate::{
     arch::{
-        debug_proving_ctx,
-        execution_mode::Segment,
-        verify_segments,
-        vm::{PostflightTracegen, VirtualMachine},
-        Executor, ExitCode, MeteredExecutor, Postflight, Streams, VmBuilder, VmChipComplex,
-        VmCircuitConfig, VmConfig, VmExecutionConfig, VmField,
+        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
+        ExitCode, GenerationError, MeteredExecutor, Postflight, PreflightOutput, Streams,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig, VmField,
     },
     system::memory::MemoryImage,
 };
+
+/// Test-harness bridge from immutable preflight history to a backend-specific proving context.
+///
+/// CPU builders share the generic history replay below. CUDA builders implement this trait with
+/// their concrete extension trace generators, preserving GPU proving coverage in integration
+/// tests without putting test-only dispatch into the production VM builder API.
+pub trait TestPreflightTracegen<E: StarkEngine>: VmBuilder<E> {
+    type Prepared;
+
+    fn prepare_test_tracegen(
+        vm: &VirtualMachine<E, Self>,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<Self::Prepared, GenerationError>;
+
+    fn generate_test_proving_ctx(
+        vm: &mut VirtualMachine<E, Self>,
+        prepared: &Self::Prepared,
+        output: &PreflightOutput,
+        postflight: &Postflight<'_, Val<E::SC>>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError>;
+}
+
+impl<SC, E, VB> TestPreflightTracegen<E> for VB
+where
+    SC: openvm_stark_backend::StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = openvm_cpu_backend::CpuBackend<SC>>,
+    Val<SC>: VmField,
+    VB: VmBuilder<E, SystemChipInventory = crate::system::SystemChipInventory<SC>>,
+{
+    type Prepared = ();
+
+    fn prepare_test_tracegen(
+        _vm: &VirtualMachine<E, Self>,
+        _exe: &VmExe<Val<E::SC>>,
+    ) -> Result<Self::Prepared, GenerationError> {
+        Ok(())
+    }
+
+    fn generate_test_proving_ctx(
+        vm: &mut VirtualMachine<E, Self>,
+        _prepared: &Self::Prepared,
+        _output: &PreflightOutput,
+        postflight: &Postflight<'_, Val<E::SC>>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        vm.generate_proving_ctx_from_postflight(postflight)
+    }
+}
 
 /// Supports `trace height <= 2^20`.
 pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngine {
@@ -48,6 +92,23 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(feature = "cuda")]
+#[doc(hidden)]
+pub fn prepare_gpu_test_tracegen<VB>(
+    vm: &VirtualMachine<TestStarkEngine, VB>,
+    exe: &VmExe<BabyBear>,
+) -> Result<crate::arch::cuda::postflight::GpuPostflightProgram, GenerationError>
+where
+    VB: VmBuilder<TestStarkEngine>,
+{
+    crate::arch::cuda::postflight::GpuPostflightProgram::upload(
+        &exe.program,
+        &vm.config().as_ref().memory_config,
+        &vm.engine.device().device_ctx,
+    )
+    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+}
+
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
@@ -59,11 +120,7 @@ where
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
-    VmChipComplex<
-        BabyBearPoseidon2Config,
-        <TestStarkEngine as StarkEngine>::PB,
-        VB::SystemChipInventory,
-    >: PostflightTracegen<BabyBearPoseidon2Config, <TestStarkEngine as StarkEngine>::PB>,
+    VB: TestPreflightTracegen<TestStarkEngine>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -83,11 +140,7 @@ where
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
-    VmChipComplex<
-        BabyBearPoseidon2Config,
-        <TestStarkEngine as StarkEngine>::PB,
-        VB::SystemChipInventory,
-    >: PostflightTracegen<BabyBearPoseidon2Config, <TestStarkEngine as StarkEngine>::PB>,
+    VB: TestPreflightTracegen<TestStarkEngine>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
@@ -304,7 +357,7 @@ where
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
+    VB: TestPreflightTracegen<E>,
     Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     setup_tracing();
@@ -325,6 +378,7 @@ where
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
     let preflight_interpreter = vm.preflight_interpreter(&exe)?;
+    let prepared_tracegen = VB::prepare_test_tracegen(&vm, &exe)?;
 
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
@@ -350,7 +404,7 @@ where
             .memory
             .extend_touched_pages_from_touched(postflight.touched_memory());
         exit_code = output.exit_code;
-        let ctx = vm.generate_proving_ctx_from_postflight(&postflight)?;
+        let ctx = VB::generate_test_proving_ctx(&mut vm, &prepared_tracegen, &output, &postflight)?;
         state = Some(output.state);
 
         validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx);

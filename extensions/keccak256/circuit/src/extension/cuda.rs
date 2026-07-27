@@ -10,7 +10,7 @@ use openvm_circuit::{
         cuda::postflight::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
-        to_byte_ptr_bits, VmBuilder,
+        to_byte_ptr_bits, GenerationError, VirtualMachine, VmBuilder,
     },
     system::cuda::{
         extensions::{
@@ -22,8 +22,8 @@ use openvm_circuit::{
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_instructions::LocalOpcode;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use openvm_riscv_circuit::Rv64ImGpuProverExt;
-use openvm_stark_backend::prover::AirProvingContext;
+use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
+use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
@@ -37,9 +37,12 @@ use {
 };
 #[cfg(any(test, feature = "test-utils"))]
 use {
-    openvm_circuit::arch::{GenerationError, VirtualMachine},
-    openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::prover::ProvingContext,
+    openvm_circuit::{
+        arch::{Postflight, PreflightOutput},
+        utils::{prepare_gpu_test_tracegen, TestPreflightTracegen},
+    },
+    openvm_instructions::exe::VmExe,
+    openvm_stark_sdk::p3_baby_bear::BabyBear,
 };
 
 use super::*;
@@ -241,7 +244,6 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
 
     /// Generates one complete RV64+Keccak segment through the VM's single
     /// reverse inventory walk and verifies both concrete producer sets.
-    #[cfg(any(test, feature = "test-utils"))]
     pub fn generate_proving_ctx<VB>(
         self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
@@ -336,6 +338,31 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Keccak256> for Keccak256GpuPr
 
 #[derive(Clone)]
 pub struct Keccak256Rv64GpuBuilder;
+
+#[cfg(any(test, feature = "test-utils"))]
+impl TestPreflightTracegen<GpuBabyBearPoseidon2Engine> for Keccak256Rv64GpuBuilder {
+    type Prepared = GpuPostflightProgram;
+
+    fn prepare_test_tracegen(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        exe: &VmExe<BabyBear>,
+    ) -> Result<Self::Prepared, GenerationError> {
+        prepare_gpu_test_tracegen(vm, exe)
+    }
+
+    fn generate_test_proving_ctx(
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        program: &Self::Prepared,
+        output: &PreflightOutput,
+        _postflight: &Postflight<'_, BabyBear>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
+        let (transcript, replay_plan) = vm
+            .postflight_history(program, output)
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        Keccak256PreflightGpuTracegen::new(program, &transcript, &replay_plan)
+            .generate_proving_ctx(vm)
+    }
+}
 
 type E = GpuBabyBearPoseidon2Engine;
 

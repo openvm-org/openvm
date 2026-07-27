@@ -55,6 +55,7 @@ lazy_static = { workspace = true }
 
 [features]
 default = []
+test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-algebra-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",

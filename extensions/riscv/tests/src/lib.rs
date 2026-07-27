@@ -4,8 +4,6 @@ mod tests {
     use std::{sync::Barrier, thread};
 
     use eyre::Result;
-    #[cfg(not(feature = "rvr"))]
-    use openvm_circuit::arch::Streams;
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::{ExecutionOutcome, VmState};
     use openvm_circuit::{
@@ -54,6 +52,14 @@ mod tests {
             SysPhantom, PUBLIC_VALUES_AS,
         },
         openvm_riscv_transpiler::{BranchEqualOpcode, Rv64JalrOpcode, Rv64Phantom},
+    };
+    #[cfg(not(feature = "rvr"))]
+    use {
+        openvm_circuit::{arch::Streams, utils::air_test_impl},
+        openvm_stark_sdk::{
+            config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
+            openvm_stark_backend::SystemParams,
+        },
     };
 
     type F = BabyBear;
@@ -301,7 +307,17 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
 
-        air_test(Rv64ImCpuBuilder, test_rv64im_config(), exe);
+        let debug = std::env::var("OPENVM_SKIP_DEBUG") != Ok("1".to_string());
+        air_test_impl::<BabyBearPoseidon2CpuEngine, _>(
+            SystemParams::new_for_testing(22),
+            Rv64ImCpuBuilder,
+            test_rv64im_config(),
+            exe,
+            Streams::default(),
+            1,
+            debug,
+        )
+        .unwrap();
     }
 
     #[cfg(feature = "rvr")]
