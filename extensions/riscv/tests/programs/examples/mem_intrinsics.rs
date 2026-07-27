@@ -35,12 +35,8 @@ fn check_memcpy(src: &[u8; CAP], dest: &mut [u8; CAP]) {
                 for k in 0..n {
                     assert_eq!(dest[dest_off + k], src[src_off + k]);
                 }
-                for k in 0..dest_off {
-                    assert_eq!(dest[k], FILL);
-                }
-                for k in dest_off + n..CAP {
-                    assert_eq!(dest[k], FILL);
-                }
+                assert!(dest[..dest_off].iter().all(|&b| b == FILL));
+                assert!(dest[dest_off + n..].iter().all(|&b| b == FILL));
             }
         }
     }
@@ -60,12 +56,8 @@ fn check_memset(dest: &mut [u8; CAP]) {
             for k in 0..n {
                 assert_eq!(dest[dest_off + k], 0x5C);
             }
-            for k in 0..dest_off {
-                assert_eq!(dest[k], FILL);
-            }
-            for k in dest_off + n..CAP {
-                assert_eq!(dest[k], FILL);
-            }
+            assert!(dest[..dest_off].iter().all(|&b| b == FILL));
+            assert!(dest[dest_off + n..].iter().all(|&b| b == FILL));
         }
     }
 }
