@@ -28,7 +28,7 @@ use openvm_stark_backend::{
     interaction::BusIndex,
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 use tracing::info_span;
@@ -37,7 +37,7 @@ use tracing::info_span;
 use super::rvr::cuda::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::DenseRecordArena;
-use super::{GenerationError, PhantomSubExecutor, SystemConfig};
+use super::{GenerationError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::system::cuda::SystemChipInventoryGPU;
 use crate::{
@@ -45,7 +45,7 @@ use crate::{
     system::{
         memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
         phantom::PhantomExecutor,
-        SystemAirInventory, SystemChipComplex, SystemRecords,
+        SystemAirInventory, SystemChipComplex, SystemChipInventory, SystemRecords,
     },
 };
 
@@ -192,6 +192,7 @@ where
     /// Chips that are being built.
     #[get = "pub"]
     chips: Vec<Box<dyn AnyChip<RA, PB>>>,
+    postflight_generators: Vec<Option<PostflightGenerator<PB>>>,
 
     /// Number of extensions that have chips added, including the current one that is still being
     /// built.
@@ -203,6 +204,32 @@ where
     /// Note: if public values chip exists, then it will be the first entry and point to
     /// `usize::MAX`. This entry should never be used.
     pub executor_idx_to_insertion_idx: Vec<usize>,
+}
+
+type PostflightGenerator<PB> = Box<
+    dyn for<'a> Fn(
+            &dyn Any,
+            &Postflight<'a, <PB as ProverBackend>::Val>,
+        ) -> Result<AirProvingContext<PB>, PostflightError>
+        + Send
+        + Sync,
+>;
+
+fn erase_postflight_generator<PB, C, G>(generate: G) -> PostflightGenerator<PB>
+where
+    PB: ProverBackend,
+    C: 'static,
+    G: for<'a> Fn(&C, &Postflight<'a, PB::Val>) -> Result<AirProvingContext<PB>, PostflightError>
+        + Send
+        + Sync
+        + 'static,
+{
+    Box::new(move |chip, postflight| {
+        let chip = chip
+            .downcast_ref::<C>()
+            .expect("postflight generator was registered with this concrete chip type");
+        generate(chip, postflight)
+    })
 }
 
 /// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
@@ -523,6 +550,7 @@ where
         Self {
             airs,
             chips: Vec::new(),
+            postflight_generators: Vec::new(),
             cur_num_exts: 0,
             executor_idx_to_insertion_idx: Vec::new(),
         }
@@ -575,6 +603,7 @@ where
     /// [VmExecutionExtension] trait.
     pub fn add_periphery_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
         self.chips.push(Box::new(chip));
+        self.postflight_generators.push(None);
     }
 
     /// Adds a chip and associates it to the next executor.
@@ -584,6 +613,43 @@ where
         tracing::debug!("add_executor_chip: {}", type_name::<C>());
         self.executor_idx_to_insertion_idx.push(self.chips.len());
         self.chips.push(Box::new(chip));
+        self.postflight_generators.push(None);
+    }
+
+    /// Adds a periphery chip with its record-free CPU trace generator.
+    pub fn add_postflight_periphery_chip<C, G>(&mut self, chip: C, generate: G)
+    where
+        C: Chip<RA, PB> + 'static,
+        G: for<'a> Fn(
+                &C,
+                &Postflight<'a, PB::Val>,
+            ) -> Result<AirProvingContext<PB>, PostflightError>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.chips.push(Box::new(chip));
+        self.postflight_generators
+            .push(Some(erase_postflight_generator(generate)));
+    }
+
+    /// Adds an executor chip with its record-free CPU trace generator.
+    pub fn add_postflight_executor_chip<C, G>(&mut self, chip: C, generate: G)
+    where
+        C: Chip<RA, PB> + 'static,
+        G: for<'a> Fn(
+                &C,
+                &Postflight<'a, PB::Val>,
+            ) -> Result<AirProvingContext<PB>, PostflightError>
+            + Send
+            + Sync
+            + 'static,
+    {
+        tracing::debug!("add_executor_chip: {}", type_name::<C>());
+        self.executor_idx_to_insertion_idx.push(self.chips.len());
+        self.chips.push(Box::new(chip));
+        self.postflight_generators
+            .push(Some(erase_postflight_generator(generate)));
     }
 
     /// Returns the mapping from executor index to the AIR index, where AIR index is the index of
@@ -771,6 +837,64 @@ where
             .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
             .collect();
 
+        Ok(ProvingContext::new(ctx_without_empties))
+    }
+}
+
+impl<SC, RA> VmChipComplex<SC, RA, CpuBackend<SC>, SystemChipInventory<SC>>
+where
+    SC: StarkProtocolConfig,
+    RA: Arena,
+    Val<SC>: super::VmField,
+{
+    /// Generates CPU traces directly from immutable preflight history.
+    pub(crate) fn generate_proving_ctx_from_postflight(
+        &mut self,
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
+        debug_assert_eq!(
+            self.inventory.chips.len(),
+            self.inventory.postflight_generators.len()
+        );
+
+        let sys_ctxs = {
+            let _span = info_span!("system_trace_gen").entered();
+            self.system.generate_proving_ctx_from_postflight(postflight)
+        };
+
+        let mut exec_ctxs = Vec::new();
+        exec_ctxs.resize_with(self.inventory.chips.len(), || None);
+        {
+            let _span = info_span!("executor_trace_gen").entered();
+            for (chain_pos, (insertion_idx, (chip, generator))) in self
+                .inventory
+                .chips
+                .iter()
+                .zip(&self.inventory.postflight_generators)
+                .enumerate()
+                .rev()
+                .enumerate()
+            {
+                let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                let _air_span = info_span!("single_trace_gen", air = air_name).entered();
+                let generator = generator.as_ref().ok_or_else(|| {
+                    GenerationError::ExtensionTracegen(format!(
+                        "AIR {air_name} has no postflight trace generator"
+                    ))
+                })?;
+                exec_ctxs[chain_pos] = Some(
+                    generator(chip.as_any(), postflight)
+                        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?,
+                );
+            }
+        }
+
+        let ctx_without_empties = sys_ctxs
+            .into_iter()
+            .chain(exec_ctxs.into_iter().map(|ctx| ctx.unwrap()))
+            .enumerate()
+            .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
+            .collect();
         Ok(ProvingContext::new(ctx_without_empties))
     }
 }

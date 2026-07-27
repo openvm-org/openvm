@@ -11,9 +11,12 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -21,7 +24,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::{
     Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_deferral::{DeferralRuntimeHooks, DeferralRvrExtension};
 #[cfg(feature = "rvr")]
@@ -194,7 +197,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -202,33 +207,51 @@ where
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
         inventory.next_air::<DeferralCircuitCountAir>()?;
-        inventory.add_periphery_chip(count_chip.clone());
+        inventory.add_postflight_periphery_chip(count_chip.clone(), |chip, postflight| {
+            chip.generate_trace_from_postflight(postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
-        inventory.add_periphery_chip(poseidon2_chip.clone());
+        inventory.add_postflight_periphery_chip(poseidon2_chip.clone(), |chip, postflight| {
+            chip.generate_trace_from_postflight(postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         inventory.next_air::<DeferralCallAir>()?;
-        inventory.add_executor_chip(DeferralCallChip::new(
-            DeferralCallCoreFiller::new(
-                DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
-                count_chip.clone(),
-                poseidon2_chip.clone(),
-                bitwise_lu.clone(),
-                address_bits,
+        inventory.add_postflight_executor_chip(
+            DeferralCallChip::new(
+                DeferralCallCoreFiller::new(
+                    DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
+                    count_chip.clone(),
+                    poseidon2_chip.clone(),
+                    bitwise_lu.clone(),
+                    address_bits,
+                ),
+                mem_helper.clone(),
             ),
-            mem_helper.clone(),
-        ));
+            |chip, postflight| {
+                crate::call::generate_trace_from_postflight(chip, postflight)
+                    .map(AirProvingContext::simple_no_pis)
+            },
+        );
 
         inventory.next_air::<DeferralOutputAir>()?;
-        inventory.add_executor_chip(DeferralOutputChip::new(
-            DeferralOutputFiller::new(
-                count_chip.clone(),
-                poseidon2_chip.clone(),
-                bitwise_lu,
-                address_bits,
+        inventory.add_postflight_executor_chip(
+            DeferralOutputChip::new(
+                DeferralOutputFiller::new(
+                    count_chip.clone(),
+                    poseidon2_chip.clone(),
+                    bitwise_lu,
+                    address_bits,
+                ),
+                mem_helper,
             ),
-            mem_helper,
-        ));
+            |chip, postflight| {
+                crate::output::generate_trace_from_postflight(chip, postflight)
+                    .map(AirProvingContext::simple_no_pis)
+            },
+        );
 
         Ok(())
     }

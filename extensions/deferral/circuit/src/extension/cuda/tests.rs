@@ -354,9 +354,18 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     assert!(field_values[..4]
         .iter()
         .all(|block| *block == [0; BLOCK_FE_WIDTH]));
-    assert!(field_values[4..]
+    let expected_accumulators = execution.transcript.residuals[5..13]
         .iter()
-        .any(|block| *block != [0; BLOCK_FE_WIDTH]));
+        .flat_map(|&packed| [packed as u32, (packed >> 32) as u32])
+        .collect::<Vec<_>>();
+    assert_eq!(
+        field_values[4..]
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>(),
+        expected_accumulators
+    );
     assert_eq!(
         replay_plan
             .opcode_range(DeferralOpcode::CALL.global_opcode())

@@ -1,8 +1,8 @@
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::{exe::VmExe, VM_DIGEST_WIDTH};
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof,
-    prover::ProvingContext, Com, StarkEngine, SystemParams, Val,
+    keygen::types::MultiStarkVerifyingKey, proof::Proof, prover::ProvingContext, Com, StarkEngine,
+    SystemParams, Val,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::setup_tracing,
@@ -14,9 +14,12 @@ use crate::arch::VmState;
 use crate::system::memory::online::{GuestMemory, LinearMemory};
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
-        ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        debug_proving_ctx,
+        execution_mode::Segment,
+        verify_segments,
+        vm::{PostflightTracegen, VirtualMachine},
+        Executor, ExitCode, MeteredExecutor, Postflight, Streams, VmBuilder, VmChipComplex,
+        VmCircuitConfig, VmConfig, VmExecutionConfig, VmField,
     },
     system::memory::MemoryImage,
 };
@@ -60,7 +63,13 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
+    VmChipComplex<
+        BabyBearPoseidon2Config,
+        RA,
+        <TestStarkEngine as StarkEngine>::PB,
+        VB::SystemChipInventory,
+    >: PostflightTracegen<BabyBearPoseidon2Config, <TestStarkEngine as StarkEngine>::PB>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -79,7 +88,13 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
+    VmChipComplex<
+        BabyBearPoseidon2Config,
+        RA,
+        <TestStarkEngine as StarkEngine>::PB,
+        VB::SystemChipInventory,
+    >: PostflightTracegen<BabyBearPoseidon2Config, <TestStarkEngine as StarkEngine>::PB>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
@@ -159,11 +174,10 @@ pub fn check_rvr_equivalence<E, VB>(
 ) -> eyre::Result<()>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     /*
@@ -293,11 +307,12 @@ pub fn air_test_impl<E, VB>(
 )>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+    VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
+        PostflightTracegen<E::SC, E::PB>,
     Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     setup_tracing();
@@ -317,7 +332,7 @@ where
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
-    let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
+    let preflight_interpreter = vm.preflight_interpreter(&exe)?;
 
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
@@ -330,21 +345,21 @@ where
         } = segment.clone();
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
-        let PreflightExecutionOutput {
-            system_records,
-            history: _,
-            record_arenas,
-            to_state,
-        } = vm.execute_preflight_for(
-            &mut preflight_interpreter,
-            from_state,
-            num_insns,
-            &trace_heights,
+        let mut output = vm.execute_preflight_for(&preflight_interpreter, from_state, num_insns)?;
+        let postflight = Postflight::new(
+            &exe.program,
+            &output.history,
+            &config.as_ref().memory_config,
+            output.exit_code,
         )?;
-        state = Some(to_state);
-        exit_code = system_records.exit_code;
-
-        let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+        output
+            .state
+            .memory
+            .memory
+            .extend_touched_pages_from_touched(postflight.touched_memory());
+        exit_code = output.exit_code;
+        let ctx = vm.generate_proving_ctx_from_postflight(&postflight)?;
+        state = Some(output.state);
 
         validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx);
 

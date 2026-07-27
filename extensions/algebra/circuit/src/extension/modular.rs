@@ -22,7 +22,9 @@ use openvm_riscv_adapters::{
     Rv64IsEqualModU16AdapterAir, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
 };
 use openvm_riscv_circuit::adapters::U16_BITS;
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
+};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_algebra::ModularRvrExtension;
 #[cfg(feature = "rvr")]
@@ -37,6 +39,10 @@ use crate::{
         get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_executor, ModularAir,
         ModularExecutor, ModularIsEqualCoreAir, ModularIsEqualFiller, ModularIsEqualU16Air,
         ModularIsEqualU16Chip, VmModularIsEqualU16Executor,
+    },
+    trace::{
+        generate_field_expression_trace_from_postflight,
+        generate_modular_is_equal_trace_from_postflight,
     },
     AlgebraCpuProverExt, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16,
     NUM_LIMBS_48, NUM_LIMBS_48_U16,
@@ -366,7 +372,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addsub);
+                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
                 let muldiv = get_modular_muldiv_chip::<Val<SC>, MODULAR_BLOCKS_32>(
@@ -375,7 +389,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(muldiv);
+                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
 
                 let modulus_limbs = array::from_fn(|i| {
                     if i < modulus_limbs_u16.len() {
@@ -399,7 +421,15 @@ where
                         ),
                         mem_helper.clone(),
                     );
-                inventory.add_executor_chip(is_eq);
+                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                    generate_modular_is_equal_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -414,7 +444,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addsub);
+                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
                 let muldiv = get_modular_muldiv_chip::<Val<SC>, MODULAR_BLOCKS_48>(
@@ -423,7 +461,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(muldiv);
+                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
 
                 let modulus_limbs = array::from_fn(|i| {
                     if i < modulus_limbs_u16.len() {
@@ -447,7 +493,15 @@ where
                         ),
                         mem_helper.clone(),
                     );
-                inventory.add_executor_chip(is_eq);
+                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                    generate_modular_is_equal_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
             } else {
                 panic!("Modulus too large");
             }

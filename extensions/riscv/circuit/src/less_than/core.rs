@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -201,10 +201,6 @@ where
         ),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", LessThanOpcode::from_usize(opcode - self.offset))
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

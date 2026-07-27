@@ -59,6 +59,13 @@ macro_rules! dispatch {
 macro_rules! impl_shift256_executor {
     ($executor:ty, $is_right_arithmetic:expr) => {
         impl<F: PrimeField32> InterpreterExecutor<F> for $executor {
+            fn get_opcode_name(&self, opcode: usize) -> String {
+                format!(
+                    "{:?}",
+                    ShiftOpcode::from_usize(opcode - Rv64Shift256Opcode::CLASS_OFFSET)
+                )
+            }
+
             fn pre_compute_size(&self) -> usize {
                 size_of::<ShiftPreCompute>()
             }

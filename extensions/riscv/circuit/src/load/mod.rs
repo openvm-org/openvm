@@ -1,10 +1,10 @@
-mod byte;
+pub(crate) mod byte;
 pub(crate) mod common;
 pub(crate) mod core;
-mod doubleword;
+pub(crate) mod doubleword;
 mod execution;
-mod halfword;
-mod word;
+pub(crate) mod halfword;
+pub(crate) mod word;
 
 pub use byte::*;
 pub use common::{LoadByteRecord, LoadRecord};

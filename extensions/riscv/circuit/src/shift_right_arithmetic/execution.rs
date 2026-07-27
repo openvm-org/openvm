@@ -62,6 +62,10 @@ impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftRightArithmeticPreCompute>()
     }

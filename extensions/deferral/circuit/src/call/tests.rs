@@ -1,11 +1,19 @@
-use std::{array::from_fn, sync::Arc};
+use std::{
+    array::from_fn,
+    sync::{atomic::Ordering, Arc},
+};
 
-use openvm_circuit::arch::{
-    deferral::{DeferralState, InputMapVal},
-    testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::{
+    arch::{
+        deferral::{DeferralState, InputMapVal},
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
+        Arena, MatrixRecordArena, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightMemoryLog, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+    system::memory::online::TracingMemory,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,12 +22,14 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
+    program::Program,
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
@@ -139,15 +149,53 @@ fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
     tester.streams_mut().deferrals = vec![DeferralState::new(vec![]); num_deferrals];
 }
 
+fn canonicalize_call_field_writes(tester: &VmChipTestBuilder<F>, memory: &mut PreflightMemoryLog) {
+    for event in memory
+        .accesses
+        .iter()
+        .filter(|event| event.address_space() == DEFERRAL_AS && event.is_write())
+    {
+        let field_index = usize::from(event.value[0]) | (usize::from(event.value[1]) << 16);
+        // This differential fixture executes the legacy record-producing path.
+        // TracingMemory stores a field's raw in-memory representation in its
+        // sidecar, whereas active preflight canonicalizes it before logging.
+        // Each CALL accumulator block is written once, so the final image is
+        // the canonical value for that write.
+        let value: [F; BLOCK_FE_WIDTH] =
+            unsafe { tester.memory.memory.data.read(DEFERRAL_AS, event.pointer) };
+        memory.field_values[field_index].values = value.map(|value| value.as_canonical_u32());
+    }
+}
+
 fn set_and_execute_call<RA, E>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
     num_deferrals: usize,
-) where
+) -> Instruction<F>
+where
     RA: Arena,
     E: PreflightExecutor<F, RA>,
+{
+    set_and_execute_call_with_hooks(tester, executor, arena, rng, num_deferrals, |_| {}, |_| {})
+}
+
+fn set_and_execute_call_with_hooks<RA, E, T, Before, After>(
+    tester: &mut T,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    num_deferrals: usize,
+    before_execute: Before,
+    after_execute: After,
+) -> Instruction<F>
+where
+    RA: Arena,
+    E: PreflightExecutor<F, RA>,
+    T: TestBuilder<F>,
+    Before: FnOnce(&mut T),
+    After: FnOnce(&mut T),
 {
     let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
@@ -194,20 +242,19 @@ fn set_and_execute_call<RA, E>(
     let old_input_acc = read_deferral_digest(tester, input_acc_ptr);
     let old_output_acc = read_deferral_digest(tester, output_acc_ptr);
 
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(
-            DeferralOpcode::CALL.global_opcode(),
-            [
-                rd,
-                rs,
-                deferral_idx,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
-        ),
+    before_execute(tester);
+    let instruction = Instruction::from_usize(
+        DeferralOpcode::CALL.global_opcode(),
+        [
+            rd,
+            rs,
+            deferral_idx,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
     );
+    tester.execute(executor, arena, &instruction);
+    after_execute(tester);
 
     let (output_commit, output_raw) = {
         let state = &tester.streams_mut().deferrals[deferral_idx];
@@ -256,6 +303,7 @@ fn set_and_execute_call<RA, E>(
         new_output_acc, expected_new_output_acc,
         "output accumulator mismatch"
     );
+    instruction
 }
 
 fn create_cpu_harness(
@@ -409,6 +457,107 @@ fn rand_deferral_call_test() {
         .finalize()
         .simple_test()
         .expect("Verification failed");
+}
+
+#[test]
+fn postflight_call_trace_matches_record_arena_and_rejects_truncated_history() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
+    let CpuHarnessBundle {
+        mut harness,
+        count,
+        poseidon2,
+        ..
+    } = create_cpu_harness(&tester, NUM_DEFERRALS, deferral_fns(NUM_DEFERRALS));
+    init_streams(&mut tester, NUM_DEFERRALS);
+    let mut instruction_history = None;
+    let instruction = set_and_execute_call_with_hooks(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        NUM_DEFERRALS,
+        |tester| {
+            let image = tester.memory.memory.data().clone();
+            tester.memory.memory = TracingMemory::from_image(image);
+        },
+        |tester| {
+            instruction_history = Some((
+                tester.memory.memory.timestamp(),
+                tester.memory.memory.take_log(),
+            ));
+        },
+    );
+    let from_pc = tester.last_from_pc().as_canonical_u32();
+    let to_pc = tester.last_to_pc().as_canonical_u32();
+    let (to_timestamp, mut memory) =
+        instruction_history.expect("CALL instruction history was captured");
+    canonicalize_call_field_writes(&tester, &mut memory);
+    let sentinel = instruction.clone();
+    let program = Program::new_without_debug_infos(&[instruction, sentinel], from_pc);
+    let mut history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: from_pc,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: to_pc,
+                timestamp: to_timestamp,
+            },
+        ],
+        memory,
+    };
+    let memory_config = test_memory_config();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = super::generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer.clone();
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+    assert_eq!(actual.values, expected.values);
+    drop(postflight);
+
+    history
+        .memory
+        .accesses
+        .pop()
+        .expect("CALL has timed memory events");
+    history
+        .memory
+        .field_values
+        .pop()
+        .expect("CALL's final accumulator write has a field sidecar value");
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let counts_before = count
+        .1
+        .count
+        .iter()
+        .map(|count| count.load(Ordering::Relaxed))
+        .collect::<Vec<_>>();
+    let poseidon_records_before = poseidon2.1.records.len();
+    let error = super::generate_trace_from_postflight(&harness.chip, &postflight)
+        .expect_err("truncated CALL history must be rejected");
+    assert!(
+        error.to_string().contains("too few memory events")
+            || error.to_string().contains("ended at timestamp")
+    );
+    assert_eq!(
+        counts_before,
+        count
+            .1
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(poseidon_records_before, poseidon2.1.records.len());
 }
 
 #[cfg(feature = "cuda")]

@@ -9,11 +9,14 @@
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::any::Any;
+#[cfg(feature = "metrics")]
+use std::collections::BTreeMap;
 use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
-use itertools::{zip_eq, Itertools};
+use itertools::Itertools;
 use openvm_circuit::system::program::trace::compute_exe_commit;
+use openvm_cpu_backend::CpuBackend;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -25,8 +28,8 @@ use openvm_instructions::{
     program::Program,
     VM_DIGEST_WIDTH,
 };
-#[cfg(all(feature = "cuda", feature = "metrics", feature = "rvr"))]
-use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode};
+#[cfg(feature = "metrics")]
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
@@ -47,7 +50,6 @@ use openvm_stark_backend::{
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::RvrExtensions;
-use rvr_state::PreflightProgramEvent;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -68,32 +70,31 @@ use super::rvr::{
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::rvr::{PreflightEndpoint, PreflightExecution};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::DenseRecordArena;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::ExecutionState;
+#[cfg(feature = "metrics")]
+use super::InterpreterExecutor;
 use super::{
     execution_mode::{
-        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, RecordCtx,
-        Segment, SegmentationLimits,
+        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
+        SegmentationLimits,
     },
     hasher::poseidon2::vm_poseidon2_hasher,
     hint_stream::HintStream,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
-    AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
-    ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
-    PreflightHistory, StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
-    VmExecState, VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    AirInventoryError, Arena, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
+    ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
+    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
+    VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::{DenseRecordArena, PreflightOutput};
-#[cfg(feature = "metrics")]
-use crate::metrics::emit_opcode_counts;
-#[cfg(feature = "perf-metrics")]
-use crate::metrics::end_segment_metrics;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::system::cuda::SystemChipInventoryGPU;
 use crate::{
     arch::deferral::DeferralState,
-    execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -101,11 +102,11 @@ use crate::{
                 public_values::{UserPublicValuesProof, UserPublicValuesProofError},
                 MemoryMerklePvs,
             },
-            online::{GuestMemory, TracingMemory},
+            online::GuestMemory,
             AddressMap,
         },
         program::trace::generate_cached_trace,
-        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
+        SystemChipComplex, SystemChipInventory, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
 
@@ -141,6 +142,33 @@ pub enum GenerationError {
         value: u64,
         threshold: u32,
     },
+}
+
+#[doc(hidden)]
+pub trait PostflightTracegen<SC, PB>
+where
+    SC: StarkProtocolConfig,
+    PB: ProverBackend,
+{
+    fn generate_from_postflight(
+        &mut self,
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Result<ProvingContext<PB>, GenerationError>;
+}
+
+impl<SC, RA> PostflightTracegen<SC, CpuBackend<SC>>
+    for VmChipComplex<SC, RA, CpuBackend<SC>, SystemChipInventory<SC>>
+where
+    SC: StarkProtocolConfig,
+    RA: Arena,
+    Val<SC>: VmField,
+{
+    fn generate_from_postflight(
+        &mut self,
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
+        self.generate_proving_ctx_from_postflight(postflight)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -197,13 +225,6 @@ pub enum ExitCode {
     Success = 0,
     Error = 1,
     Suspended = -1, // Continuations
-}
-
-pub struct PreflightExecutionOutput<F, RA> {
-    pub system_records: SystemRecords<F>,
-    pub history: PreflightHistory,
-    pub record_arenas: Vec<RA>,
-    pub to_state: VmState<GuestMemory>,
 }
 
 impl<F, VC> VmExecutor<F, VC>
@@ -724,7 +745,6 @@ pub enum VirtualMachineError {
     ProgramIsNotCommitted,
 }
 
-#[cfg(any(test, all(feature = "cuda", feature = "rvr")))]
 fn begin_preflight_tracegen_session(poisoned: &mut bool) -> Result<(), GenerationError> {
     if *poisoned {
         return Err(GenerationError::ExtensionTracegen(
@@ -759,7 +779,6 @@ where
     /// Preflight trace generation mutates shared lookup histograms. Once a segment
     /// starts, the VM remains poisoned until its outermost coordinator has
     /// validated every producer and explicitly completes the session.
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
     preflight_tracegen_poisoned: bool,
 }
 
@@ -783,7 +802,6 @@ where
             executor,
             pk: d_pk,
             chip_complex,
-            #[cfg(all(feature = "cuda", feature = "rvr"))]
             preflight_tracegen_poisoned: false,
         })
     }
@@ -1031,150 +1049,43 @@ where
     pub fn preflight_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError> {
-        PreflightInterpretedInstance::new(
-            &exe.program,
-            self.executor.inventory.clone(),
-            self.executor_idx_to_air_idx(),
-        )
+    ) -> Result<PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
+    {
+        PreflightInterpretedInstance::new(exe, self.executor.inventory.clone())
     }
 
-    /// Preflight execution until termination using an interpreter. Preflight execution must be
-    /// provided with `trace_heights` instrumentation data collected from a previous metered run so
-    /// that it knows how much memory to allocate for record arenas.
-    ///
-    /// This function should rarely be called on its own. Users are advised to call
-    /// [`prove`](Self::prove) directly.
+    /// Runs append-only preflight execution until termination using the interpreter.
     #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight(
         &self,
-        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        interpreter: &PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
         state: VmState<GuestMemory>,
-        trace_heights: &[u32],
-    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
+    ) -> Result<PreflightOutput, ExecutionError>
     where
         Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
     {
-        self.execute_preflight_inner(interpreter, state, None, trace_heights)
+        interpreter.execute_preflight_from_state(state, None)
     }
 
-    /// Preflight execution for at most `num_insns` instructions from the given state.
-    /// `system_records.exit_code` is `Some` when the program terminated and `None` when execution
-    /// stopped at the instruction limit.
+    /// Preflight execution for exactly `num_insns` instructions from the given state.
+    ///
+    /// Returns an error if execution terminates before the requested boundary.
     #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight_for(
         &self,
-        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        interpreter: &PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
         state: VmState<GuestMemory>,
         num_insns: u64,
-        trace_heights: &[u32],
-    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
+    ) -> Result<PreflightOutput, ExecutionError>
     where
         Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
     {
-        self.execute_preflight_inner(interpreter, state, Some(num_insns), trace_heights)
-    }
-
-    fn execute_preflight_inner(
-        &self,
-        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
-        state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
-        trace_heights: &[u32],
-    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    {
-        debug_assert!(interpreter
-            .executor_idx_to_air_idx
-            .iter()
-            .all(|&air_idx| air_idx < trace_heights.len()));
-
-        // TODO[jpw]: figure out how to compute RA specific main_widths
-        let main_widths = self
-            .pk
-            .per_air
-            .iter()
-            .map(|pk| pk.vk.params.width.main_width())
-            .collect_vec();
-        let capacities = zip_eq(trace_heights, main_widths)
-            .map(|(&h, w)| (h as usize, w))
-            .collect::<Vec<_>>();
-        let ctx = RecordCtx::new_with_capacity(&capacities, num_insns);
-
-        let pc = state.pc();
-        let memory = TracingMemory::from_image(state.memory);
-        let from_state = ExecutionState::new(pc, memory.timestamp());
-        let vm_state = VmState::new(
-            pc,
-            memory,
-            state.streams,
-            state.rng,
-            #[cfg(feature = "metrics")]
-            state.metrics,
-        );
-        let mut exec_state = VmExecState::new(vm_state, ctx);
-        interpreter.reset_execution_frequencies();
-        execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
-        let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
-        #[cfg(feature = "metrics")]
-        emit_opcode_counts(
-            &exec_state.vm_state.metrics,
-            interpreter.opcode_counts_by_air::<VB::RecordArena>(),
-        );
-        let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
-        // Grow the touched-page sets on the carried-forward memory image so the next segment's
-        // host-to-device transfer (`set_initial_memory`) stays a correct superset of non-zero
-        // pages.
-        exec_state
-            .vm_state
-            .memory
-            .data
-            .memory
-            .extend_touched_pages_from_touched(&touched_memory);
-        #[cfg(feature = "perf-metrics")]
-        end_segment_metrics(&mut exec_state);
-
-        let pc = exec_state.vm_state.pc();
-        let mut memory = exec_state.vm_state.memory;
-        let to_state = ExecutionState::new(pc, memory.timestamp());
-        let exit_code = exec_state.exit_code?;
-        exec_state.ctx.program.push(PreflightProgramEvent {
-            pc,
-            timestamp: memory.timestamp(),
-        });
-        let system_records = SystemRecords {
-            from_state,
-            to_state,
-            exit_code,
-            filtered_exec_frequencies,
-            touched_memory,
-        };
-        let history = PreflightHistory {
-            program: exec_state.ctx.program,
-            memory: memory.take_log(),
-        };
-        let record_arenas = exec_state.ctx.arenas;
-        let to_state = VmState::new(
-            pc,
-            memory.data,
-            exec_state.vm_state.streams,
-            exec_state.vm_state.rng,
-            #[cfg(feature = "metrics")]
-            exec_state.vm_state.metrics,
-        );
-        Ok(PreflightExecutionOutput {
-            system_records,
-            history,
-            record_arenas,
-            to_state,
-        })
+        interpreter.execute_preflight_from_state(state, Some(num_insns))
     }
 
     /// Calls [`VmState::initial`] but sets more information for
@@ -1223,7 +1134,6 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        #[cfg(all(feature = "cuda", feature = "rvr"))]
         if self.preflight_tracegen_poisoned {
             return Err(GenerationError::ExtensionTracegen(
                 "VM is poisoned by an incomplete or failed preflight tracegen session".to_string(),
@@ -1235,6 +1145,26 @@ where
             .generate_proving_ctx(system_records, record_arenas)?;
 
         self.validate_proving_ctx(ctx)
+    }
+
+    #[instrument(name = "trace_gen", skip_all)]
+    pub(crate) fn generate_proving_ctx_from_postflight(
+        &mut self,
+        postflight: &Postflight<'_, Val<E::SC>>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError>
+    where
+        VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
+            PostflightTracegen<E::SC, E::PB>,
+    {
+        begin_preflight_tracegen_session(&mut self.preflight_tracegen_poisoned)?;
+        let result = self
+            .chip_complex
+            .generate_from_postflight(postflight)
+            .and_then(|ctx| self.validate_proving_ctx(ctx));
+        if result.is_ok() {
+            self.preflight_tracegen_poisoned = false;
+        }
+        result
     }
 
     fn validate_proving_ctx(
@@ -1299,45 +1229,6 @@ where
         Ok(ctx)
     }
 
-    /// Generates proof for zkVM execution for exactly `num_insns` instructions for a given program
-    /// and a given starting state.
-    ///
-    /// **Note**: The cached program trace must be loaded via [`load_program`](Self::load_program)
-    /// before calling this function.
-    ///
-    /// Returns:
-    /// - proof for the execution segment
-    /// - final memory state only if execution ends in successful termination (exit code 0). This
-    ///   final memory state may be used to extract user public values afterwards.
-    pub fn prove(
-        &mut self,
-        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
-        state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
-        trace_heights: &[u32],
-    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    {
-        self.transport_init_memory_to_device(&state.memory);
-
-        let PreflightExecutionOutput {
-            system_records,
-            history: _,
-            record_arenas,
-            to_state,
-        } = self.execute_preflight_inner(interpreter, state, num_insns, trace_heights)?;
-        // drop final memory unless this is a terminal segment and the exit code is success
-        let final_memory =
-            (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
-        let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
-        let proof = self.engine.prove(&self.pk, ctx).unwrap();
-
-        Ok((proof, final_memory))
-    }
-
     /// Transforms the program into a cached trace and commits it _on device_ using the proof system
     /// polynomial commitment scheme.
     ///
@@ -1385,6 +1276,35 @@ where
         tracing::debug!("executor_idx_to_air_idx: {:?}", ret);
         assert_eq!(self.executor().inventory.executors().len(), ret.len());
         ret
+    }
+
+    #[cfg(feature = "metrics")]
+    fn postflight_opcode_counts(
+        &self,
+        postflight: &Postflight<'_, Val<E::SC>>,
+    ) -> BTreeMap<(usize, String), u64>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        postflight
+            .executed_opcodes()
+            .filter(|&opcode| opcode != SystemOpcode::TERMINATE.global_opcode())
+            .filter_map(|opcode| {
+                let executor_idx = *self.executor.inventory.instruction_lookup.get(&opcode)?;
+                let air_idx = *executor_idx_to_air_idx.get(executor_idx as usize)?;
+                let executor = self
+                    .executor
+                    .inventory
+                    .executors
+                    .get(executor_idx as usize)?;
+                Some((
+                    (air_idx, executor.get_opcode_name(opcode.as_usize())),
+                    postflight.opcode_count(opcode),
+                ))
+            })
+            .collect()
     }
 
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
@@ -1595,8 +1515,7 @@ where
     #[doc(hidden)]
     pub fn emit_preflight_opcode_counts(&self, replay_plan: &GpuPostflightPlan)
     where
-        <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
-            PreflightExecutor<BabyBear, DenseRecordArena>,
+        <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>,
     {
         let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
         for opcode in replay_plan.executed_opcodes() {
@@ -1822,11 +1741,12 @@ where
 impl<E, VB> ContinuationVmProver<E::SC> for VmInstance<E, VB>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+    VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
+        PostflightTracegen<E::SC, E::PB>,
 {
     /// First performs metered execution to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -1842,16 +1762,17 @@ where
 impl<E, VB> VmInstance<E, VB>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+    VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
+        PostflightTracegen<E::SC, E::PB>,
 {
     /// For internal use to resize trace matrices before proving.
     ///
     /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
-    pub fn prove_continuations(
+    pub(crate) fn prove_continuations(
         &mut self,
         input: impl Into<Streams>,
         mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
@@ -1863,7 +1784,7 @@ where
         }
         let interpreter = self
             .interpreter
-            .as_mut()
+            .as_ref()
             .expect("preflight interpreter was initialized above");
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
@@ -1877,23 +1798,34 @@ where
             let _prove_span = info_span!("total_proof").entered();
             let Segment {
                 num_insns,
-                trace_heights,
+                trace_heights: _,
                 ..
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
-            let PreflightExecutionOutput {
-                system_records,
-                history: _,
-                record_arenas,
-                to_state,
-            } = vm.execute_preflight_for(interpreter, from_state, num_insns, &trace_heights)?;
-            state = Some(to_state);
-
-            let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            let mut output = vm.execute_preflight_for(interpreter, from_state, num_insns)?;
+            let postflight = Postflight::new(
+                &self.exe.program,
+                &output.history,
+                &vm.config().as_ref().memory_config,
+                output.exit_code,
+            )
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+            #[cfg(feature = "metrics")]
+            crate::metrics::emit_opcode_counts(
+                &output.state.metrics,
+                vm.postflight_opcode_counts(&postflight),
+            );
+            output
+                .state
+                .memory
+                .memory
+                .extend_touched_pages_from_touched(postflight.touched_memory());
+            let mut ctx = vm.generate_proving_ctx_from_postflight(&postflight)?;
             modify_ctx(seg_idx, &mut ctx);
             let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
             proofs.push(proof);
+            state = Some(output.state);
         }
         let to_state = state.unwrap();
         let final_memory = &to_state.memory.memory;

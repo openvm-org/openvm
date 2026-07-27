@@ -11,7 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::MulWOpcode;
+use openvm_riscv_transpiler::{MulOpcode, MulWOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::MulWExecutor;
@@ -51,6 +51,10 @@ impl<F, A> InterpreterExecutor<F> for MulWExecutor<A>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<MulWPreCompute>()
     }

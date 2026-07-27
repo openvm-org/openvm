@@ -5,10 +5,11 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_pointer, TestBuilder, TestChipHarness, TestSC, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, MatrixRecordArena, PreflightExecutor,
+        Arena, MatrixRecordArena, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
@@ -20,11 +21,13 @@ use openvm_circuit_primitives::{
     },
     encoder::Encoder,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
-    ColumnsAir, SubAir,
+    Chip, ColumnsAir, SubAir,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
+    program::Program,
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_sha2_air::{
@@ -56,7 +59,7 @@ use {
 use crate::{
     add_padding_to_message, read_slice_from_memory, write_slice_to_memory, Sha2BlockHasherChip,
     Sha2BlockHasherDigestColsRefMut, Sha2BlockHasherVmAir, Sha2Config, Sha2MainAir, Sha2MainChip,
-    Sha2VmExecutor,
+    Sha2VmExecutor, SHA2_READ_SIZE, SHA2_REGISTER_READS,
 };
 
 const SHA2_BUS_IDX: BusIndex = 28;
@@ -223,6 +226,145 @@ fn rand_sha2_single_block_test<C: Sha2Config + 'static>() {
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+fn execute_postflight_fixture<C: Sha2Config>(
+    tester: &mut VmChipTestBuilder<F>,
+    harness: &mut Harness<MatrixRecordArena<F>, C>,
+) -> Instruction<F> {
+    let register_ptrs = [8u32, 16, 24];
+    let memory_ptrs = [0x1000u32, 0x2000, 0x3000];
+    for (&register_ptr, &memory_ptr) in register_ptrs.iter().zip(&memory_ptrs) {
+        unsafe {
+            tester.memory.memory.data.write_bytes(
+                RV64_REGISTER_AS,
+                register_ptr,
+                (memory_ptr as u64).to_le_bytes(),
+            );
+        }
+    }
+    for index in 0..C::BLOCK_READS {
+        unsafe {
+            tester.memory.memory.data.write_bytes(
+                RV64_MEMORY_AS,
+                memory_ptrs[2] + (index * SHA2_READ_SIZE) as u32,
+                [(index as u8).wrapping_mul(17).wrapping_add(3); SHA2_READ_SIZE],
+            );
+        }
+    }
+    for index in 0..C::STATE_READS {
+        unsafe {
+            tester.memory.memory.data.write_bytes(
+                RV64_MEMORY_AS,
+                memory_ptrs[1] + (index * SHA2_READ_SIZE) as u32,
+                [(index as u8).wrapping_mul(29).wrapping_add(7); SHA2_READ_SIZE],
+            );
+        }
+    }
+    let instruction = Instruction::from_usize(
+        C::OPCODE.global_opcode(),
+        [
+            register_ptrs[0] as usize,
+            register_ptrs[1] as usize,
+            register_ptrs[2] as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    );
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
+    instruction
+}
+
+fn postflight_trace_matches_record_arena_trace<C: Sha2Config + 'static>() {
+    let mut tester = VmChipTestBuilder::default();
+    let TestHarness {
+        mut harness,
+        block_hasher: (_, block_hasher),
+        ..
+    } = create_test_harness::<MatrixRecordArena<F>, C>(&mut tester);
+    let instruction = execute_postflight_fixture(&mut tester, &mut harness);
+    let final_timestamp = tester.memory.memory.timestamp();
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: final_timestamp,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+
+    let expected_main: AirProvingContext<CpuBackend<TestSC>> =
+        harness.chip.generate_proving_ctx(harness.arena);
+    let expected_block: AirProvingContext<CpuBackend<TestSC>> =
+        block_hasher.generate_proving_ctx(());
+    let actual_main =
+        crate::generate_main_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_block =
+        crate::generate_block_hasher_trace_from_postflight(&block_hasher, &postflight).unwrap();
+
+    assert_eq!(actual_main.width(), expected_main.common_main.width());
+    assert_eq!(actual_main.height(), expected_main.common_main.height());
+    assert_eq!(actual_main.values, expected_main.common_main.values);
+    assert_eq!(actual_block.width(), expected_block.common_main.width());
+    assert_eq!(actual_block.height(), expected_block.common_main.height());
+    assert_eq!(actual_block.values, expected_block.common_main.values);
+}
+
+#[test]
+fn sha256_postflight_trace_matches_record_arena_trace() {
+    postflight_trace_matches_record_arena_trace::<Sha256Config>();
+}
+
+#[test]
+fn sha512_postflight_trace_matches_record_arena_trace() {
+    postflight_trace_matches_record_arena_trace::<Sha512Config>();
+}
+
+#[test]
+fn sha2_postflight_rejects_malformed_memory_event() {
+    let mut tester = VmChipTestBuilder::default();
+    let TestHarness {
+        mut harness,
+        block_hasher: (_, block_hasher),
+        ..
+    } = create_test_harness::<MatrixRecordArena<F>, Sha256Config>(&mut tester);
+    let instruction = execute_postflight_fixture(&mut tester, &mut harness);
+    let final_timestamp = tester.memory.memory.timestamp();
+    let mut memory = tester.memory.memory.take_log();
+    memory.accesses[SHA2_REGISTER_READS].pointer += 4;
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: final_timestamp,
+            },
+        ],
+        memory,
+    };
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+
+    assert!(
+        crate::generate_main_trace_from_postflight(&harness.chip, &postflight).is_err(),
+        "malformed SHA-2 memory access must be rejected",
+    );
+    assert!(
+        crate::generate_block_hasher_trace_from_postflight(&block_hasher, &postflight).is_err(),
+        "malformed SHA-2 memory access must be rejected",
+    );
 }
 
 #[test]

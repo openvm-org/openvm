@@ -19,6 +19,7 @@ use openvm_circuit_primitives::{
         RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
         SharedRangeTupleCheckerChip,
     },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
@@ -31,7 +32,7 @@ use openvm_riscv_transpiler::{
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_riscv::{
     Rv64IExtension, Rv64IoExtension, Rv64IoRuntimeHooks, Rv64MExtension, Rv64PhantomExtension,
@@ -43,6 +44,14 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
+
+macro_rules! add_postflight_executor_chip {
+    ($inventory:expr, $chip:expr, $generate:path) => {
+        $inventory.add_postflight_executor_chip($chip, |chip, postflight| {
+            $generate(chip, postflight).map(AirProvingContext::simple_no_pis)
+        });
+    };
+}
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -797,7 +806,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -809,14 +820,22 @@ where
             AddSubFiller::new(Rv64BaseAluRegU16AdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(add_sub);
+        add_postflight_executor_chip!(
+            inventory,
+            add_sub,
+            crate::add_sub::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64BitwiseLogicAir>()?;
         let bitwise_logic = Rv64BitwiseLogicChip::new(
             BitwiseLogicFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_lu.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(bitwise_logic);
+        add_postflight_executor_chip!(
+            inventory,
+            bitwise_logic,
+            crate::bitwise_logic::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64AddSubWAir>()?;
         let add_sub_w = Rv64AddSubWChip::new(
@@ -826,21 +845,33 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(add_sub_w);
+        add_postflight_executor_chip!(
+            inventory,
+            add_sub_w,
+            crate::add_sub_w::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(
             LessThanFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(lt);
+        add_postflight_executor_chip!(
+            inventory,
+            lt,
+            crate::less_than::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftLogicalAir>()?;
         let shift_logical = Rv64ShiftLogicalChip::new(
             ShiftLogicalFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_logical);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_logical,
+            crate::shift_logical::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftRightArithmeticAir>()?;
         let shift_right_arithmetic = Rv64ShiftRightArithmeticChip::new(
@@ -850,7 +881,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_right_arithmetic);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_right_arithmetic,
+            crate::shift_right_arithmetic::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftWLogicalAir>()?;
         let shift_w_logical = Rv64ShiftWLogicalChip::new(
@@ -860,7 +895,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_w_logical);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_w_logical,
+            crate::shift_w::trace::generate_logical_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftWRightArithmeticAir>()?;
         let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticChip::new(
@@ -870,7 +909,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_w_right_arithmetic);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_w_right_arithmetic,
+            crate::shift_w::trace::generate_right_arithmetic_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64AddIWAir>()?;
         let addi_w = Rv64AddIWChip::new(
@@ -880,7 +923,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(addi_w);
+        add_postflight_executor_chip!(
+            inventory,
+            addi_w,
+            crate::addi::trace::generate_w_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftWLogicalImmAir>()?;
         let shift_w_logical_imm = Rv64ShiftWLogicalImmChip::new(
@@ -890,7 +937,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_w_logical_imm);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_w_logical_imm,
+            crate::shift_logical_imm::trace::generate_word_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftWRightArithmeticImmAir>()?;
         let shift_w_right_arithmetic_imm = Rv64ShiftWRightArithmeticImmChip::new(
@@ -900,7 +951,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_w_right_arithmetic_imm);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_w_right_arithmetic_imm,
+            crate::shift_right_arithmetic_imm::trace::generate_word_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadSignExtendByteAir>()?;
         let load_sign_extend_byte_chip = Rv64LoadSignExtendByteChip::new(
@@ -912,7 +967,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_sign_extend_byte_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_sign_extend_byte_chip,
+            crate::load_sign_extend::byte::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadByteAir>()?;
         let load_byte_chip = Rv64LoadByteChip::new(
@@ -923,7 +982,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_byte_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_byte_chip,
+            crate::load::byte::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64StoreByteAir>()?;
         let store_byte_chip = Rv64StoreByteChip::new(
@@ -934,7 +997,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(store_byte_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            store_byte_chip,
+            crate::store::byte::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadSignExtendHalfwordAir>()?;
         let load_sign_extend_halfword_chip = Rv64LoadSignExtendHalfwordChip::new(
@@ -946,7 +1013,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_sign_extend_halfword_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_sign_extend_halfword_chip,
+            crate::load_sign_extend::halfword::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadHalfwordAir>()?;
         let load_halfword_chip = Rv64LoadHalfwordChip::new(
@@ -957,7 +1028,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_halfword_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_halfword_chip,
+            crate::load::halfword::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64StoreHalfwordAir>()?;
         let store_halfword_chip = Rv64StoreHalfwordChip::new(
@@ -968,7 +1043,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(store_halfword_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            store_halfword_chip,
+            crate::store::halfword::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadSignExtendWordAir>()?;
         let load_sign_extend_word_chip = Rv64LoadSignExtendWordChip::new(
@@ -980,7 +1059,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_sign_extend_word_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_sign_extend_word_chip,
+            crate::load_sign_extend::word::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadWordAir>()?;
         let load_word_chip = Rv64LoadWordChip::new(
@@ -991,7 +1074,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_word_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_word_chip,
+            crate::load::word::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64StoreWordAir>()?;
         let store_word_chip = Rv64StoreWordChip::new(
@@ -1002,7 +1089,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(store_word_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            store_word_chip,
+            crate::store::word::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LoadDoublewordAir>()?;
         let load_doubleword_chip = Rv64LoadDoublewordChip::new(
@@ -1013,7 +1104,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(load_doubleword_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            load_doubleword_chip,
+            crate::load::doubleword::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64StoreDoublewordAir>()?;
         let store_doubleword_chip = Rv64StoreDoublewordChip::new(
@@ -1024,7 +1119,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(store_doubleword_chip);
+        add_postflight_executor_chip!(
+            inventory,
+            store_doubleword_chip,
+            crate::store::doubleword::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64BranchEqualAir>()?;
         let beq = Rv64BranchEqualChip::new(
@@ -1035,7 +1134,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(beq);
+        add_postflight_executor_chip!(
+            inventory,
+            beq,
+            crate::branch_eq::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64BranchLessThanAir>()?;
         let blt = Rv64BranchLessThanChip::new(
@@ -1046,7 +1149,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(blt);
+        add_postflight_executor_chip!(
+            inventory,
+            blt,
+            crate::branch_lt::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64JalLuiAir>()?;
         let jal_lui = Rv64JalLuiChip::new(
@@ -1056,28 +1163,44 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(jal_lui);
+        add_postflight_executor_chip!(
+            inventory,
+            jal_lui,
+            crate::jal_lui::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64JalrAir>()?;
         let jalr = Rv64JalrChip::new(
             Rv64JalrFiller::new(Rv64JalrAdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(jalr);
+        add_postflight_executor_chip!(
+            inventory,
+            jalr,
+            crate::jalr::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64AuipcAir>()?;
         let auipc = Rv64AuipcChip::new(
             Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(auipc);
+        add_postflight_executor_chip!(
+            inventory,
+            auipc,
+            crate::auipc::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64AddIAir>()?;
         let addi = Rv64AddIChip::new(
             AddIFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(addi);
+        add_postflight_executor_chip!(
+            inventory,
+            addi,
+            crate::addi::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftLogicalImmAir>()?;
         let shift_logical_imm = Rv64ShiftLogicalImmChip::new(
@@ -1087,7 +1210,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_logical_imm);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_logical_imm,
+            crate::shift_logical_imm::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64ShiftRightArithmeticImmAir>()?;
         let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmChip::new(
@@ -1097,21 +1224,33 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_right_arithmetic_imm);
+        add_postflight_executor_chip!(
+            inventory,
+            shift_right_arithmetic_imm,
+            crate::shift_right_arithmetic_imm::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64LessThanImmAir>()?;
         let less_than_imm = Rv64LessThanImmChip::new(
             LessThanImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(less_than_imm);
+        add_postflight_executor_chip!(
+            inventory,
+            less_than_imm,
+            crate::less_than_imm::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64BitwiseLogicImmAir>()?;
         let bitwise_logic_imm = Rv64BitwiseLogicImmChip::new(
             BitwiseLogicImmFiller::new(Rv64BaseAluImmAdapterFiller::new(), bitwise_lu.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(bitwise_logic_imm);
+        add_postflight_executor_chip!(
+            inventory,
+            bitwise_logic_imm,
+            crate::bitwise_logic_imm::trace::generate_trace_from_postflight
+        );
 
         Ok(())
     }
@@ -1254,7 +1393,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -1271,7 +1412,9 @@ where
             } else {
                 let air: &RangeTupleCheckerAir<2> = inventory.next_air()?;
                 let chip = SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -1288,7 +1431,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(mult);
+        add_postflight_executor_chip!(
+            inventory,
+            mult,
+            crate::mul::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64MulWAir>()?;
         let mul_w = Rv64MulWChip::new(
@@ -1300,7 +1447,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(mul_w);
+        add_postflight_executor_chip!(
+            inventory,
+            mul_w,
+            crate::mul_w::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64MulHAir>()?;
         let mul_h = Rv64MulHChip::new(
@@ -1311,7 +1462,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(mul_h);
+        add_postflight_executor_chip!(
+            inventory,
+            mul_h,
+            crate::mulh::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64DivRemAir>()?;
         let div_rem = Rv64DivRemChip::new(
@@ -1323,7 +1478,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(div_rem);
+        add_postflight_executor_chip!(
+            inventory,
+            div_rem,
+            crate::divrem::trace::generate_trace_from_postflight
+        );
 
         inventory.next_air::<Rv64DivRemWAir>()?;
         let divrem_w = Rv64DivRemWChip::new(
@@ -1335,7 +1494,11 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(divrem_w);
+        add_postflight_executor_chip!(
+            inventory,
+            divrem_w,
+            crate::divrem_w::trace::generate_trace_from_postflight
+        );
 
         Ok(())
     }
@@ -1410,7 +1573,11 @@ where
             Rv64HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(hint_store);
+        add_postflight_executor_chip!(
+            inventory,
+            hint_store,
+            crate::hintstore::trace::generate_trace_from_postflight
+        );
 
         Ok(())
     }

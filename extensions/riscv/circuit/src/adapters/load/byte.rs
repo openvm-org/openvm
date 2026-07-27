@@ -3,13 +3,11 @@ use std::{
     mem::size_of,
 };
 
-#[cfg(test)]
-use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        ExecutionBridge, ExecutionState, Postflight, PostflightError, PostflightStep, VmAdapterAir,
+        VmAdapterInterface, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -36,13 +34,12 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
-    sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_byte_ptr_to_u16_ptr_value,
+    expand_to_rv64_block, memory_read_u16, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    rv64_address_add_imm, rv64_register_pointer, sign_extend_imm16, timed_write_u16, tracing_read,
+    tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS, RV64_PTR_U16_LIMBS,
+    RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
-#[cfg(test)]
-use crate::adapters::{checked_byte_ptr_to_u16_ptr_value, RV64_REGISTER_NUM_LIMBS};
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
 
@@ -438,7 +435,6 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadByteAdapterFiller {
     }
 }
 
-#[cfg(test)]
 impl Rv64LoadByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         &self,

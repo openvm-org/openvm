@@ -1,9 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
-#[cfg(test)]
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{Postflight, PostflightError, *},
+    system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
@@ -11,26 +10,22 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-#[cfg(test)]
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
-#[cfg(test)]
-use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     BaseAirWithPublicValues,
 };
 
-#[cfg(test)]
-use crate::adapters::Rv64LoadMultiByteAdapterCols;
 use crate::{
     adapters::{
         is_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
-        Rv64LoadMultiByteAdapterFiller, Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH,
-        DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
-        WORD_ACCESS_WIDTH,
+        Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterFiller,
+        Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
+        HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, WORD_ACCESS_WIDTH,
     },
     load::common::LoadRecord,
 };
@@ -305,7 +300,6 @@ where
     }
 }
 
-#[cfg(test)]
 pub(crate) fn generate_trace_from_postflight<
     F: PrimeField32,
     const LOAD_WIDTH: usize,

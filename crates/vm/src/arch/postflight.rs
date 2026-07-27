@@ -1,8 +1,6 @@
 use std::{
     collections::{hash_map::Entry, BTreeMap},
-    mem::{align_of, size_of, MaybeUninit},
     ops::Range,
-    ptr,
 };
 
 use openvm_instructions::{
@@ -60,7 +58,7 @@ pub struct Field32Access<F> {
 pub struct Postflight<'a, F> {
     program: &'a Program<F>,
     history: &'a PreflightHistory,
-    memory_config: &'a MemoryConfig,
+    memory_config: MemoryConfig,
     exit_code: Option<u32>,
     steps: Vec<PostflightStep>,
     memory_starts: Vec<u32>,
@@ -84,10 +82,10 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new(
         program: &'a Program<F>,
         history: &'a PreflightHistory,
-        memory_config: &'a MemoryConfig,
+        memory_config: &MemoryConfig,
         exit_code: Option<u32>,
     ) -> Result<Self, PostflightError> {
-        validate_memory_config::<F>(memory_config)?;
+        validate_memory_config(memory_config)?;
         validate_program_timestamps(history, memory_config)?;
         let memory_starts = memory_starts(history)?;
         let mut opcode_counts = BTreeMap::<u32, usize>::new();
@@ -153,7 +151,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         Ok(Self {
             program,
             history,
-            memory_config,
+            memory_config: memory_config.clone(),
             exit_code,
             steps,
             memory_starts,
@@ -168,6 +166,20 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         self.opcode_ranges
             .get(&(opcode.as_usize() as u32))
             .map_or(&[], |range| &self.steps[range.clone()])
+    }
+
+    #[cfg(feature = "metrics")]
+    pub(crate) fn executed_opcodes(&self) -> impl Iterator<Item = VmOpcode> + '_ {
+        self.opcode_ranges
+            .keys()
+            .map(|&opcode| VmOpcode::from_usize(opcode as usize))
+    }
+
+    #[cfg(feature = "metrics")]
+    pub(crate) fn opcode_count(&self, opcode: VmOpcode) -> u64 {
+        self.opcode_ranges
+            .get(&(opcode.as_usize() as u32))
+            .map_or(0, |range| range.len() as u64)
     }
 
     pub fn instruction(&self, step: PostflightStep) -> &Instruction<F> {
@@ -205,7 +217,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         &self.filtered_exec_frequencies
     }
 
-    pub fn touched_memory(&self) -> &[TouchedBlock<F>] {
+    pub fn touched_memory(&self) -> &TouchedMemory<F> {
         &self.touched_memory
     }
 
@@ -690,7 +702,7 @@ fn validate_endpoint<F: Field>(
     Ok(())
 }
 
-fn validate_memory_config<F: PrimeField32>(config: &MemoryConfig) -> Result<(), PostflightError> {
+fn validate_memory_config(config: &MemoryConfig) -> Result<(), PostflightError> {
     if config.pointer_max_bits > u32::BITS as usize
         || config.addr_space_height >= u32::BITS as usize
         || config.timestamp_max_bits >= u32::BITS as usize
@@ -715,16 +727,6 @@ fn validate_memory_config<F: PrimeField32>(config: &MemoryConfig) -> Result<(), 
             "expected {expected_address_spaces} address-space layouts, found {}",
             config.addr_spaces.len()
         )));
-    }
-    if config
-        .addr_spaces
-        .iter()
-        .any(|address_space| address_space.layout == MemoryCellType::field32())
-        && (size_of::<F>() != size_of::<u32>() || align_of::<F>() > align_of::<u32>())
-    {
-        return Err(PostflightError::new(
-            "field32 memory requires a 4-byte proof field with at most 4-byte alignment",
-        ));
     }
     Ok(())
 }
@@ -814,20 +816,8 @@ fn validate_field_block<F: PrimeField32>(
 }
 
 fn decode_field_block<F: PrimeField32>(block: PreflightFieldBlock) -> [F; BLOCK_FE_WIDTH] {
-    debug_assert_eq!(size_of::<F>(), size_of::<u32>());
-    debug_assert!(align_of::<F>() <= align_of::<u32>());
     debug_assert!(block.values.iter().all(|&value| value < F::ORDER_U32));
-    let mut output = MaybeUninit::<[F; BLOCK_FE_WIDTH]>::uninit();
-    // SAFETY: construction validated that F is a 4-byte field with no stricter
-    // alignment than u32, and each raw word is a valid in-memory field value.
-    unsafe {
-        ptr::copy_nonoverlapping(
-            block.values.as_ptr().cast::<u8>(),
-            output.as_mut_ptr().cast::<u8>(),
-            size_of::<[F; BLOCK_FE_WIDTH]>(),
-        );
-        output.assume_init()
-    }
+    block.values.map(F::from_u32)
 }
 
 fn memory_index<F: PrimeField32>(
@@ -1093,15 +1083,19 @@ mod tests {
         replay.finish(4).unwrap();
     }
 
-    fn raw_baby_bear(value: BabyBear) -> u32 {
-        // BabyBear field32 memory stores one raw Montgomery u32 per cell.
-        unsafe { std::mem::transmute(value) }
+    fn field_block(values: [u32; BLOCK_FE_WIDTH]) -> PreflightFieldBlock {
+        PreflightFieldBlock { values }
     }
 
-    fn field_block(values: [u32; BLOCK_FE_WIDTH]) -> PreflightFieldBlock {
-        PreflightFieldBlock {
-            values: values.map(|value| raw_baby_bear(BabyBear::from_u32(value))),
-        }
+    #[test]
+    fn field_sidecars_are_canonical_not_field_representations() {
+        let canonical = [1, 2, 3, BabyBear::ORDER_U32 - 1];
+        let block = field_block(canonical);
+        assert_eq!(block.values, canonical);
+        assert_eq!(
+            decode_field_block::<BabyBear>(block).map(|value| value.as_canonical_u32()),
+            canonical
+        );
     }
 
     fn compact_reference(index: u32) -> [u16; BLOCK_FE_WIDTH] {
@@ -1249,6 +1243,45 @@ mod tests {
         assert_eq!(postflight.to_state(), ExecutionState::new(0u32, 1u32));
         assert_eq!(postflight.exit_code(), Some(exit_code));
         assert_eq!(postflight.filtered_exec_frequencies(), [1]);
+    }
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn derives_opcode_counts_from_validated_history() {
+        let phantom =
+            Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
+        let program = Program::<BabyBear>::new_without_debug_infos(
+            &[phantom.clone(), phantom.clone(), phantom],
+            0,
+        );
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 2,
+                },
+                PreflightProgramEvent {
+                    pc: 8,
+                    timestamp: 3,
+                },
+            ],
+            ..Default::default()
+        };
+        let postflight =
+            Postflight::new(&program, &history, &MemoryConfig::default(), None).unwrap();
+
+        assert_eq!(
+            postflight.executed_opcodes().collect::<Vec<_>>(),
+            [SystemOpcode::PHANTOM.global_opcode()]
+        );
+        assert_eq!(
+            postflight.opcode_count(SystemOpcode::PHANTOM.global_opcode()),
+            2
+        );
     }
 
     #[test]

@@ -181,10 +181,6 @@ where
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
     }
-
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.inner.name.clone()
-    }
 }
 
 // Implementation for EcDoubleExecutor
@@ -246,9 +242,5 @@ where
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
-    }
-
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.inner.name.clone()
     }
 }

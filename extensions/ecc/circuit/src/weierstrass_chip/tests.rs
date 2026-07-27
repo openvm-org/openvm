@@ -1,18 +1,20 @@
-use std::str::FromStr;
 #[cfg(feature = "cuda")]
 use std::sync::Arc;
+use std::{str::FromStr, sync::atomic::Ordering};
 
 use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    Arena, MatrixRecordArena, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    Arena, MatrixRecordArena, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+    PreflightProgramEvent, TraceFiller, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
+    program::Program,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
@@ -20,7 +22,7 @@ use openvm_mod_circuit_builder::{
     test_utils::generate_random_biguint, utils::biguint_to_limbs_vec, ExprBuilderConfig,
 };
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -44,21 +46,22 @@ use {
     openvm_cuda_common::copy::MemCopyD2H,
     openvm_instructions::{
         exe::{SparseMemoryImage, VmExe},
-        program::Program,
         SystemOpcode,
     },
     openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram},
     openvm_stark_backend::{prover::AirProvingContext, StarkEngine},
-    rvr_state::{
-        PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
-    },
+    rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT},
     strum::EnumCount,
 };
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
-    get_ec_double_chip, get_ec_double_executor, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
-    ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    get_ec_double_chip, get_ec_double_executor,
+    weierstrass_chip::{
+        generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
+    },
+    EcDoubleExecutor, WeierstrassAir, WeierstrassChip, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
+    NUM_LIMBS_48,
 };
 
 const LIMB_BITS: usize = 8;
@@ -517,7 +520,8 @@ mod ec_addne_tests {
         offset: usize,
         p1: Option<(BigUint, BigUint)>,
         p2: Option<(BigUint, BigUint)>,
-    ) where
+    ) -> Instruction<F>
+    where
         EcAddNeExecutor<BLOCKS>: PreflightExecutor<F, RA>,
     {
         let (x1, y1, x2, y2, op_local) = if is_setup {
@@ -623,6 +627,7 @@ mod ec_addne_tests {
         );
 
         tester.execute(executor, arena, &instruction);
+        instruction
     }
 
     fn run_ec_addne_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
@@ -694,6 +699,148 @@ mod ec_addne_tests {
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
+    }
+
+    #[test]
+    fn ec_addne_postflight_matches_legacy_and_rejects_bad_pointer() {
+        let mut tester = VmChipTestBuilder::<F>::default();
+        let modulus = secp256k1_coord_prime();
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS_32,
+            limb_bits: LIMB_BITS,
+        };
+        let opcode_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let mut harness = create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base);
+
+        let rd_register = 24usize;
+        let lhs_register = 8usize;
+        let rhs_register = 16usize;
+        let rd_pointer = 0x300u32;
+        let lhs_pointer = 0x100u32;
+        let rhs_pointer = 0x200u32;
+        for (register, pointer) in [
+            (rd_register, rd_pointer),
+            (lhs_register, lhs_pointer),
+            (rhs_register, rhs_pointer),
+        ] {
+            unsafe {
+                tester.memory.memory.data.write_bytes(
+                    RV64_REGISTER_AS,
+                    register as u32,
+                    u64::from(pointer).to_le_bytes(),
+                );
+            }
+        }
+        for (pointer, (x, y)) in [
+            (lhs_pointer, &SampleEcPoints[0]),
+            (rhs_pointer, &SampleEcPoints[1]),
+        ] {
+            let bytes = [x, y]
+                .into_iter()
+                .flat_map(|coordinate| biguint_to_limbs_vec(coordinate, NUM_LIMBS_32).into_iter())
+                .collect::<Vec<_>>();
+            for byte_offset in (0..2 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
+                unsafe {
+                    tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
+                        RV64_MEMORY_AS,
+                        pointer + byte_offset as u32,
+                        bytes[byte_offset..byte_offset + MEMORY_BLOCK_BYTES]
+                            .try_into()
+                            .unwrap(),
+                    );
+                }
+            }
+        }
+        let instruction = Instruction::from_usize(
+            VmOpcode::from_usize(opcode_base + Rv64WeierstrassOpcode::EC_ADD_NE as usize),
+            [
+                rd_register,
+                lhs_register,
+                rhs_register,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        );
+        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
+        let final_timestamp = tester.memory.memory.timestamp();
+        let mut history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: final_timestamp,
+                },
+            ],
+            memory: tester.memory.memory.take_log(),
+        };
+        let program =
+            Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
+        let memory_config = MemoryConfig::default();
+        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let actual =
+            generate_add_ne_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
+
+        let rows_used = harness.arena.trace_offset / harness.arena.width;
+        let mut expected_values = harness.arena.trace_buffer.clone();
+        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+        harness.chip.inner.fill_trace(
+            &harness.chip.mem_helper.as_borrowed(),
+            &mut expected,
+            rows_used,
+        );
+        assert_eq!(actual, expected);
+
+        drop(postflight);
+        history.memory.accesses[0].value[2] = 1;
+        let malformed = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let error = generate_add_ne_trace_from_postflight(&harness.chip, &malformed, opcode_base)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("nonzero upper 32 bits"),
+            "{error}"
+        );
+
+        history.memory.accesses[0].value[2] = 0;
+        history.memory.accesses[0].pointer += 1;
+        let error = Postflight::new(&program, &history, &memory_config, None)
+            .err()
+            .expect("misaligned memory event must be rejected");
+        assert!(error.to_string().contains("misaligned"), "{error}");
+
+        history.memory.accesses[0].pointer -= 1;
+        let write = history
+            .memory
+            .accesses
+            .iter_mut()
+            .find(|event| event.is_write())
+            .unwrap();
+        write.value[0] ^= 1;
+        let range_counts_before = harness
+            .chip
+            .inner
+            .range_checker
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>();
+        let malformed = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let error = generate_add_ne_trace_from_postflight(&harness.chip, &malformed, opcode_base)
+            .unwrap_err();
+        assert!(error.to_string().contains("OutputMismatch"), "{error}");
+        let range_counts_after = harness
+            .chip
+            .inner
+            .range_checker
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>();
+        assert_eq!(range_counts_after, range_counts_before);
     }
 
     #[cfg(feature = "cuda")]
@@ -1352,7 +1499,8 @@ mod ec_double_tests {
         offset: usize,
         x: Option<BigUint>,
         y: Option<BigUint>,
-    ) where
+    ) -> Instruction<F>
+    where
         EcDoubleExecutor<BLOCKS>: PreflightExecutor<F, RA>,
     {
         let (x1, y1, op_local) = if is_setup {
@@ -1426,6 +1574,7 @@ mod ec_double_tests {
         );
 
         tester.execute(executor, arena, &instruction);
+        instruction
     }
 
     fn run_ec_double_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
@@ -1546,6 +1695,91 @@ mod ec_double_tests {
             50,
             BigUint::zero(),
         );
+    }
+
+    #[test]
+    fn ec_double_postflight_matches_legacy() {
+        let mut tester = VmChipTestBuilder::<F>::default();
+        let modulus = secp256k1_coord_prime();
+        let a = BigUint::zero();
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS_32,
+            limb_bits: LIMB_BITS,
+        };
+        let opcode_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let mut harness = create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base, a.clone());
+
+        let rd_register = 16usize;
+        let input_register = 8usize;
+        let rd_pointer = 0x200u32;
+        let input_pointer = 0x100u32;
+        for (register, pointer) in [(rd_register, rd_pointer), (input_register, input_pointer)] {
+            unsafe {
+                tester.memory.memory.data.write_bytes(
+                    RV64_REGISTER_AS,
+                    register as u32,
+                    u64::from(pointer).to_le_bytes(),
+                );
+            }
+        }
+        let bytes = [&SampleEcPoints[0].0, &SampleEcPoints[0].1]
+            .into_iter()
+            .flat_map(|coordinate| biguint_to_limbs_vec(coordinate, NUM_LIMBS_32).into_iter())
+            .collect::<Vec<_>>();
+        for byte_offset in (0..2 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
+            unsafe {
+                tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
+                    RV64_MEMORY_AS,
+                    input_pointer + byte_offset as u32,
+                    bytes[byte_offset..byte_offset + MEMORY_BLOCK_BYTES]
+                        .try_into()
+                        .unwrap(),
+                );
+            }
+        }
+        let instruction = Instruction::from_usize(
+            VmOpcode::from_usize(opcode_base + Rv64WeierstrassOpcode::EC_DOUBLE as usize),
+            [
+                rd_register,
+                input_register,
+                0,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        );
+        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
+        let final_timestamp = tester.memory.memory.timestamp();
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: final_timestamp,
+                },
+            ],
+            memory: tester.memory.memory.take_log(),
+        };
+        let program =
+            Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
+        let memory_config = MemoryConfig::default();
+        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let actual =
+            generate_double_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
+
+        let rows_used = harness.arena.trace_offset / harness.arena.width;
+        let mut expected_values = harness.arena.trace_buffer.clone();
+        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+        harness.chip.inner.fill_trace(
+            &harness.chip.mem_helper.as_borrowed(),
+            &mut expected,
+            rows_used,
+        );
+        assert_eq!(actual, expected);
     }
 
     #[cfg(feature = "cuda")]

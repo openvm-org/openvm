@@ -181,10 +181,6 @@ where
         (A::RecordMut<'buf>, &'buf mut Rv64AuipcCoreRecord),
     >,
 {
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{AUIPC:?}")
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

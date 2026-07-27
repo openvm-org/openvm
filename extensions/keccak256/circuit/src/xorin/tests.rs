@@ -3,7 +3,8 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor, MEMORY_BLOCK_BYTES,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -17,6 +18,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -34,14 +36,15 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
-    openvm_instructions::{program::Program, SystemOpcode},
-    rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
+    openvm_instructions::SystemOpcode,
+    rvr_state::{PreflightMemoryEvent, PREFLIGHT_WRITE_BIT},
 };
 
 use crate::{
     xorin::{
         air::XorinVmAir,
         columns::{XorinVmCols, NUM_XORIN_VM_COLS},
+        trace::generate_trace_from_postflight,
         XorinVmChip, XorinVmExecutor, XorinVmFiller,
     },
     KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS,
@@ -294,6 +297,102 @@ fn xorin_wrong_len_limb_negative_test() {
     run_xorin_chip_negative_test(|cols| {
         cols.instruction.len_limb += F::ONE;
     });
+}
+
+fn xorin_postflight_fixture() -> (Harness, Program<F>, PreflightHistory) {
+    const LEN: usize = 16;
+
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_test_harness(&mut tester);
+    let instruction = Instruction::from_usize(
+        XorinOpcode::XORIN.global_opcode(),
+        [
+            8,
+            16,
+            24,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    );
+    let sentinel = instruction.clone();
+    let block = |bytes: [u8; MEMORY_BLOCK_BYTES]| {
+        std::array::from_fn(|index| u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]]))
+    };
+    unsafe {
+        let memory = &mut tester.memory.memory.data;
+        memory.write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, block((0x200u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            12,
+            block((LEN as u64).to_le_bytes()),
+        );
+        for index in 0..LEN / MEMORY_BLOCK_BYTES {
+            memory.write::<u16, BLOCK_FE_WIDTH>(
+                RV64_MEMORY_AS,
+                0x80 + (index * BLOCK_FE_WIDTH) as u32,
+                block(std::array::from_fn(|byte| {
+                    (index * MEMORY_BLOCK_BYTES + byte) as u8
+                })),
+            );
+            memory.write::<u16, BLOCK_FE_WIDTH>(
+                RV64_MEMORY_AS,
+                0x100 + (index * BLOCK_FE_WIDTH) as u32,
+                block(std::array::from_fn(|byte| {
+                    (0xa0 + index * MEMORY_BLOCK_BYTES + byte) as u8
+                })),
+            );
+        }
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: DEFAULT_PC_STEP,
+                timestamp: 10,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
+    (harness, program, history)
+}
+
+#[test]
+fn postflight_xorin_trace_matches_record_arena_trace() {
+    let (harness, program, history) = xorin_postflight_fixture();
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
+}
+
+#[test]
+fn postflight_xorin_rejects_corrupt_write() {
+    let (harness, program, mut history) = xorin_postflight_fixture();
+    history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let error = generate_trace_from_postflight(&harness.chip, &postflight).unwrap_err();
+
+    assert!(error.to_string().contains("unexpected write"));
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

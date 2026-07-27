@@ -85,6 +85,10 @@ impl DeferralCallExecutor {
 }
 
 impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        format!("{:?}", DeferralOpcode::CALL)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<DeferralCallPrecompute>()
     }

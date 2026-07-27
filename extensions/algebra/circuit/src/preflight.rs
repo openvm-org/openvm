@@ -253,7 +253,4 @@ where
         Ok(())
     }
 
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.inner.name.clone()
-    }
 }

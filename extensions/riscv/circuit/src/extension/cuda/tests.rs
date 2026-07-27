@@ -439,7 +439,7 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 
     vm.transport_init_memory_to_device(&interpreter_state.memory);
     let output = interpreter
-        .execute_preflight_from_state(interpreter_state, None)
+        .execute_preflight_from_state::<F>(interpreter_state, None)
         .unwrap();
     let (gpu_transcript, replay_plan) = vm.postflight_history(&gpu_program, &output).unwrap();
     let tracegen =

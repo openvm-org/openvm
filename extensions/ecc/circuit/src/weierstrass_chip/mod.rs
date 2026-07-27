@@ -2,12 +2,16 @@ mod add_ne;
 mod curves;
 mod double;
 mod preflight;
+mod trace;
 
 pub use add_ne::*;
 #[cfg(feature = "rvr")]
 pub(crate) use curves::get_curve_type;
 pub use curves::CurveType;
 pub use double::*;
+pub(crate) use trace::{
+    generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
+};
 
 #[cfg(test)]
 mod tests;

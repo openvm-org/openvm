@@ -13,8 +13,7 @@ use super::{
 
 mod execution;
 mod preflight;
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;
 pub use preflight::*;
 
 // SLLW/SRLW/SRAW all use the u16 shift cores over the W adapter (low 32-bit word in,

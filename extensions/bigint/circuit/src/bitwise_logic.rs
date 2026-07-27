@@ -46,6 +46,13 @@ macro_rules! dispatch {
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BitwiseLogic256Executor {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BaseAluOpcode::from_usize(opcode - Rv64BaseAlu256Opcode::CLASS_OFFSET)
+        )
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<BitwiseLogicPreCompute>()
     }

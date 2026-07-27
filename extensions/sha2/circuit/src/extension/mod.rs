@@ -14,9 +14,12 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::LocalOpcode;
@@ -27,7 +30,7 @@ use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_sha2::Sha2Extension;
 #[cfg(feature = "rvr")]
@@ -246,7 +249,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -266,7 +271,11 @@ where
             mem_helper.clone(),
             records.clone(),
         );
-        inventory.add_periphery_chip(sha256_block_hasher_chip);
+        inventory.add_postflight_periphery_chip(sha256_block_hasher_chip, |chip, postflight| {
+            Ok(AirProvingContext::simple_no_pis(
+                crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
+            ))
+        });
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_chip = Sha2MainChip::<Val<SC>, Sha256Config>::new(
@@ -275,7 +284,11 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(sha256_main_chip);
+        inventory.add_postflight_executor_chip(sha256_main_chip, |chip, postflight| {
+            Ok(AirProvingContext::simple_no_pis(
+                crate::generate_main_trace_from_postflight(chip, postflight)?,
+            ))
+        });
 
         // SHA-512
         inventory.next_air::<Sha2BlockHasherVmAir<Sha512Config>>()?;
@@ -288,7 +301,11 @@ where
             mem_helper.clone(),
             records.clone(),
         );
-        inventory.add_periphery_chip(sha512_block_hasher_chip);
+        inventory.add_postflight_periphery_chip(sha512_block_hasher_chip, |chip, postflight| {
+            Ok(AirProvingContext::simple_no_pis(
+                crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
+            ))
+        });
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_chip = Sha2MainChip::<Val<SC>, Sha512Config>::new(
@@ -297,7 +314,11 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(sha512_main_chip);
+        inventory.add_postflight_executor_chip(sha512_main_chip, |chip, postflight| {
+            Ok(AirProvingContext::simple_no_pis(
+                crate::generate_main_trace_from_postflight(chip, postflight)?,
+            ))
+        });
 
         Ok(())
     }

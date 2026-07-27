@@ -457,10 +457,6 @@ where
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
     }
-
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.name.clone()
-    }
 }
 
 impl<F, A> TraceFiller<F> for FieldExpressionFiller<A>

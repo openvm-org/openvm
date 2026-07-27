@@ -74,6 +74,16 @@ impl<F> InterpreterExecutor<F> for Rv64HintStoreExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if opcode == HINT_STORED.global_opcode().as_usize() {
+            String::from("HINT_STORED")
+        } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
+            String::from("HINT_BUFFER")
+        } else {
+            unreachable!("unsupported opcode: {opcode}")
+        }
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<HintStorePreCompute>()

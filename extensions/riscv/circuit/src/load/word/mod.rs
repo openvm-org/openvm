@@ -30,5 +30,4 @@ pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;

@@ -25,10 +25,9 @@ struct PreflightInitialWrite {
     uint16_t initial_value[4];
 };
 
-// One native field-cell memory-bus block. Values use the raw Montgomery
-// representation consumed by GPU field code and the memory inventory. For
-// FIELD32 events/seeds, the low 32 bits of the compact value payload index the
-// corresponding dense event/first-write sidecar; the high 32 bits are zero.
+// One field-cell memory-bus block represented by canonical unsigned integers.
+// For FIELD32 events/seeds, the low 32 bits of the compact value payload index
+// the corresponding dense event/first-write sidecar; the high 32 bits are zero.
 struct RvrFieldBlock {
     uint32_t values[4];
 };

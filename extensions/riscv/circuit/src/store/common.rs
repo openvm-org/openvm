@@ -52,13 +52,6 @@ where
         (A::RecordMut<'buf>, &'buf mut StoreRecord),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
-        )
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,
@@ -103,13 +96,6 @@ where
         (A::RecordMut<'buf>, &'buf mut StoreByteRecord),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
-        )
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

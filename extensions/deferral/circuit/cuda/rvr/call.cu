@@ -22,7 +22,7 @@ static __device__ bool deferral_call_field_block(
 #pragma unroll
     for (size_t lane = 0; lane < BLOCK_FE_WIDTH; lane++) {
         if (values[reference].values[lane] >= Fp::P) return false;
-        out[lane] = Fp::fromRaw(values[reference].values[lane]);
+        out[lane] = Fp(values[reference].values[lane]);
     }
     return true;
 }
@@ -59,7 +59,7 @@ static __device__ bool deferral_call_previous_field(
 #pragma unroll
         for (size_t lane = 0; lane < BLOCK_FE_WIDTH; lane++) {
             if (seed_values[reference].values[lane] >= Fp::P) return false;
-            previous_value[lane] = Fp::fromRaw(seed_values[reference].values[lane]);
+            previous_value[lane] = Fp(seed_values[reference].values[lane]);
         }
         return true;
     }

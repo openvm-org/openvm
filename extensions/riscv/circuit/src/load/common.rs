@@ -47,13 +47,6 @@ where
     for<'buf> RA:
         RecordArena<'buf, EmptyAdapterCoreLayout<F, A>, (A::RecordMut<'buf>, &'buf mut LoadRecord)>,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
-        )
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,
@@ -94,13 +87,6 @@ where
         (A::RecordMut<'buf>, &'buf mut LoadByteRecord),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
-        )
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

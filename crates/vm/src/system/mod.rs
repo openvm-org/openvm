@@ -454,7 +454,9 @@ where
 
         let mut inventory = ChipInventory::new(airs);
         inventory.next_air::<VariableRangeCheckerAir>()?;
-        inventory.add_periphery_chip(range_checker.clone());
+        inventory.add_postflight_periphery_chip(range_checker.clone(), |chip, _| {
+            Ok(chip.generate_proving_ctx(()))
+        });
 
         assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
         // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
@@ -467,7 +469,9 @@ where
             vm_poseidon2_config(),
             config.max_constraint_degree,
         ));
-        inventory.add_periphery_chip(hasher_chip.clone());
+        inventory.add_postflight_periphery_chip(hasher_chip.clone(), |chip, _| {
+            Ok(chip.generate_proving_ctx(()))
+        });
         let system = SystemChipInventory::new(
             config,
             &inventory.airs().system().memory,
@@ -476,7 +480,10 @@ where
         );
 
         let phantom_chip = PhantomChip::new(PhantomFiller, system.memory_controller.helper());
-        inventory.add_executor_chip(phantom_chip);
+        inventory.add_postflight_executor_chip(phantom_chip, |_, postflight| {
+            phantom::generate_trace_from_postflight(postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         Ok(VmChipComplex { system, inventory })
     }

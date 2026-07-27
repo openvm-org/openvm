@@ -3,13 +3,11 @@ use std::{
     mem::size_of,
 };
 
-#[cfg(test)]
-use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        ExecutionBridge, ExecutionState, Postflight, PostflightError, PostflightStep, VmAdapterAir,
+        VmAdapterInterface, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -35,13 +33,12 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-#[cfg(test)]
-use crate::adapters::checked_byte_ptr_to_u16_ptr_value;
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block,
-    is_multi_byte_access_width, memory_read_u16, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    rv64_address_add_imm, rv64_register_pointer, sign_extend_imm16, timed_write_u16, tracing_read,
-    tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_byte_ptr_to_u16_ptr_value,
+    expand_to_rv64_block, is_multi_byte_access_width, memory_read_u16, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer, sign_extend_imm16,
+    timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct LoadInstruction<T> {
@@ -535,10 +532,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadMultiByteAdapterFiller {
     }
 }
 
-#[cfg(test)]
 type LoadMultiReplay = ([[u16; BLOCK_FE_WIDTH]; 2], usize, [u16; BLOCK_FE_WIDTH]);
 
-#[cfg(test)]
 impl Rv64LoadMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const LOAD_WIDTH: usize>(
         &self,
@@ -732,7 +727,6 @@ impl Rv64LoadMultiByteAdapterFiller {
     }
 }
 
-#[cfg(test)]
 fn validate_register_pointer(pointer: u32) -> Result<(), PostflightError> {
     if pointer > u8::MAX as u32
         || !pointer.is_multiple_of(openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS as u32)

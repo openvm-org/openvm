@@ -198,13 +198,6 @@ where
         (A::RecordMut<'buf>, &'buf mut Rv64JalrCoreRecord),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64JalrOpcode::from_usize(opcode - Rv64JalrOpcode::CLASS_OFFSET)
-        )
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

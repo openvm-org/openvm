@@ -48,6 +48,7 @@ mod extension;
 pub use extension::*;
 pub mod fields;
 mod preflight;
+pub(crate) mod trace;
 
 use fields::{get_field_type, get_fp2_field_type, FieldType};
 

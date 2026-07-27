@@ -10,22 +10,27 @@ use openvm_circuit::{
         online::TracingMemory,
         MemoryAuxColsFactory,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{AlignedBytesBorrow, U16_BITS};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    ptr_bound_from_ptr, ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32,
-    tracing_read, tracing_write,
+    byte_ptr_to_u16_ptr_value, ptr_bound_from_ptr, ptr_to_field_u16_limbs,
+    read_rv64_register_as_u32, rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes,
+    tracing_read, tracing_write, try_rv64_bytes_to_u32,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+};
 
 use crate::{
-    xorin::{columns::XorinVmCols, XorinVmExecutor, XorinVmFiller},
+    xorin::{columns::XorinVmCols, XorinVmChip, XorinVmExecutor, XorinVmFiller},
     KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS,
 };
 
@@ -63,6 +68,44 @@ pub struct XorinVmRecordMut<'a> {
     pub inner: &'a mut XorinVmRecordHeader,
 }
 
+struct XorinTraceInput {
+    from_pc: u32,
+    timestamp: u32,
+    rd_ptr: u32,
+    rs1_ptr: u32,
+    rs2_ptr: u32,
+    buffer: u32,
+    input: u32,
+    len: u32,
+    buffer_limbs: [u8; KECCAK_RATE_BYTES],
+    input_limbs: [u8; KECCAK_RATE_BYTES],
+    register_aux_cols: [MemoryReadAuxRecord; 3],
+    input_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
+    buffer_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
+    buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; KECCAK_RATE_MEM_OPS],
+}
+
+impl From<XorinVmRecordHeader> for XorinTraceInput {
+    fn from(record: XorinVmRecordHeader) -> Self {
+        Self {
+            from_pc: record.from_pc,
+            timestamp: record.timestamp,
+            rd_ptr: record.rd_ptr,
+            rs1_ptr: record.rs1_ptr,
+            rs2_ptr: record.rs2_ptr,
+            buffer: record.buffer,
+            input: record.input,
+            len: record.len,
+            buffer_limbs: record.buffer_limbs,
+            input_limbs: record.input_limbs,
+            register_aux_cols: record.register_aux_cols,
+            input_read_aux_cols: record.input_read_aux_cols,
+            buffer_read_aux_cols: record.buffer_read_aux_cols,
+            buffer_write_aux_cols: record.buffer_write_aux_cols,
+        }
+    }
+}
+
 // Custom borrowing to split the buffer into a fixed `XorinVmRecord` header
 impl<'a> CustomBorrow<'a, XorinVmRecordMut<'a>, XorinVmRecordLayout> for [u8] {
     fn custom_borrow(&'a mut self, _layout: XorinVmRecordLayout) -> XorinVmRecordMut<'a> {
@@ -95,10 +138,6 @@ where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, XorinVmRecordLayout, XorinVmRecordMut<'buf>>,
 {
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", XorinOpcode::XORIN)
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,
@@ -224,37 +263,48 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         };
 
         // Safety: the clone here is necessary because the XorinVmCols uses the same buffer
-        let record = record.inner.clone();
+        let input = XorinTraceInput::from(record.inner.clone());
+        self.fill_trace_input(mem_helper, &input, row_slice);
+    }
+}
+
+impl XorinVmFiller {
+    fn fill_trace_input<F: PrimeField32>(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        input: &XorinTraceInput,
+        row_slice: &mut [F],
+    ) {
         row_slice.fill(F::ZERO);
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
 
-        trace_row.instruction.pc = F::from_u32(record.from_pc);
+        trace_row.instruction.pc = F::from_u32(input.from_pc);
         trace_row.instruction.is_enabled = F::ONE;
-        trace_row.instruction.buffer_reg_ptr = F::from_u32(record.rd_ptr);
-        trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
-        trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
-        trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
-        trace_row.instruction.buffer_ptr_limbs = ptr_to_field_u16_limbs(record.buffer);
-        trace_row.instruction.input_ptr = F::from_u32(record.input);
-        trace_row.instruction.input_ptr_limbs = ptr_to_field_u16_limbs(record.input);
-        trace_row.instruction.len = F::from_u32(record.len);
-        trace_row.instruction.len_limb = F::from_u8(record.len as u8);
-        trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
+        trace_row.instruction.buffer_reg_ptr = F::from_u32(input.rd_ptr);
+        trace_row.instruction.input_reg_ptr = F::from_u32(input.rs1_ptr);
+        trace_row.instruction.len_reg_ptr = F::from_u32(input.rs2_ptr);
+        trace_row.instruction.buffer_ptr = F::from_u32(input.buffer);
+        trace_row.instruction.buffer_ptr_limbs = ptr_to_field_u16_limbs(input.buffer);
+        trace_row.instruction.input_ptr = F::from_u32(input.input);
+        trace_row.instruction.input_ptr_limbs = ptr_to_field_u16_limbs(input.input);
+        trace_row.instruction.len = F::from_u32(input.len);
+        trace_row.instruction.len_limb = F::from_u8(input.len as u8);
+        trace_row.instruction.start_timestamp = F::from_u32(input.timestamp);
 
-        for i in 0..(record.len as usize / MEMORY_BLOCK_BYTES) {
+        for i in 0..(input.len as usize / MEMORY_BLOCK_BYTES) {
             trace_row.sponge.is_padding_bytes[i] = F::ZERO;
         }
-        for i in (record.len as usize / MEMORY_BLOCK_BYTES)..(KECCAK_RATE_MEM_OPS) {
+        for i in (input.len as usize / MEMORY_BLOCK_BYTES)..(KECCAK_RATE_MEM_OPS) {
             trace_row.sponge.is_padding_bytes[i] = F::ONE;
         }
 
-        let mut timestamp = record.timestamp;
-        let record_len: usize = record.len as usize;
-        let num_reads: usize = record_len.div_ceil(MEMORY_BLOCK_BYTES);
+        let mut timestamp = input.timestamp;
+        let input_len = input.len as usize;
+        let num_reads = input_len.div_ceil(MEMORY_BLOCK_BYTES);
 
         for t in 0..3 {
             mem_helper.fill(
-                record.register_aux_cols[t].prev_timestamp,
+                input.register_aux_cols[t].prev_timestamp,
                 timestamp,
                 trace_row.mem_oc.register_aux_cols[t].as_mut(),
             );
@@ -264,7 +314,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
         for t in 0..num_reads {
             mem_helper.fill(
-                record.buffer_read_aux_cols[t].prev_timestamp,
+                input.buffer_read_aux_cols[t].prev_timestamp,
                 timestamp,
                 trace_row.mem_oc.buffer_bytes_read_aux_cols[t].as_mut(),
             );
@@ -273,7 +323,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
         for t in 0..num_reads {
             mem_helper.fill(
-                record.input_read_aux_cols[t].prev_timestamp,
+                input.input_read_aux_cols[t].prev_timestamp,
                 timestamp,
                 trace_row.mem_oc.input_bytes_read_aux_cols[t].as_mut(),
             );
@@ -282,36 +332,190 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
         // Fill all bytes that are covered by active 8-byte memory blocks.
         let bytes_covered = num_reads * MEMORY_BLOCK_BYTES;
-        for i in 0..record_len {
-            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
-            trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
+        for i in 0..input_len {
+            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(input.buffer_limbs[i]);
+            trace_row.sponge.input_bytes[i] = F::from_u8(input.input_limbs[i]);
             trace_row.sponge.postimage_buffer_bytes[i] =
-                F::from_u8(record.buffer_limbs[i] ^ record.input_limbs[i]);
-            let b_val = record.buffer_limbs[i] as u32;
-            let c_val = record.input_limbs[i] as u32;
+                F::from_u8(input.buffer_limbs[i] ^ input.input_limbs[i]);
+            let b_val = input.buffer_limbs[i] as u32;
+            let c_val = input.input_limbs[i] as u32;
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
         }
-        for i in record_len..bytes_covered {
-            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
-            trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
-            trace_row.sponge.postimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
+        for i in input_len..bytes_covered {
+            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(input.buffer_limbs[i]);
+            trace_row.sponge.input_bytes[i] = F::from_u8(input.input_limbs[i]);
+            trace_row.sponge.postimage_buffer_bytes[i] = F::from_u8(input.buffer_limbs[i]);
         }
 
         for t in 0..num_reads {
             mem_helper.fill(
-                record.buffer_write_aux_cols[t].prev_timestamp,
+                input.buffer_write_aux_cols[t].prev_timestamp,
                 timestamp,
                 trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut(),
             );
             trace_row.mem_oc.buffer_bytes_write_aux_cols[t].set_prev_data(pack_u8_block_bytes(
-                &record.buffer_write_aux_cols[t].prev_data,
+                &input.buffer_write_aux_cols[t].prev_data,
             ));
             timestamp += 1;
         }
 
-        for ptr in [record.buffer, record.input] {
+        for ptr in [input.buffer, input.input] {
             self.range_checker_chip
                 .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
     }
+}
+
+/// Generates the XORIN trace directly from immutable preflight history.
+pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
+    chip: &XorinVmChip<F>,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    let steps = postflight.steps(XorinOpcode::XORIN.global_opcode());
+    let width = XorinVmCols::<F>::width();
+    let height = next_power_of_two_or_zero(steps.len());
+    let inputs = steps
+        .par_iter()
+        .map(|&step| replay_input(postflight, step, chip.inner.pointer_max_bits))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+    let mem_helper = chip.mem_helper.as_borrowed();
+    trace
+        .values
+        .par_chunks_exact_mut(width)
+        .zip(inputs.par_iter())
+        .for_each(|(row, input)| chip.inner.fill_trace_input(&mem_helper, input, row));
+    Ok(trace)
+}
+
+fn replay_input<F: PrimeField32>(
+    postflight: &Postflight<'_, F>,
+    step: PostflightStep,
+    pointer_max_bits: usize,
+) -> Result<XorinTraceInput, PostflightError> {
+    let instruction = postflight.instruction(step);
+    if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+        || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+    {
+        return Err(PostflightError::new(
+            "XORIN instruction has invalid address spaces",
+        ));
+    }
+
+    let from_pc = postflight.pc(step);
+    let timestamp = postflight.timestamp(step);
+    let rd_ptr = instruction.a.as_canonical_u32();
+    let rs1_ptr = instruction.b.as_canonical_u32();
+    let rs2_ptr = instruction.c.as_canonical_u32();
+    for pointer in [rd_ptr, rs1_ptr, rs2_ptr] {
+        if pointer & 1 != 0 {
+            return Err(PostflightError::new(
+                "XORIN register pointer must be two-byte aligned",
+            ));
+        }
+    }
+
+    let mut replay = postflight.replay(step);
+    let register_reads = [
+        replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr))?,
+        replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs1_ptr))?,
+        replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs2_ptr))?,
+    ];
+    let [Some(buffer), Some(input), Some(len)] = register_reads
+        .each_ref()
+        .map(|access| try_rv64_bytes_to_u32(rv64_u16_block_to_bytes(access.value)))
+    else {
+        return Err(PostflightError::new("XORIN register value exceeds 32 bits"));
+    };
+    let len_usize = len as usize;
+    if len_usize > KECCAK_RATE_BYTES || !len_usize.is_multiple_of(MEMORY_BLOCK_BYTES) {
+        return Err(PostflightError::new(
+            "XORIN length must be an aligned rate-sized byte count",
+        ));
+    }
+    let num_reads = len_usize / MEMORY_BLOCK_BYTES;
+    if num_reads != 0 && (buffer & 1 != 0 || input & 1 != 0) {
+        return Err(PostflightError::new(
+            "XORIN memory pointer must be two-byte aligned",
+        ));
+    }
+    let domain_end = if pointer_max_bits < 32 {
+        1u64 << pointer_max_bits
+    } else {
+        1u64 << 32
+    };
+    if u64::from(buffer) >= domain_end
+        || u64::from(input) >= domain_end
+        || u64::from(buffer) + u64::from(len) > domain_end
+        || u64::from(input) + u64::from(len) > domain_end
+    {
+        return Err(PostflightError::new(
+            "XORIN memory range exceeds the pointer domain",
+        ));
+    }
+
+    let mut buffer_limbs = [0u8; KECCAK_RATE_BYTES];
+    let mut input_limbs = [0u8; KECCAK_RATE_BYTES];
+    let mut buffer_read_aux_cols =
+        std::array::from_fn(|_| MemoryReadAuxRecord { prev_timestamp: 0 });
+    let mut input_read_aux_cols =
+        std::array::from_fn(|_| MemoryReadAuxRecord { prev_timestamp: 0 });
+    for index in 0..num_reads {
+        let access = replay.read_u16(
+            RV64_MEMORY_AS,
+            byte_ptr_to_u16_ptr_value(buffer) + (index * BLOCK_FE_WIDTH) as u32,
+        )?;
+        buffer_limbs[index * MEMORY_BLOCK_BYTES..(index + 1) * MEMORY_BLOCK_BYTES]
+            .copy_from_slice(&rv64_u16_block_to_bytes(access.value));
+        buffer_read_aux_cols[index].prev_timestamp = access.previous_timestamp;
+    }
+    for index in 0..num_reads {
+        let access = replay.read_u16(
+            RV64_MEMORY_AS,
+            byte_ptr_to_u16_ptr_value(input) + (index * BLOCK_FE_WIDTH) as u32,
+        )?;
+        input_limbs[index * MEMORY_BLOCK_BYTES..(index + 1) * MEMORY_BLOCK_BYTES]
+            .copy_from_slice(&rv64_u16_block_to_bytes(access.value));
+        input_read_aux_cols[index].prev_timestamp = access.previous_timestamp;
+    }
+
+    let mut buffer_write_aux_cols =
+        [MemoryWriteBytesAuxRecord::<MEMORY_BLOCK_BYTES>::default(); KECCAK_RATE_MEM_OPS];
+    for index in 0..num_reads {
+        let mut output = [0u8; MEMORY_BLOCK_BYTES];
+        for byte in 0..MEMORY_BLOCK_BYTES {
+            let offset = index * MEMORY_BLOCK_BYTES + byte;
+            output[byte] = buffer_limbs[offset] ^ input_limbs[offset];
+        }
+        let access = replay.write_u16(
+            RV64_MEMORY_AS,
+            byte_ptr_to_u16_ptr_value(buffer) + (index * BLOCK_FE_WIDTH) as u32,
+            rv64_bytes_to_u16_block(output),
+        )?;
+        buffer_write_aux_cols[index].prev_timestamp = access.previous_timestamp;
+        buffer_write_aux_cols[index].prev_data = rv64_u16_block_to_bytes(access.previous_value);
+    }
+    let next_pc = from_pc
+        .checked_add(DEFAULT_PC_STEP)
+        .ok_or_else(|| PostflightError::new("XORIN program counter overflow"))?;
+    replay.finish(next_pc)?;
+
+    Ok(XorinTraceInput {
+        from_pc,
+        timestamp,
+        rd_ptr,
+        rs1_ptr,
+        rs2_ptr,
+        buffer,
+        input,
+        len,
+        buffer_limbs,
+        input_limbs,
+        register_aux_cols: register_reads.map(|access| MemoryReadAuxRecord {
+            prev_timestamp: access.previous_timestamp,
+        }),
+        input_read_aux_cols,
+        buffer_read_aux_cols,
+        buffer_write_aux_cols,
+    })
 }

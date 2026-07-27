@@ -1,12 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
-#[cfg(test)]
-use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
-        BLOCK_FE_WIDTH,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, Postflight,
+        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
@@ -34,11 +32,10 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, pack_high_u16, pack_rv64_u16_block, tracing_read, tracing_write,
+    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, pack_high_u16, pack_rv64_u16_block,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, tracing_read, tracing_write,
     RV64_PTR_U16_LIMBS,
 };
-#[cfg(test)]
-use super::{checked_byte_ptr_to_u16_ptr_value, rv64_bytes_to_u16_block, rv64_u16_block_to_bytes};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -337,7 +334,6 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
     }
 }
 
-#[cfg(test)]
 impl Rv64MultWAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         &self,

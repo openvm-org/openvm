@@ -1,12 +1,17 @@
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
-use openvm_circuit::arch::{
-    deferral::{DeferralResult, DeferralState},
-    testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::{
+    arch::{
+        deferral::{DeferralResult, DeferralState},
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
+        to_byte_ptr_bits, Arena, ExecutionError, MatrixRecordArena, MemoryConfig, Postflight,
+        PreflightExecutor, PreflightHistory, PreflightProgramEvent, TraceFiller, VmStateMut,
+        MEMORY_BLOCK_BYTES,
     },
-    to_byte_ptr_bits, Arena, ExecutionError, MatrixRecordArena, MemoryConfig, PreflightExecutor,
-    VmStateMut, MEMORY_BLOCK_BYTES,
+    system::memory::online::TracingMemory,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -15,10 +20,15 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
+    program::Program,
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeCharacteristicRing};
+use openvm_stark_backend::{
+    interaction::BusIndex,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
@@ -151,9 +161,29 @@ fn set_and_execute_output<RA, E>(
     arena: &mut RA,
     rng: &mut StdRng,
     num_deferrals: usize,
-) where
+) -> Instruction<F>
+where
     RA: Arena,
     E: PreflightExecutor<F, RA>,
+{
+    set_and_execute_output_with_hooks(tester, executor, arena, rng, num_deferrals, |_| {}, |_| {})
+}
+
+fn set_and_execute_output_with_hooks<RA, E, T, Before, After>(
+    tester: &mut T,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    num_deferrals: usize,
+    before_execute: Before,
+    after_execute: After,
+) -> Instruction<F>
+where
+    RA: Arena,
+    E: PreflightExecutor<F, RA>,
+    T: TestBuilder<F>,
+    Before: FnOnce(&mut T),
+    After: FnOnce(&mut T),
 {
     let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
@@ -194,20 +224,20 @@ fn set_and_execute_output<RA, E>(
     );
     write_output_key(tester, input_ptr, output_key);
 
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(
-            DeferralOpcode::OUTPUT.global_opcode(),
-            [
-                rd,
-                rs,
-                deferral_idx,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
-        ),
+    let instruction = Instruction::from_usize(
+        DeferralOpcode::OUTPUT.global_opcode(),
+        [
+            rd,
+            rs,
+            deferral_idx,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
     );
+    before_execute(tester);
+    tester.execute(executor, arena, &instruction);
+    after_execute(tester);
+    instruction
 }
 
 fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> CpuHarnessBundle {
@@ -347,6 +377,106 @@ fn rand_deferral_output_test() {
         .finalize()
         .simple_test()
         .expect("Verification failed");
+}
+
+#[test]
+fn postflight_output_trace_matches_record_arena_and_rejects_truncated_history() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let CpuHarnessBundle {
+        mut harness,
+        count,
+        poseidon2,
+        ..
+    } = create_cpu_harness(&tester, NUM_DEFERRALS);
+    init_streams(&mut tester, NUM_DEFERRALS);
+    let mut instruction_history = None;
+    let instruction = set_and_execute_output_with_hooks(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        NUM_DEFERRALS,
+        |tester| {
+            let image = tester.memory.memory.data().clone();
+            tester.memory.memory = TracingMemory::from_image(image);
+        },
+        |tester| {
+            instruction_history = Some((
+                tester.memory.memory.timestamp(),
+                tester.memory.memory.take_log(),
+            ));
+        },
+    );
+    let from_pc = tester.last_from_pc().as_canonical_u32();
+    let to_pc = tester.last_to_pc().as_canonical_u32();
+    let (to_timestamp, memory) =
+        instruction_history.expect("OUTPUT instruction history was captured");
+    let sentinel = instruction.clone();
+    let program = Program::new_without_debug_infos(&[instruction, sentinel], from_pc);
+    let mut history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: from_pc,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: to_pc,
+                timestamp: to_timestamp,
+            },
+        ],
+        memory,
+    };
+    let memory_config = test_memory_config_cpu();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = super::generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer.clone();
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+    assert_eq!(actual.values, expected.values);
+    drop(postflight);
+
+    history
+        .memory
+        .accesses
+        .pop()
+        .expect("OUTPUT has timed memory events");
+    history
+        .memory
+        .initial_writes
+        .pop()
+        .expect("OUTPUT's final first-write event has an initial-value seed");
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let counts_before = count
+        .1
+        .count
+        .iter()
+        .map(|count| count.load(Ordering::Relaxed))
+        .collect::<Vec<_>>();
+    let poseidon_records_before = poseidon2.1.records.len();
+    let error = super::generate_trace_from_postflight(&harness.chip, &postflight)
+        .expect_err("truncated OUTPUT history must be rejected");
+    assert!(
+        error.to_string().contains("too few memory events")
+            || error.to_string().contains("ended at timestamp")
+    );
+    assert_eq!(
+        counts_before,
+        count
+            .1
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(poseidon_records_before, poseidon2.1.records.len());
 }
 
 #[test]

@@ -12,8 +12,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom, VmOpcode,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -40,6 +39,9 @@ use crate::{
 mod execution;
 #[cfg(test)]
 mod tests;
+mod trace;
+
+pub(crate) use trace::generate_trace_from_postflight;
 
 /// PhantomAir still needs columns for each nonzero operand in a phantom instruction.
 /// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction]
@@ -195,10 +197,6 @@ where
         state.memory.increment_timestamp();
 
         Ok(())
-    }
-
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", SystemOpcode::PHANTOM)
     }
 }
 

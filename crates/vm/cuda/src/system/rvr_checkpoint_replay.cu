@@ -968,9 +968,8 @@ __device__ __forceinline__ bool replay_access_schedule(
 #pragma unroll
                         for (uint32_t pair = 0; pair < 2; pair++) {
                             uint64_t packed = residuals[state.residual_cursor + pair];
-                            block.values[2 * pair] = Fp(uint32_t(packed)).asRaw();
-                            block.values[2 * pair + 1] =
-                                Fp(uint32_t(packed >> 32)).asRaw();
+                            block.values[2 * pair] = uint32_t(packed);
+                            block.values[2 * pair + 1] = uint32_t(packed >> 32);
                         }
                     }
                 } else {

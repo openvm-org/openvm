@@ -17,7 +17,9 @@ use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_riscv_circuit::adapters::U16_BITS;
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
+};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_ecc::EccExtension;
 #[cfg(feature = "rvr")]
@@ -30,8 +32,12 @@ use strum::EnumCount;
 use crate::{get_curve_type, CurveType};
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
-    get_ec_double_chip, get_ec_double_executor, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt,
-    WeierstrassAir, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    get_ec_double_chip, get_ec_double_executor,
+    weierstrass_chip::{
+        generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
+    },
+    EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir, ECC_BLOCKS_32,
+    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 #[serde_as]
@@ -307,7 +313,9 @@ where
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        for curve in extension.supported_curves.iter() {
+        for (curve_idx, curve) in extension.supported_curves.iter().enumerate() {
+            let opcode_base =
+                Rv64WeierstrassOpcode::CLASS_OFFSET + curve_idx * Rv64WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {
@@ -324,7 +332,10 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                    generate_add_ne_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32>>()?;
                 let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_32>(
@@ -334,7 +345,10 @@ where
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(double);
+                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                    generate_double_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -349,7 +363,10 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                    generate_add_ne_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48>>()?;
                 let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_48>(
@@ -359,7 +376,10 @@ where
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(double);
+                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                    generate_double_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
             } else {
                 panic!("Modulus too large");
             }

@@ -98,7 +98,7 @@ macro_rules! run {
                 }
 
                 let pc = $exec_state.pc();
-                $exec_state.ctx.on_instruction_start(pc);
+                $ctx::on_instruction_start(&mut $exec_state, pc);
                 let handler = $interpreter
                     .get_handler(pc)
                     .ok_or(ExecutionError::PcOutOfBounds(pc))?;
@@ -380,25 +380,31 @@ impl InterpretedInstance<'_, ExecutionCtx> {
 impl InterpretedInstance<'_, PreflightCtx> {
     /// Execute with ordinary interpreter semantics while recording the minimal
     /// append-only history needed by postflight.
-    pub fn execute_preflight_from_state(
+    pub fn execute_preflight_from_state<F: PrimeField32>(
         &self,
         from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<PreflightOutput, ExecutionError> {
-        let ctx = PreflightCtx::new(&from_state.memory, num_insns);
+        let ctx = PreflightCtx::new::<F>(&from_state.memory, num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
+        let start_instret_left = exec_state.ctx.instret_left;
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Preflight);
-        #[cfg(feature = "metrics")]
-        let start_instret_left = exec_state.ctx.instret_left;
 
         run!("execute_preflight", self, exec_state, PreflightCtx);
 
+        let retired = start_instret_left - exec_state.ctx.instret_left;
         #[cfg(feature = "metrics")]
-        {
-            let insns = start_instret_left - exec_state.ctx.instret_left;
-            metrics.record(insns);
+        metrics.record(retired);
+
+        if let Some(expected) = num_insns {
+            if retired != expected {
+                return Err(ExecutionError::RetiredInstructionCountMismatch {
+                    expected,
+                    actual: retired,
+                });
+            }
         }
 
         let exit_code = exec_state.exit_code?;
@@ -590,7 +596,7 @@ unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
             break;
         }
         let pc = exec_state.pc();
-        exec_state.ctx.on_instruction_start(pc);
+        Ctx::on_instruction_start(exec_state, pc);
         let pc_index = get_pc_index(pc);
 
         if let Some(inst) = fn_ptrs.get(pc_index) {
