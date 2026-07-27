@@ -19,7 +19,9 @@ use {
         prover::{vm::types::VmProvingKey, EvmProver, RootProver},
         SC,
     },
-    openvm_circuit::arch::{Executor, MeteredExecutor, VmBuilder, VmExecutionConfig},
+    openvm_circuit::arch::{
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
+    },
     openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, Val},
 };
 
@@ -137,9 +139,9 @@ pub fn generate_dummy_root_proof<E, VB>(
 ) -> Proof<RootSC>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
+    VB: ContinuationProverBuilder<E> + Clone,
     Val<SC>: PrimeField32,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
 {
     let dummy_exe = dummy_terminate_exe();
 

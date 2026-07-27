@@ -256,11 +256,15 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_postflight_periphery_chip(sha256_block_hasher_chip, |chip, postflight| {
-            Ok(AirProvingContext::simple_no_pis(
-                crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
-            ))
-        });
+        inventory.add_postflight_periphery_chip_with_height(
+            sha256_block_hasher_chip,
+            None,
+            |chip, postflight| {
+                Ok(AirProvingContext::simple_no_pis(
+                    crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
+                ))
+            },
+        );
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_chip = Sha2MainChip::<Val<SC>, Sha256Config>::new(
@@ -282,11 +286,15 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_postflight_periphery_chip(sha512_block_hasher_chip, |chip, postflight| {
-            Ok(AirProvingContext::simple_no_pis(
-                crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
-            ))
-        });
+        inventory.add_postflight_periphery_chip_with_height(
+            sha512_block_hasher_chip,
+            None,
+            |chip, postflight| {
+                Ok(AirProvingContext::simple_no_pis(
+                    crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
+                ))
+            },
+        );
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_chip = Sha2MainChip::<Val<SC>, Sha512Config>::new(

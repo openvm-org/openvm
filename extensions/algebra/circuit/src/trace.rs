@@ -405,8 +405,8 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
             );
             adapter_cols.rd_ptr = F::from_u32(rd_ptr);
             for read in 0..2 {
-                for block in 0..NUM_LANES {
-                    let access = heap_accesses[read][block]
+                for (block, access) in heap_accesses[read].iter_mut().enumerate() {
+                    let access = access
                         .take()
                         .expect("every replayed heap access is present");
                     memory_helper.fill(

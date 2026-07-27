@@ -473,9 +473,14 @@ mod tests {
     #[derive(Default)]
     struct TestEmitCtx {
         lines: Vec<String>,
+        checkpoint_preflight: bool,
     }
 
     impl ExtEmitCtx for TestEmitCtx {
+        fn is_checkpoint_preflight(&self) -> bool {
+            self.checkpoint_preflight
+        }
+
         fn read_var(&mut self, var: Reg) -> String {
             format!("r{}", var.index())
         }
@@ -686,7 +691,10 @@ mod tests {
             ptr_reg: Reg::new(5),
         };
 
-        let mut ctx = TestEmitCtx::default();
+        let mut ctx = TestEmitCtx {
+            checkpoint_preflight: true,
+            ..Default::default()
+        };
         instr.emit_c(&mut ctx);
 
         assert_eq!(
