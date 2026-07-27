@@ -127,10 +127,9 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        // Checkpoint replay follows the AIR's source-read then destination-read
-        // schedule. Preserve the historical destination-first order in every
-        // other execution mode: changing it needlessly perturbs pure and
-        // metered generated C.
+        // Preflight follows the AIR's source-read then destination-read
+        // schedule. Pure and metered execution retain destination-first codegen
+        // because they do not emit these memory events.
         let (rd, rs1, rs2) = if ctx.is_checkpoint_preflight() {
             let rs1 = ctx.read_var(self.rs1_reg);
             let rs2 = ctx.read_var(self.rs2_reg);

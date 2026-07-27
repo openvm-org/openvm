@@ -1,5 +1,6 @@
 #include "arch/rvr/replay.cuh"
 
+static constexpr uint32_t ADD_SUB_REPLAY_ERROR_BASE = 1001;
 
 __global__ void add_sub_replay_tracegen(
     Fp *trace,
@@ -46,7 +47,7 @@ __global__ void add_sub_replay_tracegen(
             ReplayPcEffect::Sequential,
             transition,
             error,
-            1001
+            ADD_SUB_REPLAY_ERROR_BASE
         )) {
         return;
     }
@@ -60,7 +61,7 @@ __global__ void add_sub_replay_tracegen(
         instruction.words[4] != register_address_space ||
         instruction.words[5] != register_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
         (rs1_ptr & 1) != 0 || (rs2_ptr & 1) != 0) {
-        preflight_set_error(error, 1004);
+        preflight_set_error(error, ADD_SUB_REPLAY_ERROR_BASE + 3);
         return;
     }
 
@@ -68,7 +69,7 @@ __global__ void add_sub_replay_tracegen(
     size_t rs2_index = rs1_index + 1;
     size_t write_index = rs1_index + 2;
     if (write_index >= memory.len() || write_index >= predecessors.len()) {
-        preflight_set_error(error, 1005);
+        preflight_set_error(error, ADD_SUB_REPLAY_ERROR_BASE + 4);
         return;
     }
     auto const &rs1 = memory[rs1_index];
@@ -81,7 +82,7 @@ __global__ void add_sub_replay_tracegen(
         write.timestamp != from.timestamp + 2 || !preflight_is_write(write) ||
         preflight_address_space(write) != register_address_space || write.pointer != rd_ptr / 2 ||
         (write_index + 1 < memory.len() && memory[write_index + 1].timestamp < to.timestamp)) {
-        preflight_set_error(error, 1006);
+        preflight_set_error(error, ADD_SUB_REPLAY_ERROR_BASE + 5);
         return;
     }
 
@@ -90,7 +91,7 @@ __global__ void add_sub_replay_tracegen(
     uint16_t logged_result[BLOCK_FE_WIDTH];
     if (!replay_u16_block(rs1.value, b) || !replay_u16_block(rs2.value, c) ||
         !replay_u16_block(write.value, logged_result)) {
-        preflight_set_error(error, 1007);
+        preflight_set_error(error, ADD_SUB_REPLAY_ERROR_BASE + 6);
         return;
     }
     uint16_t expected_result[BLOCK_FE_WIDTH];
@@ -103,7 +104,7 @@ __global__ void add_sub_replay_tracegen(
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
         if (logged_result[i] != expected_result[i]) {
-            preflight_set_error(error, 1008);
+            preflight_set_error(error, ADD_SUB_REPLAY_ERROR_BASE + 7);
             return;
         }
     }
@@ -120,7 +121,7 @@ __global__ void add_sub_replay_tracegen(
         !replay_previous_value(
             write_index, write, predecessors[write_index], memory, seeds, write_previous
         )) {
-        preflight_set_error(error, 1009);
+        preflight_set_error(error, ADD_SUB_REPLAY_ERROR_BASE + 8);
         return;
     }
 

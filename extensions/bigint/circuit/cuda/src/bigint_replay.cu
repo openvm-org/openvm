@@ -170,10 +170,6 @@ struct Int256ReplayInputs {
     uint32_t *error;
 };
 
-__device__ __forceinline__ bool int256_canonical_register(uint32_t pointer) {
-    return pointer < 32u * 8u && (pointer & 7u) == 0;
-}
-
 __device__ __forceinline__ uint64_t int256_block_u64(
     uint16_t const (&limbs)[BLOCK_FE_WIDTH]
 ) {
@@ -275,9 +271,9 @@ __device__ bool load_int256_replay_row(
         has_write ? instruction.words[3] : instruction.words[2],
     };
     uint32_t rd_ptr = has_write ? instruction.words[1] : 0;
-    if (!int256_canonical_register(rs_ptrs[0]) ||
-        !int256_canonical_register(rs_ptrs[1]) ||
-        (has_write && !int256_canonical_register(rd_ptr))) {
+    if (!replay_canonical_register_pointer(rs_ptrs[0]) ||
+        !replay_canonical_register_pointer(rs_ptrs[1]) ||
+        (has_write && !replay_canonical_register_pointer(rd_ptr))) {
         preflight_set_error(error, INT256_REPLAY_BAD_INSTRUCTION);
         return false;
     }

@@ -31,11 +31,6 @@ struct Sha2ReplayInput {
     size_t write_start;
 };
 
-static __device__ __forceinline__ bool sha2_canonical_register_pointer(uint32_t pointer) {
-    return pointer < 32u * RV64_REGISTER_NUM_LIMBS &&
-           pointer % RV64_REGISTER_NUM_LIMBS == 0;
-}
-
 static __device__ __forceinline__ uint32_t sha2_replay_pointer(
     PreflightMemoryEvent const &event,
     bool &valid
@@ -96,9 +91,9 @@ static __device__ bool replay_sha2_instruction(
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || instruction.words[6] != 0 ||
         instruction.words[7] != 0 ||
-        !sha2_canonical_register_pointer(instruction.words[1]) ||
-        !sha2_canonical_register_pointer(instruction.words[2]) ||
-        !sha2_canonical_register_pointer(instruction.words[3])) {
+        !replay_canonical_register_pointer(instruction.words[1]) ||
+        !replay_canonical_register_pointer(instruction.words[2]) ||
+        !replay_canonical_register_pointer(instruction.words[3])) {
         return false;
     }
 

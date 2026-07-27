@@ -60,6 +60,8 @@ use tracing::{info_span, instrument};
 use super::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
+#[cfg(any(not(feature = "rvr"), feature = "test-utils"))]
+use super::execution_mode::PreflightCtx;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::rvr::cuda::{CheckpointReplayProgram, PostflightOpcodeBases};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -79,8 +81,7 @@ use super::ExecutionState;
 use super::InterpreterExecutor;
 use super::{
     execution_mode::{
-        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
-        SegmentationLimits,
+        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, Segment, SegmentationLimits,
     },
     hasher::poseidon2::vm_poseidon2_hasher,
     hint_stream::HintStream,
@@ -276,8 +277,10 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "rvr")]
-    pub fn preflight_interpreter_instance(
+    /// Builds the interpreter preflight backend for differential tests.
+    #[cfg(all(feature = "rvr", feature = "test-utils"))]
+    #[doc(hidden)]
+    pub fn test_preflight_interpreter_instance(
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError> {
@@ -842,18 +845,6 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
         self.executor().preflight_instance(exe)
-    }
-
-    #[cfg(feature = "rvr")]
-    pub fn preflight_interpreter_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
-    {
-        self.executor().preflight_interpreter_instance(exe)
     }
 
     /// Pure execution instance.

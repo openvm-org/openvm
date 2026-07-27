@@ -886,9 +886,9 @@ where
         let mut exec_ctxs = Vec::new();
         exec_ctxs.resize_with(num_ext_airs, || None);
 
-        // This is the same load-bearing order as the legacy path: system
-        // connector/Merkle requests first, then extension chips in reverse
-        // insertion order so shared periphery chips are generated last.
+        // System connector and Merkle requests must be generated first.
+        // Extension chips then run in reverse insertion order so shared
+        // periphery chips are generated after their consumers.
         let sys_ctxs = {
             let _span = info_span!("system_trace_gen").entered();
             self.system

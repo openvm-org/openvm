@@ -402,9 +402,9 @@ preflight emits checkpoints and residuals, which postflight expands into the
 same history. Standard SDK tracegen and continuation proving begin only after
 both paths have converged on that validated read-only representation.
 
-Negative tests retain a small expanded-log fixture type, and chronology tests
-retain an independent CPU oracle. Both are test utilities over postflight's
-derived history; neither is a second execution mode or production contract.
+Negative tests construct the generic history directly, while chronology tests
+retain an independent CPU oracle. Neither introduces a second execution mode or
+production contract.
 
 CPU trace generation replays the validated host history. GPU trace generation
 consumes the uploaded immutable history and its postflight indexes. Tests use
@@ -649,21 +649,21 @@ compile-time gate for pure, metered, and preflight execution.
 
 The implementation is large because every active AIR must consume the same
 read-only history. Review should be split by dependency and ownership, not by
-arbitrary line count. A ten-change stack keeps each boundary concrete:
+arbitrary line count. A nine-change stack keeps each boundary concrete:
 
-1. compiled preflight executor, transcript contract, and differential execution
-   tests;
-2. postflight expansion, chronology, system traces, continuation state, and
-   shared GPU validation;
-3. RV64 ALU, branch, jump, and control-flow trace generation;
-4. RV64 load/store, IO, multiplication, and division trace generation;
-5. Keccak-256 and SHA-2;
-6. bigint and Int256;
-7. modular arithmetic and field expressions;
-8. ECC and curve operations;
-9. deferral and pairing, including hint materialization;
-10. SDK integration, production metrics, performance evidence, and this design
-    document.
+1. generic preflight history, interpreter logging, host postflight indexing,
+   and system boundary semantics;
+2. CPU history trace generation for system, RISC-V, and extensions;
+3. compiled preflight execution, checkpoints, residuals, and differential
+   execution tests;
+4. generic GPU postflight, chronology, system traces, continuation state, and
+   shared validation;
+5. RV64 GPU replay, grouped into control/ALU, memory, M, and IO changes;
+6. bigint, modular arithmetic, field expressions, and ECC GPU replay;
+7. Keccak-256, SHA-2, deferral, and pairing GPU replay;
+8. the ordinary SDK proving path and low-cardinality metrics;
+9. final RecordArena/legacy purge, fixture consolidation, performance evidence,
+   and documentation.
 
 Small correctness prerequisites that are independently reviewable should land
 before the relevant layer: the aligned four-cell memory contract, typed
@@ -699,7 +699,7 @@ The production metrics surface stays phase-level and low-cardinality:
   segment scope;
 - `execute_preflight_insns`, emitted once per completed segment, and
   `execute_preflight_insn_mi/s`, emitted once for the completed proof;
-- `execute_preflight_checkpoints`,
+- `execute_preflight_intervals`,
   `execute_preflight_residuals`, and
   `execute_preflight_transcript_bytes`, emitted once for the completed proof;
 - `postflight_time_ms` and its four fixed subphases, attributed only by

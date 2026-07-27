@@ -395,7 +395,7 @@ fn modular_metering_counts_only_irreducible_results() {
 
     assert_eq!(segments.len(), 1);
     assert_eq!(segments[0].num_insns, 5);
-    assert_eq!(segments[0].num_checkpoint_residuals, 5);
+    assert_eq!(segments[0].num_preflight_residuals, 5);
 }
 
 #[test]

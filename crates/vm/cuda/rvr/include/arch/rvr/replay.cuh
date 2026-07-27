@@ -25,6 +25,10 @@ struct ReplayProgramTransition {
     RvrReplayInstruction const *instruction;
 };
 
+static __device__ __forceinline__ bool replay_canonical_register_pointer(uint32_t pointer) {
+    return pointer < 32u * 8u && (pointer & 7u) == 0;
+}
+
 static __device__ __forceinline__ RvrReplayInstruction const *resolve_replay_instruction(
     DeviceBufferConstView<RvrReplayInstruction> instructions,
     uint32_t pc_base,

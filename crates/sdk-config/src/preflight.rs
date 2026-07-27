@@ -484,7 +484,7 @@ mod tests {
             SdkVmGpuBuilder::postflight(&vm, &gpu_program, &execution, execution.retired).unwrap();
         let proving_ctx = SdkVmGpuBuilder::generate_preflight_proving_ctx(
             &mut vm,
-            &gpu_program,
+            gpu_program.program(),
             &transcript,
             &replay_plan,
         )

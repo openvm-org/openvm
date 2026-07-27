@@ -14,6 +14,10 @@ use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
 
+use crate::arch::cuda::postflight::{
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+};
+
 pub mod boundary;
 pub mod connector;
 pub mod extensions;
@@ -68,11 +72,10 @@ impl SystemChipInventoryGPU {
     /// preflight mutates the host state.
     pub fn generate_proving_ctx_from_postflight(
         &mut self,
-        program: &crate::arch::cuda::postflight::GpuPostflightProgram,
-        transcript: &crate::arch::cuda::postflight::GpuPostflightTranscript,
-        replay_plan: &crate::arch::cuda::postflight::GpuPostflightPlan,
-    ) -> Result<Vec<AirProvingContext<GpuBackend>>, crate::arch::cuda::postflight::GpuPostflightError>
-    {
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<Vec<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         program.ensure_replay_inputs(transcript, replay_plan, &self.program.device_ctx)?;
         let program_ctx = {
             let _span = tracing::info_span!("program_trace_gen").entered();
