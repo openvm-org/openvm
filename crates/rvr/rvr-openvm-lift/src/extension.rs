@@ -203,6 +203,12 @@ pub trait RvrExtension: Send + Sync {
         Vec::new()
     }
 
+    /// Whether this extension requires the final shared library to be linked
+    /// with the C++ driver.
+    fn requires_cxx_linker(&self) -> bool {
+        false
+    }
+
     /// Whether this extension's static library calls the shared memory wrappers.
     fn uses_memory_wrappers(&self) -> bool {
         false
@@ -347,6 +353,13 @@ impl ExtensionRegistry {
             .iter()
             .flat_map(|ext| ext.extension.staticlib_files())
             .collect()
+    }
+
+    /// Whether any registered extension requires the C++ linker driver.
+    pub fn requires_cxx_linker(&self) -> bool {
+        self.extensions
+            .iter()
+            .any(|ext| ext.extension.requires_cxx_linker())
     }
 
     /// Whether any registered extension needs the shared memory wrappers.
