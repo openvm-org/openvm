@@ -345,6 +345,29 @@ impl GpuPostflightProgram {
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let postflight = Postflight::new(program, history, &self.memory_config, exit_code)
             .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        self.upload_validated_history_for_test(history, postflight)
+    }
+
+    /// Uploads an isolated chip fixture whose final sentinel need not resolve
+    /// to another instruction in the fixture program.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[doc(hidden)]
+    pub fn upload_isolated_history_for_test<F: PrimeField32>(
+        &self,
+        program: &Program<F>,
+        history: &PreflightHistory,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let postflight = Postflight::new_for_test(program, history, &self.memory_config)
+            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        self.upload_validated_history_for_test(history, postflight)
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    fn upload_validated_history_for_test<F: PrimeField32>(
+        &self,
+        history: &PreflightHistory,
+        postflight: Postflight<'_, F>,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let replay_steps = postflight
             .replay_steps_for_test()
             .map(|(program_index, memory_start)| GpuReplayStep {
@@ -376,7 +399,7 @@ impl GpuPostflightProgram {
             opcode_ranges: postflight.opcode_ranges_for_test().clone(),
             from_state: postflight.from_state(),
             to_state: postflight.to_state(),
-            exit_code: None,
+            exit_code: postflight.exit_code(),
             device_ctx: self.device_ctx.clone(),
             program_identity: self.identity.clone(),
             segment_identity,
