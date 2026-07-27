@@ -62,7 +62,7 @@ impl<'a, T, const NUM: usize, const AUX_LEN: usize> From<&'a IsLtArrayAuxCols<T,
         Self {
             diff_marker: &value.diff_marker,
             diff_inv: &value.diff_inv,
-            lt_decomp: &value.lt_aux.lower_decomp,
+            lt_decomp: &value.lt_aux.diff_decomp,
         }
     }
 }
@@ -74,7 +74,7 @@ impl<'a, T, const NUM: usize, const AUX_LEN: usize> From<&'a mut IsLtArrayAuxCol
         Self {
             diff_marker: &mut value.diff_marker,
             diff_inv: &mut value.diff_inv,
-            lt_decomp: &mut value.lt_aux.lower_decomp,
+            lt_decomp: &mut value.lt_aux.diff_decomp,
         }
     }
 }

@@ -7,10 +7,8 @@
 using namespace riscv;
 
 template <typename T> struct MemoryBaseAuxCols {
-    /// The previous timestamps in which the cells were accessed.
-    T prev_timestamp;
-    /// The auxiliary columns to perform the less than check.
-    LessThanAuxCols<T, AUX_LEN> timestamp_lt_aux; // lower_decomp [T; AUX_LEN]
+    /// The limbs of `timestamp - prev_timestamp - 1` used to derive `prev_timestamp` in the AIR.
+    LessThanAuxCols<T, AUX_LEN> timestamp_lt_aux;
 };
 
 template <typename T> struct MemoryReadAuxCols {

@@ -21,7 +21,7 @@ template <typename T> struct Rv64BaseAluWRegU16AdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
-static_assert(sizeof(Rv64BaseAluWRegU16AdapterCols<uint8_t>) == 23);
+static_assert(sizeof(Rv64BaseAluWRegU16AdapterCols<uint8_t>) == 20);
 
 struct Rv64BaseAluWRegU16AdapterRecord {
     uint32_t from_pc;
