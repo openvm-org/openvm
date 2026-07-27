@@ -57,6 +57,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = []
+test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-riscv-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",

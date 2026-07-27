@@ -62,6 +62,7 @@ rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []
+test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-riscv-circuit/tco", "openvm-ecc-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",

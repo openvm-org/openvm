@@ -7,6 +7,8 @@ use openvm_algebra_circuit::{
     cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
     ModularExtension, Rv64ModularHybridBuilder,
 };
+#[cfg(any(test, feature = "test-utils"))]
+use openvm_circuit::utils::{prepare_gpu_test_tracegen, TestPreflightTracegen};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -28,6 +30,8 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+#[cfg(any(test, feature = "test-utils"))]
+use openvm_instructions::exe::VmExe;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
@@ -633,6 +637,37 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
 /// GPU builder for RV64IM, modular, and elliptic-curve extensions.
 #[derive(Clone)]
 pub struct Rv64WeierstrassHybridBuilder;
+
+#[cfg(any(test, feature = "test-utils"))]
+impl TestPreflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBuilder {
+    type Prepared = GpuPostflightProgram;
+
+    fn prepare_test_tracegen(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        exe: &VmExe<F>,
+    ) -> Result<Self::Prepared, GenerationError> {
+        prepare_gpu_test_tracegen(vm, exe)
+    }
+
+    fn generate_test_proving_ctx(
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        program: &Self::Prepared,
+        output: &PreflightOutput,
+        _postflight: &Postflight<'_, F>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
+        let (transcript, replay_plan) = vm
+            .postflight_history(program, output)
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        let config = vm.config().clone();
+        WeierstrassPreflightGpuTracegen::new(
+            &config.weierstrass,
+            program,
+            &transcript,
+            &replay_plan,
+        )
+        .generate_proving_ctx(vm, &config.modular.modular, None)
+    }
+}
 
 type E = GpuBabyBearPoseidon2Engine;
 
