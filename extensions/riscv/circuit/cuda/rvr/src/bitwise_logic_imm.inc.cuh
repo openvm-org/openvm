@@ -77,7 +77,7 @@ __global__ void bitwise_logic_imm_replay_tracegen(
     uint32_t imm_sign = (immediate >> 11) & 1;
     if (instruction.words[0] != expected_opcode ||
         instruction.words[4] != register_address_space ||
-        instruction.words[5] != immediate_address_space || (rd_ptr & 1) != 0 ||
+        instruction.words[5] != immediate_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
         (rs1_ptr & 1) != 0 || immediate >= (1u << 24) ||
         (immediate >> 12) != (imm_sign ? 0xfffu : 0)) {
         preflight_set_error(error, 94);
