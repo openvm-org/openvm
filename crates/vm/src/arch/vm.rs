@@ -57,8 +57,6 @@ use super::rvr::cuda::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     PostflightOpcodeBases,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::PreflightExecution;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile::compile_preflight,
@@ -68,6 +66,8 @@ use super::rvr::{
     RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::rvr::{PreflightEndpoint, PreflightExecution};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::DenseRecordArena;
 use super::{
@@ -1484,6 +1484,43 @@ where
                 initial_main_memory.view(),
                 &initial_memory_images,
                 opcodes,
+            )
+        })();
+        memory.emit_metrics();
+        result
+    }
+
+    /// Derives the standard GPU replay indexes from history produced by
+    /// interpreter preflight.
+    #[doc(hidden)]
+    #[instrument(name = "postflight", skip_all)]
+    pub fn postflight_history(
+        &self,
+        program: &GpuPostflightProgram,
+        history: &PreflightHistory,
+        system_records: &SystemRecords<BabyBear>,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let memory = MemTracker::start_and_reset_peak("postflight");
+        let result = (|| {
+            let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
+            let initial_memory_images = initial_memory
+                .iter()
+                .map(|image| image.view())
+                .collect::<Vec<_>>();
+            let endpoint = if system_records.exit_code.is_some() {
+                PreflightEndpoint::Terminated
+            } else {
+                PreflightEndpoint::Suspended
+            };
+            program.upload_history(
+                history,
+                endpoint,
+                (
+                    system_records.from_state,
+                    system_records.to_state,
+                    system_records.exit_code,
+                ),
+                &initial_memory_images,
             )
         })();
         memory.emit_metrics();
