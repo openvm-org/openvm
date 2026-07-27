@@ -156,6 +156,7 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 
 Forked or custom libraries optimized for guest program execution inside the VM.
 
+- [`openvm-caci`](../../guest-libs/caci): OpenVM implementation of the eth-act zkVM Cryptographic Accelerators C Interface.
 - [`openvm-ff-derive`](../../guest-libs/ff_derive): OpenVM fork of `ff_derive` for finite field arithmetic.
 - [`k256`](../../guest-libs/k256): OpenVM fork of `k256`.
 - [`openvm-keccak256`](../../guest-libs/keccak256): OpenVM library for keccak256.

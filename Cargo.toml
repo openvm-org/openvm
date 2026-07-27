@@ -65,6 +65,7 @@ members = [
   "extensions/ecc/tests",
   "extensions/pairing/circuit",
   "extensions/pairing/guest",
+  "guest-libs/caci/",
   "guest-libs/ff_derive/",
   "guest-libs/k256/",
   "guest-libs/p256/",

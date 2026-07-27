@@ -4561,6 +4561,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-caci"
+version = "2.0.0"
+
+[[package]]
 name = "openvm-circuit"
 version = "2.0.0"
 dependencies = [

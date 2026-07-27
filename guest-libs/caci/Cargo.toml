@@ -1,0 +1,16 @@
+[package]
+name = "openvm-caci"
+description = "OpenVM implementation of the eth-act zkVM Cryptographic Accelerators C Interface"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+default = []
+
+[lints]
+workspace = true
