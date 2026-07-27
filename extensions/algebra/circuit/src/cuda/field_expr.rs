@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use num_bigint::BigUint;
 use openvm_circuit::arch::{
-    rvr::cuda::{
+    cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     VmChipWrapper,

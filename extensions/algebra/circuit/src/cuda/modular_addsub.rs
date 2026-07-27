@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
-use openvm_circuit::arch::rvr::cuda::{
+use openvm_circuit::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;

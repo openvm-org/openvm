@@ -349,7 +349,6 @@ pub mod mul256 {
     }
 }
 
-#[cfg(feature = "rvr")]
 pub mod replay {
     use openvm_circuit_primitives::cuda_abi::UInt2;
 
