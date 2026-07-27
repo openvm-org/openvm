@@ -157,13 +157,8 @@ impl StaticVerifierProvingKey {
                     .unwrap_or(1)
             });
 
-        let diagnostic_params = if cfg!(feature = "halo2-gpu") {
-            Some(params)
-        } else {
-            None
-        };
         let (advice, instances) =
-            self.run_witness_gen_pipeline(proof, graph_prover_threads, diagnostic_params);
+            self.run_witness_gen_pipeline(proof, graph_prover_threads);
 
         snark_verifier_sdk::halo2::gen_snark_from_base(
             params,
@@ -186,7 +181,6 @@ impl StaticVerifierProvingKey {
         &self,
         proof: &Proof<RootConfig>,
         num_threads: usize,
-        diagnostic_params: Option<&Halo2Params>,
     ) -> (AdviceColumns<Fr>, Vec<Vec<Fr>>) {
         use halo2_base::{
             gates::circuit::MaybeRangeConfig,
@@ -254,88 +248,8 @@ impl StaticVerifierProvingKey {
         let mut instances = vec![Vec::new(); self.shape.instance_columns];
         instances[0] = pvs;
 
-        #[cfg(feature = "halo2-gpu")]
-        if let Some(params) = diagnostic_params {
-            if std::env::var("STATIC_VERIFIER_COMPARE_WITNESS").is_ok() {
-                let host_columns = builder.snapshot_columns_to_host();
-                self.compare_witness_with_base_builder(params, proof, &host_columns, &instances);
-            }
-        }
-        #[cfg(not(feature = "halo2-gpu"))]
-        let _ = diagnostic_params;
-
         let advice = builder.take_columns();
         (advice, instances)
-    }
-
-    /// Diagnostic: regenerates the witness through the legacy `BaseCircuitBuilder`
-    /// populate + `synthesize_witness_shplonk` path and asserts the post-break-point,
-    /// post-lookup advice matches the graph-executor path. Blinding rows are excluded
-    /// (the synthesize path randomizes them; the materialized path leaves them zero).
-    #[cfg(feature = "halo2-gpu")]
-    fn compare_witness_with_base_builder(
-        &self,
-        params: &Halo2Params,
-        proof: &Proof<RootConfig>,
-        new_columns: &[Vec<Fr>],
-        new_instances: &[Vec<Fr>],
-    ) {
-        use halo2_base::halo2_proofs::poly::DevicePolyExt;
-        use tracing::info;
-
-        let mut builder = BaseCircuitBuilder::prover(
-            self.pinning.metadata.config_params.clone(),
-            self.pinning.metadata.break_points.clone(),
-        )
-        .use_instance_columns(self.shape.instance_columns);
-        let _public_inputs = self.circuit.populate(&mut builder, proof);
-        let instances_old: Vec<Vec<Fr>> = builder
-            .assigned_instances
-            .iter()
-            .map(|column| column.iter().map(|v| *v.value()).collect())
-            .collect();
-        assert_eq!(
-            new_instances,
-            &instances_old[..],
-            "instances differ from BaseCircuitBuilder path"
-        );
-
-        let (_, mut advice, _) = snark_verifier_sdk::halo2::synthesize_witness_shplonk(
-            params,
-            &self.pinning.pk,
-            builder,
-            instances_old,
-        );
-        let advice = advice.remove(0);
-        let usable_rows = (1usize << self.pinning.metadata.config_params.k)
-            - (self.pinning.pk.get_vk().cs().blinding_factors() + 1);
-        assert_eq!(
-            advice.advice_values.len(),
-            new_columns.len(),
-            "advice column count differs"
-        );
-        for (col, (device_poly, new_column)) in
-            advice.advice_values.iter().zip(new_columns).enumerate()
-        {
-            let host_poly = device_poly.to_host();
-            let old_column = host_poly.values();
-            let mut diffs = 0usize;
-            for row in 0..usable_rows {
-                if old_column[row] != new_column[row] {
-                    eprintln!(
-                        "advice col {col} row {row} differs: old={:?} new={:?}",
-                        old_column[row], new_column[row]
-                    );
-                    diffs += 1;
-                    assert!(diffs < 20, "too many diffs in advice col {col}");
-                }
-            }
-            assert_eq!(
-                diffs, 0,
-                "advice col {col} differs from synthesize_witness_shplonk"
-            );
-        }
-        info!("graph-executor advice matches BaseCircuitBuilder + synthesize_witness_shplonk");
     }
 
     /// Generate a dummy snark for wrapper keygen.
