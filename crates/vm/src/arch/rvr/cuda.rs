@@ -1136,7 +1136,7 @@ impl GpuPostflightProgram {
         }
 
         let mut write_masks = Vec::with_capacity(history.memory.accesses.len());
-        let mut field_values = history.memory.field_values.clone();
+        let field_values = &history.memory.field_values;
         let mut field_cursor = 0usize;
         for event in &history.memory.accesses {
             let address_space = event.address_space() as usize;
@@ -1164,9 +1164,6 @@ impl GpuPostflightProgram {
                         "field memory events must use dense ordered sidecar references".to_string(),
                     ));
                 }
-                if !event.is_write() {
-                    field_values[reference] = PreflightFieldBlock::default();
-                }
                 field_cursor += 1;
             }
         }
@@ -1178,7 +1175,7 @@ impl GpuPostflightProgram {
 
         let program_log = upload(&history.program, &self.device_ctx)?;
         let memory_log = upload(&history.memory.accesses, &self.device_ctx)?;
-        let field_values = upload(&field_values, &self.device_ctx)?;
+        let field_values = upload(field_values, &self.device_ctx)?;
         let write_masks = upload(&write_masks, &self.device_ctx)?;
         let error = [0u32].to_device_on(&self.device_ctx)?;
         let (initial_write_log, field_initial_values, memory_index) = build_gpu_memory_chronology(
@@ -2203,6 +2200,7 @@ mod tests {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let program = gpu_program(&[opcode, terminate], &device_ctx);
         let first = [1u16, 2, 3, 4];
+        let memory_read = [21u16, 22, 23, 24];
         let initial_second = [5u16, 6, 7, 8];
         let written_second = [9u16, 10, 11, 12];
         let history = PreflightHistory {
@@ -2213,18 +2211,19 @@ mod tests {
                 },
                 PreflightProgramEvent {
                     pc: 4,
-                    timestamp: 3,
+                    timestamp: 4,
                 },
                 PreflightProgramEvent {
                     pc: 4,
-                    timestamp: 3,
+                    timestamp: 4,
                 },
             ],
             memory: crate::arch::PreflightMemoryLog {
                 accesses: vec![
                     event_value(1, RV64_REGISTER_AS, 0, false, first),
+                    event_value(2, RV64_MEMORY_AS, 0, false, memory_read),
                     event_value(
-                        2,
+                        3,
                         RV64_REGISTER_AS,
                         BLOCK_FE_WIDTH as u32,
                         true,
@@ -2244,17 +2243,20 @@ mod tests {
         for value in first.into_iter().chain(initial_second) {
             initial_registers.extend_from_slice(&value.to_le_bytes());
         }
+        let initial_memory_values = memory_read
+            .into_iter()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
         let initial_memory = (0..program.memory_config.addr_spaces.len())
             .map(|address_space| {
-                upload(
-                    if address_space == RV64_REGISTER_AS as usize {
-                        initial_registers.as_slice()
-                    } else {
-                        &[]
-                    },
-                    &device_ctx,
-                )
-                .unwrap()
+                let image = if address_space == RV64_REGISTER_AS as usize {
+                    initial_registers.as_slice()
+                } else if address_space == RV64_MEMORY_AS as usize {
+                    initial_memory_values.as_slice()
+                } else {
+                    &[]
+                };
+                upload(image, &device_ctx).unwrap()
             })
             .collect::<Vec<_>>();
         let initial_memory_views = initial_memory
@@ -2268,7 +2270,7 @@ mod tests {
                 PreflightEndpoint::Terminated,
                 (
                     ExecutionState::new(0u32, 1u32),
-                    ExecutionState::new(4u32, 3u32),
+                    ExecutionState::new(4u32, 4u32),
                     Some(0),
                 ),
                 &initial_memory_views,
@@ -2287,7 +2289,7 @@ mod tests {
                 .memory_predecessors
                 .to_host_on(&device_ctx)
                 .unwrap(),
-            vec![0, MEMORY_PREDECESSOR_SEED_BIT]
+            vec![0, 0, MEMORY_PREDECESSOR_SEED_BIT]
         );
         assert_eq!(
             plan.opcode_range(VmOpcode::from_usize(opcode as usize))

@@ -384,7 +384,7 @@ impl InterpretedInstance<'_, PreflightCtx> {
         &self,
         from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
-    ) -> Result<(PreflightHistory, ExecutionOutcome<VmState<GuestMemory>>), ExecutionError> {
+    ) -> Result<(PreflightHistory, VmState<GuestMemory>, Option<u32>), ExecutionError> {
         let ctx = PreflightCtx::new(&from_state.memory, num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
@@ -401,20 +401,13 @@ impl InterpretedInstance<'_, PreflightCtx> {
             metrics.record(insns);
         }
 
-        let terminated = matches!(exec_state.exit_code.as_ref(), Ok(Some(_)));
-        if num_insns.is_some() {
-            check_exit_code(exec_state.exit_code)?;
-        } else {
-            check_termination(exec_state.exit_code)?;
+        let exit_code = exec_state.exit_code?;
+        if num_insns.is_none() && exit_code.is_none() {
+            return Err(ExecutionError::DidNotTerminate);
         }
         let pc = exec_state.vm_state.pc();
         let history = exec_state.ctx.finish(pc);
-        let outcome = if terminated {
-            ExecutionOutcome::Terminated(exec_state.vm_state)
-        } else {
-            ExecutionOutcome::Suspended(exec_state.vm_state)
-        };
-        Ok((history, outcome))
+        Ok((history, exec_state.vm_state, exit_code))
     }
 }
 

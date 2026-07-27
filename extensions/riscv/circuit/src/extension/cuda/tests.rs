@@ -3,8 +3,9 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog, PreflightLimits},
-        VirtualMachine, VmExecutor,
+        ExecutionState, VirtualMachine, VmExecutor,
     },
+    system::SystemRecords,
     utils::{test_gpu_engine, test_system_config},
 };
 use openvm_circuit_primitives::{
@@ -402,6 +403,8 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     let executor = VmExecutor::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let interpreter = executor.preflight_interpreter_instance(&exe).unwrap();
+    let interpreter_state = state.clone();
 
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -432,6 +435,30 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     drop(replay_plan);
     drop(gpu_transcript);
 
+    let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
+    vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+
+    vm.transport_init_memory_to_device(&interpreter_state.memory);
+    let from_pc = interpreter_state.pc();
+    let (history, _, exit_code) = interpreter
+        .execute_preflight_from_state(interpreter_state, None)
+        .unwrap();
+    let to = *history.program.last().unwrap();
+    let system_records = SystemRecords {
+        from_state: ExecutionState::new(from_pc, 1u32),
+        to_state: ExecutionState::new(to.pc, to.timestamp),
+        exit_code,
+        filtered_exec_frequencies: Vec::new(),
+        touched_memory: Vec::new(),
+    };
+    let (gpu_transcript, replay_plan) = vm
+        .postflight_history(&gpu_program, &history, &system_records)
+        .unwrap();
+    let tracegen =
+        Rv64ImPreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+    let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
+    drop(replay_plan);
+    drop(gpu_transcript);
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
 }

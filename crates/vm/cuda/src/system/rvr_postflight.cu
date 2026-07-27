@@ -217,17 +217,10 @@ __global__ void prepare_chronology_entries(
         } else if ((is_write && mask != FIELD_FULL_WRITE_MASK) ||
                    (!is_write && mask != 0)) {
             preflight_set_error(error, ERROR_MEMORY_MASK);
-        } else if (is_write && !field_block_is_valid(field_values[reference])) {
+        } else if (!field_block_is_valid(field_values[reference])) {
             preflight_set_error(error, ERROR_FIELD_VALUE);
-        } else if (!is_write) {
-#pragma unroll
-            for (uint32_t lane = 0; lane < 4; ++lane) {
-                if (field_values[reference].values[lane] != 0) {
-                    preflight_set_error(error, ERROR_FIELD_VALUE);
-                }
-            }
         }
-    } else if (preflight_address_space(event) != address_space_offset) {
+    } else if (is_write && preflight_address_space(event) != address_space_offset) {
         auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
 #pragma unroll
         for (uint32_t lane = 0; lane < 8; ++lane) {
