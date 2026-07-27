@@ -1,7 +1,7 @@
 //! Graph-IR generation backend for the [`chip_traits`](crate::chip_traits) traits.
 //!
 //! [`Halo2IRBuilder`] implements the same chip traits as
-//! [`Halo2Backend`](crate::halo2_backend::Halo2Backend), but instead of assigning halo2
+//! [`Halo2Backend`](crate::backend::Halo2Backend), but instead of assigning halo2
 //! advice cells it records a dataflow graph of [`Halo2GraphNode`]s. Each node corresponds
 //! to a statically-sized slice of the halo2 witness tape (advice cells) and range-check
 //! tape, so executing the nodes **in tape order** reproduces the exact witness stream the

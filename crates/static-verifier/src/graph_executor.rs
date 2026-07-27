@@ -930,7 +930,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        halo2_backend::Halo2Backend,
+        backend::Halo2Backend,
         stages::{full_pipeline::load_proof_wire, proof_shape::log_heights_per_air_from_proof},
         test_fixtures::{fixture_circuit_and_proof, FIXTURE_K},
         Halo2Params, StaticVerifierCircuit, StaticVerifierProvingKey, StaticVerifierShape,

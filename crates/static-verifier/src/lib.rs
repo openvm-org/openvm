@@ -29,11 +29,10 @@ pub mod config;
 pub mod field;
 #[cfg(feature = "halo2-gpu")]
 pub mod graph_executor;
-pub mod halo2_backend;
 #[cfg(feature = "halo2-gpu")]
-pub mod halo2_ir_builder;
+pub mod ir_builder;
 #[cfg(feature = "halo2-gpu")]
-pub mod halo2_opcode_impl;
+pub mod opcode_impl;
 pub mod hash;
 pub mod keygen;
 pub mod prover;
