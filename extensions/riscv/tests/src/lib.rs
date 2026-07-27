@@ -501,9 +501,13 @@ mod tests {
             Ok(_) => panic!("an early termination must not satisfy a metered segment boundary"),
             Err(error) => error,
         };
-        assert!(exact_error
-            .to_string()
-            .contains("retired 4 instructions, expected 5"));
+        assert!(matches!(
+            exact_error,
+            ExecutionError::RetiredInstructionCountMismatch {
+                expected: 5,
+                actual: 4
+            }
+        ));
 
         let first = preflight.execute_for(
             Vec::<Vec<u8>>::new(),

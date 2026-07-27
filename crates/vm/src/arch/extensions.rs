@@ -612,8 +612,9 @@ where
 
     /// Adds a chip that is not associated with any executor, as defined by the
     /// [VmExecutionExtension] trait.
-    pub fn add_periphery_chip<C: 'static>(&mut self, chip: C) {
-        self.add_periphery_chip_with_height(chip, None);
+    pub fn add_periphery_chip<C: Chip<(), PB> + 'static>(&mut self, chip: C) {
+        let constant_trace_height = chip.constant_trace_height();
+        self.add_periphery_chip_with_height(chip, constant_trace_height);
     }
 
     pub fn add_periphery_chip_with_height<C: 'static>(

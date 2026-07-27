@@ -319,7 +319,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Keccak256> for Keccak256GpuPr
         inventory.next_air::<KeccakfPermAir>()?;
         let perm_chip =
             KeccakfPermChipGpu::new(shared_state.clone(), range_checker.device_ctx.clone());
-        inventory.add_periphery_chip(perm_chip);
+        inventory.add_periphery_chip_with_height(perm_chip, None);
 
         // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery
         // ordering)

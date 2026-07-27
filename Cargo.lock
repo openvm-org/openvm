@@ -5129,7 +5129,6 @@ dependencies = [
  "num-traits",
  "openvm-circuit",
  "openvm-circuit-primitives",
- "openvm-instructions",
  "openvm-pairing-guest",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -5371,7 +5370,6 @@ dependencies = [
  "serde",
  "strum",
  "test-case",
- "tracing",
 ]
 
 [[package]]

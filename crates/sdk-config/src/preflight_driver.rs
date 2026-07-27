@@ -274,7 +274,7 @@ fn prove_inner(
     let mut preflight_time = Duration::ZERO;
     #[cfg(feature = "metrics")]
     let mut preflight_retired = 0u64;
-    #[cfg(feature = "metrics")]
+    #[cfg(all(feature = "metrics", feature = "rvr"))]
     let mut preflight_retired_by_segment = Vec::with_capacity(num_segments);
     #[cfg(all(feature = "metrics", feature = "rvr"))]
     let mut interval_count = 0u64;
@@ -362,7 +362,6 @@ fn prove_inner(
             {
                 preflight_time += preflight_started.elapsed();
                 preflight_retired += num_insns;
-                preflight_retired_by_segment.push(num_insns);
             }
             validate_endpoint(output.exit_code.is_some(), segment_idx + 1 == num_segments)?;
             mark_written_pages(&mut output);
@@ -409,12 +408,12 @@ fn prove_inner(
     #[cfg(feature = "metrics")]
     {
         let elapsed_micros = preflight_time.as_secs_f64().max(1e-9) * 1_000_000.0;
-        for (segment, retired) in preflight_retired_by_segment.into_iter().enumerate() {
-            metrics::counter!("execute_preflight_insns", "segment" => segment.to_string())
-                .absolute(retired);
-        }
         #[cfg(feature = "rvr")]
         {
+            for (segment, retired) in preflight_retired_by_segment.into_iter().enumerate() {
+                metrics::counter!("execute_preflight_insns", "segment" => segment.to_string())
+                    .absolute(retired);
+            }
             metrics::counter!("execute_preflight_intervals").absolute(interval_count);
             metrics::counter!("execute_preflight_residuals").absolute(residual_count);
             metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);

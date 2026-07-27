@@ -540,9 +540,10 @@ fn require_segment_boundary(
     })?;
     let instret = execution.retired;
     if instret != num_insns {
-        return Err(ExecutionError::RvrExecution(format!(
-            "preflight instret {instret} does not match segment num_insns {num_insns}"
-        )));
+        return Err(ExecutionError::RetiredInstructionCountMismatch {
+            expected: u64::from(num_insns),
+            actual: u64::from(instret),
+        });
     }
     Ok(execution)
 }

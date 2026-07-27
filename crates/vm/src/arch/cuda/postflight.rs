@@ -566,7 +566,7 @@ impl GpuPostflightProgram {
         self.cell_pointer_max_bits
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn synthetic_for_test(
         opcodes: &[u32],
         pc_base: u32,
@@ -626,7 +626,7 @@ impl GpuPostflightProgram {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn index_program_log_for_test(
         &self,
         program_log: &[PreflightProgramEvent],
@@ -888,7 +888,7 @@ fn build_gpu_memory_chronology(
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rvr"))]
 pub(crate) type ChronologyOutputForTest = (
     Vec<PreflightMemoryEvent>,
     Vec<PreflightInitialWrite>,
@@ -898,7 +898,7 @@ pub(crate) type ChronologyOutputForTest = (
     Vec<TouchedBlock<BabyBear>>,
 );
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rvr"))]
 pub(crate) fn build_memory_chronology_for_test(
     memory: &[PreflightMemoryEvent],
     write_masks: &[u8],
@@ -1072,7 +1072,7 @@ impl GpuPostflightTranscript {
             .collect())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn memory_predecessors_host(&self) -> Result<Vec<u32>, MemCopyError> {
         self.memory_predecessors.to_host_on(&self.device_ctx)
     }
@@ -1245,7 +1245,7 @@ impl GpuPostflightPlan {
             .collect())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn program_frequencies_host(&self) -> Result<Vec<u32>, MemCopyError> {
         self.program_frequencies.to_host_on(&self.device_ctx)
     }

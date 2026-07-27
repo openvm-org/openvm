@@ -367,7 +367,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DeferralExtension> for Deferr
             range_checker.device_ctx.clone(),
         ));
         let poseidon2_shared = poseidon2_chip.shared_buffer();
-        inventory.add_periphery_chip(poseidon2_chip);
+        inventory.add_periphery_chip_with_height(poseidon2_chip, None);
 
         inventory.next_air::<DeferralCallAir>()?;
         let call_chip = DeferralCallChipGpu::new(

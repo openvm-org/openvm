@@ -71,7 +71,7 @@ impl SdkVmGpuBuilder {
         )?;
         GpuPostflightProgram::upload(
             program,
-            &config.system.memory_config,
+            &vm.config().as_ref().memory_config,
             &vm.engine.device().device_ctx,
         )
     }
@@ -120,7 +120,7 @@ impl SdkVmGpuBuilder {
         registry.validate_no_native_collisions(native)?;
         CheckpointReplayProgram::upload_with_postflight_access_registry(
             program,
-            &config.system.memory_config,
+            &vm.config().as_ref().memory_config,
             &registry,
             &vm.engine.device().device_ctx,
         )
