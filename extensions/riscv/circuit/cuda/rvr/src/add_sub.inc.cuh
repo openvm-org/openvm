@@ -179,7 +179,7 @@ extern "C" int _add_sub_replay_tracegen(
     assert(num_sub_steps <= steps.len() - sub_step_start);
     assert(num_add_steps <= SIZE_MAX - num_sub_steps);
     assert(height >= num_add_steps + num_sub_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     add_sub_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

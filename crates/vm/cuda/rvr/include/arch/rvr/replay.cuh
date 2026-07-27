@@ -5,6 +5,8 @@
 #include "primitives/constants.h"
 #include "system/memory/params.cuh"
 
+static constexpr uint32_t RV64_REPLAY_THREADS = 256;
+
 struct ReplayPreviousValue {
     uint32_t timestamp;
     uint16_t value[BLOCK_FE_WIDTH];

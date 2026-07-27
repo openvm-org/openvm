@@ -131,7 +131,7 @@ extern "C" int _rv64_mul_w_replay_tracegen(
     assert(step_start <= steps.len());
     assert(num_steps <= steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     rv64_mul_w_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         step_start, num_steps, error, opcode, register_address_space, range_checker,

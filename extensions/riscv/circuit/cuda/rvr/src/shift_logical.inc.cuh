@@ -183,7 +183,7 @@ extern "C" int _rv64_shift_logical_replay_tracegen(
     assert(num_srl_steps <= steps.len() - srl_step_start);
     assert(num_sll_steps <= SIZE_MAX - num_srl_steps);
     assert(height >= num_sll_steps + num_srl_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     rv64_shift_logical_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

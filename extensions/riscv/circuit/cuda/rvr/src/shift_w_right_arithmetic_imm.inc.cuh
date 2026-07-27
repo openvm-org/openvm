@@ -161,7 +161,7 @@ extern "C" int _shift_w_right_arithmetic_imm_replay_tracegen(
     assert(step_start <= steps.len());
     assert(num_steps <= steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     shift_w_right_arithmetic_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

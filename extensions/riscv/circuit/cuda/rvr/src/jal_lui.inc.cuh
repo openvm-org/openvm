@@ -193,7 +193,7 @@ extern "C" int _jal_lui_replay_tracegen(
     assert(num_jal_steps <= SIZE_MAX - num_lui_steps);
     assert(height >= num_jal_steps + num_lui_steps);
 
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     jal_lui_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

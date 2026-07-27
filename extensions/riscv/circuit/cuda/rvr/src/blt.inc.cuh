@@ -226,7 +226,7 @@ extern "C" int _blt_replay_tracegen(
     assert(total_steps <= SIZE_MAX - num_bgeu_steps);
     total_steps += num_bgeu_steps;
     assert(height >= total_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     blt_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

@@ -177,7 +177,7 @@ extern "C" int _less_than_imm_replay_tracegen(
     assert(num_sltiu_steps <= steps.len() - sltiu_step_start);
     assert(num_slti_steps <= SIZE_MAX - num_sltiu_steps);
     assert(height >= num_slti_steps + num_sltiu_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     less_than_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

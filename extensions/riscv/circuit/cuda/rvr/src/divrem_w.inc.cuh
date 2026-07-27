@@ -133,7 +133,7 @@ extern "C" int _rv64_div_rem_w_replay_tracegen(
     size_t total = div_count + divu_count + rem_count + remu_count;
     assert(total >= div_count && total >= divu_count && total >= rem_count && total >= remu_count);
     assert(height >= total);
-    auto [grid, block] = kernel_launch_params(height, 256);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     rv64_div_rem_w_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         div_start, div_count, divu_start, divu_count, rem_start, rem_count, remu_start, remu_count,
