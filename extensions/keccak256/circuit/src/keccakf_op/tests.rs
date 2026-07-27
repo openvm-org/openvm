@@ -42,8 +42,7 @@ use tiny_keccak::keccakf;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::{
-        cuda::postflight::GpuPostflightProgram,
-        rvr::{PreflightEndpoint, PreflightEventLog},
+        cuda::postflight::GpuPostflightProgram, PreflightHistory, PreflightMemoryLog,
     },
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{
@@ -598,8 +597,8 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
             value: block(&postimage[i * 8..][..8]),
         });
     }
-    let transcript = PreflightEventLog {
-        program_log: vec![
+    let history = PreflightHistory {
+        program: vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -613,8 +612,11 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
                 timestamp: 27,
             },
         ],
-        memory_log,
-        initial_write_log,
+        memory: PreflightMemoryLog {
+            accesses: memory_log,
+            initial_writes: initial_write_log,
+            ..Default::default()
+        },
     };
 
     let tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -629,17 +631,17 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
     let device_ctx = &tester.range_checker().device_ctx;
     let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &history, Some(0))
         .unwrap();
     let _op_ctx = op_chip
         .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);
 
-    let mut corrupt = transcript;
-    corrupt.memory_log[1].value[0] ^= 1;
+    let mut corrupt = history;
+    corrupt.memory.accesses[1].value[0] ^= 1;
     let (gpu_corrupt, corrupt_plan) = gpu_program
-        .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &corrupt, Some(0))
         .unwrap();
     let corrupt_shared = Arc::new(Mutex::new(SharedKeccakfState::default()));
     let corrupt_chip = KeccakfOpChipGpu::new(

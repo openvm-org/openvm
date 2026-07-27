@@ -3,9 +3,9 @@ use openvm_circuit::{
         cuda::postflight::GpuPostflightProgram,
         rvr::{
             cuda::{CheckpointReplayProgram, PostflightAccessRegistry, PostflightAccessSpan},
-            PreflightEndpoint, PreflightEventLog, PreflightLimits,
+            PreflightLimits,
         },
-        VirtualMachine, VmExecutor,
+        PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -358,8 +358,8 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
-    let transcript = PreflightEventLog {
-        program_log: vec![
+    let history = PreflightHistory {
+        program: vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -373,15 +373,14 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
                 timestamp: 2,
             },
         ],
-        memory_log: vec![],
-        initial_write_log: vec![],
+        memory: PreflightMemoryLog::default(),
     };
     let memory_config = openvm_circuit::arch::MemoryConfig::default();
     let engine = test_gpu_engine();
     let device_ctx = &engine.device().device_ctx;
     let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &history, Some(0))
         .unwrap();
     let claimed = [
         XorinOpcode::XORIN.global_opcode().as_usize() as u32,

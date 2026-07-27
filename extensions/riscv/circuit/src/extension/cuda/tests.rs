@@ -1309,7 +1309,7 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
         };
         let (gpu_transcript, replay_plan) = gpu_program
             .program()
-            .upload_history_for_test(&program, &history)
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),

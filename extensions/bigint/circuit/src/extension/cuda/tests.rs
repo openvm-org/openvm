@@ -4,8 +4,8 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        rvr::{PreflightEndpoint, PreflightEventLog, PreflightLimits},
-        VirtualMachine, VmExecutor,
+        rvr::{PreflightEndpoint, PreflightLimits},
+        PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -295,10 +295,13 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     for case in &cases {
         assert_eq!(replay_plan.opcode_range(case.opcode).len(), 1);
     }
-    let host_transcript = PreflightEventLog {
-        program_log: transcript.program_log_host().unwrap(),
-        memory_log: transcript.memory_log_host().unwrap(),
-        initial_write_log: transcript.initial_write_log_host().unwrap(),
+    let host_history = PreflightHistory {
+        program: transcript.program_log_host().unwrap(),
+        memory: PreflightMemoryLog {
+            accesses: transcript.memory_log_host().unwrap(),
+            initial_writes: transcript.initial_write_log_host().unwrap(),
+            ..Default::default()
+        },
     };
 
     let tracegen =
@@ -322,10 +325,10 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         &invalid_vm.engine.device().device_ctx,
     )
     .unwrap();
-    let mut invalid_transcript = host_transcript;
+    let mut invalid_history = host_history;
     let pointer_block = reg(1) as u32 / 2;
     let mut mutated_reads = 0;
-    for pointer_event in invalid_transcript.memory_log.iter_mut().filter(|event| {
+    for pointer_event in invalid_history.memory.accesses.iter_mut().filter(|event| {
         event.address_space() == RV64_REGISTER_AS
             && !event.is_write()
             && event.pointer == pointer_block
@@ -340,7 +343,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     );
     let (invalid_transcript, invalid_plan) = invalid_gpu_program
         .program()
-        .upload_transcript(&invalid_transcript, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &invalid_history, Some(0))
         .unwrap();
     let error = Int256PreflightGpuTracegen::new(
         invalid_gpu_program.program(),
@@ -423,10 +426,13 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         execution.retired,
     )
     .unwrap();
-    let host_transcript = PreflightEventLog {
-        program_log: transcript.program_log_host().unwrap(),
-        memory_log: transcript.memory_log_host().unwrap(),
-        initial_write_log: transcript.initial_write_log_host().unwrap(),
+    let host_history = PreflightHistory {
+        program: transcript.program_log_host().unwrap(),
+        memory: PreflightMemoryLog {
+            accesses: transcript.memory_log_host().unwrap(),
+            initial_writes: transcript.initial_write_log_host().unwrap(),
+            ..Default::default()
+        },
     };
     drop(replay_plan);
     drop(transcript);
@@ -450,9 +456,9 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         .unwrap();
         let (mut transcript, replay_plan) = gpu_program
             .program()
-            .upload_transcript(&host_transcript, execution.endpoint)
+            .upload_history_for_test(&program, &host_history, None)
             .unwrap();
-        let mut program_log = host_transcript.program_log.clone();
+        let mut program_log = host_history.program.clone();
         if corrupt_timestamp {
             // Int256 branch rows consume 10 timed events. This pair would pass a
             // wrapping addition check while violating the u32 timestamp domain.

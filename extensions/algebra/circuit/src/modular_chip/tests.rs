@@ -868,8 +868,7 @@ mod is_equal_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
         openvm_circuit::arch::{
-            cuda::postflight::GpuPostflightProgram,
-            rvr::{PreflightEndpoint, PreflightEventLog},
+            cuda::postflight::GpuPostflightProgram, PreflightHistory, PreflightMemoryLog,
         },
         openvm_instructions::SystemOpcode,
         rvr_state::{
@@ -1357,8 +1356,8 @@ mod is_equal_tests {
             pointer: is_eq_rd as u32 / 2,
             value: [1, 0, 0, 0],
         });
-        let transcript = PreflightEventLog {
-            program_log: vec![
+        let history = PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0,
                     timestamp: 1,
@@ -1376,30 +1375,33 @@ mod is_equal_tests {
                     timestamp: final_timestamp,
                 },
             ],
-            memory_log,
-            initial_write_log: vec![
-                PreflightInitialWrite {
-                    address_space: RV64_REGISTER_AS,
-                    pointer: setup_rd as u32 / 2,
-                    initial_value: [0; 4],
-                },
-                PreflightInitialWrite {
-                    address_space: RV64_REGISTER_AS,
-                    pointer: is_eq_rd as u32 / 2,
-                    initial_value: [0; 4],
-                },
-            ],
+            memory: PreflightMemoryLog {
+                accesses: memory_log,
+                initial_writes: vec![
+                    PreflightInitialWrite {
+                        address_space: RV64_REGISTER_AS,
+                        pointer: setup_rd as u32 / 2,
+                        initial_value: [0; 4],
+                    },
+                    PreflightInitialWrite {
+                        address_space: RV64_REGISTER_AS,
+                        pointer: is_eq_rd as u32 / 2,
+                        initial_value: [0; 4],
+                    },
+                ],
+                ..Default::default()
+            },
         };
 
         let memory_config = openvm_circuit::arch::MemoryConfig::default();
         let device_ctx = &tester.range_checker().device_ctx;
         let gpu_program =
             GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
-        let mut corrupt = transcript;
-        corrupt.memory_log[1 + first_delta as usize].value[0] |= 1;
+        let mut corrupt = history;
+        corrupt.memory.accesses[1 + first_delta as usize].value[0] |= 1;
         let counts_before = tester.range_checker().count.to_host_on(device_ctx).unwrap();
         let (gpu_corrupt, corrupt_plan) = gpu_program
-            .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
+            .upload_history_for_test(&program, &corrupt, Some(0))
             .unwrap();
         assert!(harness
             .gpu_chip
