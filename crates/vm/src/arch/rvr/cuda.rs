@@ -26,7 +26,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use rvr_state::{
-    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, RvrCheckpoint,
+    PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
+    RvrCheckpoint,
 };
 use thiserror::Error;
 
@@ -62,12 +63,7 @@ const _: () = assert!(size_of::<PostflightInstruction>() == 32);
 const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == size_of::<[u32; 8]>());
 const _: () = assert!(RV64_REGISTER_AS == ADDR_SPACE_OFFSET);
 
-/// Four native field cells in the raw Montgomery representation used by CUDA.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct PostflightFieldBlock {
-    pub values: [u32; BLOCK_FE_WIDTH],
-}
+type PostflightFieldBlock = PreflightFieldBlock;
 
 const _: () = assert!(size_of::<PostflightFieldBlock>() == 4 * size_of::<u32>());
 

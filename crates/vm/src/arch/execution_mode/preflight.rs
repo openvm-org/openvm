@@ -1,7 +1,10 @@
+use rvr_state::PreflightProgramEvent;
+
 use crate::arch::Arena;
 
 pub struct PreflightCtx<RA> {
     pub arenas: Vec<RA>,
+    pub program: Vec<PreflightProgramEvent>,
     pub instret_left: u64,
 }
 
@@ -21,6 +24,7 @@ impl<RA: Arena> PreflightCtx<RA> {
 
         Self {
             arenas,
+            program: Vec::new(),
             instret_left: instret_left.unwrap_or(u64::MAX),
         }
     }

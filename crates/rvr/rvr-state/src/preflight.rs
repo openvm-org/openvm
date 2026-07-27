@@ -45,6 +45,17 @@ pub struct PreflightInitialWrite {
     pub initial_value: [u16; 4],
 }
 
+/// Four native field cells in the raw representation used by the prover.
+///
+/// Field-valued accesses store an index into a dense sidecar in the compact
+/// `value` payload of [`PreflightMemoryEvent`] and
+/// [`PreflightInitialWrite`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PreflightFieldBlock {
+    pub values: [u32; 4],
+}
+
 const _: () = {
     assert!(size_of::<PreflightProgramEvent>() == 8);
     assert!(align_of::<PreflightProgramEvent>() == 4);
@@ -52,4 +63,6 @@ const _: () = {
     assert!(align_of::<PreflightMemoryEvent>() == 4);
     assert!(size_of::<PreflightInitialWrite>() == 16);
     assert!(align_of::<PreflightInitialWrite>() == 4);
+    assert!(size_of::<PreflightFieldBlock>() == 16);
+    assert!(align_of::<PreflightFieldBlock>() == 4);
 };

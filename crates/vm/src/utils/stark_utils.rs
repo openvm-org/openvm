@@ -332,6 +332,7 @@ where
         vm.transport_init_memory_to_device(&from_state.memory);
         let PreflightExecutionOutput {
             system_records,
+            history: _,
             record_arenas,
             to_state,
         } = vm.execute_preflight_for(
