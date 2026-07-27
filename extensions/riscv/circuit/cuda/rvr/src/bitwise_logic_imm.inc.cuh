@@ -220,7 +220,7 @@ extern "C" int _bitwise_logic_imm_replay_tracegen(
     assert(num_xori_steps <= SIZE_MAX - num_ori_steps);
     assert(num_xori_steps + num_ori_steps <= SIZE_MAX - num_andi_steps);
     assert(height >= num_xori_steps + num_ori_steps + num_andi_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     bitwise_logic_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

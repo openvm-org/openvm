@@ -216,7 +216,7 @@ extern "C" int _bitwise_logic_replay_tracegen(
     assert(num_xor_steps <= SIZE_MAX - num_or_steps);
     assert(num_xor_steps + num_or_steps <= SIZE_MAX - num_and_steps);
     assert(height >= num_xor_steps + num_or_steps + num_and_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     bitwise_logic_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

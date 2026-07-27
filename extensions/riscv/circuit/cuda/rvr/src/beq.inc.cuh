@@ -185,7 +185,7 @@ extern "C" int _beq_replay_tracegen(
     assert(num_bne_steps <= d_steps.len() - bne_step_start);
     assert(num_beq_steps <= SIZE_MAX - num_bne_steps);
     assert(height >= num_beq_steps + num_bne_steps);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     beq_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
