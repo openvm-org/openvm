@@ -4,7 +4,7 @@ use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -180,15 +180,6 @@ where
     fn start_offset(&self) -> usize {
         self.offset
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub a: [u16; NUM_LIMBS],
-    pub b: [u16; NUM_LIMBS],
-    pub imm: u32,
-    pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

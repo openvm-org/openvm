@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
-use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -125,15 +125,6 @@ where
     fn start_offset(&self) -> usize {
         self.offset
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
-    pub a: [u16; NUM_LIMBS],
-    pub b: [u16; NUM_LIMBS],
-    pub imm: u32,
-    pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

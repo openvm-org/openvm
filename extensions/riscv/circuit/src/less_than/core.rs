@@ -4,7 +4,7 @@ use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
+    ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_transpiler::LessThanOpcode;
@@ -153,14 +153,6 @@ where
     fn start_offset(&self) -> usize {
         self.offset
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct LessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u16; NUM_LIMBS],
-    pub c: [u16; NUM_LIMBS],
-    pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

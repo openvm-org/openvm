@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_transpiler::ShiftOpcode;
@@ -199,13 +199,6 @@ where
     fn start_offset(&self) -> usize {
         self.offset
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct ShiftRightArithmeticCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u16; NUM_LIMBS],
-    pub c: [u16; NUM_LIMBS],
 }
 
 #[derive(Clone, Copy, derive_new::new)]

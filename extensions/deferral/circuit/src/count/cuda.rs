@@ -16,9 +16,6 @@ pub struct DeferralCircuitCountChipGpu {
 }
 
 impl DeferralCircuitCountChipGpu {
-    /// Generates the periphery trace directly from the shared histogram. No
-    /// execution arena is consumed; the caller supplies the existing padded
-    /// segment trace-height limit.
     pub fn generate_proving_ctx_direct(
         &self,
         max_trace_height: usize,

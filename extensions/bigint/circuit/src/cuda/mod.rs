@@ -25,11 +25,8 @@ use openvm_riscv_adapters::{
 };
 use openvm_riscv_circuit::{
     adapters::{RV64_BYTE_BITS, U16_BITS},
-    AddSubCoreCols, AddSubCoreRecord, BitwiseLogicCoreCols, BitwiseLogicCoreRecord,
-    BranchEqualCoreCols, BranchEqualCoreRecord, BranchLessThanCoreCols, BranchLessThanCoreRecord,
-    LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreCols, MultiplicationCoreRecord,
-    ShiftLogicalCoreCols, ShiftLogicalCoreRecord, ShiftRightArithmeticCoreCols,
-    ShiftRightArithmeticCoreRecord,
+    AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
+    LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -43,8 +40,6 @@ use crate::{INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U16_LIMBS, INT256_NUM_U8_LIMBS,
 //////////////////////////////////////////////////////////////////////////////////////
 /// AddSub (u16 limbs, range checker)
 //////////////////////////////////////////////////////////////////////////////////////
-pub type AddSub256CoreRecord = AddSubCoreRecord<INT256_NUM_U16_LIMBS>;
-
 #[derive(new)]
 pub struct AddSub256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -55,8 +50,6 @@ pub struct AddSub256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// BitwiseLogic (byte limbs, bitwise lookup)
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BitwiseLogic256CoreRecord = BitwiseLogicCoreRecord<INT256_NUM_U8_LIMBS>;
-
 #[derive(new)]
 pub struct BitwiseLogic256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -68,8 +61,6 @@ pub struct BitwiseLogic256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Branch Equal
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_U16_LIMBS>;
-
 #[derive(new)]
 pub struct BranchEqual256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -80,8 +71,6 @@ pub struct BranchEqual256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Less Than
 //////////////////////////////////////////////////////////////////////////////////////
-pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
-
 #[derive(new)]
 pub struct LessThan256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -92,8 +81,6 @@ pub struct LessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Branch Less Than
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
-
 #[derive(new)]
 pub struct BranchLessThan256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -104,10 +91,6 @@ pub struct BranchLessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Shift
 //////////////////////////////////////////////////////////////////////////////////////
-pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
-pub type ShiftRightArithmetic256CoreRecord =
-    ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
-
 #[derive(new)]
 pub struct ShiftLogical256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -125,9 +108,6 @@ pub struct ShiftRightArithmetic256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Multiplication
 //////////////////////////////////////////////////////////////////////////////////////
-pub type Multiplication256CoreRecord =
-    MultiplicationCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
-
 #[derive(new)]
 pub struct Multiplication256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
