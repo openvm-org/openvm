@@ -788,7 +788,7 @@ impl GpuChipTester {
                 GpuPostflightProgram::upload(&execution.program, &memory_config, &device_ctx)
                     .expect("test program must upload");
             let (transcript, plan) = program
-                .upload_history_for_test(&execution.program, &execution.history, None)
+                .upload_isolated_history_for_test(&execution.program, &execution.history)
                 .expect("test preflight history must upload");
             let proving_ctx = generate_gpu_trace(&gpu_chip, &program, &transcript, &plan)
                 .expect("GPU postflight trace generation must succeed");

@@ -283,7 +283,7 @@ fn test_cuda_phantom_preflight_replay() {
     let memory_config = MemoryConfig::default();
     let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
-        .upload_history_for_test(&program, &history, None)
+        .upload_isolated_history_for_test(&program, &history)
         .unwrap();
     let chip = PhantomChipGPU::new(device_ctx.clone());
     let _replay_ctx = chip
@@ -304,7 +304,7 @@ fn test_cuda_phantom_preflight_replay() {
         },
     };
     let (d_corrupt, d_corrupt_plan) = d_program
-        .upload_history_for_test(&program, &corrupt, None)
+        .upload_isolated_history_for_test(&program, &corrupt)
         .unwrap();
     chip.generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
