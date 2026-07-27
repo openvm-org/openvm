@@ -12,8 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    ColumnsAir, StructReflection, StructReflectionHelper,
+    var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -22,7 +21,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -201,39 +200,5 @@ impl<
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &Rv64IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Rv64IsEqualModAdapterExecutor<
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const TOTAL_READ_SIZE: usize,
-> {
-    pointer_max_bits: usize,
-}
-
-#[derive(derive_new::new)]
-pub struct Rv64IsEqualModAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pointer_max_bits: usize,
-    pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
-    Rv64IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
-{
-    pub fn new(pointer_max_bits: usize) -> Self {
-        const {
-            assert!(NUM_READS <= 2);
-            assert!(
-                TOTAL_READ_SIZE == BLOCKS_PER_READ * MEMORY_BLOCK_BYTES,
-                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * MEMORY_BLOCK_BYTES"
-            );
-        }
-        assert!(
-            (U16_BITS..=RV64_PTR_BITS).contains(&pointer_max_bits),
-            "pointer_max_bits must be in [16, 32]"
-        );
-        Self { pointer_max_bits }
     }
 }

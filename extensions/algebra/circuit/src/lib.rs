@@ -7,7 +7,6 @@ use std::ops::{Deref, DerefMut};
 
 use openvm_circuit::arch::{MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
-use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
 
 // Number of limbs for different modulus sizes (bytes)
 /// Number of limbs for 256-bit (32-byte) moduli
@@ -46,19 +45,17 @@ pub(crate) mod trace;
 
 #[derive(Clone)]
 pub struct FieldExprVecHeapExecutor<const BLOCKS: usize, const IS_FP2: bool> {
-    inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
+    inner: FieldExpressionExecutor,
 }
 
 impl<const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
-    pub fn new(
-        inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    ) -> Self {
+    pub fn new(inner: FieldExpressionExecutor) -> Self {
         Self { inner }
     }
 }
 
 impl<const BLOCKS: usize, const IS_FP2: bool> Deref for FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
-    type Target = FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>;
+    type Target = FieldExpressionExecutor;
 
     fn deref(&self) -> &Self::Target {
         &self.inner

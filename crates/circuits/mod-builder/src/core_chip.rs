@@ -172,8 +172,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct FieldExpressionExecutor<A> {
-    adapter: A,
+pub struct FieldExpressionExecutor {
     program: FieldExpressionProgram,
     pub offset: usize,
     pub local_opcode_idx: Vec<usize>,
@@ -181,10 +180,9 @@ pub struct FieldExpressionExecutor<A> {
     pub name: String,
 }
 
-impl<A> FieldExpressionExecutor<A> {
+impl FieldExpressionExecutor {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        adapter: A,
         program: FieldExpressionProgram,
         offset: usize,
         local_opcode_idx: Vec<usize>,
@@ -198,19 +196,12 @@ impl<A> FieldExpressionExecutor<A> {
             program.width()
         );
         Self {
-            adapter,
             program,
             offset,
             local_opcode_idx,
             opcode_flag_idx,
             name: name.to_string(),
         }
-    }
-
-    /// Returns a reference to the adapter used by trace generation.
-    #[inline]
-    pub fn adapter(&self) -> &A {
-        &self.adapter
     }
 
     pub fn program(&self) -> &FieldExpressionProgram {

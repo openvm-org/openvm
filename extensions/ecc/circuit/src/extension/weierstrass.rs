@@ -132,7 +132,6 @@ impl VmExecutionExtension for WeierstrassExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv64WeierstrassOpcode::CLASS_OFFSET + i * Rv64WeierstrassOpcode::COUNT;
@@ -144,12 +143,7 @@ impl VmExecutionExtension for WeierstrassExtension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_executor(
-                    config.clone(),
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let addne = get_ec_addne_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv64_32(addne),
@@ -158,13 +152,8 @@ impl VmExecutionExtension for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_executor(
-                    config,
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                    curve.a.clone(),
-                );
+                let double =
+                    get_ec_double_executor(config, U16_BITS, start_offset, curve.a.clone());
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv64_32(double),
@@ -178,12 +167,7 @@ impl VmExecutionExtension for WeierstrassExtension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_executor(
-                    config.clone(),
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let addne = get_ec_addne_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv64_48(addne),
@@ -192,13 +176,8 @@ impl VmExecutionExtension for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_executor(
-                    config,
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                    curve.a.clone(),
-                );
+                let double =
+                    get_ec_double_executor(config, U16_BITS, start_offset, curve.a.clone());
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv64_48(double),

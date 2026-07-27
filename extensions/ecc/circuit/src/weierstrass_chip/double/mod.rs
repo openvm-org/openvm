@@ -18,9 +18,7 @@ use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldExpressionProgram, FieldVariable,
 };
-use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
-};
+use openvm_riscv_adapters::{Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller};
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -83,19 +81,17 @@ pub fn ec_double_ne_program(
 // Preflight executes this transition with fast native arithmetic.
 #[derive(Clone)]
 pub struct EcDoubleExecutor<const BLOCKS: usize> {
-    pub(crate) inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
+    pub(crate) inner: FieldExpressionExecutor,
 }
 
 impl<const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
-    pub fn new(
-        inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
-    ) -> Self {
+    pub fn new(inner: FieldExpressionExecutor) -> Self {
         Self { inner }
     }
 }
 
 impl<const BLOCKS: usize> Deref for EcDoubleExecutor<BLOCKS> {
-    type Target = FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>;
+    type Target = FieldExpressionExecutor;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -143,13 +139,11 @@ pub fn get_ec_double_air<const BLOCKS: usize>(
 pub fn get_ec_double_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_max_bits: usize,
-    pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
 ) -> EcDoubleExecutor<BLOCKS> {
     let (program, local_opcode_idx) = gen_base_program(config, range_max_bits, a_biguint);
     EcDoubleExecutor::new(FieldExpressionExecutor::new(
-        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
         program,
         offset,
         local_opcode_idx,

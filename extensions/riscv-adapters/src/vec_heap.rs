@@ -336,15 +336,6 @@ mod projection_tests {
     }
 }
 
-#[derive(derive_new::new, Clone, Copy)]
-pub struct Rv64VecHeapAdapterExecutor<
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCKS_PER_WRITE: usize,
-> {
-    pointer_max_bits: usize,
-}
-
 #[derive(derive_new::new)]
 pub struct Rv64VecHeapAdapterFiller<
     const NUM_READS: usize,
