@@ -1,5 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
@@ -232,5 +234,47 @@ where
         };
         let adapter_row: &mut Rv64StoreByteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.mem_as = F::from_u32(2);
+    }
+}
+
+#[cfg(test)]
+impl StoreByteFiller<Rv64StoreByteAdapterFiller> {
+    pub(super) fn replay<F: PrimeField32>(
+        &self,
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64StoreByteAdapterCols<F>,
+        core_row: &mut StoreByteCoreCols<F>,
+    ) -> Result<(), PostflightError> {
+        let (read_data, prev_data, shift) = self.adapter.replay(
+            postflight,
+            step,
+            mem_helper,
+            adapter_row,
+            |read_data, prev_data, shift| {
+                store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
+            },
+        )?;
+        let cell_shift = shift / 2;
+
+        let read_lo_byte = u16_cell_byte(read_data[0], 0);
+        self.bitwise_lookup_chip
+            .request_range(read_lo_byte as u32, u16_cell_byte(read_data[0], 1) as u32);
+        core_row.read_lo_byte = F::from_u16(read_lo_byte);
+
+        let prev_cell_bytes = [
+            u16_cell_byte(prev_data[cell_shift], 0),
+            u16_cell_byte(prev_data[cell_shift], 1),
+        ];
+        self.bitwise_lookup_chip
+            .request_range(prev_cell_bytes[0] as u32, prev_cell_bytes[1] as u32);
+        core_row.prev_cell_lo_byte = F::from_u16(prev_cell_bytes[0]);
+        core_row.read_data = read_data.map(F::from_u16);
+        core_row.prev_data = prev_data.map(F::from_u16);
+        let flag_point: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] =
+            self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*flag_point).map(F::from_u32);
+        Ok(())
     }
 }

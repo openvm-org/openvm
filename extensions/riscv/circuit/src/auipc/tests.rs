@@ -3,7 +3,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, Postflight, PreflightExecutor, PreflightHistory,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
         PreflightProgramEvent, TraceFiller, VmAirWrapper, VmChipWrapper,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -196,7 +196,8 @@ fn postflight_auipc_trace_matches_record_arena_trace() {
         memory: tester.memory.memory.take_log(),
     };
     let program = Program::new_without_debug_infos(&[auipc_low, auipc_sign, sentinel], 0);
-    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
     let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
 
     let rows_used = harness.arena.trace_offset / harness.arena.width;

@@ -1,0 +1,61 @@
+use std::borrow::BorrowMut;
+
+use openvm_circuit::{
+    arch::{Postflight, PostflightError},
+    utils::next_power_of_two_or_zero,
+};
+use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::MulWOpcode;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+
+use super::Rv64MulWChip;
+use crate::{
+    adapters::{Rv64MultWAdapterCols, Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS},
+    mul::{fill_core_row_with_result, run_mul, MultiplicationCoreCols},
+};
+
+/// Generates the RV64 MULW trace directly from immutable preflight history.
+pub fn generate_trace_from_postflight<F: PrimeField32>(
+    chip: &Rv64MulWChip<F>,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    let opcode = MulWOpcode::MULW.global_opcode();
+    let rows_used = postflight.steps(opcode).len();
+    let adapter_width = Rv64MultWAdapterCols::<F>::width();
+    let width =
+        adapter_width + MultiplicationCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
+    let height = next_power_of_two_or_zero(rows_used);
+    let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+    let adapter = Rv64MultWAdapterFiller::new(chip.inner.bitwise_lookup_chip.clone());
+
+    for (row_index, &step) in postflight.steps(opcode).iter().enumerate() {
+        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+        let mut carry = None;
+        let ([rs1, rs2], output) = adapter.replay(
+            postflight,
+            step,
+            &chip.mem_helper.as_borrowed(),
+            adapter_row.borrow_mut(),
+            |[rs1, rs2]| {
+                let (output, computed_carry) =
+                    run_mul::<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>(&rs1, &rs2);
+                carry = Some(computed_carry);
+                output
+            },
+        )?;
+        let core_row: &mut MultiplicationCoreCols<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS> =
+            core_row.borrow_mut();
+        fill_core_row_with_result(
+            &chip.inner.range_tuple_chip,
+            &chip.inner.bitwise_lookup_chip,
+            core_row,
+            rs1,
+            rs2,
+            output,
+            carry.expect("word multiplication replay called its compute closure"),
+        );
+    }
+
+    Ok(trace)
+}

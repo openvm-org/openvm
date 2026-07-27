@@ -6,7 +6,8 @@ use openvm_circuit::{
             TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -20,7 +21,9 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{
+    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
+};
 use openvm_riscv_transpiler::MulWOpcode::{self, MULW};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -42,7 +45,7 @@ use {
     },
 };
 
-use super::{MulWCoreAir, MulWFiller, Rv64MulWChip};
+use super::{trace::generate_trace_from_postflight, MulWCoreAir, MulWFiller, Rv64MulWChip};
 use crate::{
     adapters::{
         pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
@@ -197,6 +200,71 @@ fn run_rv64_mulw_rand_test() {
         .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn postflight_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _, _) = create_harness(&tester);
+    let mulw = Instruction::from_usize(
+        MULW.global_opcode(),
+        [24, 8, 16, RV64_REGISTER_AS as usize, 0],
+    );
+    let sentinel = Instruction::from_usize(
+        MULW.global_opcode(),
+        [32, 8, 16, RV64_REGISTER_AS as usize, 0],
+    );
+    unsafe {
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            4,
+            [u16::MAX, 0x7fff, 0x1234, 0xabcd],
+        );
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            8,
+            [0x1001, 0x8000, 0x5678, 0x9abc],
+        );
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &mulw, 0);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 4,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[mulw, sentinel], 0);
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_range_tuple = harness.chip.inner.range_tuple_chip.generate_trace::<F>();
+    let actual_bitwise = harness.chip.inner.bitwise_lookup_chip.generate_trace::<F>();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+    let expected_range_tuple = harness.chip.inner.range_tuple_chip.generate_trace::<F>();
+    let expected_bitwise = harness.chip.inner.bitwise_lookup_chip.generate_trace::<F>();
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
+    assert_eq!(actual_range_tuple.values, expected_range_tuple.values);
+    assert_eq!(actual_bitwise.values, expected_bitwise.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

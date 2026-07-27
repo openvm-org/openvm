@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, Postflight, PreflightExecutor, PreflightHistory,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
         PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -303,7 +303,8 @@ fn postflight_addi_trace_matches_record_arena_trace() {
         memory: tester.memory.memory.take_log(),
     };
     let program = Program::new_without_debug_infos(&[add_positive, add_negative, sentinel], 0);
-    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
     let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
 
     let rows_used = harness.arena.trace_offset / harness.arena.width;
@@ -377,7 +378,8 @@ fn postflight_addiw_trace_matches_record_arena_trace() {
         memory: tester.memory.memory.take_log(),
     };
     let program = Program::new_without_debug_infos(&[add_positive, add_negative, sentinel], 0);
-    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
     let actual = generate_w_trace_from_postflight(&harness.chip, &postflight).unwrap();
 
     let rows_used = harness.arena.trace_offset / harness.arena.width;

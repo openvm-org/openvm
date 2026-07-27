@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
@@ -35,6 +37,8 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
+#[cfg(test)]
+use crate::adapters::RV64_REGISTER_NUM_LIMBS;
 use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
@@ -416,4 +420,141 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreByteAdapterFiller {
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
     }
+}
+
+#[cfg(test)]
+impl Rv64StoreByteAdapterFiller {
+    pub(crate) fn replay<F: PrimeField32>(
+        &self,
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64StoreByteAdapterCols<F>,
+        compute: impl FnOnce(
+            [u16; BLOCK_FE_WIDTH],
+            [u16; BLOCK_FE_WIDTH],
+            usize,
+        ) -> [u16; BLOCK_FE_WIDTH],
+    ) -> Result<([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH], usize), PostflightError> {
+        let instruction = postflight.instruction(step);
+        let mem_as = instruction.e.as_canonical_u32();
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || !matches!(mem_as, RV64_MEMORY_AS | PUBLIC_VALUES_AS)
+        {
+            return Err(PostflightError::new(
+                "byte-store instruction has invalid address spaces",
+            ));
+        }
+        if !instruction.f.is_one() {
+            return Err(PostflightError::new(
+                "byte-store instruction must be enabled",
+            ));
+        }
+        let imm_sign = match instruction.g.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "byte-store instruction has a non-boolean immediate sign",
+                ));
+            }
+        };
+        let imm = instruction.c.as_canonical_u32();
+        if imm > u16::MAX as u32 {
+            return Err(PostflightError::new(
+                "byte-store instruction has a non-canonical immediate",
+            ));
+        }
+
+        let rs1_ptr = checked_register_pointer(instruction.b.as_canonical_u32(), "rs1")?;
+        let rs2_ptr = checked_register_pointer(instruction.a.as_canonical_u32(), "rs2")?;
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(
+            RV64_REGISTER_AS,
+            byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr)),
+        )?;
+        if rs1.value[RV64_PTR_U16_LIMBS..]
+            .iter()
+            .any(|&limb| limb != 0)
+        {
+            return Err(PostflightError::new(
+                "byte-store base register is not a low-32-bit pointer",
+            ));
+        }
+        let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
+        let effective_ptr =
+            rv64_address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let effective_ptr = u32::try_from(effective_ptr)
+            .ok()
+            .filter(|&ptr| {
+                self.pointer_max_bits >= RV64_PTR_BITS
+                    || u64::from(ptr) < (1u64 << self.pointer_max_bits)
+            })
+            .ok_or_else(|| {
+                PostflightError::new(
+                    "byte-store effective address exceeds implemented memory address space",
+                )
+            })?;
+        let shift_amount = effective_ptr as usize & (MEMORY_BLOCK_BYTES - 1);
+        let aligned_ptr = effective_ptr - shift_amount as u32;
+
+        let read_data = replay.read_u16(
+            RV64_REGISTER_AS,
+            byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr)),
+        )?;
+        let mem_ptr = byte_ptr_to_u16_ptr_value(aligned_ptr);
+        let prev_data = replay.peek_u16(mem_as, mem_ptr)?;
+        let write_data = compute(read_data.value, prev_data, shift_amount);
+        let write = replay.write_u16(mem_as, mem_ptr, write_data)?;
+        if write.previous_value != prev_data {
+            return Err(PostflightError::new(
+                "byte-store peek did not resolve the write predecessor",
+            ));
+        }
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        mem_helper.fill(
+            write.previous_timestamp,
+            write.timestamp,
+            &mut adapter_row.write_base_aux,
+        );
+        adapter_row.mem_as = F::from_u32(mem_as);
+        let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
+        self.range_checker_chip
+            .add_count((ptr_limbs[0] - shift_amount as u32) >> 3, U16_BITS - 3);
+        self.range_checker_chip
+            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+        adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
+        adapter_row.imm_sign = F::from_bool(imm_sign);
+        adapter_row.imm = F::from_u32(imm);
+        adapter_row.rs2_ptr = F::from_u8(rs2_ptr);
+        mem_helper.fill(
+            read_data.previous_timestamp,
+            read_data.timestamp,
+            adapter_row.read_data_aux.as_mut(),
+        );
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.rs1_aux_cols.as_mut(),
+        );
+        adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
+        adapter_row.rs1_ptr = F::from_u8(rs1_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((read_data.value, prev_data, shift_amount))
+    }
+}
+
+#[cfg(test)]
+fn checked_register_pointer(pointer: u32, operand: &str) -> Result<u8, PostflightError> {
+    if pointer > u8::MAX as u32 || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+        return Err(PostflightError::new(format!(
+            "byte-store {operand} pointer is not an aligned register address"
+        )));
+    }
+    Ok(pointer as u8)
 }

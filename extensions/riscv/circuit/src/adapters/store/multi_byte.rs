@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
@@ -41,6 +43,8 @@ use crate::adapters::{
     rv64_address_add_imm, rv64_register_pointer, sign_extend_imm16, timed_write_u16, tracing_read,
     tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
+#[cfg(test)]
+use crate::adapters::{checked_byte_ptr_to_u16_ptr_value, RV64_REGISTER_NUM_LIMBS};
 
 pub struct StoreInstruction<T> {
     /// Boolean flag constrained by the core indicating whether this row is active.
@@ -526,4 +530,211 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreMultiByteAdapterFiller 
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
     }
+}
+
+#[cfg(test)]
+type StoreMultiReplay = ([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2], usize);
+
+#[cfg(test)]
+impl Rv64StoreMultiByteAdapterFiller {
+    pub(crate) fn replay<F: PrimeField32, const STORE_WIDTH: usize>(
+        &self,
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64StoreMultiByteAdapterCols<F>,
+        compute: impl FnOnce(
+            [u16; BLOCK_FE_WIDTH],
+            [[u16; BLOCK_FE_WIDTH]; 2],
+            usize,
+        ) -> [[u16; BLOCK_FE_WIDTH]; 2],
+    ) -> Result<StoreMultiReplay, PostflightError> {
+        if !is_multi_byte_access_width(STORE_WIDTH) {
+            return Err(PostflightError::new(
+                "multi-byte store has an unsupported access width",
+            ));
+        }
+        let instruction = postflight.instruction(step);
+        let mem_as = instruction.e.as_canonical_u32();
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || !matches!(mem_as, RV64_MEMORY_AS | PUBLIC_VALUES_AS)
+        {
+            return Err(PostflightError::new(
+                "multi-byte store has invalid address spaces",
+            ));
+        }
+        if !instruction.f.is_one() {
+            return Err(PostflightError::new(
+                "multi-byte store instruction must be enabled",
+            ));
+        }
+        let imm_sign = match instruction.g.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "multi-byte store has a non-boolean immediate sign",
+                ));
+            }
+        };
+        let imm = instruction.c.as_canonical_u32();
+        if imm > u16::MAX as u32 {
+            return Err(PostflightError::new(
+                "multi-byte store immediate exceeds the u16 execution-bus operand",
+            ));
+        }
+
+        let rs1_ptr = checked_register_pointer(instruction.b.as_canonical_u32(), "rs1")?;
+        let rs2_ptr = checked_register_pointer(instruction.a.as_canonical_u32(), "rs2")?;
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(
+            RV64_REGISTER_AS,
+            checked_byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr))?,
+        )?;
+        if rs1.value[RV64_PTR_U16_LIMBS..]
+            .iter()
+            .any(|&limb| limb != 0)
+        {
+            return Err(PostflightError::new(
+                "multi-byte store base register is not a low-32-bit pointer",
+            ));
+        }
+        let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
+        let effective_ptr =
+            rv64_address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let pointer_limit = 1u64
+            .checked_shl(self.pointer_max_bits as u32)
+            .unwrap_or(u64::MAX);
+        if effective_ptr >= pointer_limit || effective_ptr > u64::from(u32::MAX) {
+            return Err(PostflightError::new(
+                "multi-byte store effective address exceeds the pointer domain",
+            ));
+        }
+        let effective_ptr = effective_ptr as u32;
+        let shift = effective_ptr as usize & (MEMORY_BLOCK_BYTES - 1);
+        let aligned_ptr = effective_ptr - shift as u32;
+        let crosses = shift + STORE_WIDTH > MEMORY_BLOCK_BYTES;
+        if crosses && u64::from(aligned_ptr) + 2 * MEMORY_BLOCK_BYTES as u64 > pointer_limit {
+            return Err(PostflightError::new(
+                "crossing multi-byte store exceeds the pointer domain",
+            ));
+        }
+
+        let read_data = replay.read_u16(
+            RV64_REGISTER_AS,
+            checked_byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr))?,
+        )?;
+        let block0_ptr = checked_byte_ptr_to_u16_ptr_value(aligned_ptr)?;
+        let prev_data0 = replay.peek_u16(mem_as, block0_ptr)?;
+        let block1 = if crosses {
+            let pointer = checked_byte_ptr_to_u16_ptr_value(
+                aligned_ptr
+                    .checked_add(MEMORY_BLOCK_BYTES as u32)
+                    .ok_or_else(|| {
+                        PostflightError::new("crossing multi-byte store pointer overflow")
+                    })?,
+            )?;
+            Some((pointer, replay.peek_u16(mem_as, pointer)?))
+        } else {
+            None
+        };
+        let prev_data1 = block1.map_or([0; BLOCK_FE_WIDTH], |(_, value)| value);
+        let prev_data = [prev_data0, prev_data1];
+        let write_data = compute(read_data.value, prev_data, shift);
+        let write0 = replay.write_u16(mem_as, block0_ptr, write_data[0])?;
+        if write0.previous_value != prev_data0 {
+            return Err(PostflightError::new(
+                "multi-byte store first peek did not resolve the write predecessor",
+            ));
+        }
+        let write1 = if crosses {
+            let Some((block1_ptr, _)) = block1 else {
+                return Err(PostflightError::new(
+                    "crossing multi-byte store is missing its second block",
+                ));
+            };
+            let write = replay.write_u16(mem_as, block1_ptr, write_data[1])?;
+            if write.previous_value != prev_data1 {
+                return Err(PostflightError::new(
+                    "multi-byte store second peek did not resolve the write predecessor",
+                ));
+            }
+            Some(write)
+        } else {
+            replay.advance_timestamp(1)?;
+            None
+        };
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        if let Some(write1) = write1 {
+            mem_helper.fill(
+                write1.previous_timestamp,
+                write1.timestamp,
+                &mut adapter_row.write_base_aux[1],
+            );
+        } else {
+            mem_helper.fill_zero(&mut adapter_row.write_base_aux[1]);
+        }
+        mem_helper.fill(
+            write0.previous_timestamp,
+            write0.timestamp,
+            &mut adapter_row.write_base_aux[0],
+        );
+
+        adapter_row.mem_as = F::from_u32(mem_as);
+        let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
+        let aligned_limb = ptr_limbs[0] - shift as u32;
+        self.range_checker_chip
+            .add_count(aligned_limb >> 3, U16_BITS - 3);
+        self.range_checker_chip
+            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+        adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
+        let block1_low_sum = aligned_limb + MEMORY_BLOCK_BYTES as u32;
+        let carry = crosses && block1_low_sum == 1 << U16_BITS;
+        adapter_row.mem_ptr_carry = F::from_bool(carry);
+        if crosses {
+            self.range_checker_chip.add_count(
+                (block1_low_sum - (u32::from(carry) << U16_BITS)) >> 3,
+                U16_BITS - 3,
+            );
+        }
+        if carry {
+            self.range_checker_chip.add_count(
+                ptr_limbs[1] + u32::from(carry),
+                self.pointer_max_bits - U16_BITS,
+            );
+        }
+
+        adapter_row.imm_sign = F::from_bool(imm_sign);
+        adapter_row.imm = F::from_u32(imm);
+        adapter_row.rs2_ptr = F::from_u8(rs2_ptr);
+        mem_helper.fill(
+            read_data.previous_timestamp,
+            read_data.timestamp,
+            adapter_row.read_data_aux.as_mut(),
+        );
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.rs1_aux_cols.as_mut(),
+        );
+        adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
+        adapter_row.rs1_ptr = F::from_u8(rs1_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((read_data.value, prev_data, shift))
+    }
+}
+
+#[cfg(test)]
+fn checked_register_pointer(pointer: u32, operand: &str) -> Result<u8, PostflightError> {
+    if pointer > u8::MAX as u32 || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+        return Err(PostflightError::new(format!(
+            "multi-byte store {operand} pointer is not an aligned register address"
+        )));
+    }
+    Ok(pointer as u8)
 }

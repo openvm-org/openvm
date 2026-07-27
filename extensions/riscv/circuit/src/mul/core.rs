@@ -244,26 +244,63 @@ where
         // during trace generation
         let record: &MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
-
+        let b = record.b;
+        let c = record.c;
         let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
-
-        for (a, carry) in a.iter().zip(carry.iter()) {
-            self.range_tuple_chip.add_count(&[*a as u32, *carry]);
-        }
-
-        for (b_val, c_val) in record.b.iter().zip(record.c.iter()) {
-            self.bitwise_lookup_chip
-                .request_range(*b_val as u32, *c_val as u32);
-        }
-
-        // write in reverse order
-        core_row.is_valid = F::ONE;
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = a.map(F::from_u8);
+        fill_core_row(
+            &self.range_tuple_chip,
+            &self.bitwise_lookup_chip,
+            core_row,
+            b,
+            c,
+        );
     }
+}
+
+pub(crate) fn fill_core_row<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    range_tuple_chip: &SharedRangeTupleCheckerChip<2>,
+    bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS>,
+    b: [u8; NUM_LIMBS],
+    c: [u8; NUM_LIMBS],
+) -> [u8; NUM_LIMBS] {
+    let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
+    fill_core_row_with_result(
+        range_tuple_chip,
+        bitwise_lookup_chip,
+        core_row,
+        b,
+        c,
+        a,
+        carry,
+    );
+    a
+}
+
+pub(crate) fn fill_core_row_with_result<
+    F: PrimeField32,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+>(
+    range_tuple_chip: &SharedRangeTupleCheckerChip<2>,
+    bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS>,
+    b: [u8; NUM_LIMBS],
+    c: [u8; NUM_LIMBS],
+    a: [u8; NUM_LIMBS],
+    carry: [u32; NUM_LIMBS],
+) {
+    for (a, carry) in a.iter().zip(carry.iter()) {
+        range_tuple_chip.add_count(&[*a as u32, *carry]);
+    }
+    for (b_val, c_val) in b.iter().zip(c.iter()) {
+        bitwise_lookup_chip.request_range(*b_val as u32, *c_val as u32);
+    }
+
+    core_row.is_valid = F::ONE;
+    core_row.c = c.map(F::from_u8);
+    core_row.b = b.map(F::from_u8);
+    core_row.a = a.map(F::from_u8);
 }
 
 // returns mul, carry

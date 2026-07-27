@@ -5,7 +5,8 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor, BLOCK_FE_WIDTH,
+        Arena, ExecutionBridge, MatrixRecordArena, MemoryConfig, Postflight, PreflightExecutor,
+        PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{pack_u8_block_value, MemoryBridge},
@@ -15,6 +16,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{
     instruction::Instruction,
+    program::Program,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -39,7 +41,10 @@ use {
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
-use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
+use super::{
+    trace::generate_trace_from_postflight, Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols,
+    Rv64HintStoreExecutor,
+};
 use crate::{
     adapters::{u64_to_rv64_limbs, RV64_PTR_U16_LIMBS, U16_BITS},
     Rv64HintStoreFiller,
@@ -166,7 +171,7 @@ fn rand_hintstore_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let mut harness = create_harness(&mut tester);
+    let mut harness = create_harness::<MatrixRecordArena<F>>(&mut tester);
     let num_ops: usize = 100;
     for _ in 0..num_ops {
         let opcode = if rng.random_bool(0.5) {
@@ -470,6 +475,125 @@ fn negative_hintstore_tests() {
         )),
         true,
     );
+}
+
+#[test]
+fn postflight_trace_matches_record_arena_trace_with_materialized_advice() {
+    let mut tester = VmChipTestBuilder::default();
+    let mut harness = create_harness::<MatrixRecordArena<F>>(&mut tester);
+    let mem_ptr_ptr = 8;
+    let num_words_ptr = 16;
+    let mem_ptr = 0x80u32;
+    unsafe {
+        tester
+            .memory
+            .memory
+            .data
+            .write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+                RV64_REGISTER_AS,
+                mem_ptr_ptr as u32,
+                u64::from(mem_ptr).to_le_bytes(),
+            );
+        tester
+            .memory
+            .memory
+            .data
+            .write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+                RV64_REGISTER_AS,
+                num_words_ptr as u32,
+                2u64.to_le_bytes(),
+            );
+    }
+
+    let stored = Instruction::from_usize(
+        HINT_STORED.global_opcode(),
+        [
+            0,
+            mem_ptr_ptr,
+            0,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    );
+    let buffer = Instruction::from_usize(
+        HINT_BUFFER.global_opcode(),
+        [
+            num_words_ptr,
+            mem_ptr_ptr,
+            0,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    );
+    let sentinel = stored.clone();
+    let hint_words = [
+        0x0807_0605_0403_0201u64,
+        0x1817_1615_1413_1211,
+        0x2827_2625_2423_2221,
+    ];
+    tester
+        .streams_mut()
+        .hint_stream
+        .set_hint(hint_words.into_iter().flat_map(u64::to_le_bytes).collect());
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &stored, 0);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &buffer, 4);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 4,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 10,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let memory_config = MemoryConfig::default();
+    let writes = history
+        .memory
+        .accesses
+        .iter()
+        .filter(|event| event.is_write())
+        .collect::<Vec<_>>();
+    assert_eq!(writes.len(), hint_words.len());
+    for (write, expected) in writes.iter().zip(hint_words) {
+        let value = write
+            .value
+            .into_iter()
+            .enumerate()
+            .fold(0u64, |value, (index, limb)| {
+                value | (u64::from(limb) << (index * U16_BITS))
+            });
+        assert_eq!(value, expected);
+    }
+
+    let program = Program::new_without_debug_infos(&[stored, buffer, sentinel], 0);
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+    let expected_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
+    assert_eq!(actual_range.values, expected_range.values);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

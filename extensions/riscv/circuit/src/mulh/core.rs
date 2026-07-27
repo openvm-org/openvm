@@ -317,44 +317,68 @@ where
         let core_row: &mut MulHCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
         let opcode = MulHOpcode::from_usize(record.local_opcode as usize);
-        let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(
+        let result = run_mulh::<NUM_LIMBS, LIMB_BITS>(
             opcode,
             &record.b.map(u32::from),
             &record.c.map(u32::from),
         );
-
-        for i in 0..NUM_LIMBS {
-            self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
-            self.range_tuple_chip
-                .add_count(&[a[i], carry[NUM_LIMBS + i]]);
-        }
-
-        if opcode != MulHOpcode::MULHU {
-            let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-            let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-            self.bitwise_lookup_chip.request_range(
-                (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
-                (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask)
-                    << ((opcode == MulHOpcode::MULH) as u32),
-            );
-        }
-
-        for i in 0..NUM_LIMBS {
-            self.bitwise_lookup_chip
-                .request_range(record.b[i] as u32, record.c[i] as u32);
-        }
-
-        // Write in reverse order
-        core_row.opcode_mulhu_flag = F::from_bool(opcode == MulHOpcode::MULHU);
-        core_row.opcode_mulhsu_flag = F::from_bool(opcode == MulHOpcode::MULHSU);
-        core_row.opcode_mulh_flag = F::from_bool(opcode == MulHOpcode::MULH);
-        core_row.c_ext = F::from_u32(c_ext);
-        core_row.b_ext = F::from_u32(b_ext);
-        core_row.a_mul = a_mul.map(F::from_u32);
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = a.map(F::from_u32);
+        fill_core_row_with_result(
+            &self.range_tuple_chip,
+            &self.bitwise_lookup_chip,
+            core_row,
+            opcode,
+            record.b,
+            record.c,
+            result,
+        );
     }
+}
+
+pub(super) type MulHResult<const NUM_LIMBS: usize> =
+    ([u32; NUM_LIMBS], [u32; NUM_LIMBS], Vec<u32>, u32, u32);
+
+pub(super) fn fill_core_row_with_result<
+    F: PrimeField32,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+>(
+    range_tuple_chip: &SharedRangeTupleCheckerChip<2>,
+    bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    core_row: &mut MulHCoreCols<F, NUM_LIMBS, LIMB_BITS>,
+    opcode: MulHOpcode,
+    b: [u8; NUM_LIMBS],
+    c: [u8; NUM_LIMBS],
+    result: MulHResult<NUM_LIMBS>,
+) {
+    let (a, a_mul, carry, b_ext, c_ext) = result;
+    for i in 0..NUM_LIMBS {
+        range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
+        range_tuple_chip.add_count(&[a[i], carry[NUM_LIMBS + i]]);
+    }
+
+    if opcode != MulHOpcode::MULHU {
+        let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+        let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+        bitwise_lookup_chip.request_range(
+            (b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
+            (c[NUM_LIMBS - 1] as u32 - c_sign_mask) << ((opcode == MulHOpcode::MULH) as u32),
+        );
+    }
+
+    for i in 0..NUM_LIMBS {
+        bitwise_lookup_chip.request_range(b[i] as u32, c[i] as u32);
+    }
+
+    // Write in reverse order.
+    core_row.opcode_mulhu_flag = F::from_bool(opcode == MulHOpcode::MULHU);
+    core_row.opcode_mulhsu_flag = F::from_bool(opcode == MulHOpcode::MULHSU);
+    core_row.opcode_mulh_flag = F::from_bool(opcode == MulHOpcode::MULH);
+    core_row.c_ext = F::from_u32(c_ext);
+    core_row.b_ext = F::from_u32(b_ext);
+    core_row.a_mul = a_mul.map(F::from_u32);
+    core_row.c = c.map(F::from_u8);
+    core_row.b = b.map(F::from_u8);
+    core_row.a = a.map(F::from_u32);
 }
 
 // returns mulh[[s]u], mul, carry, x_ext, y_ext
@@ -363,7 +387,7 @@ pub(super) fn run_mulh<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: MulHOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
-) -> ([u32; NUM_LIMBS], [u32; NUM_LIMBS], Vec<u32>, u32, u32) {
+) -> MulHResult<NUM_LIMBS> {
     let mut mul = [0; NUM_LIMBS];
     let mut carry = vec![0; 2 * NUM_LIMBS];
     for i in 0..NUM_LIMBS {

@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
@@ -39,6 +41,8 @@ use crate::adapters::{
     sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
     RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
+#[cfg(test)]
+use crate::adapters::{checked_byte_ptr_to_u16_ptr_value, RV64_REGISTER_NUM_LIMBS};
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
 
@@ -431,5 +435,143 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadByteAdapterFiller {
         adapter_row.rs1_ptr = F::from_u8(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
+    }
+}
+
+#[cfg(test)]
+impl Rv64LoadByteAdapterFiller {
+    pub(crate) fn replay<F: PrimeField32>(
+        &self,
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64LoadByteAdapterCols<F>,
+        compute: impl FnOnce([u16; BLOCK_FE_WIDTH], usize) -> [u16; BLOCK_FE_WIDTH],
+    ) -> Result<([u16; BLOCK_FE_WIDTH], usize, [u16; BLOCK_FE_WIDTH]), PostflightError> {
+        let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+        {
+            return Err(PostflightError::new(
+                "byte-load instruction has invalid address spaces",
+            ));
+        }
+        let needs_write = match instruction.f.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "byte-load instruction has a non-boolean write enable",
+                ));
+            }
+        };
+        let imm_sign = match instruction.g.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "byte-load instruction has a non-boolean immediate sign",
+                ));
+            }
+        };
+        let imm = instruction.c.as_canonical_u32();
+        if imm > u16::MAX as u32 {
+            return Err(PostflightError::new(
+                "byte-load instruction has a non-canonical immediate",
+            ));
+        }
+
+        let rs1_ptr = instruction.b.as_canonical_u32();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        if rs1_ptr > u32::from(u8::MAX) || !rs1_ptr.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+            return Err(PostflightError::new(
+                "byte-load instruction has an invalid source register pointer",
+            ));
+        }
+        if rd_ptr > u32::from(u8::MAX) || !rd_ptr.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+            return Err(PostflightError::new(
+                "byte-load instruction has an invalid destination register pointer",
+            ));
+        }
+        if needs_write != (rd_ptr != 0) {
+            return Err(PostflightError::new(
+                "byte-load write enable does not match its destination register",
+            ));
+        }
+
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        if rs1.value[RV64_PTR_U16_LIMBS..].iter().any(|&x| x != 0) {
+            return Err(PostflightError::new(
+                "byte-load base register exceeds the implemented pointer width",
+            ));
+        }
+        let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
+        let effective_ptr = u32::try_from(rv64_address_add_imm(
+            rs1_val,
+            sign_extend_imm16(imm, u32::from(imm_sign)),
+        ))
+        .map_err(|_| PostflightError::new("byte-load effective address exceeds u32"))?;
+        if self.pointer_max_bits < u32::BITS as usize
+            && u64::from(effective_ptr) >= (1u64 << self.pointer_max_bits)
+        {
+            return Err(PostflightError::new(
+                "byte-load effective address exceeds implemented memory",
+            ));
+        }
+        let shift_amount = effective_ptr as usize & (MEMORY_BLOCK_BYTES - 1);
+        let aligned_ptr = effective_ptr - shift_amount as u32;
+        let memory = replay.read_u16(
+            RV64_MEMORY_AS,
+            checked_byte_ptr_to_u16_ptr_value(aligned_ptr)?,
+        )?;
+        let output = compute(memory.value, shift_amount);
+
+        adapter_row.needs_write = F::from_bool(needs_write);
+        if needs_write {
+            let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, output)?;
+            mem_helper.fill(
+                write.previous_timestamp,
+                write.timestamp,
+                &mut adapter_row.write_aux.base,
+            );
+            adapter_row.write_aux.prev_data = write.previous_value.map(F::from_u16);
+            adapter_row.rd_ptr = F::from_u32(rd_ptr);
+        } else {
+            replay.advance_timestamp(1)?;
+            mem_helper.fill_zero(&mut adapter_row.write_aux.base);
+            adapter_row.write_aux.prev_data = [F::ZERO; BLOCK_FE_WIDTH];
+            adapter_row.rd_ptr = F::ZERO;
+        }
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
+        self.range_checker_chip
+            .add_count((ptr_limbs[0] - shift_amount as u32) >> 3, U16_BITS - 3);
+        self.range_checker_chip
+            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+        adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
+        adapter_row.imm_sign = F::from_bool(imm_sign);
+        adapter_row.imm = F::from_u32(imm);
+        mem_helper.fill(
+            memory.previous_timestamp,
+            memory.timestamp,
+            adapter_row.read_data_aux.as_mut(),
+        );
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.rs1_aux_cols.as_mut(),
+        );
+        adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
+        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((memory.value, shift_amount, output))
     }
 }

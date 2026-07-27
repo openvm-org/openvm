@@ -1,12 +1,21 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
+#[cfg(test)]
+use openvm_circuit::{
+    arch::{Postflight, PostflightError, VmChipWrapper},
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
+#[cfg(test)]
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+#[cfg(test)]
+use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -270,30 +279,16 @@ impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     }
 }
 
-impl<F, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> TraceFiller<F>
-    for StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
-where
-    F: PrimeField32,
+impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
+    StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // StoreCoreCols::width() elements.
-        let (mut adapter_row, mut core_row) = unsafe {
-            row_slice.split_at_mut_unchecked(
-                <Rv64StoreMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
-            )
-        };
-        let adapter_record: &Rv64StoreMultiByteAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let shift = adapter_record.shift_amount();
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY: core_row contains a valid StoreRecord written by the executor during trace
-        // generation.
-        let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
-        let prev_data = record.prev_data;
-        let core_row: &mut StoreCoreCols<F, NUM_VALUE_CELLS> = core_row.borrow_mut();
+    fn fill_core_row<F: PrimeField32>(
+        &self,
+        shift: usize,
+        read_data: [u16; BLOCK_FE_WIDTH],
+        prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
+        core_row: &mut StoreCoreCols<F, NUM_VALUE_CELLS>,
+    ) {
         debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid store shift {shift}");
 
         let width = STORE_WIDTH / U16_CELL_SIZE;
@@ -322,14 +317,40 @@ where
             };
 
         core_row.value_lo_bytes = value_lo_bytes.map(F::from_u16);
-        // Only the preserved bytes are materialized: the low byte of the first overlapped cell
-        // and the high byte of the last.
         core_row.prev_bound_bytes =
             [prev_bound_cells[0][0], prev_bound_cells[1][1]].map(F::from_u16);
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(|block| block.map(F::from_u16));
-        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
-        core_row.selector = (*pt).map(F::from_u32);
+        let flag_point: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] =
+            self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*flag_point).map(F::from_u32);
+    }
+}
+
+impl<F, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> TraceFiller<F>
+    for StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
+where
+    F: PrimeField32,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
+        // StoreCoreCols::width() elements.
+        let (mut adapter_row, mut core_row) = unsafe {
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
+        };
+        let adapter_record: &Rv64StoreMultiByteAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let shift = adapter_record.shift_amount();
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
+        // SAFETY: core_row contains a valid StoreRecord written by the executor during trace
+        // generation.
+        let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let read_data = record.read_data;
+        let prev_data = record.prev_data;
+        self.fill_core_row(shift, read_data, prev_data, core_row.borrow_mut());
     }
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
@@ -341,4 +362,51 @@ where
         let adapter_row: &mut Rv64StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.mem_as = F::from_u32(2);
     }
+}
+
+#[cfg(test)]
+pub(crate) fn generate_trace_from_postflight<
+    F: PrimeField32,
+    const STORE_WIDTH: usize,
+    const NUM_VALUE_CELLS: usize,
+>(
+    chip: &VmChipWrapper<
+        F,
+        StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>,
+    >,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    let steps = postflight.steps(store_opcode::<STORE_WIDTH>().global_opcode());
+    let adapter_width = Rv64StoreMultiByteAdapterCols::<F>::width();
+    let width = adapter_width + StoreCoreCols::<F, NUM_VALUE_CELLS>::width();
+    let height = next_power_of_two_or_zero(steps.len());
+    let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+
+    for (row_index, &step) in steps.iter().enumerate() {
+        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+        let (read_data, prev_data, shift) = chip.inner.adapter.replay::<F, STORE_WIDTH>(
+            postflight,
+            step,
+            &chip.mem_helper.as_borrowed(),
+            adapter_row.borrow_mut(),
+            |read_data, prev_data, shift| {
+                crate::store::common::store_write_data(
+                    store_opcode::<STORE_WIDTH>(),
+                    read_data,
+                    prev_data,
+                    shift,
+                )
+            },
+        )?;
+        chip.inner
+            .fill_core_row(shift, read_data, prev_data, core_row.borrow_mut());
+    }
+    for row_index in steps.len()..height {
+        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let adapter_row: &mut Rv64StoreMultiByteAdapterCols<F> = row[..adapter_width].borrow_mut();
+        adapter_row.mem_as = F::from_u32(2);
+    }
+
+    Ok(trace)
 }

@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, Postflight, PreflightExecutor, PreflightHistory,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
         PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -391,7 +391,8 @@ fn postflight_trace_matches_record_arena_trace() {
         memory: tester.memory.memory.take_log(),
     };
     let program = Program::new_without_debug_infos(&[sllw, srlw, sraw, sentinel], 0);
-    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
     let logical_actual =
         generate_logical_trace_from_postflight(&logical_harness.chip, &postflight).unwrap();
 
