@@ -4572,9 +4572,13 @@ dependencies = [
  "openvm-keccak256-transpiler",
  "openvm-riscv-transpiler",
  "openvm-sdk",
+ "openvm-sha2",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "sha2 0.10.9",
  "tiny-keccak",
 ]
 

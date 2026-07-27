@@ -24,7 +24,9 @@ caci:
   - *shared
   - "crates/sdk/**"
   - "extensions/keccak256/**"
+  - "extensions/sha2/**"
   - "guest-libs/keccak256/**"
+  - "guest-libs/sha2/**"
   - "guest-libs/caci/**"
 sha2:
   - *shared

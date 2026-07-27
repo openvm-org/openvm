@@ -12,3 +12,8 @@ pub mod types;
 mod keccak256;
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use keccak256::zkvm_keccak256;
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+mod sha256;
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+pub use sha256::zkvm_sha256;

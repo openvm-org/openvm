@@ -11,6 +11,7 @@ license.workspace = true
 
 [dependencies]
 openvm-keccak256 = { path = "../keccak256", default-features = false }
+openvm-sha2 = { path = "../sha2", default-features = false }
 
 [dev-dependencies]
 eyre = { workspace = true }
@@ -20,15 +21,18 @@ openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 openvm-riscv-transpiler = { workspace = true }
 openvm-sdk = { path = "../../crates/sdk", default-features = false }
+openvm-sha2-circuit = { workspace = true }
+openvm-sha2-transpiler = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 openvm-transpiler = { workspace = true }
+sha2 = { workspace = true }
 tiny-keccak = { workspace = true }
 
 [features]
 default = []
 # Internal feature for testing only.
-cuda = ["openvm-keccak256-circuit/cuda"]
+cuda = ["openvm-keccak256-circuit/cuda", "openvm-sha2-circuit/cuda"]
 
 [lints]
 workspace = true
