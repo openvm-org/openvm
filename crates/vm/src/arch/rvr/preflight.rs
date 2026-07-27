@@ -535,13 +535,13 @@ fn require_segment_boundary(
     execution: PreflightExecution,
     limits: PreflightLimits,
 ) -> Result<PreflightExecution, ExecutionError> {
-    let expected_retired = u32::try_from(limits.max_instructions).map_err(|_| {
+    let num_insns = u32::try_from(limits.max_instructions).map_err(|_| {
         ExecutionError::RvrExecution("preflight instruction limit exceeds u32".to_string())
     })?;
-    if execution.retired != expected_retired {
+    let instret = execution.retired;
+    if instret != num_insns {
         return Err(ExecutionError::RvrExecution(format!(
-            "preflight retired {} instructions, expected {expected_retired}",
-            execution.retired
+            "preflight instret {instret} does not match segment num_insns {num_insns}"
         )));
     }
     Ok(execution)

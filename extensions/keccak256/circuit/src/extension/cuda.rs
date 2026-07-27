@@ -152,13 +152,13 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
-        expected_retired: u32,
+        num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let opcodes = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
-        vm.postflight(program, execution, expected_retired, opcodes)
+        vm.postflight(program, execution, num_insns, opcodes)
     }
 
     pub fn new(

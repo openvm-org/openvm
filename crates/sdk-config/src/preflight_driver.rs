@@ -107,26 +107,6 @@ impl PreparedPreflight {
         })
     }
 
-    fn segments(
-        &self,
-        _instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
-        input: Streams,
-    ) -> Result<Vec<Segment>, VirtualMachineError> {
-        #[cfg(feature = "rvr")]
-        {
-            Ok(self
-                .metered
-                .execute_metered(input, self.metered_ctx.clone())?
-                .0)
-        }
-        #[cfg(not(feature = "rvr"))]
-        {
-            let metered_ctx = _instance.vm.build_metered_ctx(_instance.exe());
-            let metered = _instance.vm.metered_instance(_instance.exe())?;
-            Ok(metered.execute_metered(input, metered_ctx)?.0)
-        }
-    }
-
     fn tracegen_program(&self) -> &GpuPostflightProgram {
         #[cfg(feature = "rvr")]
         {
@@ -172,7 +152,17 @@ fn prove_inner(
     input: Streams,
     prepared: &PreparedPreflight,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
-    let segments = prepared.segments(instance, input)?;
+    #[cfg(feature = "rvr")]
+    let segments = prepared
+        .metered
+        .execute_metered(input, prepared.metered_ctx.clone())?
+        .0;
+    #[cfg(not(feature = "rvr"))]
+    let segments = {
+        let metered_ctx = instance.vm.build_metered_ctx(instance.exe());
+        let metered = instance.vm.metered_instance(instance.exe())?;
+        metered.execute_metered(input, metered_ctx)?.0
+    };
     let num_segments = segments.len();
     let mut proofs = Vec::with_capacity(num_segments);
     let mut state = instance
@@ -212,12 +202,10 @@ fn prove_inner(
 
         #[cfg(feature = "rvr")]
         let (next_state, gpu_transcript, replay_plan) = {
-            let num_insns = usize::try_from(num_insns)
-                .map_err(|_| generation_error("metered instruction count exceeds usize"))?;
-            let expected_retired = u32::try_from(num_insns)
+            let num_insns = u32::try_from(num_insns)
                 .map_err(|_| generation_error("metered instruction count exceeds u32"))?;
             let limits = PreflightLimits::new(
-                num_insns,
+                num_insns as usize,
                 num_preflight_residuals as usize,
                 CHECKPOINT_INTERVAL,
             );
@@ -242,13 +230,9 @@ fn prove_inner(
                 matches!(&execution.endpoint, PreflightEndpoint::Terminated),
                 segment_idx + 1 == num_segments,
             )?;
-            let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::postflight(
-                &instance.vm,
-                &prepared.program,
-                &execution,
-                expected_retired,
-            )
-            .map_err(generation_error)?;
+            let (gpu_transcript, replay_plan) =
+                SdkVmGpuBuilder::postflight(&instance.vm, &prepared.program, &execution, num_insns)
+                    .map_err(generation_error)?;
             let PreflightExecution {
                 state: next_state,
                 mut transcript,

@@ -861,17 +861,17 @@ impl CheckpointReplayProgram {
     pub(crate) fn postflight(
         &self,
         execution: &PreflightExecution,
-        expected_retired: u32,
+        num_insns: u32,
         initial_registers: DeviceBufferView,
         initial_memory: DeviceBufferView,
         initial_memory_images: &[DeviceBufferView],
         opcodes: PostflightOpcodeBases,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let program = self.program();
-        if execution.retired != expected_retired {
+        let instret = execution.retired;
+        if instret != num_insns {
             return Err(GpuPostflightError::InvalidTranscript(format!(
-                "preflight retired {} instructions, expected {expected_retired}",
-                execution.retired
+                "preflight instret {instret} does not match segment num_insns {num_insns}"
             )));
         }
         if let Some(opcode) = self

@@ -10,13 +10,13 @@ use openvm_stark_backend::{
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
 use crate::arch::VmField;
 
-impl<RA, SC: StarkProtocolConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
+impl<SC: StarkProtocolConfig, const SBOX_REGISTERS: usize> Chip<(), CpuBackend<SC>>
     for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: VmField,
 {
     /// Generates trace and clears internal records state.
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
         let width = Poseidon2PeripheryCols::<Val<SC>, SBOX_REGISTERS>::width();
         if !self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
             let trace = RowMajorMatrix::new(vec![], width);
