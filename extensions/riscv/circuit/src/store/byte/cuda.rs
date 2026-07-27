@@ -1,12 +1,11 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
+use openvm_circuit::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
@@ -22,9 +21,8 @@ use {
 
 use super::StoreByteCoreCols;
 use crate::{
-    adapters::{Rv64StoreByteAdapterCols, Rv64StoreByteAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64StoreByteAdapterCols, RV64_BYTE_BITS},
     cuda_abi::store_byte_cuda,
-    store::StoreByteRecord,
 };
 
 #[derive(new)]
@@ -80,40 +78,5 @@ impl Rv64StoreByteChipGpu {
             )?;
         }
         Ok(AirProvingContext::simple_no_pis(d_trace))
-    }
-}
-
-impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreByteChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64StoreByteAdapterRecord, StoreByteRecord)>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let trace_width = Rv64StoreByteAdapterCols::<F>::width() + StoreByteCoreCols::<F>::width();
-        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = tracing::info_span!("trace_gen.h2d_records")
-            .in_scope(|| records.to_device_on(device_ctx))
-            .unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-
-        unsafe {
-            store_byte_cuda::tracegen(
-                d_trace.buffer(),
-                trace_height,
-                &d_records,
-                self.pointer_max_bits,
-                &self.range_checker.count,
-                &self.bitwise_lookup.count,
-                self.timestamp_max_bits as u32,
-                device_ctx.stream.as_raw(),
-            )
-            .unwrap();
-        }
-        AirProvingContext::simple_no_pis(d_trace)
     }
 }

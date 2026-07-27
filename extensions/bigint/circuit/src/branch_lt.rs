@@ -12,18 +12,18 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, BranchLessThanExecutor};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{i256_lt, read_int256, u256_lt},
-    BranchAdapterExecutor, Rv64BranchLessThan256Executor, INT256_NUM_U8_LIMBS,
+    Rv64BranchLessThan256Executor, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64BranchLessThan256Executor {
-    pub fn new(adapter: BranchAdapterExecutor, offset: usize) -> Self {
-        Self(BranchLessThanExecutor::new(adapter, offset))
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -48,7 +48,10 @@ macro_rules! dispatch {
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThan256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        InterpreterExecutor::<F>::get_opcode_name(&self.0, opcode)
+        format!(
+            "{:?}",
+            BranchLessThanOpcode::from_usize(opcode - Rv64BranchLessThan256Opcode::CLASS_OFFSET)
+        )
     }
 
     fn pre_compute_size(&self) -> usize {

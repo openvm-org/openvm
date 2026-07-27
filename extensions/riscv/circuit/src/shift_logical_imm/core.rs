@@ -1,24 +1,18 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftOpcode};
+use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
-
-use crate::shift_logical::run_shift_logical;
 
 /// Core columns for logical shifts with an immediate shift amount.
 #[repr(C)]
@@ -235,132 +229,4 @@ pub struct ShiftLogicalImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: u
 pub struct ShiftLogicalImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; NUM_LIMBS]; 1]>,
-            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS>,
-        ),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, c, .. } = instruction;
-
-        let local_opcode = opcode.local_opcode_idx(self.offset);
-        debug_assert!(
-            local_opcode == ShiftImmOpcode::SLLI as usize
-                || local_opcode == ShiftImmOpcode::SRLI as usize
-        );
-        let shamt = c.as_canonical_u32();
-        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        [core_record.b] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.shamt = shamt as u8;
-        core_record.local_opcode = local_opcode as u8;
-
-        let reg_opcode = if local_opcode == ShiftImmOpcode::SLLI as usize {
-            ShiftOpcode::SLL
-        } else {
-            ShiftOpcode::SRL
-        };
-        let mut shamt_limbs = [0u16; NUM_LIMBS];
-        shamt_limbs[0] = shamt as u16;
-        let (output, _, _) =
-            run_shift_logical::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &core_record.b, &shamt_limbs);
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            [output].into(),
-            &mut adapter_record,
-        );
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftLogicalImmFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record: &ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let is_sll = record.local_opcode == ShiftImmOpcode::SLLI as u8;
-        let reg_opcode = if is_sll {
-            ShiftOpcode::SLL
-        } else {
-            ShiftOpcode::SRL
-        };
-        let mut shamt_limbs = [0u16; NUM_LIMBS];
-        shamt_limbs[0] = record.shamt as u16;
-        let (a, limb_shift, bit_shift) =
-            run_shift_logical::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &record.b, &shamt_limbs);
-
-        let aux_bits = LIMB_BITS - bit_shift;
-        let mut bit_shift_carry = [F::ZERO; NUM_LIMBS];
-        let mut bit_shift_aux = [F::ZERO; NUM_LIMBS];
-        for k in 0..NUM_LIMBS {
-            let limb = record.b[k] as u32;
-            let (carry, aux) = if is_sll {
-                (limb >> aux_bits, limb & ((1u32 << aux_bits) - 1))
-            } else {
-                (limb & ((1u32 << bit_shift) - 1), limb >> bit_shift)
-            };
-            self.range_checker_chip.add_count(carry, bit_shift);
-            self.range_checker_chip.add_count(aux, aux_bits);
-            bit_shift_carry[k] = F::from_u32(carry);
-            bit_shift_aux[k] = F::from_u32(aux);
-        }
-
-        let mut limb_shift_marker = [F::ZERO; NUM_LIMBS];
-        limb_shift_marker[limb_shift] = F::ONE;
-        let mut bit_shift_marker = [F::ZERO; LIMB_BITS];
-        bit_shift_marker[bit_shift] = F::ONE;
-
-        let b = record.b;
-        let core_row: &mut ShiftLogicalImmCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        let bit_mult = F::from_u32(1 << bit_shift);
-        let carry_mult = F::from_u32(1 << aux_bits);
-        core_row.bit_shift_aux = bit_shift_aux;
-        core_row.bit_shift_carry = bit_shift_carry;
-        core_row.limb_shift_marker = limb_shift_marker;
-        core_row.bit_shift_marker = bit_shift_marker;
-        core_row.carry_multiplier_left = if is_sll { carry_mult } else { F::ZERO };
-        core_row.bit_multiplier_left = if is_sll { bit_mult } else { F::ZERO };
-        core_row.opcode_sll_flag = F::from_bool(is_sll);
-        core_row.b = b.map(F::from_u16);
-        core_row.a = a.map(F::from_u16);
-    }
 }

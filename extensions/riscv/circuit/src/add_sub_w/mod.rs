@@ -9,12 +9,16 @@ use super::{
 };
 
 mod execution;
-mod preflight;
 pub(crate) mod trace;
-pub use preflight::*;
 
 pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;
 pub type AddSubWFiller<A> = AddSubFiller<A, RV64_WORD_U16_LIMBS, U16_BITS, false>;
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct AddSubWExecutor<A> {
+    _adapter: A,
+    pub offset: usize,
+}
 
 #[cfg(feature = "cuda")]
 mod cuda;

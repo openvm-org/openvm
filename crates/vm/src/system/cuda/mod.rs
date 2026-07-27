@@ -3,10 +3,8 @@ use std::sync::Arc;
 use connector::VmConnectorChipGPU;
 use memory::MemoryInventoryGPU;
 use openvm_circuit::{
-    arch::{DenseRecordArena, SystemConfig},
-    system::{
-        connector::VmConnectorChip, memory::online::GuestMemory, SystemChipComplex, SystemRecords,
-    },
+    arch::SystemConfig,
+    system::{connector::VmConnectorChip, memory::online::GuestMemory, SystemChipComplex},
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
@@ -111,46 +109,13 @@ impl SystemChipInventoryGPU {
     }
 }
 
-impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU {
+impl SystemChipComplex<GpuBackend> for SystemChipInventoryGPU {
     fn load_program(&mut self, cached_program_trace: CommittedTraceData<GpuBackend>) {
         self.program.cached.replace(cached_program_trace);
     }
 
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
         self.memory_inventory.set_initial_memory(&memory.memory);
-    }
-
-    fn generate_proving_ctx(
-        &mut self,
-        system_records: SystemRecords<F>,
-        _record_arenas: Vec<DenseRecordArena>,
-    ) -> Vec<AirProvingContext<GpuBackend>> {
-        let SystemRecords {
-            from_state,
-            to_state,
-            exit_code,
-            filtered_exec_frequencies,
-            touched_memory,
-        } = system_records;
-
-        let program_ctx = {
-            let _span = tracing::info_span!("program_trace_gen").entered();
-            self.program.generate_proving_ctx(filtered_exec_frequencies)
-        };
-
-        self.connector.cpu_chip.begin(from_state);
-        self.connector.cpu_chip.end(to_state, exit_code);
-        let connector_ctx = {
-            let _span = tracing::info_span!("connector_trace_gen").entered();
-            self.connector.generate_proving_ctx(())
-        };
-
-        let memory_ctxs = self.memory_inventory.generate_proving_ctxs(touched_memory);
-
-        [program_ctx, connector_ctx]
-            .into_iter()
-            .chain(memory_ctxs)
-            .collect()
     }
 
     fn memory_top_tree(&self) -> Option<&[[F; VM_DIGEST_WIDTH]]> {

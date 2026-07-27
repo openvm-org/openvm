@@ -2,7 +2,7 @@ use std::sync::{atomic::Ordering, Arc};
 
 use openvm_circuit::{
     arch::{
-        Postflight, PostflightError, PostflightStep, TraceFiller, VmChipWrapper, BLOCK_FE_WIDTH,
+        Postflight, PostflightError, PostflightStep, VmChipWrapper, BLOCK_FE_WIDTH,
         MEMORY_BLOCK_BYTES,
     },
     system::memory::SharedMemoryHelper,
@@ -267,7 +267,8 @@ fn generate_trace_from_postflight<
     }
     if projection.len() < height {
         let mut dummy_row = F::zero_vec(width);
-        chip.inner.fill_dummy_trace_row(&mut dummy_row);
+        chip.inner
+            .fill_dummy_core_row(&mut dummy_row[adapter_width..]);
         for row in trace.values.chunks_exact_mut(width).skip(projection.len()) {
             row.copy_from_slice(&dummy_row);
         }

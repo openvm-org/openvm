@@ -5,12 +5,13 @@ use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
         ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
-        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
-        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+    utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, VmConfig};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -91,7 +92,7 @@ impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
     }
 }
 
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum DeferralExecutor {
     Call(DeferralCallExecutor),
     Output(DeferralOutputExecutor),
@@ -171,18 +172,17 @@ where
 
 pub struct DeferralCpuProverExt;
 
-impl<SC, E, RA> VmProverExtension<E, RA, DeferralExtension> for DeferralCpuProverExt
+impl<SC, E> VmProverExtension<E, DeferralExtension> for DeferralCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &DeferralExtension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -207,10 +207,14 @@ where
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
         inventory.next_air::<DeferralCircuitCountAir>()?;
-        inventory.add_postflight_periphery_chip(count_chip.clone(), |chip, postflight| {
-            chip.generate_trace_from_postflight(postflight)
-                .map(AirProvingContext::simple_no_pis)
-        });
+        inventory.add_postflight_periphery_chip_with_height(
+            count_chip.clone(),
+            Some(next_power_of_two_or_zero(extension.fns.len())),
+            |chip, postflight| {
+                chip.generate_trace_from_postflight(postflight)
+                    .map(AirProvingContext::simple_no_pis)
+            },
+        );
 
         inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
         inventory.add_postflight_periphery_chip(poseidon2_chip.clone(), |chip, postflight| {
@@ -288,17 +292,13 @@ where
 {
     type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -306,10 +306,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(
             &DeferralCpuProverExt,
             &config.deferral,
             inventory,

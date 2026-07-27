@@ -3,9 +3,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{
-        to_byte_ptr_bits, ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
-    },
+    arch::{to_byte_ptr_bits, ChipInventory, ChipInventoryError, VmProverExtension},
     system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
@@ -127,11 +125,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.postflight(
             program,
@@ -283,11 +277,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.generate_preflight_proving_ctx(
             self.program,
@@ -511,11 +501,11 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for Rv64ImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64I> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
         _: &Rv64I,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -729,11 +719,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for Rv64ImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64M> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
         extension: &Rv64M,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -816,13 +806,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
-    for Rv64ImGpuProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
         _: &Rv64Io,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();

@@ -8,8 +8,8 @@ use openvm_circuit::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
-        PreflightExecutor, Streams, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
-        VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
+        PostflightTracegen, Streams, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
+        VmBuilder, VmChipComplex, VmExecutionConfig, VmInstance, VmVerificationError,
     },
     system::{
         memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
@@ -123,9 +123,9 @@ where
     /// Generates proof for every continuation segment.
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-            + MeteredExecutor<Val<E::SC>>
-            + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+        VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
     {
         check_max_constraint_degrees(
             self.vm_config().as_ref(),

@@ -1,7 +1,6 @@
 mod add_ne;
 mod curves;
 mod double;
-mod preflight;
 mod trace;
 
 pub use add_ne::*;

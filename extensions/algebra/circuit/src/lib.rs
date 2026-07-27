@@ -8,11 +8,6 @@ use std::ops::{Deref, DerefMut};
 use openvm_circuit::arch::{MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
-#[cfg(feature = "cuda")]
-use {
-    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
-    openvm_riscv_adapters::Rv64VecHeapAdapterRecord,
-};
 
 // Number of limbs for different modulus sizes (bytes)
 /// Number of limbs for 256-bit (32-byte) moduli
@@ -47,12 +42,10 @@ pub use fp2::*;
 mod extension;
 pub use extension::*;
 pub mod fields;
-mod preflight;
 pub(crate) mod trace;
 
 use fields::{get_field_type, get_fp2_field_type, FieldType};
 
-// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
 #[derive(Clone)]
 pub struct FieldExprVecHeapExecutor<const BLOCKS: usize, const IS_FP2: bool> {
     inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
@@ -90,9 +83,3 @@ impl<const BLOCKS: usize, const IS_FP2: bool> DerefMut
         &mut self.inner
     }
 }
-
-#[cfg(feature = "cuda")]
-pub(crate) type AlgebraRecord<'a, const NUM_READS: usize, const BLOCKS: usize> = (
-    &'a mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS>,
-    FieldExpressionCoreRecordMut<'a>,
-);

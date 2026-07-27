@@ -4,8 +4,8 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
-        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension,
+        VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -131,7 +131,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 64-bit Base (RV64I) Instruction Executors
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Rv64IExecutor {
     AddSub(Rv64AddSubExecutor),
     AddI(Rv64AddIExecutor),
@@ -168,7 +168,7 @@ pub enum Rv64IExecutor {
 }
 
 /// RISC-V 64-bit Multiplication Extension (RV64M) Instruction Executors
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Rv64MExecutor {
     Multiplication(Rv64MultiplicationExecutor),
     MulW(Rv64MulWExecutor),
@@ -178,7 +178,7 @@ pub enum Rv64MExecutor {
 }
 
 /// RISC-V 64-bit Io Instruction Executors
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Rv64IoExecutor {
     HintStore(Rv64HintStoreExecutor),
 }
@@ -779,18 +779,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 pub struct Rv64ImCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Rv64I> for Rv64ImCpuProverExt
+impl<E, SC> VmProverExtension<E, Rv64I> for Rv64ImCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Rv64I,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -1367,18 +1366,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Rv64M> for Rv64ImCpuProverExt
+impl<E, SC> VmProverExtension<E, Rv64M> for Rv64ImCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &Rv64M,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -1550,18 +1548,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Rv64Io> for Rv64ImCpuProverExt
+impl<E, SC> VmProverExtension<E, Rv64Io> for Rv64ImCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Rv64Io,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

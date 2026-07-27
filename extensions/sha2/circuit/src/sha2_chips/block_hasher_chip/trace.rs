@@ -1,8 +1,7 @@
 use std::slice;
 
-use openvm_circuit::arch::{get_record_from_slice, Postflight, PostflightError};
-use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
-use openvm_cpu_backend::CpuBackend;
+use openvm_circuit::arch::{Postflight, PostflightError};
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::LocalOpcode;
 use openvm_sha2_air::{
     be_limbs_into_word, le_limbs_into_word, Sha2BlockHasherFillerHelper, Sha2RoundColsRef,
@@ -12,13 +11,11 @@ use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    StarkProtocolConfig, Val,
 };
 
 use crate::{
     Sha2BlockHasherChip, Sha2BlockHasherRoundColsRefMut, Sha2BlockHasherVmConfig, Sha2Config,
-    Sha2Metadata, Sha2RecordLayout, Sha2RecordMut, Sha2SharedRecords, INNER_OFFSET,
+    INNER_OFFSET,
 };
 
 struct Sha2BlockTraceInput<'a> {
@@ -63,81 +60,11 @@ where
     Ok(trace)
 }
 
-// We don't use the record arena associated with this chip. Instead, we will use the record arena
-// provided by the main chip, which will be passed to this chip after the main chip's tracegen is
-// done.
-impl<R, SC, C: Sha2Config> Chip<R, CpuBackend<SC>> for Sha2BlockHasherChip<Val<SC>, C>
-where
-    Val<SC>: PrimeField32,
-    SC: StarkProtocolConfig,
-{
-    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        // SAFETY: the tracegen for Sha2MainChip must be done before this chip's tracegen
-        let mut records = self.records.lock().unwrap();
-        let mut records = records.take().unwrap();
-        let rows_used = records.num_records * C::ROWS_PER_BLOCK;
-
-        let height = next_power_of_two_or_zero(rows_used);
-        let trace = Val::<SC>::zero_vec(height * C::BLOCK_HASHER_WIDTH);
-        let mut trace_matrix = RowMajorMatrix::new(trace, C::BLOCK_HASHER_WIDTH);
-
-        self.fill_trace(&mut trace_matrix, &mut records, rows_used);
-
-        AirProvingContext::simple_no_pis(trace_matrix)
-    }
-}
-
 impl<F, C> Sha2BlockHasherChip<F, C>
 where
     F: PrimeField32,
     C: Sha2BlockHasherVmConfig,
 {
-    fn fill_trace(
-        &self,
-        trace_matrix: &mut RowMajorMatrix<F>,
-        records: &mut Sha2SharedRecords<F>,
-        rows_used: usize,
-    ) {
-        if rows_used == 0 {
-            return;
-        }
-
-        let records = records
-            .matrix
-            .par_rows_mut()
-            .take(records.num_records)
-            .map(|mut record| {
-                // SAFETY:
-                // - caller ensures `records` contains a valid record representation that was
-                //   previously written by the executor
-                // - records contains a valid Sha2RecordMut with the exact layout specified
-                // - get_record_from_slice will correctly split the buffer into header, input, and
-                //   aux components based on this layout
-                let record: Sha2RecordMut = unsafe {
-                    get_record_from_slice(
-                        &mut record,
-                        Sha2RecordLayout {
-                            metadata: Sha2Metadata {
-                                variant: C::VARIANT,
-                            },
-                        },
-                    )
-                };
-
-                record
-            })
-            .collect::<Vec<_>>();
-        let inputs = records
-            .iter()
-            .map(|record| Sha2BlockTraceInput {
-                message_bytes: &*record.message_bytes,
-                prev_state: &*record.prev_state,
-            })
-            .collect::<Vec<_>>();
-        debug_assert_eq!(rows_used, inputs.len() * C::ROWS_PER_BLOCK);
-        self.fill_trace_from_inputs(trace_matrix, &inputs);
-    }
-
     fn fill_trace_from_inputs(
         &self,
         trace_matrix: &mut RowMajorMatrix<F>,

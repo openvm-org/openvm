@@ -12,18 +12,18 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, AddSubExecutor};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluU16AdapterExecutor, Rv64AddSub256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    Rv64AddSub256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64AddSub256Executor {
-    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
-        Self(AddSubExecutor::new(adapter, offset))
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -46,7 +46,10 @@ macro_rules! dispatch {
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        InterpreterExecutor::<F>::get_opcode_name(&self.0, opcode)
+        format!(
+            "{:?}",
+            BaseAluOpcode::from_usize(opcode - Rv64BaseAlu256Opcode::CLASS_OFFSET)
+        )
     }
 
     fn pre_compute_size(&self) -> usize {

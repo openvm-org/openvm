@@ -1,19 +1,12 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -170,86 +163,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             range_tuple_chip,
             bitwise_lookup_chip,
         }
-    }
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for MultiplicationExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>,
-        ),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        debug_assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-            MulOpcode::MUL
-        );
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let (a, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
-
-        core_record.b = rs1;
-        core_record.c = rs2;
-
-        self.adapter
-            .write(state.memory, instruction, [a].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // MultiplicationCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid MultiplicationCoreRecord written by the executor
-        // during trace generation
-        let record: &MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let b = record.b;
-        let c = record.c;
-        let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        fill_core_row(
-            &self.range_tuple_chip,
-            &self.bitwise_lookup_chip,
-            core_row,
-            b,
-            c,
-        );
     }
 }
 

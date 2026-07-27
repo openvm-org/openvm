@@ -11,18 +11,15 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu, Chip};
-use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
-    base::DeviceMatrix,
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::LocalOpcode;
-use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
-use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_stark_backend::prover::AirProvingContext;
 use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
@@ -55,8 +52,8 @@ use crate::{
     weierstrass_chip::{
         generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
     },
-    EccRecord, Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip, WeierstrassExtension,
-    ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32,
+    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 #[cfg(feature = "rvr")]
@@ -186,43 +183,6 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
 // of Dense->Matrix Record Arena, cpu tracegen, and then H2D transfer of the trace matrix.
-impl<const NUM_READS: usize, const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend>
-    for HybridWeierstrassChip<F, NUM_READS, BLOCKS>
-{
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.program().canonical_num_limbs();
-        let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
-            F,
-            Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>,
-        >::new(total_input_limbs));
-
-        let record_size = RecordSeeker::<
-            DenseRecordArena,
-            EccRecord<NUM_READS, BLOCKS>,
-            _,
-        >::get_aligned_record_size(&layout);
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena.get_record_seeker::<EccRecord<NUM_READS, BLOCKS>, AdapterCoreLayout<
-            FieldExpressionMetadata<F, Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>>,
-        >>();
-        let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
-        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
-    }
-}
-
 #[derive(Clone, Copy, Default)]
 pub struct EccHybridProverExt;
 
@@ -393,11 +353,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.postflight(
             program,
@@ -500,11 +456,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         fp2: Option<&Fp2Extension>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let algebra = AlgebraPreflightGpuTracegen::new(
             self.program,
@@ -558,13 +510,11 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     }
 }
 
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, WeierstrassExtension>
-    for EccHybridProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for EccHybridProverExt {
     fn extend_prover(
         &self,
         extension: &WeierstrassExtension,
-        inventory: &mut ChipInventory<SC, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<SC, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -711,17 +661,13 @@ type E = GpuBabyBearPoseidon2Engine;
 impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
     type VmConfig = Rv64WeierstrassConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
         config: &Rv64WeierstrassConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &Rv64ModularHybridBuilder,
             &config.modular,
@@ -729,7 +675,7 @@ impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(
             &EccHybridProverExt,
             &config.weierstrass,
             inventory,

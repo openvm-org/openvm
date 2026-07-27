@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomExecutor,
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
@@ -77,7 +77,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
 pub enum PairingExtensionExecutor {
     Phantom(PhantomExecutor),
 }
@@ -104,14 +104,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for PairingExtension {
 }
 
 pub struct PairingProverExt;
-impl<E, RA> VmProverExtension<E, RA, PairingExtension> for PairingProverExt
+impl<E> VmProverExtension<E, PairingExtension> for PairingProverExt
 where
     E: StarkEngine,
 {
     fn extend_prover(
         &self,
         _: &PairingExtension,
-        _inventory: &mut ChipInventory<E::SC, RA, E::PB>,
+        _inventory: &mut ChipInventory<E::SC, E::PB>,
     ) -> Result<(), ChipInventoryError> {
         Ok(())
     }

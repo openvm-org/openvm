@@ -1,7 +1,7 @@
 use openvm_circuit::{
     arch::{
-        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, VmBuilder,
+        VmChipComplex, VmProverExtension,
     },
     system::cuda::{
         extensions::{
@@ -124,11 +124,7 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.postflight(
             program,
@@ -236,11 +232,7 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = Self::extension_opcodes();
         let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
@@ -277,11 +269,11 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
     }
 }
 
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for Sha2GpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Sha2> for Sha2GpuProverExt {
     fn extend_prover(
         &self,
         _: &Sha2,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -291,9 +283,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         // SHA-256
         inventory.next_air::<Sha2BlockHasherVmAir<Sha256Config>>()?;
-        let sha256_shared_records = Arc::new(Mutex::new(None));
         let sha256_block_gpu = Sha2BlockHasherChipGpu::<Sha256Config>::new(
-            sha256_shared_records.clone(),
             bitwise_gpu.clone(),
             range_checker_gpu.clone(),
             byte_ptr_max_bits as u32,
@@ -302,7 +292,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
-            sha256_shared_records,
             range_checker_gpu.clone(),
             byte_ptr_max_bits as u32,
             timestamp_max_bits as u32,
@@ -311,9 +300,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         // SHA-512 (also covers SHA-384 constraints)
         inventory.next_air::<Sha2BlockHasherVmAir<Sha512Config>>()?;
-        let sha512_shared_records = Arc::new(Mutex::new(None));
         let sha512_block_gpu = Sha2BlockHasherChipGpu::<Sha512Config>::new(
-            sha512_shared_records.clone(),
             bitwise_gpu.clone(),
             range_checker_gpu.clone(),
             byte_ptr_max_bits as u32,
@@ -322,7 +309,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
-            sha512_shared_records,
             range_checker_gpu,
             byte_ptr_max_bits as u32,
             timestamp_max_bits as u32,
@@ -340,7 +326,6 @@ type E = GpuBabyBearPoseidon2Engine;
 impl VmBuilder<E> for Sha2Rv64GpuBuilder {
     type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -348,12 +333,7 @@ impl VmBuilder<E> for Sha2Rv64GpuBuilder {
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
-        VmChipComplex<
-            <E as StarkEngine>::SC,
-            Self::RecordArena,
-            <E as StarkEngine>::PB,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<<E as StarkEngine>::SC, <E as StarkEngine>::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
@@ -363,10 +343,10 @@ impl VmBuilder<E> for Sha2Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, &config.sha2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Sha2GpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
     }
 }

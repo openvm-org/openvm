@@ -3,8 +3,8 @@ use std::result::Result;
 use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{
-        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmField, VmProverExtension,
+        AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
+        VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -156,17 +156,13 @@ where
 {
     type VmConfig = Rv64ModularConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Rv64ModularConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -174,14 +170,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraCpuProverExt,
-            &config.modular,
-            inventory,
-        )?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.modular, inventory)?;
         Ok(chip_complex)
     }
 }
@@ -198,17 +190,13 @@ where
 {
     type VmConfig = Rv64ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Rv64ModularWithFp2Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &Rv64ModularCpuBuilder,
             &config.modular,
@@ -216,7 +204,7 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)
     }
 }

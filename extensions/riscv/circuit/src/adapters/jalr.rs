@@ -1,20 +1,15 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    mem::size_of,
-};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, Postflight, PostflightError,
-        PostflightStep, SignedImmInstruction, VmAdapterAir, BLOCK_FE_WIDTH,
+        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState, Postflight,
+        PostflightError, PostflightStep, SignedImmInstruction, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
             MemoryWriteU16AuxRecord,
         },
-        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -22,19 +17,14 @@ use openvm_circuit_primitives::{
     utils::not, AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS,
-};
+use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_byte_ptr_to_u16_ptr_value,
-    tracing_read_u16, tracing_write_u16,
-};
+use crate::adapters::{byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -170,113 +160,6 @@ pub struct Rv64JalrAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64JalrAdapterFiller;
-
-impl<F> AdapterTraceExecutor<F> for Rv64JalrAdapterExecutor
-where
-    F: PrimeField32,
-{
-    const WIDTH: usize = size_of::<Rv64JalrAdapterCols<u8>>();
-    type ReadData = [u16; BLOCK_FE_WIDTH];
-    type WriteData = [u16; BLOCK_FE_WIDTH];
-    type RecordMut<'a> = &'a mut Rv64JalrAdapterRecord;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        record.from_pc = pc;
-        record.from_timestamp = memory.timestamp;
-    }
-
-    #[inline(always)]
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut Self::RecordMut<'_>,
-    ) -> Self::ReadData {
-        let &Instruction { b, d, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-
-        record.rs1_ptr = b.as_canonical_u32();
-        tracing_read_u16(
-            memory,
-            RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(record.rs1_ptr),
-            &mut record.reads_aux.prev_timestamp,
-        )
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut Self::RecordMut<'_>,
-    ) {
-        let &Instruction {
-            a, d, f: enabled, ..
-        } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-
-        if enabled.is_one() {
-            record.rd_ptr = a.as_canonical_u32();
-
-            tracing_write_u16(
-                memory,
-                RV64_REGISTER_AS,
-                byte_ptr_to_u16_ptr_value(record.rd_ptr),
-                data,
-                &mut record.writes_aux.prev_timestamp,
-                &mut record.writes_aux.prev_data,
-            );
-        } else {
-            record.rd_ptr = u32::MAX;
-            memory.increment_timestamp();
-        }
-    }
-}
-
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64JalrAdapterCols<u8>>();
-
-    #[inline(always)]
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // SAFETY:
-        // - caller ensures `adapter_row` contains a valid record representation that was previously
-        //   written by the executor
-        // - get_record_from_slice correctly interprets the bytes as Rv64JalrAdapterRecord
-        let record: &Rv64JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
-
-        // We must assign in reverse
-        adapter_row.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
-
-        if record.rd_ptr != u32::MAX {
-            adapter_row
-                .rd_aux_cols
-                .set_prev_data(record.writes_aux.prev_data.map(F::from_u16));
-            mem_helper.fill(
-                record.writes_aux.prev_timestamp,
-                record.from_timestamp + 1,
-                adapter_row.rd_aux_cols.as_mut(),
-            );
-            adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
-        } else {
-            adapter_row.rd_ptr = F::ZERO;
-        }
-
-        mem_helper.fill(
-            record.reads_aux.prev_timestamp,
-            record.from_timestamp,
-            adapter_row.rs1_aux_cols.as_mut(),
-        );
-        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
-        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
-    }
-}
 
 impl Rv64JalrAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(

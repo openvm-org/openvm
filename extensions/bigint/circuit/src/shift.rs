@@ -18,23 +18,19 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluU16AdapterExecutor, Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Executor,
-    INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Executor, INT256_NUM_U64_LIMBS,
+    INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64ShiftLogical256Executor {
-    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
-        Self(openvm_riscv_circuit::ShiftLogicalExecutor::new(
-            adapter, offset,
-        ))
+    pub fn new() -> Self {
+        Self
     }
 }
 
 impl Rv64ShiftRightArithmetic256Executor {
-    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
-        Self(openvm_riscv_circuit::ShiftRightArithmeticExecutor::new(
-            adapter, offset,
-        ))
+    pub fn new() -> Self {
+        Self
     }
 }
 

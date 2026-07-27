@@ -18,11 +18,10 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         is_signed_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
-        Rv64LoadMultiByteAdapterFiller, Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH,
+        Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH,
         HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
         RV64_U16_SIGN_BIT, U16_BITS, WORD_ACCESS_WIDTH,
     },
-    load::LoadRecord,
     load_sign_extend::common::load_sign_extend_write_data,
 };
 
@@ -275,8 +274,8 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
         mem_helper: &MemoryAuxColsFactory<F>,
         row_slice: &mut [F],
     ) -> Result<(), PostflightError> {
-        let (adapter_row, core_row) = row_slice
-            .split_at_mut(<Rv64LoadMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH);
+        let (adapter_row, core_row) =
+            row_slice.split_at_mut(Rv64LoadMultiByteAdapterCols::<F>::width());
         let opcode = load_sign_extend_opcode::<LOAD_WIDTH>();
         let (read_data, shift, _) = self.adapter.replay::<F, LOAD_WIDTH>(
             postflight,
@@ -300,7 +299,6 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
         let width = LOAD_WIDTH / U16_CELL_SIZE;
         let read_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
-        // The high bytes are derived in the AIR and only range checked here.
         let (overlap_lo_bytes, overlap_hi_bytes): (
             [u16; NUM_OVERLAP_CELLS],
             [u16; NUM_OVERLAP_CELLS],
@@ -336,32 +334,5 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
         core_row.data_most_sig_bit = F::from_bool(sign_bit);
         let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
-    }
-}
-
-impl<F, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> TraceFiller<F>
-    for LoadSignExtendFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
-where
-    F: PrimeField32,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // LoadSignExtendCoreCols::width() elements.
-        let (mut adapter_row, mut core_row) = unsafe {
-            row_slice.split_at_mut_unchecked(
-                <Rv64LoadMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
-            )
-        };
-        let adapter_record: &Rv64LoadMultiByteAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let shift = adapter_record.shift_amount();
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
-        // generation.
-        let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
-        let core_row: &mut LoadSignExtendCoreCols<F, NUM_OVERLAP_CELLS> = core_row.borrow_mut();
-        self.fill_core_trace(read_data, shift, core_row);
     }
 }

@@ -3,8 +3,8 @@ use std::result::Result;
 use openvm_algebra_circuit::{Rv64ModularConfig, Rv64ModularConfigExecutor, Rv64ModularCpuBuilder};
 use openvm_circuit::{
     arch::{
-        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmField, VmProverExtension,
+        AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
+        VmChipComplex, VmField, VmProverExtension,
     },
     system::SystemChipInventory,
 };
@@ -76,17 +76,13 @@ where
 {
     type VmConfig = Rv64WeierstrassConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &Rv64ModularCpuBuilder,
             &config.modular,
@@ -94,11 +90,7 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &EccCpuProverExt,
-            &config.weierstrass,
-            inventory,
-        )?;
+        VmProverExtension::<E, _>::extend_prover(&EccCpuProverExt, &config.weierstrass, inventory)?;
         Ok(chip_complex)
     }
 }

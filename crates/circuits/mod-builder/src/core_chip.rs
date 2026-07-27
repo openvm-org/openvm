@@ -1,21 +1,13 @@
-use std::{
-    marker::PhantomData,
-    mem::{align_of, size_of},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
     ColumnsAir, SubAir, TraceSubRowGenerator,
 };
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -179,113 +171,6 @@ where
     }
 }
 
-pub struct FieldExpressionMetadata<F, A> {
-    pub total_input_limbs: usize, // num_inputs * limbs_per_input
-    _phantom: PhantomData<(F, A)>,
-}
-
-impl<F, A> Clone for FieldExpressionMetadata<F, A> {
-    fn clone(&self) -> Self {
-        Self {
-            total_input_limbs: self.total_input_limbs,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<F, A> Default for FieldExpressionMetadata<F, A> {
-    fn default() -> Self {
-        Self {
-            total_input_limbs: 0,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<F, A> FieldExpressionMetadata<F, A> {
-    pub fn new(total_input_limbs: usize) -> Self {
-        Self {
-            total_input_limbs,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<F, A> AdapterCoreMetadata for FieldExpressionMetadata<F, A>
-where
-    A: AdapterTraceExecutor<F>,
-{
-    #[inline(always)]
-    fn get_adapter_width() -> usize {
-        A::WIDTH * size_of::<F>()
-    }
-}
-
-pub type FieldExpressionRecordLayout<F, A> = AdapterCoreLayout<FieldExpressionMetadata<F, A>>;
-
-pub struct FieldExpressionCoreRecordMut<'a> {
-    pub opcode: &'a mut u8,
-    pub input_limbs: &'a mut [u8],
-}
-
-impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionRecordLayout<F, A>>
-    for [u8]
-{
-    fn custom_borrow(
-        &'a mut self,
-        layout: FieldExpressionRecordLayout<F, A>,
-    ) -> FieldExpressionCoreRecordMut<'a> {
-        // SAFETY: The buffer length is the width of the trace which should be at least 1
-        let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
-
-        // SAFETY: opcode_buf has exactly 1 element from split_at_mut_unchecked(1)
-        let opcode_buf = unsafe { opcode_buf.get_unchecked_mut(0) };
-
-        FieldExpressionCoreRecordMut {
-            opcode: opcode_buf,
-            input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
-        }
-    }
-
-    unsafe fn extract_layout(&self) -> FieldExpressionRecordLayout<F, A> {
-        panic!("Should get the Layout information from FieldExpressionExecutor");
-    }
-}
-
-impl<F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'_> {
-    fn size(layout: &FieldExpressionRecordLayout<F, A>) -> usize {
-        layout.metadata.total_input_limbs + 1
-    }
-
-    fn alignment(_layout: &FieldExpressionRecordLayout<F, A>) -> usize {
-        align_of::<u8>()
-    }
-}
-
-impl<'a> FieldExpressionCoreRecordMut<'a> {
-    // This method is only used in testing
-    pub fn new_from_execution_data(
-        buffer: &'a mut [u8],
-        inputs: &[BigUint],
-        limbs_per_input: usize,
-    ) -> Self {
-        let record_info = FieldExpressionMetadata::<(), ()>::new(inputs.len() * limbs_per_input);
-
-        let record: Self = buffer.custom_borrow(FieldExpressionRecordLayout {
-            metadata: record_info,
-        });
-        record
-    }
-
-    #[inline(always)]
-    pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
-        // Rust will assert that length of `data` and `self.input_limbs` are the same
-        // That is `data.len() == num_inputs * limbs_per_input`
-        *self.opcode = opcode;
-        self.input_limbs.copy_from_slice(data);
-    }
-}
-
 #[derive(Clone)]
 pub struct FieldExpressionExecutor<A> {
     adapter: A,
@@ -322,15 +207,7 @@ impl<A> FieldExpressionExecutor<A> {
         }
     }
 
-    pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
-        FieldExpressionRecordLayout {
-            metadata: FieldExpressionMetadata::new(
-                self.program.num_inputs() * self.program.canonical_num_limbs(),
-            ),
-        }
-    }
-
-    /// Returns a reference to the adapter for use in custom PreflightExecutor implementations.
+    /// Returns a reference to the adapter used by trace generation.
     #[inline]
     pub fn adapter(&self) -> &A {
         &self.adapter
@@ -399,114 +276,22 @@ impl<A> FieldExpressionFiller<A> {
     pub fn adapter(&self) -> &A {
         &self.adapter
     }
-
-    pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
-        FieldExpressionRecordLayout {
-            metadata: FieldExpressionMetadata::new(
-                self.num_inputs() * self.expr.program().canonical_num_limbs(),
-            ),
-        }
-    }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for FieldExpressionExecutor<A>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
-    for<'buf> RA: RecordArena<
-        'buf,
-        FieldExpressionRecordLayout<F, A>,
-        (A::RecordMut<'buf>, FieldExpressionCoreRecordMut<'buf>),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.get_record_layout());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let data: DynArray<_> = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.fill_from_execution_data(
-            instruction.opcode.local_opcode_idx(self.offset) as u8,
-            &data.0,
-        );
-
-        let run = run_field_expression(
-            &self.program,
-            &self.local_opcode_idx,
-            &self.opcode_flag_idx,
-            core_record.input_limbs,
-            *core_record.opcode as usize,
-        );
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            run.writes.into(),
-            &mut adapter_record,
-        );
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
-    }
-}
-
-impl<F, A> TraceFiller<F> for FieldExpressionFiller<A>
-where
-    F: PrimeField32 + Send + Sync + Clone,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // Get the core record from the row slice
-        // SAFETY: Caller guarantees that row_slice has width A::WIDTH + core width
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY:
-        // - caller ensures `core_row` contains a valid record representation that was previously
-        //   written by the executor
-        // - core_row slice is transmuted to FieldExpressionCoreRecordMut using the specified
-        //   layout, which satisfies CustomBorrow requirements for safe access.
-        let record: FieldExpressionCoreRecordMut =
-            unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
-
-        self.fill_trace_row_from_execution_data(
-            self.range_checker.as_ref(),
-            *record.opcode as usize,
-            record.input_limbs,
-            None,
-            core_row,
-        )
-        .expect("legacy field-expression record must contain a supported opcode");
-    }
-
-    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
+impl<A> FieldExpressionFiller<A> {
+    pub fn fill_dummy_core_row<F: PrimeField32>(&self, core_row: &mut [F]) {
         if !self.should_finalize {
             return;
         }
 
-        let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
-        let flags: Vec<bool> = vec![false; self.num_flags()];
-        let core_row = &mut row_slice[A::WIDTH..];
-        // We **do not** want this trace row to update the range checker
-        // so we must create a temporary range checker
-        let tmp_range_checker = Arc::new(VariableRangeCheckerChip::new(self.range_checker.bus()));
+        let inputs = vec![BigUint::zero(); self.num_inputs()];
+        let flags = vec![false; self.num_flags()];
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(self.range_checker.bus()));
         self.expr
-            .generate_subrow((&tmp_range_checker, inputs, flags), core_row);
-        core_row[0] = F::ZERO; // is_valid = 0
+            .generate_subrow((&range_checker, inputs, flags), core_row);
+        core_row[0] = F::ZERO;
     }
-}
 
-impl<A> FieldExpressionFiller<A> {
     /// Replays one field expression directly from semantic execution values.
     ///
     /// When `logged_output` is present, it is checked before the range checker or
@@ -547,23 +332,6 @@ struct FieldExpressionRun {
     writes: DynArray<u8>,
     inputs: Vec<BigUint>,
     flags: Vec<bool>,
-}
-
-fn run_field_expression(
-    program: &FieldExpressionProgram,
-    local_opcode_flags: &[usize],
-    opcode_flag_idx: &[usize],
-    data: &[u8],
-    local_opcode_idx: usize,
-) -> FieldExpressionRun {
-    run_field_expression_checked(
-        program,
-        local_opcode_flags,
-        opcode_flag_idx,
-        data,
-        local_opcode_idx,
-    )
-    .expect("field-expression executor metadata must be internally consistent")
 }
 
 fn run_field_expression_checked(

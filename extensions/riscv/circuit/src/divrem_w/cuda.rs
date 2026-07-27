@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
+use openvm_circuit::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-    var_range::VariableRangeCheckerChipGPU, Chip,
+    var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::{RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS};
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
@@ -20,9 +19,9 @@ use {
 };
 
 use crate::{
-    adapters::{Rv64MultWAdapterCols, Rv64MultWAdapterRecord},
+    adapters::Rv64MultWAdapterCols,
     cuda_abi::{divrem_w_cuda, UInt2},
-    DivRemCoreCols, DivRemCoreRecord,
+    DivRemCoreCols,
 };
 
 #[derive(new)]
@@ -96,48 +95,5 @@ impl Rv64DivRemWChipGpu {
             )?;
         }
         Ok(AirProvingContext::simple_no_pis(trace))
-    }
-}
-
-impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemWChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(
-            Rv64MultWAdapterRecord,
-            DivRemCoreRecord<RV64_WORD_NUM_LIMBS>,
-        )>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let trace_width = DivRemCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64MultWAdapterCols::<F>::width();
-        let height = records.len() / RECORD_SIZE;
-        let padded_height = next_power_of_two_or_zero(height);
-
-        let tuple_checker_sizes = self.range_tuple_checker.sizes;
-        let tuple_checker_sizes = UInt2::new(tuple_checker_sizes[0], tuple_checker_sizes[1]);
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
-        unsafe {
-            divrem_w_cuda::tracegen(
-                d_trace.buffer(),
-                padded_height,
-                trace_width,
-                &d_records,
-                &self.range_checker.count,
-                &self.bitwise_lookup.count,
-                &self.range_tuple_checker.count,
-                tuple_checker_sizes,
-                self.timestamp_max_bits as u32,
-                device_ctx.stream.as_raw(),
-            )
-            .unwrap();
-        }
-
-        AirProvingContext::simple_no_pis(d_trace)
     }
 }
