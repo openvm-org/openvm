@@ -179,7 +179,7 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
     })
 }
 
-fn generate_trace_from_postflight<
+fn generate_trace_from_postflights<
     F: PrimeField32 + Send + Sync + Clone,
     const NUM_READS: usize,
     const BLOCKS: usize,
@@ -188,33 +188,37 @@ fn generate_trace_from_postflight<
         F,
         FieldExpressionFiller<Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
     >,
-    postflight: &Postflight<'_, F>,
+    postflights: &[Postflight<'_, F>],
     opcode_base: usize,
     local_opcodes: &[Rv64WeierstrassOpcode],
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let pointer_max_bits = chip.inner.adapter().pointer_max_bits();
-    let mut selected = Vec::new();
-    for &local_opcode in local_opcodes {
-        let local_opcode = local_opcode as usize;
-        let global_opcode = opcode_base
-            .checked_add(local_opcode)
-            .ok_or_else(|| PostflightError::new("Weierstrass opcode overflow"))?;
-        selected.extend(
-            postflight
-                .steps(VmOpcode::from_usize(global_opcode))
-                .iter()
-                .copied()
-                .map(|step| (step, local_opcode)),
-        );
+    let mut projection = Vec::new();
+    for postflight in postflights {
+        let mut selected = Vec::new();
+        for &local_opcode in local_opcodes {
+            let local_opcode = local_opcode as usize;
+            let global_opcode = opcode_base
+                .checked_add(local_opcode)
+                .ok_or_else(|| PostflightError::new("Weierstrass opcode overflow"))?;
+            selected.extend(
+                postflight
+                    .steps(VmOpcode::from_usize(global_opcode))
+                    .iter()
+                    .copied()
+                    .map(|step| (step, local_opcode)),
+            );
+        }
+        selected.sort_unstable_by_key(|&(step, _)| postflight.timestamp(step));
+        for (step, local_opcode) in selected {
+            projection.push(project_step::<F, NUM_READS, BLOCKS>(
+                postflight,
+                step,
+                local_opcode,
+                pointer_max_bits,
+            )?);
+        }
     }
-    selected.sort_unstable_by_key(|&(step, _)| postflight.timestamp(step));
-
-    let projection = selected
-        .into_iter()
-        .map(|(step, local_opcode)| {
-            project_step::<F, NUM_READS, BLOCKS>(postflight, step, local_opcode, pointer_max_bits)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
 
     let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
     let width = adapter_width
@@ -299,9 +303,29 @@ pub(crate) fn generate_add_ne_trace_from_postflight<
     postflight: &Postflight<'_, F>,
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
-    generate_trace_from_postflight(
+    generate_trace_from_postflights(
         chip,
-        postflight,
+        std::slice::from_ref(postflight),
+        opcode_base,
+        &[
+            Rv64WeierstrassOpcode::EC_ADD_NE,
+            Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
+        ],
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn generate_add_ne_trace_from_postflights<
+    F: PrimeField32 + Send + Sync + Clone,
+    const BLOCKS: usize,
+>(
+    chip: &WeierstrassChip<F, 2, BLOCKS>,
+    postflights: &[Postflight<'_, F>],
+    opcode_base: usize,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    generate_trace_from_postflights(
+        chip,
+        postflights,
         opcode_base,
         &[
             Rv64WeierstrassOpcode::EC_ADD_NE,
@@ -318,9 +342,29 @@ pub(crate) fn generate_double_trace_from_postflight<
     postflight: &Postflight<'_, F>,
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
-    generate_trace_from_postflight(
+    generate_trace_from_postflights(
         chip,
-        postflight,
+        std::slice::from_ref(postflight),
+        opcode_base,
+        &[
+            Rv64WeierstrassOpcode::EC_DOUBLE,
+            Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
+        ],
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn generate_double_trace_from_postflights<
+    F: PrimeField32 + Send + Sync + Clone,
+    const BLOCKS: usize,
+>(
+    chip: &WeierstrassChip<F, 1, BLOCKS>,
+    postflights: &[Postflight<'_, F>],
+    opcode_base: usize,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    generate_trace_from_postflights(
+        chip,
+        postflights,
         opcode_base,
         &[
             Rv64WeierstrassOpcode::EC_DOUBLE,

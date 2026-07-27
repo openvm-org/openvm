@@ -358,10 +358,13 @@ pub(crate) fn generate_trace_from_postflight<
             .fill_core_row(shift, read_data, prev_data, core_row.borrow_mut());
     }
     for row_index in steps.len()..height {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
-        let adapter_row: &mut Rv64StoreMultiByteAdapterCols<F> = row[..adapter_width].borrow_mut();
-        adapter_row.mem_as = F::from_u32(2);
+        fill_padding_row(&mut trace.values[row_index * width..(row_index + 1) * width]);
     }
-
     Ok(trace)
+}
+
+pub(crate) fn fill_padding_row<F: PrimeField32>(row: &mut [F]) {
+    let adapter_width = Rv64StoreMultiByteAdapterCols::<F>::width();
+    let adapter_row: &mut Rv64StoreMultiByteAdapterCols<F> = row[..adapter_width].borrow_mut();
+    adapter_row.mem_as = F::from_u32(2);
 }

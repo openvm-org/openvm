@@ -13,13 +13,18 @@ pub use cpu::*;
 pub use cuda::*;
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{interaction::BusIndex, p3_air::BaseAir};
-use p3_field::Field;
+use openvm_instructions::{instruction::Instruction, program::Program};
+use openvm_stark_backend::{
+    interaction::BusIndex,
+    p3_air::BaseAir,
+    p3_field::PrimeField32,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+};
 pub use utils::*;
 
-use crate::arch::{Arena, ExecutionState, MatrixRecordArena, PreflightExecutor, Streams};
+use crate::arch::{
+    ExecutionState, Executor, Postflight, PostflightError, PreflightHistory, Streams,
+};
 
 pub const EXECUTION_BUS: BusIndex = 0;
 pub const MEMORY_BUS: BusIndex = 1;
@@ -34,46 +39,103 @@ pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
 pub type ArenaId = usize;
 
-pub struct TestChipHarness<F, E, A, C, RA = MatrixRecordArena<F>> {
+#[derive(Clone)]
+pub struct TestPreflightExecution<F> {
+    pub program: Program<F>,
+    pub history: PreflightHistory,
+}
+
+#[derive(Clone, Default)]
+pub struct TestPreflight<F> {
+    pub executions: Vec<TestPreflightExecution<F>>,
+}
+
+type TestTraceGenerator<F, C> =
+    Box<dyn for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>>;
+type TestBatchTraceGenerator<F, C> =
+    Box<dyn for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>>;
+type TestTracePadding<F> = Box<dyn Fn(&mut [F])>;
+type TestTraceRows<F> = Box<dyn Fn(&RowMajorMatrix<F>) -> usize>;
+
+pub struct TestChipHarness<F, E, A, C> {
     pub executor: E,
     pub air: A,
     pub chip: C,
-    pub arena: RA,
+    pub preflight: TestPreflight<F>,
+    pub generate_trace: TestTraceGenerator<F, C>,
+    pub generate_batch_trace: Option<TestBatchTraceGenerator<F, C>>,
+    pub rows_used: TestTraceRows<F>,
+    pub fill_padding: TestTracePadding<F>,
+    pub balance_memory: bool,
     phantom: PhantomData<F>,
 }
 
-impl<F, E, A, C, RA> TestChipHarness<F, E, A, C, RA>
+impl<F, E, A, C> TestChipHarness<F, E, A, C>
 where
-    F: Field,
+    F: PrimeField32,
     A: BaseAir<F>,
-    RA: Arena,
 {
-    pub fn with_capacity(executor: E, air: A, chip: C, height: usize) -> Self {
-        let width = air.width();
-        let height = next_power_of_two_or_zero(height);
-        let arena = RA::with_capacity(height, width);
+    pub fn with_capacity<G>(executor: E, air: A, chip: C, height: usize, generate_trace: G) -> Self
+    where
+        G: for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>
+            + 'static,
+    {
         Self {
             executor,
             air,
             chip,
-            arena,
+            preflight: TestPreflight {
+                executions: Vec::with_capacity(height),
+            },
+            generate_trace: Box::new(generate_trace),
+            generate_batch_trace: None,
+            rows_used: Box::new(|trace| trace.height()),
+            fill_padding: Box::new(|_| {}),
+            balance_memory: true,
             phantom: PhantomData,
         }
     }
+
+    pub fn with_batch_trace_generator(
+        mut self,
+        generate_trace: impl for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>
+            + 'static,
+    ) -> Self {
+        self.generate_batch_trace = Some(Box::new(generate_trace));
+        self
+    }
+
+    pub fn with_rows_used(
+        mut self,
+        rows_used: impl Fn(&RowMajorMatrix<F>) -> usize + 'static,
+    ) -> Self {
+        self.rows_used = Box::new(rows_used);
+        self
+    }
+
+    pub fn with_padding(mut self, fill_padding: impl Fn(&mut [F]) + 'static) -> Self {
+        self.fill_padding = Box::new(fill_padding);
+        self
+    }
+
+    pub fn without_memory_balance(mut self) -> Self {
+        self.balance_memory = false;
+        self
+    }
 }
 
-pub trait TestBuilder<F> {
-    fn execute<E: PreflightExecutor<F, RA>, RA: Arena>(
+pub trait TestBuilder<F: PrimeField32> {
+    fn execute<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         instruction: &Instruction<F>,
     );
 
-    fn execute_with_pc<E: PreflightExecutor<F, RA>, RA: Arena>(
+    fn execute_with_pc<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         instruction: &Instruction<F>,
         initial_pc: u32,
     );
@@ -101,6 +163,11 @@ pub trait TestBuilder<F> {
 
     fn get_default_register(&mut self, increment: usize) -> usize;
     fn get_default_pointer(&mut self, increment: usize) -> usize;
+
+    fn get_default_registers<const N: usize>(&mut self, increment: usize) -> [usize; N] {
+        let start = self.get_default_register(N * increment);
+        std::array::from_fn(|index| start + index * increment)
+    }
 
     fn write_heap_pointer_default(
         &mut self,

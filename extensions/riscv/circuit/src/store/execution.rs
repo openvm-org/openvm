@@ -21,13 +21,12 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
-use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{store_width_for_opcode, StoreExecutor};
 use crate::adapters::{
-    rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    checked_rv64_memory_address, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
     DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
@@ -204,9 +203,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
-    let addr = rv64_address_add_imm(rs1_val, pre_compute.imm_extended);
-    debug_assert!(addr <= (MEM_SIZE - OP::WIDTH) as u64);
-    let ptr_val = addr as u32;
+    let ptr_val = checked_rv64_memory_address(pc, rs1_val, pre_compute.imm_extended, OP::WIDTH)?;
     OP::write(
         exec_state,
         pre_compute.e as u32,

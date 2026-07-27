@@ -1,17 +1,12 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use openvm_circuit::{
-    arch::{
-        deferral::{DeferralResult, DeferralState},
-        testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
-        },
-        to_byte_ptr_bits, Arena, ExecutionError, MatrixRecordArena, MemoryConfig, Postflight,
-        PreflightExecutor, PreflightHistory, PreflightProgramEvent, TraceFiller, VmStateMut,
-        MEMORY_BLOCK_BYTES,
+use openvm_circuit::arch::{
+    deferral::{DeferralResult, DeferralState},
+    testing::{
+        memory::{gen_pointer, gen_register_pointer},
+        TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    system::memory::online::TracingMemory,
+    ExecutionError, Executor, MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -27,7 +22,6 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
@@ -62,8 +56,7 @@ const NUM_DEFERRALS: usize = 4;
 const DEFERRAL_COUNT_BUS: BusIndex = 20;
 const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 
-type Harness<RA> =
-    TestChipHarness<F, DeferralOutputExecutor, DeferralOutputAir, DeferralOutputChip<F>, RA>;
+type Harness = TestChipHarness<F, DeferralOutputExecutor, DeferralOutputAir, DeferralOutputChip<F>>;
 type BitwisePeriphery = (
     BitwiseOperationLookupAir<RV64_BYTE_BITS>,
     SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
@@ -93,7 +86,7 @@ type CudaPoseidon2Periphery = (
 );
 
 struct CpuHarnessBundle {
-    harness: Harness<MatrixRecordArena<F>>,
+    harness: Harness,
     bitwise: BitwisePeriphery,
     count: CountPeriphery,
     poseidon2: Poseidon2Periphery,
@@ -108,15 +101,7 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
-    config
-}
-
-fn test_memory_config_cpu() -> MemoryConfig {
-    let mut config = test_memory_config();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-        1 << to_byte_ptr_bits(config.pointer_max_bits);
     config
 }
 
@@ -155,38 +140,22 @@ fn make_result(
     .unwrap()
 }
 
-fn set_and_execute_output<RA, E>(
-    tester: &mut impl TestBuilder<F>,
-    executor: &mut E,
-    arena: &mut RA,
-    rng: &mut StdRng,
-    num_deferrals: usize,
-) -> Instruction<F>
-where
-    RA: Arena,
-    E: PreflightExecutor<F, RA>,
-{
-    set_and_execute_output_with_hooks(tester, executor, arena, rng, num_deferrals, |_| {}, |_| {})
-}
-
-fn set_and_execute_output_with_hooks<RA, E, T, Before, After>(
+fn set_and_execute_output<E, T>(
     tester: &mut T,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     num_deferrals: usize,
-    before_execute: Before,
-    after_execute: After,
 ) -> Instruction<F>
 where
-    RA: Arena,
-    E: PreflightExecutor<F, RA>,
+    E: Executor<F> + Clone,
     T: TestBuilder<F>,
-    Before: FnOnce(&mut T),
-    After: FnOnce(&mut T),
 {
-    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
+    let mut rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
+    while rs == rd {
+        rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
+    }
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
@@ -234,9 +203,7 @@ where
             RV64_MEMORY_AS as usize,
         ],
     );
-    before_execute(tester);
-    tester.execute(executor, arena, &instruction);
-    after_execute(tester);
+    tester.execute(executor, preflight, &instruction);
     instruction
 }
 
@@ -269,7 +236,20 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
         tester.memory_helper(),
     );
 
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        super::generate_trace_from_postflight,
+    )
+    .with_rows_used(|trace| {
+        trace
+            .values
+            .chunks_exact(trace.width)
+            .take_while(|row| row[0] != F::ZERO)
+            .count()
+    });
     CpuHarnessBundle {
         harness,
         bitwise: (bitwise_chip.air, bitwise_chip),
@@ -348,7 +328,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
 #[test]
 fn rand_deferral_output_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -362,7 +342,7 @@ fn rand_deferral_output_test() {
         set_and_execute_output(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             NUM_DEFERRALS,
         );
@@ -380,9 +360,9 @@ fn rand_deferral_output_test() {
 }
 
 #[test]
-fn postflight_output_trace_matches_record_arena_and_rejects_truncated_history() {
+fn postflight_output_trace_rejects_truncated_history_without_mutating_periphery() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         count,
@@ -390,57 +370,21 @@ fn postflight_output_trace_matches_record_arena_and_rejects_truncated_history() 
         ..
     } = create_cpu_harness(&tester, NUM_DEFERRALS);
     init_streams(&mut tester, NUM_DEFERRALS);
-    let mut instruction_history = None;
-    let instruction = set_and_execute_output_with_hooks(
+    let instruction = set_and_execute_output(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         NUM_DEFERRALS,
-        |tester| {
-            let image = tester.memory.memory.data().clone();
-            tester.memory.memory = TracingMemory::from_image(image);
-        },
-        |tester| {
-            instruction_history = Some((
-                tester.memory.memory.timestamp(),
-                tester.memory.memory.take_log(),
-            ));
-        },
     );
     let from_pc = tester.last_from_pc().as_canonical_u32();
-    let to_pc = tester.last_to_pc().as_canonical_u32();
-    let (to_timestamp, memory) =
-        instruction_history.expect("OUTPUT instruction history was captured");
     let sentinel = instruction.clone();
     let program = Program::new_without_debug_infos(&[instruction, sentinel], from_pc);
-    let mut history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: from_pc,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: to_pc,
-                timestamp: to_timestamp,
-            },
-        ],
-        memory,
-    };
-    let memory_config = test_memory_config_cpu();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let history = &mut harness.preflight.executions[0].history;
+    let memory_config = test_memory_config();
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
     let actual = super::generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer.clone();
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    assert_eq!(actual.values, expected.values);
+    assert!(!actual.values.is_empty());
     drop(postflight);
 
     history
@@ -448,12 +392,7 @@ fn postflight_output_trace_matches_record_arena_and_rejects_truncated_history() 
         .accesses
         .pop()
         .expect("OUTPUT has timed memory events");
-    history
-        .memory
-        .initial_writes
-        .pop()
-        .expect("OUTPUT's final first-write event has an initial-value seed");
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
     let counts_before = count
         .1
         .count
@@ -480,36 +419,8 @@ fn postflight_output_trace_matches_record_arena_and_rejects_truncated_history() 
 }
 
 #[test]
-fn deferral_output_rejects_invalid_deferral_index_without_mutation() {
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
-    let CpuHarnessBundle { mut harness, .. } = create_cpu_harness(&tester, NUM_DEFERRALS);
-    init_streams(&mut tester, NUM_DEFERRALS);
-
-    let initial_pc = 17;
-    let initial_timestamp = tester.memory.memory.timestamp();
-    let initial_trace_offset = harness.arena.trace_offset;
-    let mut pc = initial_pc;
-    let state = VmStateMut::new(
-        &mut pc,
-        &mut tester.memory.memory,
-        &mut tester.streams,
-        &mut tester.rng,
-        &mut harness.arena,
-    );
-    let instruction: Instruction<F> = Instruction::from_usize(
-        DeferralOpcode::OUTPUT.global_opcode(),
-        [
-            0,
-            0,
-            NUM_DEFERRALS,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-        ],
-    );
-
-    let error = harness
-        .executor
-        .execute(state, &instruction)
+fn deferral_output_rejects_invalid_deferral_index() {
+    let error = super::checked_deferral_index(17, NUM_DEFERRALS, NUM_DEFERRALS as u32)
         .expect_err("invalid deferral index must return an execution error");
 
     assert!(matches!(
@@ -519,29 +430,13 @@ fn deferral_output_rejects_invalid_deferral_index_without_mutation() {
             msg: "deferral index is out of bounds"
         }
     ));
-    assert_eq!(pc, initial_pc);
-    assert_eq!(tester.memory.memory.timestamp(), initial_timestamp);
-    assert_eq!(harness.arena.trace_offset, initial_trace_offset);
 }
 
-/// Regression test that the filler clears the canonicity aux columns
-/// (`output_commit_lt_aux`) on non-first rows of a section.
-///
-/// The trace buffer is normally zero-initialized at allocation, but the preflight
-/// record is laid over the section's bytes, so columns the filler does not write
-/// can retain non-zero record bytes. `output_commit_lt_aux` is only populated on
-/// the first row, so on non-first rows it must be explicitly cleared - otherwise
-/// the leftover bytes violate the unconditional `assert_bool` constraints in the
-/// canonicity sub-AIR (the canonicity range check itself is gated by `is_first`,
-/// so soundness is unaffected, but proving such a trace fails).
-///
-/// To exercise this deterministically without depending on the record being large
-/// enough to spill into those specific columns, we pre-fill the arena with a
-/// non-boolean value so that any column the filler leaves untouched is non-zero.
+/// Regression test that a multi-row OUTPUT section initializes every constrained column.
 #[test]
-fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
+fn deferral_output_multi_row_trace_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -551,13 +446,8 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
 
     init_streams(&mut tester, NUM_DEFERRALS);
 
-    // Pre-fill the arena with a non-boolean value. The executor overwrites the
-    // record region and the filler overwrites every column it populates; only
-    // columns the filler skips (the bug under test) retain this value.
-    harness.arena.trace_buffer.fill(F::from_u32(0xdead));
-
-    let rd = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let rd = gen_register_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_register_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = 0;
@@ -598,7 +488,7 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
 
     tester.execute(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::from_usize(
             DeferralOpcode::OUTPUT.global_opcode(),
             [

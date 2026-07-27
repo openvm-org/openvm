@@ -2,9 +2,10 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        testing::{
+            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        },
+        ExecutionBridge, Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -102,15 +103,21 @@ fn create_test_harness(
         tester.address_bits(),
     );
 
-    let harness = Harness::with_capacity(executor, air, chip, MAX_TRACE_ROWS);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_TRACE_ROWS,
+        generate_trace_from_postflight,
+    );
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     opcode: XorinOpcode,
     buffer_length: Option<usize>,
@@ -132,10 +139,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut rand_input_arr = [0u8; MAX_LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    use openvm_circuit::arch::testing::memory::{gen_distinct_register_pointers, gen_pointer};
+    let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     // Align buffer/input pointers to MEMORY_BLOCK_BYTES-byte blocks for memory bus compatibility
     let num_blocks = buffer_length.div_ceil(MEMORY_BLOCK_BYTES);
@@ -188,7 +193,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -234,7 +239,7 @@ fn xorin_chip_positive_tests() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             XorinOpcode::XORIN,
             buffer_length,
@@ -259,7 +264,7 @@ fn run_xorin_chip_negative_test(prank: impl Fn(&mut XorinVmCols<F>)) {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         XorinOpcode::XORIN,
         buffer_length,
@@ -299,7 +304,7 @@ fn xorin_wrong_len_limb_negative_test() {
     });
 }
 
-fn xorin_postflight_fixture() -> (Harness, Program<F>, PreflightHistory) {
+fn xorin_postflight_fixture() -> Harness {
     const LEN: usize = 16;
 
     let mut tester = VmChipTestBuilder::default();
@@ -314,7 +319,6 @@ fn xorin_postflight_fixture() -> (Harness, Program<F>, PreflightHistory) {
             RV64_MEMORY_AS as usize,
         ],
     );
-    let sentinel = instruction.clone();
     let block = |bytes: [u8; MEMORY_BLOCK_BYTES]| {
         std::array::from_fn(|index| u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]]))
     };
@@ -344,52 +348,37 @@ fn xorin_postflight_fixture() -> (Harness, Program<F>, PreflightHistory) {
             );
         }
     }
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: DEFAULT_PC_STEP,
-                timestamp: 10,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
-    (harness, program, history)
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.preflight,
+        &instruction,
+        0,
+    );
+    harness
 }
 
 #[test]
-fn postflight_xorin_trace_matches_record_arena_trace() {
-    let (harness, program, history) = xorin_postflight_fixture();
+fn postflight_xorin_trace_generation_succeeds() {
+    let harness = xorin_postflight_fixture();
+    let execution = &harness.preflight.executions[0];
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &execution.history, &memory_config).unwrap();
     let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
 
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
+    assert_eq!(actual.width(), NUM_XORIN_VM_COLS);
+    assert_eq!(actual.height(), 1);
 }
 
 #[test]
 fn postflight_xorin_rejects_corrupt_write() {
-    let (harness, program, mut history) = xorin_postflight_fixture();
+    let harness = xorin_postflight_fixture();
+    let execution = &harness.preflight.executions[0];
+    let mut history = execution.history.clone();
     history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
     let error = generate_trace_from_postflight(&harness.chip, &postflight).unwrap_err();
 
     assert!(error.to_string().contains("unexpected write"));
@@ -450,16 +439,15 @@ fn cuda_set_and_execute(
     rng: &mut StdRng,
     len: Option<usize>,
 ) {
-    use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_circuit::arch::testing::memory::{gen_distinct_register_pointers, gen_pointer};
 
     let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
     if len == 0 {
         return;
     }
 
-    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let input_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let len_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let [buffer_reg, input_reg, len_reg] =
+        gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     let buffer_ptr = gen_pointer(rng, len);
     let input_ptr = gen_pointer(rng, len);

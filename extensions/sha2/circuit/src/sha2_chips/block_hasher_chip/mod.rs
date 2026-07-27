@@ -16,6 +16,8 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_sha2_air::{Sha2BlockHasherFillerHelper, Sha2BlockHasherSubairConfig};
 pub(crate) use trace::generate_trace_from_postflight as generate_block_hasher_trace_from_postflight;
+#[cfg(test)]
+pub(crate) use trace::generate_trace_from_postflights as generate_block_hasher_trace_from_postflights;
 
 pub use super::config::*;
 

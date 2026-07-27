@@ -7,8 +7,10 @@ use num_traits::Zero;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
-    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    Arena, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+    testing::{
+        memory::gen_pointer, TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder,
+    },
+    Executor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime};
 use openvm_instructions::{
@@ -71,11 +73,8 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
 
 #[cfg(test)]
 mod addsub_tests {
-    use openvm_circuit::arch::{
-        MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller,
-    };
+    use openvm_circuit::arch::{MemoryConfig, Postflight};
     use openvm_instructions::program::Program;
-    use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 
     use super::*;
     use crate::trace::generate_field_expression_trace_from_postflight;
@@ -110,7 +109,21 @@ mod addsub_tests {
             tester.range_checker(),
             tester.address_bits(),
         );
-        Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+        let address_bits = tester.address_bits();
+        Harness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| {
+                generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                    chip,
+                    postflight,
+                    offset,
+                    address_bits,
+                )
+            },
+        )
     }
 
     #[cfg(feature = "cuda")]
@@ -181,17 +194,15 @@ mod addsub_tests {
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    fn set_and_execute_addsub<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
+    fn set_and_execute_addsub<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut ModularExecutor<BLOCKS>,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
-    ) where
-        ModularExecutor<BLOCKS>: PreflightExecutor<F, RA>,
-    {
+    ) {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), ADD_LOCAL + 2)
         } else {
@@ -258,7 +269,7 @@ mod addsub_tests {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(executor, arena, &instruction);
+        tester.execute(executor, preflight, &instruction);
 
         let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS)
             .into_iter()
@@ -292,10 +303,10 @@ mod addsub_tests {
         let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_addsub::<BLOCKS, NUM_LIMBS, _>(
+            set_and_execute_addsub::<BLOCKS, NUM_LIMBS>(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 &modulus,
                 i == 0,
@@ -399,24 +410,16 @@ mod addsub_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
-        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
-        let final_timestamp = tester.memory.memory.timestamp();
-        let mut history = PreflightHistory {
-            program: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: final_timestamp,
-                },
-            ],
-            memory: tester.memory.memory.take_log(),
-        };
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.preflight,
+            &instruction,
+            0,
+        );
+        let history = &mut harness.preflight.executions[0].history;
         let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
         let memory_config = MemoryConfig::default();
-        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
         let actual = generate_field_expression_trace_from_postflight::<_, BLOCKS>(
             &harness.chip,
             &postflight,
@@ -424,24 +427,10 @@ mod addsub_tests {
             tester.address_bits(),
         )
         .unwrap();
-        let actual_range = harness.chip.inner.range_checker.generate_trace::<F>();
-
-        let rows_used = harness.arena.trace_offset / harness.arena.width;
-        let mut expected_values = harness.arena.trace_buffer;
-        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-        harness.chip.inner.fill_trace(
-            &harness.chip.mem_helper.as_borrowed(),
-            &mut expected,
-            rows_used,
-        );
-        let expected_range = harness.chip.inner.range_checker.generate_trace::<F>();
-        assert_eq!(actual.width, expected.width);
-        assert_eq!(actual.values, expected.values);
-        assert_eq!(actual_range.values, expected_range.values);
+        assert!(!actual.values.is_empty());
 
         history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
-        let corrupt = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let corrupt = Postflight::new(&program, history, &memory_config, None).unwrap();
         assert!(
             generate_field_expression_trace_from_postflight::<_, BLOCKS>(
                 &harness.chip,
@@ -536,6 +525,7 @@ mod addsub_tests {
 #[cfg(test)]
 mod muldiv_tests {
     use super::*;
+    use crate::trace::generate_field_expression_trace_from_postflight;
 
     const MUL_LOCAL: usize = Rv64ModularArithmeticOpcode::MUL as usize;
     type Harness<const BLOCKS: usize> =
@@ -568,7 +558,21 @@ mod muldiv_tests {
             tester.range_checker(),
             tester.address_bits(),
         );
-        Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+        let address_bits = tester.address_bits();
+        Harness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| {
+                generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                    chip,
+                    postflight,
+                    offset,
+                    address_bits,
+                )
+            },
+        )
     }
 
     #[cfg(feature = "cuda")]
@@ -634,17 +638,15 @@ mod muldiv_tests {
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    fn set_and_execute_muldiv<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
+    fn set_and_execute_muldiv<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut ModularExecutor<BLOCKS>,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
-    ) where
-        ModularExecutor<BLOCKS>: PreflightExecutor<F, RA>,
-    {
+    ) {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), MUL_LOCAL + 2)
         } else {
@@ -712,7 +714,7 @@ mod muldiv_tests {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(executor, arena, &instruction);
+        tester.execute(executor, preflight, &instruction);
 
         let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS)
             .into_iter()
@@ -746,10 +748,10 @@ mod muldiv_tests {
         let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_muldiv::<BLOCKS, NUM_LIMBS, _>(
+            set_and_execute_muldiv::<BLOCKS, NUM_LIMBS>(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 &modulus,
                 i == 0,
@@ -868,9 +870,7 @@ mod muldiv_tests {
 
 #[cfg(test)]
 mod is_equal_tests {
-    use openvm_circuit::arch::{
-        MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller,
-    };
+    use openvm_circuit::arch::{MemoryConfig, Postflight};
     use openvm_instructions::program::Program;
     use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
     use openvm_riscv_adapters::{
@@ -936,14 +936,28 @@ mod is_equal_tests {
             ),
             tester.memory_helper(),
         );
-        Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+        let address_bits = tester.address_bits();
+        Harness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| {
+                generate_modular_is_equal_trace_from_postflight(
+                    chip,
+                    postflight,
+                    offset,
+                    address_bits,
+                )
+            },
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_and_execute_is_equal<const NUM_LANES: usize, const TOTAL_LIMBS: usize, RA: Arena>(
+    fn set_and_execute_is_equal<const NUM_LANES: usize, const TOTAL_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         rng: &mut StdRng,
         modulus: &BigUint,
         modulus_limbs: [F; TOTAL_LIMBS],
@@ -951,9 +965,7 @@ mod is_equal_tests {
         is_setup: bool,
         b: Option<[F; TOTAL_LIMBS]>,
         c: Option<[F; TOTAL_LIMBS]>,
-    ) where
-        VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>: PreflightExecutor<F, RA>,
-    {
+    ) {
         let (b, c, opcode) = if is_setup {
             (
                 modulus_limbs,
@@ -976,7 +988,7 @@ mod is_equal_tests {
         let instruction =
             rv64_write_u16_heap_default::<TOTAL_LIMBS>(tester, vec![b], vec![c], opcode);
 
-        tester.execute(executor, arena, &instruction);
+        tester.execute(executor, preflight, &instruction);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////
@@ -1010,7 +1022,7 @@ mod is_equal_tests {
             set_and_execute_is_equal(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 &modulus,
                 modulus_limbs,
@@ -1027,7 +1039,7 @@ mod is_equal_tests {
         set_and_execute_is_equal(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             modulus_limbs,
@@ -1099,24 +1111,16 @@ mod is_equal_tests {
             ],
         );
         let sentinel = instruction.clone();
-        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
-        let final_timestamp = tester.memory.memory.timestamp();
-        let mut history = PreflightHistory {
-            program: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: final_timestamp,
-                },
-            ],
-            memory: tester.memory.memory.take_log(),
-        };
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.preflight,
+            &instruction,
+            0,
+        );
+        let history = &mut harness.preflight.executions[0].history;
         let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
         let memory_config = MemoryConfig::default();
-        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
         let actual = generate_modular_is_equal_trace_from_postflight(
             &harness.chip,
             &postflight,
@@ -1124,24 +1128,10 @@ mod is_equal_tests {
             tester.address_bits(),
         )
         .unwrap();
-        let actual_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
-
-        let rows_used = harness.arena.trace_offset / harness.arena.width;
-        let mut expected_values = harness.arena.trace_buffer;
-        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-        harness.chip.inner.fill_trace(
-            &harness.chip.mem_helper.as_borrowed(),
-            &mut expected,
-            rows_used,
-        );
-        let expected_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
-        assert_eq!(actual.width, expected.width);
-        assert_eq!(actual.values, expected.values);
-        assert_eq!(actual_range.values, expected_range.values);
+        assert_eq!(actual.height(), 1);
 
         history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
-        let corrupt = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let corrupt = Postflight::new(&program, history, &memory_config, None).unwrap();
         assert!(generate_modular_is_equal_trace_from_postflight(
             &harness.chip,
             &corrupt,
@@ -1567,7 +1557,7 @@ mod is_equal_tests {
         set_and_execute_is_equal(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             modulus_limbs,

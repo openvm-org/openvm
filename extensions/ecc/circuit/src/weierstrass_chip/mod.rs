@@ -11,6 +11,10 @@ pub use double::*;
 pub(crate) use trace::{
     generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
 };
+#[cfg(test)]
+pub(crate) use trace::{
+    generate_add_ne_trace_from_postflights, generate_double_trace_from_postflights,
+};
 
 #[cfg(test)]
 mod tests;

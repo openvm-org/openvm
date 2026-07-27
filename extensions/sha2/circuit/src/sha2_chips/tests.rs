@@ -5,11 +5,11 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, TestSC, VmChipTestBuilder,
+            memory::{gen_distinct_register_pointers, gen_pointer},
+            TestBuilder, TestChipHarness, TestPreflight, TestSC, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, MatrixRecordArena, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent,
+        Executor, MemoryConfig, Postflight,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
@@ -23,10 +23,8 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
     Chip, ColumnsAir, SubAir,
 };
-use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
-    program::Program,
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -66,7 +64,8 @@ const SHA2_BUS_IDX: BusIndex = 28;
 const SUBAIR_BUS_IDX: BusIndex = 29;
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
-type Harness<RA, C> = TestChipHarness<F, Sha2VmExecutor<C>, Sha2MainAir<C>, Sha2MainChip<F, C>, RA>;
+type Harness<C> = TestChipHarness<F, Sha2VmExecutor<C>, Sha2MainAir<C>, Sha2MainChip<F, C>>;
+type BlockHarness<C> = TestChipHarness<F, (), Sha2BlockHasherVmAir<C>, Sha2BlockHasherChip<F, C>>;
 
 fn create_harness_fields<C: Sha2Config>(
     system_port: SystemPort,
@@ -75,13 +74,7 @@ fn create_harness_fields<C: Sha2Config>(
     pointer_max_bits: usize,
 ) -> (Sha2MainAir<C>, Sha2VmExecutor<C>, Sha2MainChip<F, C>) {
     let executor = Sha2VmExecutor::<C>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
-    let empty_records = Arc::new(Mutex::new(None));
-    let main_chip = Sha2MainChip::new(
-        empty_records.clone(),
-        range_checker_chip.clone(),
-        pointer_max_bits,
-        memory_helper,
-    );
+    let main_chip = Sha2MainChip::new(range_checker_chip.clone(), pointer_max_bits, memory_helper);
     let main_air = Sha2MainAir::new(
         system_port,
         range_checker_chip.bus(),
@@ -92,8 +85,8 @@ fn create_harness_fields<C: Sha2Config>(
     (main_air, executor, main_chip)
 }
 
-struct TestHarness<RA, C: Sha2Config> {
-    harness: Harness<RA, C>,
+struct TestHarness<C: Sha2Config> {
+    harness: Harness<C>,
     bitwise: (
         BitwiseOperationLookupAir<RV64_BYTE_BITS>,
         SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
@@ -101,9 +94,9 @@ struct TestHarness<RA, C: Sha2Config> {
     block_hasher: (Sha2BlockHasherVmAir<C>, Sha2BlockHasherChip<F, C>),
 }
 
-fn create_test_harness<RA: Arena, C: Sha2Config>(
+fn create_test_harness<C: Sha2Config + 'static>(
     tester: &mut VmChipTestBuilder<F>,
-) -> TestHarness<RA, C> {
+) -> TestHarness<C> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
@@ -116,9 +109,14 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
         tester.address_bits(),
     );
 
-    let shared_records = main_chip.records.clone();
-
-    let harness = Harness::<RA, C>::with_capacity(executor, air, main_chip, MAX_INS_CAPACITY);
+    let harness = Harness::<C>::with_capacity(
+        executor,
+        air,
+        main_chip,
+        MAX_INS_CAPACITY,
+        crate::generate_main_trace_from_postflight,
+    )
+    .with_batch_trace_generator(crate::generate_main_trace_from_postflights);
 
     let range_checker = tester.range_checker();
     let block_hasher_air = Sha2BlockHasherVmAir::new(
@@ -132,7 +130,6 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
         range_checker,
         tester.address_bits(),
         tester.memory_helper(),
-        shared_records,
     );
 
     TestHarness {
@@ -142,20 +139,48 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
     }
 }
 
+impl<C: Sha2Config + 'static> TestHarness<C> {
+    fn into_parts(
+        self,
+    ) -> (
+        Harness<C>,
+        BlockHarness<C>,
+        (
+            BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        ),
+    ) {
+        let TestHarness {
+            harness,
+            bitwise,
+            block_hasher: (block_air, block_chip),
+        } = self;
+        let mut block_harness = BlockHarness::<C>::with_capacity(
+            (),
+            block_air,
+            block_chip,
+            MAX_INS_CAPACITY,
+            crate::generate_block_hasher_trace_from_postflight,
+        )
+        .with_batch_trace_generator(crate::generate_block_hasher_trace_from_postflights)
+        .without_memory_balance();
+        block_harness.preflight = harness.preflight.clone();
+        (harness, block_harness, bitwise)
+    }
+}
+
 // execute one SHA2_UPDATE instruction
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F, RA>>(
+fn set_and_execute_single_block<C: Sha2Config, E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64Sha2Opcode,
     message: Option<&[u8]>,
     prev_state: Option<&[u8]>,
 ) {
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     let dst_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
@@ -176,7 +201,7 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
     );
 
@@ -200,18 +225,14 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
 fn rand_sha2_single_block_test<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let TestHarness {
-        mut harness,
-        bitwise,
-        block_hasher,
-    } = create_test_harness::<MatrixRecordArena<F>, C>(&mut tester);
+    let mut test_harness = create_test_harness::<C>(&mut tester);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute_single_block::<_, C, _>(
+        set_and_execute_single_block::<C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
+            &mut test_harness.harness.executor,
+            &mut test_harness.harness.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -219,10 +240,11 @@ fn rand_sha2_single_block_test<C: Sha2Config + 'static>() {
         );
     }
 
+    let (harness, block_harness, bitwise) = test_harness.into_parts();
     let tester = tester
         .build()
         .load(harness)
-        .load_periphery(block_hasher)
+        .load(block_harness)
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
@@ -230,7 +252,7 @@ fn rand_sha2_single_block_test<C: Sha2Config + 'static>() {
 
 fn execute_postflight_fixture<C: Sha2Config>(
     tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness<MatrixRecordArena<F>, C>,
+    harness: &mut Harness<C>,
 ) -> Instruction<F> {
     let register_ptrs = [8u32, 16, 24];
     let memory_ptrs = [0x1000u32, 0x2000, 0x3000];
@@ -271,61 +293,46 @@ fn execute_postflight_fixture<C: Sha2Config>(
             RV64_MEMORY_AS as usize,
         ],
     );
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.preflight,
+        &instruction,
+        0,
+    );
     instruction
 }
 
-fn postflight_trace_matches_record_arena_trace<C: Sha2Config + 'static>() {
+fn postflight_trace_generation_succeeds<C: Sha2Config + 'static>() {
     let mut tester = VmChipTestBuilder::default();
     let TestHarness {
         mut harness,
         block_hasher: (_, block_hasher),
         ..
-    } = create_test_harness::<MatrixRecordArena<F>, C>(&mut tester);
-    let instruction = execute_postflight_fixture(&mut tester, &mut harness);
-    let final_timestamp = tester.memory.memory.timestamp();
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: final_timestamp,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    } = create_test_harness::<C>(&mut tester);
+    execute_postflight_fixture(&mut tester, &mut harness);
+    let execution = &harness.preflight.executions[0];
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-
-    let expected_main: AirProvingContext<CpuBackend<TestSC>> =
-        harness.chip.generate_proving_ctx(harness.arena);
-    let expected_block: AirProvingContext<CpuBackend<TestSC>> =
-        block_hasher.generate_proving_ctx(());
+    let postflight =
+        Postflight::new_for_test(&execution.program, &execution.history, &memory_config).unwrap();
     let actual_main =
         crate::generate_main_trace_from_postflight(&harness.chip, &postflight).unwrap();
     let actual_block =
         crate::generate_block_hasher_trace_from_postflight(&block_hasher, &postflight).unwrap();
 
-    assert_eq!(actual_main.width(), expected_main.common_main.width());
-    assert_eq!(actual_main.height(), expected_main.common_main.height());
-    assert_eq!(actual_main.values, expected_main.common_main.values);
-    assert_eq!(actual_block.width(), expected_block.common_main.width());
-    assert_eq!(actual_block.height(), expected_block.common_main.height());
-    assert_eq!(actual_block.values, expected_block.common_main.values);
+    assert_eq!(actual_main.width(), C::MAIN_CHIP_WIDTH);
+    assert_eq!(actual_main.height(), 1);
+    assert_eq!(actual_block.width(), C::BLOCK_HASHER_WIDTH);
+    assert!(actual_block.height() >= C::ROWS_PER_BLOCK);
 }
 
 #[test]
-fn sha256_postflight_trace_matches_record_arena_trace() {
-    postflight_trace_matches_record_arena_trace::<Sha256Config>();
+fn sha256_postflight_trace_generation_succeeds() {
+    postflight_trace_generation_succeeds::<Sha256Config>();
 }
 
 #[test]
-fn sha512_postflight_trace_matches_record_arena_trace() {
-    postflight_trace_matches_record_arena_trace::<Sha512Config>();
+fn sha512_postflight_trace_generation_succeeds() {
+    postflight_trace_generation_succeeds::<Sha512Config>();
 }
 
 #[test]
@@ -335,27 +342,14 @@ fn sha2_postflight_rejects_malformed_memory_event() {
         mut harness,
         block_hasher: (_, block_hasher),
         ..
-    } = create_test_harness::<MatrixRecordArena<F>, Sha256Config>(&mut tester);
-    let instruction = execute_postflight_fixture(&mut tester, &mut harness);
-    let final_timestamp = tester.memory.memory.timestamp();
-    let mut memory = tester.memory.memory.take_log();
-    memory.accesses[SHA2_REGISTER_READS].pointer += 4;
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: final_timestamp,
-            },
-        ],
-        memory,
-    };
-    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    } = create_test_harness::<Sha256Config>(&mut tester);
+    execute_postflight_fixture(&mut tester, &mut harness);
+    let execution = &harness.preflight.executions[0];
+    let mut history = execution.history.clone();
+    history.memory.accesses[SHA2_REGISTER_READS].pointer += 4;
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
 
     assert!(
         crate::generate_main_trace_from_postflight(&harness.chip, &postflight).is_err(),
@@ -388,18 +382,16 @@ fn rand_sha384_single_block_test() {
 /// Execute multiple SHA2_UPDATE instructions to hash an entire message
 ///////////////////////////////////////////////////////////////////////////////////////
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: PreflightExecutor<F, RA>>(
+fn set_and_execute_full_message<C: Sha2Config + 'static, E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64Sha2Opcode,
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let dst_ptr = state_ptr;
@@ -441,7 +433,7 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
 
             tester.execute(
                 executor,
-                arena,
+                preflight,
                 &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
             );
         });
@@ -458,18 +450,14 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
 fn rand_sha2_multi_block_test<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let TestHarness {
-        mut harness,
-        bitwise,
-        block_hasher,
-    } = create_test_harness::<_, C>(&mut tester);
+    let mut test_harness = create_test_harness::<C>(&mut tester);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
+            &mut test_harness.harness.executor,
+            &mut test_harness.harness.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -477,10 +465,11 @@ fn rand_sha2_multi_block_test<C: Sha2Config + 'static>() {
         );
     }
 
+    let (harness, block_harness, bitwise) = test_harness.into_parts();
     let tester = tester
         .build()
         .load(harness)
-        .load_periphery(block_hasher)
+        .load(block_harness)
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
@@ -511,11 +500,7 @@ fn rand_sha384_multi_block_test() {
 fn sha2_edge_test_lengths<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let TestHarness {
-        mut harness,
-        bitwise,
-        block_hasher,
-    } = create_test_harness::<_, C>(&mut tester);
+    let mut test_harness = create_test_harness::<C>(&mut tester);
 
     // inputs of various number of blocks
     const TEST_VECTORS: [&str; 4] = [
@@ -528,10 +513,10 @@ fn sha2_edge_test_lengths<C: Sha2Config + 'static>() {
     for input in TEST_VECTORS.iter() {
         let input = Vec::from_hex(input).unwrap();
 
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
+            &mut test_harness.harness.executor,
+            &mut test_harness.harness.preflight,
             &mut rng,
             C::OPCODE,
             Some(&input),
@@ -541,10 +526,10 @@ fn sha2_edge_test_lengths<C: Sha2Config + 'static>() {
 
     // check every possible input length modulo block size
     for i in (C::BLOCK_BYTES + 1)..=(2 * C::BLOCK_BYTES) {
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
+            &mut test_harness.harness.executor,
+            &mut test_harness.harness.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -552,10 +537,11 @@ fn sha2_edge_test_lengths<C: Sha2Config + 'static>() {
         );
     }
 
+    let (harness, block_harness, bitwise) = test_harness.into_parts();
     let tester = tester
         .build()
         .load(harness)
-        .load_periphery(block_hasher)
+        .load(block_harness)
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
@@ -584,16 +570,15 @@ fn sha384_edge_test_lengths() {
 fn execute_roundtrip_sanity_test<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let TestHarness { mut harness, .. } =
-        create_test_harness::<MatrixRecordArena<F>, C>(&mut tester);
+    let TestHarness { mut harness, .. } = create_test_harness::<C>(&mut tester);
 
     // let num_tests: usize = 10;
     let num_tests: usize = 1;
     for _ in 0..num_tests {
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -661,18 +646,14 @@ fn sha384_solve_sanity_check() {
 fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let TestHarness {
-        mut harness,
-        bitwise,
-        block_hasher,
-    } = create_test_harness::<MatrixRecordArena<F>, C>(&mut tester);
+    let mut test_harness = create_test_harness::<C>(&mut tester);
 
     let num_ops: usize = 1;
     for _ in 0..num_ops {
-        set_and_execute_single_block::<_, C, _>(
+        set_and_execute_single_block::<C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
+            &mut test_harness.harness.executor,
+            &mut test_harness.harness.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -699,10 +680,11 @@ fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
     };
 
     disable_debug_builder();
+    let (harness, block_harness, bitwise) = test_harness.into_parts();
     let tester = tester
         .build()
         .load(harness)
-        .load_periphery_and_prank_trace(block_hasher, modify_trace)
+        .load_and_prank_trace(block_harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
     tester
@@ -995,7 +977,7 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
 
     let num_ops = 70;
     for _ in 1..=num_ops {
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.main.executor,
             &mut harness.main.dense_arena,
@@ -1056,7 +1038,7 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
         let expected = Vec::from_hex(expected_hex).unwrap();
         // Sanity-check the expected digest matches the config’s hash.
         assert_eq!(C::hash(&input).as_slice(), expected.as_slice());
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.main.executor,
             &mut harness.main.dense_arena,
@@ -1152,7 +1134,7 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
 
     // check every possible input length modulo block size
     for i in (C::BLOCK_BYTES + 1)..=(2 * C::BLOCK_BYTES) {
-        set_and_execute_full_message::<_, C, _>(
+        set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.main.executor,
             &mut harness.main.dense_arena,

@@ -2,16 +2,14 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+        testing::{TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder},
+        ExecutionBridge, Executor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{
     instruction::Instruction,
-    program::Program,
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -91,13 +89,19 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         range_checker,
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    )
 }
 
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -108,7 +112,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let b = u64::from_le_bytes(b);
     let c = u64::from_le_bytes(c);
@@ -150,7 +154,7 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -160,115 +164,6 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn postflight_trace_matches_record_arena_trace() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&tester);
-    let add = Instruction::from_usize(
-        ADD.global_opcode(),
-        [
-            24,
-            8,
-            16,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    );
-    let sub = Instruction::from_usize(
-        SUB.global_opcode(),
-        [
-            32,
-            24,
-            8,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    );
-    let add_again = Instruction::from_usize(
-        ADD.global_opcode(),
-        [
-            40,
-            32,
-            16,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    );
-    let sentinel = Instruction::from_usize(
-        SUB.global_opcode(),
-        [
-            48,
-            8,
-            16,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    );
-    unsafe {
-        tester
-            .memory
-            .memory
-            .data
-            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [1, 2, 3, 4]);
-        tester
-            .memory
-            .memory
-            .data
-            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, [5, 6, 7, 8]);
-    }
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &add, 0);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &sub, 4);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &add_again, 8);
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: 4,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 7,
-            },
-            PreflightProgramEvent {
-                pc: 12,
-                timestamp: 10,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[add, sub, add_again, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    let sub_row = expected.row_slice(1).unwrap().to_vec();
-    let second_add_row = expected.row_slice(2).unwrap().to_vec();
-    let width = expected.width();
-    expected.values[width..2 * width].copy_from_slice(&second_add_row);
-    expected.values[2 * width..3 * width].copy_from_slice(&sub_row);
-    let expected_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-    assert_eq!(actual_range.values, expected_range.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -289,7 +184,7 @@ fn run_add_sub_memory_binding_negative_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         ADD,
         Some([0; RV64_REGISTER_NUM_LIMBS]),

@@ -25,7 +25,10 @@ use openvm_cuda_common::{
     common::get_device,
     stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
 };
-use openvm_instructions::{program::PC_BITS, riscv::RV64_REGISTER_AS};
+use openvm_instructions::{
+    program::PC_BITS,
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -55,7 +58,7 @@ use crate::{
         },
         to_byte_ptr_bits, Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -213,8 +216,14 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {
+        let register_file_bytes = NUM_RV64_REGISTERS * RV64_REGISTER_NUM_LIMBS;
+        assert!(increment <= register_file_bytes);
+        if self.default_register + increment > register_file_bytes {
+            self.default_register = 0;
+        }
+        let register = self.default_register;
         self.default_register += increment;
-        self.default_register - increment
+        register
     }
 
     fn get_default_pointer(&mut self, increment: usize) -> usize {
@@ -339,7 +348,7 @@ impl GpuChipTestBuilder {
     ) where
         E: PreflightExecutor<F, RA>,
     {
-        self.execute(&mut harness.executor, &mut harness.arena, instruction);
+        self.execute(&mut harness.executor, &mut harness.preflight, instruction);
     }
 
     pub fn execute_with_pc_harness<E, A, C, RA: Arena>(
@@ -352,7 +361,7 @@ impl GpuChipTestBuilder {
     {
         self.execute_with_pc(
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             instruction,
             initial_pc,
         );
@@ -525,7 +534,7 @@ impl GpuChipTester {
         A: AnyAir<SC> + 'static,
         G: Chip<RA, GpuBackend>,
     {
-        self.load(harness.air, harness.chip, harness.arena)
+        self.load(harness.air, harness.chip, harness.preflight)
     }
 
     pub fn load_periphery<A, G>(self, air: A, gpu_chip: G) -> Self

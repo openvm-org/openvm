@@ -2,20 +2,23 @@ use std::sync::Arc;
 
 use itertools::zip_eq;
 use openvm_circuit_primitives::{
+    utils::next_power_of_two_or_zero,
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
+#[cfg(feature = "tco")]
+use openvm_instructions::exe::VmExe;
 use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    instruction::Instruction, program::Program, riscv::RV64_REGISTER_NUM_LIMBS,
 };
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
-    p3_matrix::dense::RowMajorMatrix,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::AirProvingContext,
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, StarkTestError, SystemParams, Val,
     VerificationData,
@@ -28,22 +31,29 @@ use openvm_stark_sdk::{
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
+#[cfg(not(feature = "tco"))]
+use crate::arch::{execution_mode::PreflightCtx, interpreter::AlignedBuf};
+#[cfg(feature = "tco")]
+use crate::arch::{
+    execution_mode::PreflightCtx, ExecutorInventory, InterpretedInstance, SystemConfig,
+};
 use crate::{
     arch::{
         testing::{
             execution::air::ExecutionDummyAir,
             program::{air::ProgramDummyAir, ProgramTester},
-            ExecutionTester, MemoryTester, TestBuilder, TestChipHarness, EXECUTION_BUS, MEMORY_BUS,
-            MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+            ExecutionTester, MemoryTester, TestBuilder, TestChipHarness, TestPreflight,
+            TestPreflightExecution, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
+            POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
-        to_byte_ptr_bits, vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus,
-        ExecutionState, MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField,
-        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        to_byte_ptr_bits, vm_poseidon2_config, ExecutionBridge, ExecutionBus, ExecutionCtxTrait,
+        ExecutionState, Executor, MemoryConfig, Postflight, Streams, VmExecState, VmField, VmState,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
-            online::TracingMemory,
+            online::{AddressMap, GuestMemory, TracingMemory},
             MemoryAirInventory, MemoryController, SharedMemoryHelper,
         },
         poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
@@ -68,51 +78,111 @@ impl<F> TestBuilder<F> for VmChipTestBuilder<F>
 where
     F: VmField,
 {
-    fn execute<E, RA>(&mut self, executor: &mut E, arena: &mut RA, instruction: &Instruction<F>)
-    where
-        E: PreflightExecutor<F, RA>,
-        RA: Arena,
-    {
-        let initial_pc = self.next_elem_size_u32();
-        self.execute_with_pc(executor, arena, instruction, initial_pc);
-    }
-
-    fn execute_with_pc<E, RA>(
+    fn execute<E>(
         &mut self,
         executor: &mut E,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
+        instruction: &Instruction<F>,
+    ) where
+        E: Executor<F> + Clone,
+    {
+        let initial_pc = self.next_elem_size_u32();
+        self.execute_with_pc(executor, preflight, instruction, initial_pc);
+    }
+
+    fn execute_with_pc<E>(
+        &mut self,
+        executor: &mut E,
+        preflight: &mut TestPreflight<F>,
         instruction: &Instruction<F>,
         initial_pc: u32,
     ) where
-        E: PreflightExecutor<F, RA>,
-        RA: Arena,
+        E: Executor<F> + Clone,
     {
-        let initial_state = ExecutionState {
-            pc: initial_pc,
-            timestamp: self.memory.memory.timestamp(),
-        };
-        tracing::debug!("initial_timestamp={}", self.memory.memory.timestamp());
+        let program =
+            Program::new_without_debug_infos(std::slice::from_ref(instruction), initial_pc);
+        #[cfg(not(feature = "tco"))]
+        let output = {
+            let pre_compute_size = executor.pre_compute_size();
+            let pre_compute_align = pre_compute_size.next_power_of_two();
+            let pre_compute = AlignedBuf::uninit(pre_compute_size, pre_compute_align);
+            let pre_compute_data =
+                unsafe { std::slice::from_raw_parts_mut(pre_compute.ptr, pre_compute_size) };
+            let handler = executor
+                .pre_compute::<PreflightCtx>(initial_pc, instruction, pre_compute_data)
+                .expect("test instruction must be statically valid");
 
-        let mut pc = initial_pc;
-        let state_mut = VmStateMut {
-            pc: &mut pc,
-            memory: &mut self.memory.memory,
-            streams: &mut self.streams,
-            rng: &mut self.rng,
-            ctx: arena,
-            #[cfg(feature = "metrics")]
-            metrics: &mut Default::default(),
-        };
-        executor
-            .execute(state_mut, instruction)
-            .expect("Expected the execution not to fail");
-        let final_state = ExecutionState {
-            pc,
-            timestamp: self.memory.memory.timestamp(),
+            let empty_memory = GuestMemory::new(AddressMap::from_mem_config(
+                self.memory.controller.memory_config(),
+            ));
+            let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
+            let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
+            state.rng = self.rng.clone();
+
+            let ctx = PreflightCtx::new::<F>(&state.memory, Some(1));
+            let mut exec_state = VmExecState::new(state, ctx);
+            assert!(!exec_state.should_suspend());
+            PreflightCtx::on_instruction_start(&mut exec_state, initial_pc);
+            unsafe { handler(pre_compute.ptr, &mut exec_state) };
+            if let Err(error) = exec_state.exit_code {
+                panic!("{error}");
+            }
+            let final_pc = exec_state.vm_state.pc();
+            let history = exec_state.ctx.finish(final_pc);
+            crate::arch::PreflightOutput {
+                history,
+                state: exec_state.vm_state,
+                exit_code: None,
+            }
         };
 
+        #[cfg(feature = "tco")]
+        let output = {
+            let exe = VmExe::new(program.clone()).with_pc_start(initial_pc);
+            let system_config =
+                SystemConfig::default_from_memory(self.memory.controller.memory_config().clone());
+            let mut inventory = ExecutorInventory::<E>::new(system_config);
+            inventory
+                .add_executor(executor.clone(), [instruction.opcode])
+                .expect("test executor opcode must be unique");
+            let interpreter = InterpretedInstance::new(&inventory, &exe)
+                .expect("test instruction must be statically valid");
+            let mut state = VmState::new_with_defaults(
+                initial_pc,
+                self.memory.memory.data.clone(),
+                self.streams.clone(),
+                0,
+            );
+            state.rng = self.rng.clone();
+            let output = interpreter
+                .execute_preflight_from_state::<F>(state, Some(1))
+                .expect("test instruction preflight must succeed");
+            output
+        };
+        let initial_state = ExecutionState::new(initial_pc, 1u32);
+        let final_event = *output
+            .history
+            .program
+            .last()
+            .expect("preflight always emits a final sentinel");
+        let final_state = ExecutionState::new(final_event.pc, final_event.timestamp);
+
+        self.memory.memory.data = output.state.memory;
+        self.streams = output.state.streams;
+        self.rng = output.state.rng;
+        let postflight = Postflight::new_for_test(
+            &program,
+            &output.history,
+            self.memory.controller.memory_config(),
+        )
+        .expect("test preflight history must be valid");
+        postflight.record_test_writes(&mut self.memory);
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);
+        preflight.executions.push(TestPreflightExecution {
+            program,
+            history: output.history,
+        });
     }
 
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
@@ -174,8 +244,14 @@ where
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {
+        let register_file_bytes = NUM_RV64_REGISTERS * RV64_REGISTER_NUM_LIMBS;
+        assert!(increment <= register_file_bytes);
+        if self.default_register + increment > register_file_bytes {
+            self.default_register = 0;
+        }
+        let register = self.default_register;
         self.default_register += increment;
-        self.default_register - increment
+        register
     }
 
     fn get_default_pointer(&mut self, increment: usize) -> usize {
@@ -237,7 +313,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     }
 
     fn next_elem_size_u32(&mut self) -> u32 {
-        self.internal_rng.next_u32() % (1 << (F::bits() - 2))
+        (self.internal_rng.next_u32() % (1 << (F::bits() - 2))) & !3
     }
 
     fn write_heap<const NUM_LIMBS: usize>(
@@ -365,11 +441,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
 
 impl<F: VmField> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
-        // removed when tests are updated.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::from_config(mem_config)
+        Self::from_config(MemoryConfig::default())
     }
 }
 
@@ -399,19 +471,57 @@ where
     SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
-    pub fn load<E, A, C>(
-        mut self,
-        harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,
-    ) -> Self
+    pub fn load<E, A, C>(mut self, harness: TestChipHarness<Val<SC>, E, A, C>) -> Self
     where
         A: AnyAir<SC> + 'static,
-        C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
     {
-        let arena = harness.arena;
-        let rows_used = arena.trace_offset.div_ceil(arena.width);
-        if rows_used > 0 {
+        let memory = self
+            .memory
+            .as_mut()
+            .expect("chip traces must be loaded before memory finalization");
+        let memory_config = memory.controller.memory_config().clone();
+        let width = harness.air.width();
+        let mut values = Vec::new();
+        let postflights = harness
+            .preflight
+            .executions
+            .iter()
+            .map(|execution| {
+                Postflight::new_for_test(&execution.program, &execution.history, &memory_config)
+                    .expect("test preflight history must be valid")
+            })
+            .collect::<Vec<_>>();
+        for postflight in &postflights {
+            if harness.balance_memory {
+                postflight.balance_test_memory(&mut memory.chip);
+            }
+        }
+        if let Some(generate_batch_trace) = &harness.generate_batch_trace {
+            let trace = generate_batch_trace(&harness.chip, &postflights)
+                .expect("test postflight trace generation must succeed");
+            assert_eq!(trace.width(), width);
+            let rows_used = (harness.rows_used)(&trace);
+            assert!(rows_used <= trace.height());
+            values.extend_from_slice(&trace.values[..rows_used * width]);
+        } else {
+            for postflight in &postflights {
+                let trace = (harness.generate_trace)(&harness.chip, postflight)
+                    .expect("test postflight trace generation must succeed");
+                assert_eq!(trace.width(), width);
+                let rows_used = (harness.rows_used)(&trace);
+                assert!(rows_used <= trace.height());
+                values.extend_from_slice(&trace.values[..rows_used * width]);
+            }
+        }
+        if !values.is_empty() {
+            let rows_used = values.len() / width;
+            let height = next_power_of_two_or_zero(rows_used);
+            values.resize(height * width, Val::<SC>::ZERO);
+            for row_index in rows_used..height {
+                (harness.fill_padding)(&mut values[row_index * width..(row_index + 1) * width]);
+            }
             let air = Arc::new(harness.air) as AirRef<SC>;
-            let ctx = harness.chip.generate_proving_ctx(arena);
+            let ctx = AirProvingContext::simple_no_pis(RowMajorMatrix::new(values, width));
             tracing::debug!("Generated air proving context for {}", air.name());
             self.air_ctxs.push((air, ctx));
         }
@@ -496,18 +606,62 @@ where
 
     pub fn load_and_prank_trace<E, A, C, P>(
         mut self,
-        harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,
+        harness: TestChipHarness<Val<SC>, E, A, C>,
         modify_trace: P,
     ) -> Self
     where
         A: AnyAir<SC> + 'static,
-        C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
         P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {
-        let arena = harness.arena;
-        let mut ctx = harness.chip.generate_proving_ctx(arena);
-        modify_trace(&mut ctx.common_main);
-        self.air_ctxs.push((Arc::new(harness.air), ctx));
+        let width = harness.air.width();
+        let air = Arc::new(harness.air) as AirRef<SC>;
+        let memory = self
+            .memory
+            .as_mut()
+            .expect("chip traces must be loaded before memory finalization");
+        let memory_config = memory.controller.memory_config().clone();
+        let mut values = Vec::new();
+        let postflights = harness
+            .preflight
+            .executions
+            .iter()
+            .map(|execution| {
+                Postflight::new_for_test(&execution.program, &execution.history, &memory_config)
+                    .expect("test preflight history must be valid")
+            })
+            .collect::<Vec<_>>();
+        for postflight in &postflights {
+            if harness.balance_memory {
+                postflight.balance_test_memory(&mut memory.chip);
+            }
+        }
+        if let Some(generate_batch_trace) = &harness.generate_batch_trace {
+            let trace = generate_batch_trace(&harness.chip, &postflights)
+                .expect("test postflight trace generation must succeed");
+            assert_eq!(trace.width(), width);
+            let rows_used = (harness.rows_used)(&trace);
+            assert!(rows_used <= trace.height());
+            values.extend_from_slice(&trace.values[..rows_used * width]);
+        } else {
+            for postflight in &postflights {
+                let trace = (harness.generate_trace)(&harness.chip, postflight)
+                    .expect("test postflight trace generation must succeed");
+                assert_eq!(trace.width(), width);
+                let rows_used = (harness.rows_used)(&trace);
+                assert!(rows_used <= trace.height());
+                values.extend_from_slice(&trace.values[..rows_used * width]);
+            }
+        }
+        let rows_used = values.len() / width;
+        let height = next_power_of_two_or_zero(rows_used);
+        values.resize(height * width, Val::<SC>::ZERO);
+        for row_index in rows_used..height {
+            (harness.fill_padding)(&mut values[row_index * width..(row_index + 1) * width]);
+        }
+        let mut trace = RowMajorMatrix::new(values, width);
+        modify_trace(&mut trace);
+        self.air_ctxs
+            .push((air, AirProvingContext::simple_no_pis(trace)));
         self
     }
 

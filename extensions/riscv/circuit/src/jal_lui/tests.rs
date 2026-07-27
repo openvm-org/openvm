@@ -2,9 +2,11 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, VmAirWrapper, VmChipWrapper,
+        testing::{
+            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        },
+        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
+        PreflightProgramEvent, VmAirWrapper, VmChipWrapper,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -106,23 +108,27 @@ fn create_harness(
         tester.range_checker(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64JalLuiOpcode,
     imm: Option<i32>,
     initial_pc: Option<u32>,
     rd_ptr: Option<usize>,
-) where
-    Rv64JalLuiExecutor: PreflightExecutor<F, RA>,
-{
+) {
     let is_jal = opcode == JAL;
     let imm = imm.unwrap_or_else(|| {
         if is_jal {
@@ -152,7 +158,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
     tester.execute_with_pc(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -192,7 +198,7 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -206,61 +212,6 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn postflight_jal_lui_trace_matches_record_arena_trace() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, _) = create_harness(&tester);
-    let jal = Instruction::from_usize(
-        JAL.global_opcode(),
-        [8, 0, 8, RV64_REGISTER_AS as usize, 0, 1],
-    );
-    let lui = Instruction::from_usize(
-        LUI.global_opcode(),
-        [0, 0, 0x80000, RV64_REGISTER_AS as usize, 0, 0],
-    );
-    let filler = lui.clone();
-    let sentinel = lui.clone();
-
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &jal, 0);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &lui, 8);
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 2,
-            },
-            PreflightProgramEvent {
-                pc: 12,
-                timestamp: 3,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[jal, filler, lui, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -298,7 +249,7 @@ fn run_negative_jal_lui_test_with_rd_ptr(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         initial_imm,
@@ -452,7 +403,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
     tester.execute_with_pc(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::large_from_isize(
             LUI.global_opcode(),
             rd_ptr as isize,
@@ -604,7 +555,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LUI,
         Some((1 << 20) - 1),
@@ -614,7 +565,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         JAL,
         Some((1i32 << (RV_J_TYPE_IMM_BITS - 1)) - 1),
@@ -641,7 +592,7 @@ fn jal_x0_write_suppression_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         JAL,
         Some((1 << 19) + 2),

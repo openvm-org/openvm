@@ -7,11 +7,11 @@ use std::{
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller,
+        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
+        PreflightProgramEvent,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -144,7 +144,13 @@ fn create_harness(
         range_tuple_chip.clone(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, cpu_chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        cpu_chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (
         harness,
@@ -157,10 +163,10 @@ fn create_harness(
 /// Only the low 32-bit word participates in the core div/rem relation; upper bytes are
 /// consumed by adapter full-width read constraints.
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
     b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
@@ -189,9 +195,12 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
 
     // Write full 8-byte registers. Upper bytes are arbitrary and remain adapter-constrained.
-    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mut rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    while rs2_ptr == rs1_ptr {
+        rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    }
+    let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));
@@ -208,7 +217,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(opcode.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 0]),
     );
 
@@ -228,17 +237,17 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
 // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
-fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
 ) {
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some(word_to_register([98, 188, 163, 127])),
@@ -247,7 +256,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some(word_to_register([98, 188, 163, 229])),
@@ -256,7 +265,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some(word_to_register([0, 0, 0, 128])),
@@ -265,7 +274,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some(word_to_register([0, 0, 0, 127])),
@@ -274,7 +283,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some(word_to_register([0, 0, 0, 0])),
@@ -283,7 +292,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some(word_to_register([0, 0, 0, 128])),
@@ -311,7 +320,7 @@ fn rand_divremw_test(opcode: DivRemWOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -321,7 +330,7 @@ fn rand_divremw_test(opcode: DivRemWOpcode, num_ops: usize) {
     set_and_execute_special_cases(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
     );
@@ -364,106 +373,6 @@ fn range_tuple_counts(chip: &SharedRangeTupleCheckerChip<2>) -> Vec<(usize, u32)
         .collect()
 }
 
-#[test]
-fn postflight_divremw_trace_and_lookups_match_record_arena() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, (_, bitwise_chip), (_, range_tuple_chip)) = create_harness(&tester);
-    let cases = [
-        (
-            DIVW,
-            [0, 0, 0, 128, 17, 34, 51, 68],
-            [255, 255, 255, 255, 85, 102, 119, 136],
-        ),
-        (
-            DIVUW,
-            [98, 188, 163, 127, 153, 170, 187, 204],
-            [0, 0, 0, 0, 221, 238, 15, 30],
-        ),
-        (
-            REMW,
-            [10, 0, 0, 0, 45, 60, 75, 90],
-            [3, 0, 0, 0, 105, 120, 135, 150],
-        ),
-        (
-            REMUW,
-            [255, 1, 0, 0, 165, 180, 195, 210],
-            [7, 0, 0, 0, 225, 240, 1, 2],
-        ),
-    ];
-    let instructions = array::from_fn::<_, 4, _>(|index| {
-        let rs1_ptr = 8 + index * 24;
-        let rs2_ptr = rs1_ptr + 8;
-        let rd_ptr = rs2_ptr + 8;
-        unsafe {
-            tester.memory.memory.data.write::<u16, 4>(
-                RV64_REGISTER_AS,
-                (rs1_ptr / 2) as u32,
-                rv64_bytes_to_u16_block(cases[index].1),
-            );
-            tester.memory.memory.data.write::<u16, 4>(
-                RV64_REGISTER_AS,
-                (rs2_ptr / 2) as u32,
-                rv64_bytes_to_u16_block(cases[index].2),
-            );
-        }
-        Instruction::from_usize(
-            cases[index].0.global_opcode(),
-            [rd_ptr, rs1_ptr, rs2_ptr, RV64_REGISTER_AS as usize, 0],
-        )
-    });
-    for (index, instruction) in instructions.iter().enumerate() {
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.arena,
-            instruction,
-            (index * 4) as u32,
-        );
-    }
-
-    let sentinel = Instruction::from_usize(
-        DIVW.global_opcode(),
-        [24, 8, 16, RV64_REGISTER_AS as usize, 0],
-    );
-    let history = PreflightHistory {
-        program: (0..=instructions.len())
-            .map(|index| PreflightProgramEvent {
-                pc: (index * 4) as u32,
-                timestamp: 1 + (index * 3) as u32,
-            })
-            .collect(),
-        memory: tester.memory.memory.take_log(),
-    };
-    let mut program_instructions = instructions.to_vec();
-    program_instructions.push(sentinel);
-    let program = Program::new_without_debug_infos(&program_instructions, 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    let expected_bitwise = bitwise_counts(&bitwise_chip);
-    let expected_range_tuple = range_tuple_counts(&range_tuple_chip);
-    bitwise_chip.clear();
-    range_tuple_chip.clear();
-
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_bitwise = bitwise_counts(&bitwise_chip);
-    let actual_range_tuple = range_tuple_counts(&range_tuple_chip);
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-    assert_eq!(actual_bitwise, expected_bitwise);
-    assert_eq!(actual_range_tuple, expected_range_tuple);
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
@@ -498,7 +407,7 @@ fn run_negative_divremw_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),

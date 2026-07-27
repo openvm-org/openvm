@@ -13,6 +13,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
+use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -287,6 +288,24 @@ pub fn try_rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> Option<u32
 #[inline(always)]
 pub fn rv64_address_add_imm(base: u32, imm_extended: u32) -> u64 {
     u64::from(base).wrapping_add(sext32_to_u64(imm_extended))
+}
+
+#[inline(always)]
+pub(crate) fn checked_rv64_memory_address(
+    pc: u32,
+    base: u32,
+    imm_extended: u32,
+    access_width: usize,
+) -> Result<u32, ExecutionError> {
+    debug_assert!(access_width <= MEM_SIZE);
+    let address = rv64_address_add_imm(base, imm_extended);
+    if address > (MEM_SIZE - access_width) as u64 {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "effective address exceeds implemented memory address space",
+        });
+    }
+    Ok(address as u32)
 }
 
 #[inline(always)]

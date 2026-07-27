@@ -11,6 +11,8 @@ pub use config::*;
 use openvm_circuit::system::memory::SharedMemoryHelper;
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 pub(crate) use trace::generate_trace_from_postflight as generate_main_trace_from_postflight;
+#[cfg(test)]
+pub(crate) use trace::generate_trace_from_postflights as generate_main_trace_from_postflights;
 
 use crate::Sha2Config;
 
