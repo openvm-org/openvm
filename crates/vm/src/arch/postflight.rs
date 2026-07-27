@@ -1,6 +1,8 @@
 use std::{
     collections::{hash_map::Entry, BTreeMap},
+    mem::{align_of, size_of, MaybeUninit},
     ops::Range,
+    ptr,
 };
 
 use openvm_instructions::{
@@ -8,11 +10,15 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_stark_backend::p3_field::Field;
+use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 
-use super::{PreflightHistory, BLOCK_FE_WIDTH};
+use super::{
+    ExecutionState, MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory,
+    ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
+};
+use crate::system::{TouchedBlock, TouchedMemory};
 
 const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const PREDECESSOR_INDEX_MASK: u32 = !PREDECESSOR_SEED_BIT;
@@ -39,6 +45,13 @@ pub struct U16Access {
     pub timestamp: u32,
 }
 
+pub struct Field32Access<F> {
+    pub value: [F; BLOCK_FE_WIDTH],
+    pub previous_value: [F; BLOCK_FE_WIDTH],
+    pub previous_timestamp: u32,
+    pub timestamp: u32,
+}
+
 /// Read-only indexes derived from one serial preflight history.
 ///
 /// Steps are grouped by opcode for parallel trace generation. Memory remains
@@ -47,10 +60,14 @@ pub struct U16Access {
 pub struct Postflight<'a, F> {
     program: &'a Program<F>,
     history: &'a PreflightHistory,
+    memory_config: &'a MemoryConfig,
+    exit_code: Option<u32>,
     steps: Vec<PostflightStep>,
     memory_starts: Vec<u32>,
     opcode_ranges: BTreeMap<u32, Range<usize>>,
+    filtered_exec_frequencies: Vec<u32>,
     memory_predecessors: Vec<u32>,
+    touched_memory: TouchedMemory<F>,
 }
 
 #[derive(Debug, Error)]
@@ -63,19 +80,48 @@ impl PostflightError {
     }
 }
 
-impl<'a, F: Field> Postflight<'a, F> {
+impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new(
         program: &'a Program<F>,
         history: &'a PreflightHistory,
+        memory_config: &'a MemoryConfig,
         exit_code: Option<u32>,
     ) -> Result<Self, PostflightError> {
+        validate_memory_config::<F>(memory_config)?;
+        validate_program_timestamps(history, memory_config)?;
         let memory_starts = memory_starts(history)?;
         let mut opcode_counts = BTreeMap::<u32, usize>::new();
+        let mut dense_program_rows = Vec::with_capacity(program.instructions_and_debug_infos.len());
+        let mut filtered_exec_frequencies = Vec::new();
+        for instruction in &program.instructions_and_debug_infos {
+            if instruction.is_some() {
+                dense_program_rows.push(filtered_exec_frequencies.len());
+                filtered_exec_frequencies.push(0u32);
+            } else {
+                dense_program_rows.push(usize::MAX);
+            }
+        }
         let mut opcodes = Vec::with_capacity(memory_starts.len() - 1);
         for program_index in 0..memory_starts.len() - 1 {
-            let opcode = resolve_instruction(program, history, program_index)?.opcode;
+            let slot = resolve_program_slot(program, history, program_index)?;
+            let instruction = &program.instructions_and_debug_infos[slot]
+                .as_ref()
+                .expect("resolve_program_slot rejects gaps")
+                .0;
+            let opcode = instruction.opcode;
             validate_step(history, program_index, opcode, exit_code)?;
+            if opcode == SystemOpcode::TERMINATE.global_opcode()
+                && exit_code != Some(instruction.c.as_canonical_u32())
+            {
+                return Err(PostflightError::new(
+                    "TERMINATE exit code does not match the fetched instruction",
+                ));
+            }
             *opcode_counts.entry(opcode.as_usize() as u32).or_default() += 1;
+            let frequency = &mut filtered_exec_frequencies[dense_program_rows[slot]];
+            *frequency = frequency
+                .checked_add(1)
+                .ok_or_else(|| PostflightError::new("program frequency exceeds u32::MAX"))?;
             opcodes.push(opcode);
         }
         validate_endpoint(program, history, exit_code)?;
@@ -103,14 +149,18 @@ impl<'a, F: Field> Postflight<'a, F> {
             *destination += 1;
         }
 
-        let memory_predecessors = memory_predecessors(history)?;
+        let (memory_predecessors, touched_memory) = memory_index::<F>(history, memory_config)?;
         Ok(Self {
             program,
             history,
+            memory_config,
+            exit_code,
             steps,
             memory_starts,
             opcode_ranges,
+            filtered_exec_frequencies,
             memory_predecessors,
+            touched_memory,
         })
     }
 
@@ -131,6 +181,32 @@ impl<'a, F: Field> Postflight<'a, F> {
 
     pub fn timestamp(&self, step: PostflightStep) -> u32 {
         self.history.program[step.0 as usize].timestamp
+    }
+
+    pub fn from_state(&self) -> ExecutionState<u32> {
+        let first = self.history.program[0];
+        ExecutionState::new(first.pc, first.timestamp)
+    }
+
+    pub fn to_state(&self) -> ExecutionState<u32> {
+        let last = *self
+            .history
+            .program
+            .last()
+            .expect("postflight requires a final sentinel");
+        ExecutionState::new(last.pc, last.timestamp)
+    }
+
+    pub fn exit_code(&self) -> Option<u32> {
+        self.exit_code
+    }
+
+    pub fn filtered_exec_frequencies(&self) -> &[u32] {
+        &self.filtered_exec_frequencies
+    }
+
+    pub fn touched_memory(&self) -> &[TouchedBlock<F>] {
+        &self.touched_memory
     }
 
     pub fn replay(&self, step: PostflightStep) -> PostflightReplay<'_, 'a, F> {
@@ -163,9 +239,31 @@ impl<'a, F: Field> Postflight<'a, F> {
             self.history.memory.accesses[predecessor as usize - 1].value
         }
     }
+
+    fn field_value(&self, event_index: usize) -> [F; BLOCK_FE_WIDTH] {
+        decode_field_block::<F>(
+            self.history.memory.field_values
+                [field_reference(self.history.memory.accesses[event_index].value)],
+        )
+    }
+
+    fn previous_field32(&self, event_index: usize) -> [F; BLOCK_FE_WIDTH] {
+        let predecessor = self.memory_predecessors[event_index];
+        if predecessor == 0 {
+            self.field_value(event_index)
+        } else if predecessor & PREDECESSOR_SEED_BIT != 0 {
+            let seed =
+                self.history.memory.initial_writes[(predecessor & PREDECESSOR_INDEX_MASK) as usize];
+            decode_field_block::<F>(
+                self.history.memory.field_initial_values[field_reference(seed.initial_value)],
+            )
+        } else {
+            self.field_value(predecessor as usize - 1)
+        }
+    }
 }
 
-impl<F: Field> PostflightReplay<'_, '_, F> {
+impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
     pub fn read_u16(
         &mut self,
         address_space: u32,
@@ -193,6 +291,31 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
         self.access_u16(address_space, pointer, true, None)
     }
 
+    pub fn read_field32(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+    ) -> Result<Field32Access<F>, PostflightError> {
+        self.access_field32(address_space, pointer, false, None)
+    }
+
+    pub fn write_field32(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        expected_value: [F; BLOCK_FE_WIDTH],
+    ) -> Result<Field32Access<F>, PostflightError> {
+        self.access_field32(address_space, pointer, true, Some(expected_value))
+    }
+
+    pub fn write_observed_field32(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+    ) -> Result<Field32Access<F>, PostflightError> {
+        self.access_field32(address_space, pointer, true, None)
+    }
+
     /// Resolves an untimed peek from the memory version immediately after the
     /// already-consumed timed-event prefix. Peeks append nothing and do not
     /// advance the logical timestamp. A proof-visible peek must be anchored by
@@ -202,6 +325,7 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
         address_space: u32,
         pointer: u32,
     ) -> Result<[u16; BLOCK_FE_WIDTH], PostflightError> {
+        self.validate_access_layout(address_space, MemoryCellType::U16)?;
         let program_index = self.step.0 as usize;
         let memory_start = self.postflight.memory_starts[program_index] as usize;
         let memory_end = self.postflight.memory_starts[program_index + 1] as usize;
@@ -222,6 +346,39 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
             .position(|event| event.address_space() == address_space && event.pointer == pointer)
         {
             return Ok(self.postflight.previous_u16(self.memory_cursor + offset));
+        }
+        Err(PostflightError::new(format!(
+            "instruction at PC {:#x} peeked AS={} pointer={} without a timed event",
+            self.postflight.pc(self.step),
+            address_space,
+            pointer
+        )))
+    }
+
+    pub fn peek_field32(
+        &self,
+        address_space: u32,
+        pointer: u32,
+    ) -> Result<[F; BLOCK_FE_WIDTH], PostflightError> {
+        self.validate_access_layout(address_space, MemoryCellType::field32())?;
+        let program_index = self.step.0 as usize;
+        let memory_start = self.postflight.memory_starts[program_index] as usize;
+        let memory_end = self.postflight.memory_starts[program_index + 1] as usize;
+        if let Some(offset) = self.postflight.history.memory.accesses
+            [memory_start..self.memory_cursor]
+            .iter()
+            .rposition(|event| event.address_space() == address_space && event.pointer == pointer)
+        {
+            return Ok(self.postflight.field_value(memory_start + offset));
+        }
+        if let Some(offset) = self.postflight.history.memory.accesses
+            [self.memory_cursor..memory_end]
+            .iter()
+            .position(|event| event.address_space() == address_space && event.pointer == pointer)
+        {
+            return Ok(self
+                .postflight
+                .previous_field32(self.memory_cursor + offset));
         }
         Err(PostflightError::new(format!(
             "instruction at PC {:#x} peeked AS={} pointer={} without a timed event",
@@ -275,6 +432,7 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
         is_write: bool,
         expected_write: Option<[u16; BLOCK_FE_WIDTH]>,
     ) -> Result<U16Access, PostflightError> {
+        self.validate_access_layout(address_space, MemoryCellType::U16)?;
         let memory_end = self.postflight.memory_starts[self.step.0 as usize + 1] as usize;
         if self.memory_cursor >= memory_end {
             return Err(PostflightError::new(format!(
@@ -313,6 +471,75 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
             .checked_add(1)
             .ok_or_else(|| PostflightError::new("logical timestamp overflow"))?;
         Ok(access)
+    }
+
+    fn access_field32(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        is_write: bool,
+        expected_write: Option<[F; BLOCK_FE_WIDTH]>,
+    ) -> Result<Field32Access<F>, PostflightError> {
+        self.validate_access_layout(address_space, MemoryCellType::field32())?;
+        let memory_end = self.postflight.memory_starts[self.step.0 as usize + 1] as usize;
+        if self.memory_cursor >= memory_end {
+            return Err(PostflightError::new(format!(
+                "instruction at PC {:#x} has too few memory events",
+                self.postflight.pc(self.step)
+            )));
+        }
+        let event = self.postflight.history.memory.accesses[self.memory_cursor];
+        if event.timestamp != self.timestamp
+            || event.address_space() != address_space
+            || event.pointer != pointer
+            || event.is_write() != is_write
+        {
+            return Err(PostflightError::new(format!(
+                "instruction at PC {:#x} has an invalid memory event at timestamp {}",
+                self.postflight.pc(self.step),
+                self.timestamp
+            )));
+        }
+        let value = self.postflight.field_value(self.memory_cursor);
+        if expected_write.is_some_and(|expected| expected != value) {
+            return Err(PostflightError::new(format!(
+                "instruction at PC {:#x} logged an unexpected write at timestamp {}",
+                self.postflight.pc(self.step),
+                self.timestamp
+            )));
+        }
+        let access = Field32Access {
+            value,
+            previous_value: self.postflight.previous_field32(self.memory_cursor),
+            previous_timestamp: self.postflight.previous_timestamp(self.memory_cursor),
+            timestamp: self.timestamp,
+        };
+        self.memory_cursor += 1;
+        self.timestamp = self
+            .timestamp
+            .checked_add(1)
+            .ok_or_else(|| PostflightError::new("logical timestamp overflow"))?;
+        Ok(access)
+    }
+
+    fn validate_access_layout(
+        &self,
+        address_space: u32,
+        expected: MemoryCellType,
+    ) -> Result<(), PostflightError> {
+        let actual = self
+            .postflight
+            .memory_config
+            .addr_spaces
+            .get(address_space as usize)
+            .map(|config| config.layout);
+        if actual != Some(expected) {
+            return Err(PostflightError::new(format!(
+                "instruction at PC {:#x} replayed AS={address_space} with the wrong cell layout",
+                self.postflight.pc(self.step)
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -387,6 +614,18 @@ fn resolve_instruction<'a, F: Field>(
     history: &PreflightHistory,
     program_index: usize,
 ) -> Result<&'a Instruction<F>, PostflightError> {
+    let slot = resolve_program_slot(program, history, program_index)?;
+    Ok(&program.instructions_and_debug_infos[slot]
+        .as_ref()
+        .expect("resolve_program_slot rejects gaps")
+        .0)
+}
+
+fn resolve_program_slot<F: Field>(
+    program: &Program<F>,
+    history: &PreflightHistory,
+    program_index: usize,
+) -> Result<usize, PostflightError> {
     let pc = history.program[program_index].pc;
     let delta = pc.checked_sub(program.pc_base).ok_or_else(|| {
         PostflightError::new(format!("program log PC {pc:#x} precedes the program base"))
@@ -396,9 +635,12 @@ fn resolve_instruction<'a, F: Field>(
             "program log PC {pc:#x} is not instruction-aligned"
         )));
     }
+    let slot = (delta / DEFAULT_PC_STEP) as usize;
     program
-        .get_instruction_and_debug_info((delta / DEFAULT_PC_STEP) as usize)
-        .map(|(instruction, _)| instruction)
+        .instructions_and_debug_infos
+        .get(slot)
+        .and_then(Option::as_ref)
+        .map(|_| slot)
         .ok_or_else(|| {
             PostflightError::new(format!(
                 "program log PC {pc:#x} points to an undefined instruction"
@@ -448,7 +690,150 @@ fn validate_endpoint<F: Field>(
     Ok(())
 }
 
-fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, PostflightError> {
+fn validate_memory_config<F: PrimeField32>(config: &MemoryConfig) -> Result<(), PostflightError> {
+    if config.pointer_max_bits > u32::BITS as usize
+        || config.addr_space_height >= u32::BITS as usize
+        || config.timestamp_max_bits >= u32::BITS as usize
+    {
+        return Err(PostflightError::new(
+            "address-space height, pointer width, and timestamp width must fit u32",
+        ));
+    }
+    if config.pointer_max_bits < BLOCK_FE_WIDTH.ilog2() as usize {
+        return Err(PostflightError::new(
+            "pointer width is smaller than one memory block",
+        ));
+    }
+    let address_space_count = 1usize
+        .checked_shl(config.addr_space_height as u32)
+        .ok_or_else(|| PostflightError::new("address-space count overflow"))?;
+    let expected_address_spaces = (ADDR_SPACE_OFFSET as usize)
+        .checked_add(address_space_count)
+        .ok_or_else(|| PostflightError::new("address-space count overflow"))?;
+    if config.addr_spaces.len() != expected_address_spaces {
+        return Err(PostflightError::new(format!(
+            "expected {expected_address_spaces} address-space layouts, found {}",
+            config.addr_spaces.len()
+        )));
+    }
+    if config
+        .addr_spaces
+        .iter()
+        .any(|address_space| address_space.layout == MemoryCellType::field32())
+        && (size_of::<F>() != size_of::<u32>() || align_of::<F>() > align_of::<u32>())
+    {
+        return Err(PostflightError::new(
+            "field32 memory requires a 4-byte proof field with at most 4-byte alignment",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_program_timestamps(
+    history: &PreflightHistory,
+    config: &MemoryConfig,
+) -> Result<(), PostflightError> {
+    let timestamp_limit = 1u64 << config.timestamp_max_bits;
+    for (index, event) in history.program.iter().enumerate() {
+        if u64::from(event.timestamp) >= timestamp_limit {
+            return Err(PostflightError::new(format!(
+                "program event {index} timestamp exceeds the configured domain"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_memory_block(
+    address_space: u32,
+    pointer: u32,
+    config: &MemoryConfig,
+) -> Result<MemoryCellType, PostflightError> {
+    let address_space_limit = u64::from(ADDR_SPACE_OFFSET) + (1u64 << config.addr_space_height);
+    let address_space_config = config
+        .addr_spaces
+        .get(address_space as usize)
+        .filter(|_| {
+            address_space >= ADDR_SPACE_OFFSET && u64::from(address_space) < address_space_limit
+        })
+        .ok_or_else(|| {
+            PostflightError::new(format!("address space {address_space} is out of range"))
+        })?;
+    if !matches!(
+        address_space_config.layout,
+        MemoryCellType::U16 | MemoryCellType::F { size: 4 }
+    ) {
+        return Err(PostflightError::new(format!(
+            "address space {address_space} must use u16 or field32 cells"
+        )));
+    }
+    let pointer_limit = 1u64 << config.pointer_max_bits;
+    let end = u64::from(pointer)
+        .checked_add(BLOCK_FE_WIDTH as u64)
+        .ok_or_else(|| PostflightError::new("memory block pointer overflow"))?;
+    if !pointer.is_multiple_of(BLOCK_FE_WIDTH as u32)
+        || u64::from(pointer) >= pointer_limit
+        || end > pointer_limit
+        || end > address_space_config.num_cells as u64
+    {
+        return Err(PostflightError::new(format!(
+            "memory block AS={address_space} pointer={pointer} is out of range or misaligned"
+        )));
+    }
+    Ok(address_space_config.layout)
+}
+
+fn field_reference(value: [u16; BLOCK_FE_WIDTH]) -> usize {
+    usize::try_from(u32::from(value[0]) | (u32::from(value[1]) << 16)).unwrap()
+}
+
+fn validate_field_reference(
+    value: [u16; BLOCK_FE_WIDTH],
+    expected: usize,
+    sidecar_len: usize,
+    kind: &str,
+) -> Result<(), PostflightError> {
+    let reference = field_reference(value);
+    if value[2] != 0 || value[3] != 0 || reference != expected || reference >= sidecar_len {
+        return Err(PostflightError::new(format!(
+            "field {kind} must use dense ordered sidecar references"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_field_block<F: PrimeField32>(
+    block: PreflightFieldBlock,
+) -> Result<(), PostflightError> {
+    if block.values.iter().any(|&value| value >= F::ORDER_U32) {
+        return Err(PostflightError::new(
+            "field sidecar contains a non-canonical raw field value",
+        ));
+    }
+    Ok(())
+}
+
+fn decode_field_block<F: PrimeField32>(block: PreflightFieldBlock) -> [F; BLOCK_FE_WIDTH] {
+    debug_assert_eq!(size_of::<F>(), size_of::<u32>());
+    debug_assert!(align_of::<F>() <= align_of::<u32>());
+    debug_assert!(block.values.iter().all(|&value| value < F::ORDER_U32));
+    let mut output = MaybeUninit::<[F; BLOCK_FE_WIDTH]>::uninit();
+    // SAFETY: construction validated that F is a 4-byte field with no stricter
+    // alignment than u32, and each raw word is a valid in-memory field value.
+    unsafe {
+        ptr::copy_nonoverlapping(
+            block.values.as_ptr().cast::<u8>(),
+            output.as_mut_ptr().cast::<u8>(),
+            size_of::<[F; BLOCK_FE_WIDTH]>(),
+        );
+        output.assume_init()
+    }
+}
+
+fn memory_index<F: PrimeField32>(
+    history: &PreflightHistory,
+    config: &MemoryConfig,
+) -> Result<(Vec<u32>, TouchedMemory<F>), PostflightError> {
     let memory = &history.memory.accesses;
     let seeds = &history.memory.initial_writes;
     if memory.len() >= PREDECESSOR_INDEX_MASK as usize
@@ -460,7 +845,28 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
     }
 
     let mut seed_by_block = FxHashMap::default();
+    let mut field_seed_cursor = 0usize;
     for (index, seed) in seeds.iter().enumerate() {
+        if seed.address_space & rvr_state::PREFLIGHT_WRITE_BIT != 0 {
+            return Err(PostflightError::new(
+                "initial-write seed address space contains the write bit",
+            ));
+        }
+        let layout = validate_memory_block(seed.address_space, seed.pointer, config)?;
+        match layout {
+            MemoryCellType::U16 => {}
+            MemoryCellType::F { size: 4 } => {
+                validate_field_reference(
+                    seed.initial_value,
+                    field_seed_cursor,
+                    history.memory.field_initial_values.len(),
+                    "initial-write seed",
+                )?;
+                validate_field_block::<F>(history.memory.field_initial_values[field_seed_cursor])?;
+                field_seed_cursor += 1;
+            }
+            _ => unreachable!("validate_memory_block rejects other layouts"),
+        }
         let key = memory_key(seed.address_space, seed.pointer);
         if seed_by_block
             .insert(key, u32::try_from(index).unwrap())
@@ -472,11 +878,48 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
             )));
         }
     }
+    if field_seed_cursor != history.memory.field_initial_values.len() {
+        return Err(PostflightError::new(
+            "field initial-value sidecar contains unreferenced values",
+        ));
+    }
 
     let mut last_event = FxHashMap::<u64, u32>::default();
     let mut predecessors = Vec::with_capacity(memory.len());
+    let mut final_blocks = BTreeMap::<u64, (usize, bool)>::new();
+    let mut previous_timestamp = None;
+    let timestamp_limit = 1u64 << config.timestamp_max_bits;
+    let mut field_event_cursor = 0usize;
     for (event_index, event) in memory.iter().enumerate() {
-        let key = memory_key(event.address_space(), event.pointer);
+        let address_space = event.address_space();
+        let layout = validate_memory_block(address_space, event.pointer, config)?;
+        if u64::from(event.timestamp) >= timestamp_limit {
+            return Err(PostflightError::new(format!(
+                "memory event {event_index} timestamp exceeds the configured domain"
+            )));
+        }
+        if previous_timestamp.is_some_and(|previous| previous >= event.timestamp) {
+            return Err(PostflightError::new(
+                "memory timestamps are not strictly increasing",
+            ));
+        }
+        previous_timestamp = Some(event.timestamp);
+        match layout {
+            MemoryCellType::U16 => {}
+            MemoryCellType::F { size: 4 } => {
+                validate_field_reference(
+                    event.value,
+                    field_event_cursor,
+                    history.memory.field_values.len(),
+                    "memory event",
+                )?;
+                validate_field_block::<F>(history.memory.field_values[field_event_cursor])?;
+                field_event_cursor += 1;
+            }
+            _ => unreachable!("validate_memory_block rejects other layouts"),
+        }
+
+        let key = memory_key(address_space, event.pointer);
         let event_index = u32::try_from(event_index).unwrap();
         let predecessor = match last_event.entry(key) {
             Entry::Occupied(mut previous) => {
@@ -489,8 +932,7 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
                     let seed_index = seed_by_block.remove(&key).ok_or_else(|| {
                         PostflightError::new(format!(
                             "first event is a write without a seed for AS={} pointer={}",
-                            event.address_space(),
-                            event.pointer
+                            address_space, event.pointer
                         ))
                     })?;
                     PREDECESSOR_SEED_BIT | seed_index
@@ -502,6 +944,18 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
             }
         };
         predecessors.push(predecessor);
+        final_blocks
+            .entry(key)
+            .and_modify(|(last_event_index, dirty)| {
+                *last_event_index = event_index as usize;
+                *dirty |= event.is_write();
+            })
+            .or_insert((event_index as usize, event.is_write()));
+    }
+    if field_event_cursor != history.memory.field_values.len() {
+        return Err(PostflightError::new(
+            "field event sidecar contains unreferenced values",
+        ));
     }
     if !seed_by_block.is_empty() {
         return Err(PostflightError::new(format!(
@@ -509,12 +963,36 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
             seed_by_block.len()
         )));
     }
-    Ok(predecessors)
+
+    let touched_memory = final_blocks
+        .into_values()
+        .map(|(event_index, dirty)| {
+            let event = history.memory.accesses[event_index];
+            let values = match config.addr_spaces[event.address_space() as usize].layout {
+                MemoryCellType::U16 => event.value.map(F::from_u16),
+                MemoryCellType::F { size: 4 } => decode_field_block::<F>(
+                    history.memory.field_values[field_reference(event.value)],
+                ),
+                _ => unreachable!("memory layouts were validated above"),
+            };
+            TouchedBlock {
+                address_space: event.address_space(),
+                ptr: event.pointer,
+                is_dirty: u32::from(dirty),
+                timestamp: event.timestamp,
+                values,
+            }
+        })
+        .collect();
+    Ok((predecessors, touched_memory))
 }
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{program::Program, SystemOpcode};
+    use openvm_instructions::{
+        program::Program, riscv::RV64_REGISTER_AS, SystemOpcode, DEFERRAL_AS,
+    };
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rvr_state::PREFLIGHT_WRITE_BIT;
 
@@ -563,7 +1041,8 @@ mod tests {
                 ..Default::default()
             },
         };
-        let postflight = Postflight::new(&program, &history, None).unwrap();
+        let memory_config = MemoryConfig::default();
+        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
         let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
         let mut replay = postflight.replay(step);
 
@@ -602,7 +1081,8 @@ mod tests {
                 ..Default::default()
             },
         };
-        let postflight = Postflight::new(&program, &history, None).unwrap();
+        let memory_config = MemoryConfig::default();
+        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
         let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
         let mut replay = postflight.replay(step);
 
@@ -611,5 +1091,211 @@ mod tests {
         assert_eq!(replay.read_u16(1, 0).unwrap().value, [7, 0, 0, 0]);
         assert_eq!(replay.peek_u16(1, 0).unwrap(), [7, 0, 0, 0]);
         replay.finish(4).unwrap();
+    }
+
+    fn raw_baby_bear(value: BabyBear) -> u32 {
+        // BabyBear field32 memory stores one raw Montgomery u32 per cell.
+        unsafe { std::mem::transmute(value) }
+    }
+
+    fn field_block(values: [u32; BLOCK_FE_WIDTH]) -> PreflightFieldBlock {
+        PreflightFieldBlock {
+            values: values.map(|value| raw_baby_bear(BabyBear::from_u32(value))),
+        }
+    }
+
+    fn compact_reference(index: u32) -> [u16; BLOCK_FE_WIDTH] {
+        [index as u16, (index >> 16) as u16, 0, 0]
+    }
+
+    fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
+        let instruction =
+            Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
+        let program =
+            Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 5,
+                },
+            ],
+            memory: PreflightMemoryLog {
+                accesses: vec![
+                    PreflightMemoryEvent {
+                        timestamp: 1,
+                        address_space_and_kind: RV64_REGISTER_AS,
+                        pointer: 0,
+                        value: [1, 2, 3, 4],
+                    },
+                    PreflightMemoryEvent {
+                        timestamp: 2,
+                        address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+                        pointer: 0,
+                        value: [5, 6, 7, 8],
+                    },
+                    PreflightMemoryEvent {
+                        timestamp: 3,
+                        address_space_and_kind: DEFERRAL_AS | PREFLIGHT_WRITE_BIT,
+                        pointer: 0,
+                        value: compact_reference(0),
+                    },
+                    PreflightMemoryEvent {
+                        timestamp: 4,
+                        address_space_and_kind: DEFERRAL_AS,
+                        pointer: 0,
+                        value: compact_reference(1),
+                    },
+                ],
+                initial_writes: vec![PreflightInitialWrite {
+                    address_space: DEFERRAL_AS,
+                    pointer: 0,
+                    initial_value: compact_reference(0),
+                }],
+                field_values: vec![field_block([21, 22, 23, 24]), field_block([31, 32, 33, 34])],
+                field_initial_values: vec![field_block([11, 12, 13, 14])],
+            },
+        };
+        (program, history)
+    }
+
+    #[test]
+    fn derives_boundary_frequencies_and_mixed_touched_memory() {
+        let (program, history) = mixed_history();
+        let memory_config = MemoryConfig::default();
+        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+
+        assert_eq!(postflight.from_state(), ExecutionState::new(0u32, 1u32));
+        assert_eq!(postflight.to_state(), ExecutionState::new(4u32, 5u32));
+        assert_eq!(postflight.exit_code(), None);
+        assert_eq!(postflight.filtered_exec_frequencies(), [1, 0]);
+        assert_eq!(
+            postflight
+                .touched_memory()
+                .iter()
+                .map(|block| (
+                    block.address_space,
+                    block.ptr,
+                    block.is_dirty,
+                    block.timestamp
+                ))
+                .collect::<Vec<_>>(),
+            [(RV64_REGISTER_AS, 0, 1, 2), (DEFERRAL_AS, 0, 1, 4),]
+        );
+        assert_eq!(
+            postflight.touched_memory()[0]
+                .values
+                .map(|value| value.as_canonical_u32()),
+            [5, 6, 7, 8]
+        );
+        assert_eq!(
+            postflight.touched_memory()[1]
+                .values
+                .map(|value| value.as_canonical_u32()),
+            [31, 32, 33, 34]
+        );
+
+        let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
+        let mut replay = postflight.replay(step);
+        let read = replay.read_u16(RV64_REGISTER_AS, 0).unwrap();
+        assert_eq!(read.value, [1, 2, 3, 4]);
+        assert_eq!(read.previous_value, read.value);
+        let write = replay.write_u16(RV64_REGISTER_AS, 0, [5, 6, 7, 8]).unwrap();
+        assert_eq!(write.previous_value, [1, 2, 3, 4]);
+        let field_write = replay
+            .write_field32(DEFERRAL_AS, 0, [21, 22, 23, 24].map(BabyBear::from_u32))
+            .unwrap();
+        assert_eq!(
+            field_write
+                .previous_value
+                .map(|value| value.as_canonical_u32()),
+            [11, 12, 13, 14]
+        );
+        let field_read = replay.read_field32(DEFERRAL_AS, 0).unwrap();
+        assert_eq!(
+            field_read
+                .previous_value
+                .map(|value| value.as_canonical_u32()),
+            [21, 22, 23, 24]
+        );
+        replay.finish(4).unwrap();
+    }
+
+    #[test]
+    fn retains_a_terminated_boundary_and_frequency() {
+        let exit_code = 7;
+        let terminate = Instruction::from_usize(
+            SystemOpcode::TERMINATE.global_opcode(),
+            [0, 0, exit_code as usize, 0, 0],
+        );
+        let program = Program::<BabyBear>::new_without_debug_infos(&[terminate], 0);
+        let boundary = PreflightProgramEvent {
+            pc: 0,
+            timestamp: 1,
+        };
+        let history = PreflightHistory {
+            program: vec![boundary, boundary],
+            ..Default::default()
+        };
+        let memory_config = MemoryConfig::default();
+        let postflight =
+            Postflight::new(&program, &history, &memory_config, Some(exit_code)).unwrap();
+
+        assert_eq!(postflight.from_state(), ExecutionState::new(0u32, 1u32));
+        assert_eq!(postflight.to_state(), ExecutionState::new(0u32, 1u32));
+        assert_eq!(postflight.exit_code(), Some(exit_code));
+        assert_eq!(postflight.filtered_exec_frequencies(), [1]);
+    }
+
+    #[test]
+    fn rejects_invalid_memory_domains_and_field_sidecars() {
+        let memory_config = MemoryConfig::default();
+
+        let (program, mut history) = mixed_history();
+        history.memory.accesses[0].pointer = 1;
+        assert!(Postflight::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("misaligned"));
+
+        let (program, mut history) = mixed_history();
+        history.memory.accesses[2].value = compact_reference(1);
+        assert!(Postflight::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("dense ordered"));
+
+        let (program, mut history) = mixed_history();
+        history.memory.field_values[0].values[0] = BabyBear::ORDER_U32;
+        assert!(Postflight::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("non-canonical"));
+
+        let (program, mut history) = mixed_history();
+        history.program[1].timestamp = 1 << memory_config.timestamp_max_bits;
+        assert!(Postflight::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("timestamp exceeds"));
+
+        let (program, history) = mixed_history();
+        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
+        assert!(postflight
+            .replay(step)
+            .read_u16(DEFERRAL_AS, 0)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("wrong cell layout"));
     }
 }
