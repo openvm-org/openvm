@@ -30,7 +30,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{MeteredCtx, Segment},
         hasher::poseidon2::vm_poseidon2_hasher,
-        rvr::{cuda::GpuPostflightProgram, RvrMeteredInstance},
+        rvr::{cuda::CheckpointReplayProgram, RvrMeteredInstance},
         ContinuationProverFn, ContinuationVmProof, ExecutionError, GenerationError,
         PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, Streams,
         VirtualMachineError, VmInstance,
@@ -49,7 +49,7 @@ struct PreparedPreflight {
     metered: RvrMeteredInstance<'static>,
     metered_ctx: MeteredCtx,
     preflight: PreflightInstance<'static>,
-    gpu_program: GpuPostflightProgram,
+    preflight_program: CheckpointReplayProgram,
 }
 
 impl PreparedPreflight {
@@ -77,14 +77,14 @@ impl PreparedPreflight {
             .preflight_instance(exe)
             .map_err(VirtualMachineError::from)?
             .into_owned();
-        let gpu_program = info_span!("upload_preflight_program")
+        let preflight_program = info_span!("upload_preflight_program")
             .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(&instance.vm, &exe.program))
             .map_err(generation_error)?;
         Ok(Self {
             metered,
             metered_ctx,
             preflight,
-            gpu_program,
+            preflight_program,
         })
     }
 }
@@ -111,7 +111,7 @@ pub(crate) fn continuation_prover(
             &prepared.metered,
             &prepared.metered_ctx,
             &prepared.preflight,
-            &prepared.gpu_program,
+            &prepared.preflight_program,
         )
     })
 }
@@ -123,7 +123,7 @@ fn prove(
     metered: &RvrMeteredInstance<'_>,
     metered_ctx: &MeteredCtx,
     preflight: &PreflightInstance<'_>,
-    gpu_program: &GpuPostflightProgram,
+    preflight_program: &CheckpointReplayProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     instance.reset_state(input.clone());
     let exe = instance.exe().clone();
@@ -134,7 +134,7 @@ fn prove(
         metered,
         metered_ctx,
         preflight,
-        gpu_program,
+        preflight_program,
     );
     if result.is_err() && instance.state().is_none() {
         // Preflight consumes the segment state. If it fails before
@@ -152,7 +152,7 @@ fn prove_inner(
     metered: &RvrMeteredInstance<'_>,
     metered_ctx: &MeteredCtx,
     preflight: &PreflightInstance<'_>,
-    gpu_program: &GpuPostflightProgram,
+    preflight_program: &CheckpointReplayProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     // Meter once. Its exact instruction and residual counts are the only
     // capacities supplied to preflight for each segment.
@@ -218,12 +218,16 @@ fn prove_inner(
         }
         validate_endpoint(&execution, segment_idx + 1 == num_segments)?;
 
-        let (gpu_transcript, replay_plan) =
-            SdkVmGpuBuilder::postflight(&instance.vm, gpu_program, &execution, expected_retired)
-                .map_err(generation_error)?;
+        let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::postflight(
+            &instance.vm,
+            preflight_program,
+            &execution,
+            expected_retired,
+        )
+        .map_err(generation_error)?;
         let ctx = SdkVmGpuBuilder::generate_preflight_proving_ctx(
             &mut instance.vm,
-            gpu_program,
+            preflight_program.program(),
             &gpu_transcript,
             &replay_plan,
         )?;

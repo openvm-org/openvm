@@ -56,8 +56,8 @@ use tracing::{info_span, instrument};
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::rvr::cuda::{
-    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    PostflightOpcodeBases,
+    CheckpointReplayProgram, GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
+    GpuPostflightTranscript, PostflightOpcodeBases,
 };
 #[cfg(feature = "rvr")]
 use super::rvr::{
@@ -1394,7 +1394,7 @@ where
     #[instrument(name = "postflight", skip_all)]
     pub fn postflight(
         &self,
-        program: &GpuPostflightProgram,
+        program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
         opcodes: PostflightOpcodeBases,

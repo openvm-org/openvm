@@ -5,8 +5,8 @@ use openvm_bigint_circuit::Int256PreflightGpuTracegen;
 use openvm_circuit::arch::{
     instructions::program::Program,
     rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-        PostflightAccessRegistry, PostflightOpcodeBases,
+        CheckpointReplayProgram, GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
+        GpuPostflightTranscript, PostflightAccessRegistry, PostflightOpcodeBases,
     },
     GenerationError, PreflightExecution, VirtualMachine,
 };
@@ -50,7 +50,7 @@ impl SdkVmGpuBuilder {
     pub(crate) fn upload_preflight_program<F: PrimeField32>(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
-    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+    ) -> Result<CheckpointReplayProgram, GpuPostflightError> {
         let config = vm.config().to_inner();
         validate_preflight_config(
             config.modular.is_some(),
@@ -86,7 +86,7 @@ impl SdkVmGpuBuilder {
         }
         let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
         registry.validate_no_native_collisions(native)?;
-        GpuPostflightProgram::upload_with_postflight_access_registry(
+        CheckpointReplayProgram::upload_with_postflight_access_registry(
             program,
             &config.system.memory_config,
             &registry,
@@ -103,7 +103,7 @@ impl SdkVmGpuBuilder {
     /// constructing `PreflightLimits`.
     pub(crate) fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &GpuPostflightProgram,
+        program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
