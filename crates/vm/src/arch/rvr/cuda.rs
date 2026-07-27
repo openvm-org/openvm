@@ -18,8 +18,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, RvrCheckpoint};
 
-#[cfg(test)]
-use super::PreflightEventLog;
 use crate::{
     arch::{
         cuda::postflight::{
@@ -1059,10 +1057,7 @@ impl CheckpointReplayProgram {
 
 #[cfg(test)]
 mod tests {
-    use openvm_cuda_common::{
-        copy::{MemCopyD2H, MemCopyH2D},
-        stream::GpuDeviceCtx,
-    };
+    use openvm_cuda_common::stream::GpuDeviceCtx;
     use openvm_instructions::{
         instruction::Instruction, riscv::RV64_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode,
     };
@@ -1075,7 +1070,8 @@ mod tests {
     use super::*;
     use crate::arch::{
         cuda::postflight::build_memory_chronology_for_test as gpu_chronology_with_fields,
-        postflight::PREDECESSOR_SEED_BIT, Postflight, PreflightHistory, PreflightMemoryLog,
+        postflight::PREDECESSOR_SEED_BIT, ExecutionState, MemoryCellType, Postflight,
+        PreflightHistory, ADDR_SPACE_OFFSET,
     };
 
     fn event_value(
@@ -1124,20 +1120,20 @@ mod tests {
 
     fn gpu_plan(
         program: &GpuPostflightProgram,
-        transcript: &PreflightEventLog,
+        history: &PreflightHistory,
         endpoint: PreflightEndpoint,
     ) -> Result<GpuPostflightPlan, GpuPostflightError> {
-        assert!(transcript.memory_log.is_empty());
-        assert!(transcript.initial_write_log.is_empty());
-        let first = transcript.program_log.first().unwrap();
-        let last = transcript.program_log.last().unwrap();
+        assert!(history.memory.accesses.is_empty());
+        assert!(history.memory.initial_writes.is_empty());
+        let first = history.program.first().unwrap();
+        let last = history.program.last().unwrap();
         let boundary = (
             ExecutionState::new(first.pc, first.timestamp),
             ExecutionState::new(last.pc, last.timestamp),
             matches!(endpoint, PreflightEndpoint::Terminated).then_some(0),
         );
         program
-            .index_program_log_for_test(&transcript.program_log, boundary)
+            .index_program_log_for_test(&history.program, boundary)
             .map(|(_, plan)| plan)
     }
 
@@ -1146,21 +1142,19 @@ mod tests {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let program = gpu_program(&[terminate], &device_ctx);
-        let transcript = PreflightEventLog {
-            program_log: vec![PreflightProgramEvent {
+        let history = PreflightHistory {
+            program: vec![PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
             }],
-            memory_log: Vec::new(),
-            initial_write_log: Vec::new(),
+            ..Default::default()
         };
         let state = ExecutionState::new(0u32, 1u32);
-        let error = match program
-            .index_program_log_for_test(&transcript.program_log, (state, state, Some(0)))
-        {
-            Ok(_) => panic!("empty program must not terminate without a terminate step"),
-            Err(error) => error,
-        };
+        let error =
+            match program.index_program_log_for_test(&history.program, (state, state, Some(0))) {
+                Ok(_) => panic!("empty program must not terminate without a terminate step"),
+                Err(error) => error,
+            };
         assert!(error.to_string().contains("code 115"));
     }
 
@@ -1603,8 +1597,8 @@ mod tests {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let opcodes = [100, 200, terminate];
         let program = gpu_program(&opcodes, &device_ctx);
-        let transcript = PreflightEventLog {
-            program_log: vec![
+        let history = PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0,
                     timestamp: 1,
@@ -1630,8 +1624,7 @@ mod tests {
                     timestamp: 5,
                 },
             ],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            ..Default::default()
         };
         let endpoint = PreflightEndpoint::Terminated;
         let cpu_program = Program::<BabyBear>::new_without_debug_infos(
@@ -1642,13 +1635,9 @@ mod tests {
             ],
             0,
         );
-        let history = PreflightHistory {
-            program: transcript.program_log.clone(),
-            memory: PreflightMemoryLog::default(),
-        };
         let expected =
             Postflight::new(&cpu_program, &history, &MemoryConfig::default(), Some(0)).unwrap();
-        let actual = gpu_plan(&program, &transcript, endpoint).unwrap();
+        let actual = gpu_plan(&program, &history, endpoint).unwrap();
         let actual_steps = actual.steps_host().unwrap();
         let expected_steps = expected
             .replay_steps_for_test()
@@ -1694,8 +1683,8 @@ mod tests {
             &device_ctx,
         )
         .unwrap();
-        let transcript = PreflightEventLog {
-            program_log: vec![
+        let history = PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0x100,
                     timestamp: 1,
@@ -1717,10 +1706,9 @@ mod tests {
                     timestamp: 4,
                 },
             ],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            ..Default::default()
         };
-        let plan = gpu_plan(&program, &transcript, PreflightEndpoint::Terminated).unwrap();
+        let plan = gpu_plan(&program, &history, PreflightEndpoint::Terminated).unwrap();
         assert_eq!(plan.program_frequencies_host().unwrap(), vec![2, 1, 0, 1]);
         assert_eq!(
             plan.connector_boundary(),
@@ -1731,8 +1719,8 @@ mod tests {
             )
         );
 
-        let suspended = PreflightEventLog {
-            program_log: vec![
+        let suspended = PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0x100,
                     timestamp: 1,
@@ -1742,8 +1730,7 @@ mod tests {
                     timestamp: 2,
                 },
             ],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            ..Default::default()
         };
         let plan = gpu_plan(&program, &suspended, PreflightEndpoint::Suspended).unwrap();
         assert_eq!(plan.program_frequencies_host().unwrap(), vec![1, 0, 0, 0]);
@@ -1756,13 +1743,12 @@ mod tests {
             )
         );
 
-        let empty = PreflightEventLog {
-            program_log: vec![PreflightProgramEvent {
+        let empty = PreflightHistory {
+            program: vec![PreflightProgramEvent {
                 pc: 0x100,
                 timestamp: 1,
             }],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            ..Default::default()
         };
         let plan = gpu_plan(&program, &empty, PreflightEndpoint::Suspended).unwrap();
         assert_eq!(plan.program_frequencies_host().unwrap(), vec![0; 4]);
@@ -1779,8 +1765,8 @@ mod tests {
         )
         .unwrap();
         for invalid_pc in [0xfc, 0x102, 0x104, 0x10c] {
-            let transcript = PreflightEventLog {
-                program_log: vec![
+            let history = PreflightHistory {
+                program: vec![
                     PreflightProgramEvent {
                         pc: invalid_pc,
                         timestamp: 1,
@@ -1790,10 +1776,9 @@ mod tests {
                         timestamp: 2,
                     },
                 ],
-                memory_log: vec![],
-                initial_write_log: vec![],
+                ..Default::default()
             };
-            assert!(gpu_plan(&program, &transcript, PreflightEndpoint::Suspended,).is_err());
+            assert!(gpu_plan(&program, &history, PreflightEndpoint::Suspended,).is_err());
         }
     }
 
@@ -1801,16 +1786,15 @@ mod tests {
     fn gpu_program_index_accepts_an_empty_suspended_segment() {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let program = gpu_program(&[100], &device_ctx);
-        let transcript = PreflightEventLog {
-            program_log: vec![PreflightProgramEvent {
+        let history = PreflightHistory {
+            program: vec![PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
             }],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            ..Default::default()
         };
         let endpoint = PreflightEndpoint::Suspended;
-        let plan = gpu_plan(&program, &transcript, endpoint).unwrap();
+        let plan = gpu_plan(&program, &history, endpoint).unwrap();
         assert!(plan.steps_host().unwrap().is_empty());
         assert_eq!(plan.executed_opcodes().count(), 0);
     }
@@ -1819,8 +1803,8 @@ mod tests {
     fn gpu_program_index_rejects_the_timestamp_domain_limit() {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let program = GpuPostflightProgram::synthetic_for_test(&[100], 0, 2, &device_ctx).unwrap();
-        let transcript = |final_timestamp| PreflightEventLog {
-            program_log: vec![
+        let history = |final_timestamp| PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0,
                     timestamp: 1,
@@ -1830,11 +1814,10 @@ mod tests {
                     timestamp: final_timestamp,
                 },
             ],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            ..Default::default()
         };
-        gpu_plan(&program, &transcript(3), PreflightEndpoint::Suspended).unwrap();
-        assert!(gpu_plan(&program, &transcript(4), PreflightEndpoint::Suspended,).is_err());
+        gpu_plan(&program, &history(3), PreflightEndpoint::Suspended).unwrap();
+        assert!(gpu_plan(&program, &history(4), PreflightEndpoint::Suspended,).is_err());
     }
 
     #[test]
@@ -1842,13 +1825,12 @@ mod tests {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let program = gpu_program(&[100, terminate], &device_ctx);
-        let transcript = |program_log| PreflightEventLog {
-            program_log,
-            memory_log: vec![],
-            initial_write_log: vec![],
+        let history = |program| PreflightHistory {
+            program,
+            ..Default::default()
         };
 
-        let undefined_pc = transcript(vec![
+        let undefined_pc = history(vec![
             PreflightProgramEvent {
                 pc: 12,
                 timestamp: 1,
@@ -1860,7 +1842,7 @@ mod tests {
         ]);
         assert!(gpu_plan(&program, &undefined_pc, PreflightEndpoint::Suspended,).is_err());
 
-        let missing_terminate = transcript(vec![
+        let missing_terminate = history(vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -1872,7 +1854,7 @@ mod tests {
         ]);
         assert!(gpu_plan(&program, &missing_terminate, PreflightEndpoint::Terminated,).is_err());
 
-        let timestamp_regression = transcript(vec![
+        let timestamp_regression = history(vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 2,

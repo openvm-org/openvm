@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        rvr::{
-            cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightEventLog, PreflightLimits,
-        },
+        rvr::{cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightLimits},
         PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
@@ -1289,27 +1287,22 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
     let (gpu_transcript, replay_plan) =
         Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
-    let transcript = PreflightEventLog {
-        program_log: gpu_transcript.program_log_host().unwrap(),
-        memory_log: gpu_transcript.memory_log_host().unwrap(),
-        initial_write_log: gpu_transcript.initial_write_log_host().unwrap(),
+    let history = PreflightHistory {
+        program: gpu_transcript.program_log_host().unwrap(),
+        memory: PreflightMemoryLog {
+            accesses: gpu_transcript.memory_log_host().unwrap(),
+            initial_writes: gpu_transcript.initial_write_log_host().unwrap(),
+            ..Default::default()
+        },
     };
-    assert_eq!(transcript.memory_log.len(), 3);
+    assert_eq!(history.memory.accesses.len(), 3);
     drop(replay_plan);
     drop(gpu_transcript);
 
-    let reject = |transcript: &PreflightEventLog, expected_code| {
-        let history = PreflightHistory {
-            program: transcript.program_log.clone(),
-            memory: PreflightMemoryLog {
-                accesses: transcript.memory_log.clone(),
-                initial_writes: transcript.initial_write_log.clone(),
-                ..Default::default()
-            },
-        };
+    let reject = |history: &PreflightHistory, expected_code| {
         let (gpu_transcript, replay_plan) = gpu_program
             .program()
-            .upload_history_for_test(&program, &history, Some(0))
+            .upload_history_for_test(&program, history, Some(0))
             .unwrap();
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -1342,17 +1335,13 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
         }
     };
 
-    let mut corrupt_result = PreflightEventLog {
-        program_log: transcript.program_log.clone(),
-        memory_log: transcript.memory_log.clone(),
-        initial_write_log: transcript.initial_write_log.clone(),
-    };
-    corrupt_result.memory_log[2].value[0] = 5;
+    let mut corrupt_result = history.clone();
+    corrupt_result.memory.accesses[2].value[0] = 5;
     reject(&corrupt_result, 609);
 
-    let mut corrupt_predecessor = transcript;
-    corrupt_predecessor.memory_log[1].value[0] = 3;
-    corrupt_predecessor.memory_log[2].value[0] = 6;
+    let mut corrupt_predecessor = history;
+    corrupt_predecessor.memory.accesses[1].value[0] = 3;
+    corrupt_predecessor.memory.accesses[2].value[0] = 6;
     reject(&corrupt_predecessor, 608);
 }
 
