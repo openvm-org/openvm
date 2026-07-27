@@ -7,7 +7,6 @@ pub(crate) mod halfword;
 pub(crate) mod word;
 
 pub use byte::*;
-pub use common::{StoreByteRecord, StoreRecord};
 pub use doubleword::*;
 pub use halfword::*;
 pub use word::*;

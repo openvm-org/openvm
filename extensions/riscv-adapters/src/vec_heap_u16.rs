@@ -11,16 +11,13 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -229,29 +226,6 @@ impl<
             local.borrow();
         cols.from_state.pc
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64VecHeapU16AdapterRecord<
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCKS_PER_WRITE: usize,
-> {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-
-    pub rs_ptrs: [u32; NUM_READS],
-    pub rd_ptr: u32,
-
-    pub rs_vals: [u32; NUM_READS],
-    pub rd_val: u32,
-
-    pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
-    pub rd_read_aux: MemoryReadAuxRecord,
-
-    pub reads_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
-    pub writes_aux: [MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>; BLOCKS_PER_WRITE],
 }
 
 #[derive(derive_new::new, Clone, Copy)]

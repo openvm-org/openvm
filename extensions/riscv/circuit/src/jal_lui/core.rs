@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -159,14 +159,6 @@ where
     fn start_offset(&self) -> usize {
         Rv64JalLuiOpcode::CLASS_OFFSET
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalLuiCoreRecord {
-    pub imm: u32,
-    pub rd_data: [u16; BLOCK_FE_WIDTH],
-    pub is_jal: bool,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

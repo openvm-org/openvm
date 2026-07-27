@@ -7,16 +7,13 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -179,26 +176,6 @@ pub struct Rv64MultWAdapterExecutor;
 #[derive(derive_new::new)]
 pub struct Rv64MultWAdapterFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64MultWAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub rs2_ptr: u32,
-    /// Upper 4 bytes of rs1 register read, kept to satisfy the full-width memory read.
-    pub rs1_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-    /// Upper 4 bytes of rs2 register read, kept to satisfy the full-width memory read.
-    pub rs2_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-    pub result_sign: u8,
-    pub result_word_msl: u8,
-
-    pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
 }
 
 impl Rv64MultWAdapterFiller {

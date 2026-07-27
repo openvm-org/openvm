@@ -6,13 +6,11 @@ use openvm_circuit::{
         Postflight, PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteU16AuxRecord},
+        offline_checker::{MemoryBridge, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    utils::not, AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
 use openvm_stark_backend::{
@@ -178,18 +176,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
         let cols: &Rv64CondRdWriteAdapterCols<_> = local.borrow();
         cols.inner.from_state.pc
     }
-}
-
-/// This adapter doesn't read anything, and writes to \[a:8\]_d, where d == 1
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct Rv64RdWriteAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-
-    // Will use u32::MAX to indicate no write
-    pub rd_ptr: u32,
-    pub rd_aux_record: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

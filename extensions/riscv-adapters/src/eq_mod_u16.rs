@@ -7,16 +7,13 @@ use openvm_circuit::{
         MinimalInstruction, VmAdapterAir, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -201,21 +198,6 @@ impl<
         let cols: &Rv64IsEqualModU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64IsEqualModU16AdapterRecord<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pub from_pc: u32,
-    pub timestamp: u32,
-
-    pub rs_ptr: [u32; NUM_READS],
-    pub rs_val: [u32; NUM_READS],
-    pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
-    pub heap_read_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
-
-    pub rd_ptr: u32,
-    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
 #[derive(Clone, Copy)]

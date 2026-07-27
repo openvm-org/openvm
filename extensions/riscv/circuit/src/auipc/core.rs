@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::PC_BITS, LocalOpcode};
@@ -144,13 +144,6 @@ where
     fn start_offset(&self) -> usize {
         Rv64AuipcOpcode::CLASS_OFFSET
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct Rv64AuipcCoreRecord {
-    pub from_pc: u32,
-    pub imm: u32,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

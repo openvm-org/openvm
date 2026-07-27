@@ -6,13 +6,11 @@ use openvm_circuit::{
         Postflight, PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
+        offline_checker::{MemoryBridge, MemoryReadAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
 use openvm_stark_backend::{
@@ -108,16 +106,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         let cols: &Rv64BranchAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BranchAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rs1_ptr: u32,
-    pub rs2_ptr: u32,
-    pub reads_aux: [MemoryReadAuxRecord; 2],
 }
 
 /// Reads instructions of the form OP a, b, c, d, e where if(\[a:8\]_d op \[b:8\]_e) pc += c.

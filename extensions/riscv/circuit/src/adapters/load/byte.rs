@@ -6,15 +6,13 @@ use openvm_circuit::{
         PostflightStep, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -208,37 +206,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
         let local_cols: &Rv64LoadByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
-    }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64LoadByteAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rs1_val: u32,
-    pub rs1_aux_record: MemoryReadAuxRecord,
-    pub read_data_aux: MemoryReadAuxRecord,
-    pub imm: u16,
-    pub imm_sign: bool,
-    pub write_prev_timestamp: u32,
-    pub write_prev_data: [u16; BLOCK_FE_WIDTH],
-    pub rs1_ptr: u8,
-    /// `u8::MAX` when the load does not write a register.
-    pub rd_ptr: u8,
-}
-
-impl Rv64LoadByteAdapterRecord {
-    pub(crate) fn effective_ptr(&self) -> u32 {
-        let addr = rv64_address_add_imm(
-            self.rs1_val,
-            sign_extend_imm16(self.imm as u32, self.imm_sign as u32),
-        );
-        u32::try_from(addr).expect("effective address exceeds u32 range")
-    }
-
-    pub(crate) fn shift_amount(&self) -> usize {
-        (self.effective_ptr() & (MEMORY_BLOCK_BYTES as u32 - 1)) as usize
     }
 }
 

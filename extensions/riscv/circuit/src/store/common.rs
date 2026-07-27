@@ -1,27 +1,10 @@
 use openvm_circuit::arch::BLOCK_FE_WIDTH;
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
 
 use crate::adapters::{
     rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
     HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
-pub struct StoreRecord {
-    pub read_data: [u16; BLOCK_FE_WIDTH],
-    /// Previous contents of the first and second memory blocks. The second-block entry is zero
-    /// when the access does not cross the first block.
-    pub prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
-pub struct StoreByteRecord {
-    pub read_data: [u16; BLOCK_FE_WIDTH],
-    pub prev_data: [u16; BLOCK_FE_WIDTH],
-}
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct StoreExecutor<A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize = 2> {
