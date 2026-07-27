@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use getset::Getters;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_circuit::arch::ContinuationProverFn;
 use openvm_circuit::{
     arch::{
@@ -42,7 +42,7 @@ where
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     app_exe_commit: OnceLock<Digest>,
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[cfg(feature = "cuda")]
     prove_app: Option<ContinuationProverFn<E, VB>>,
 }
 
@@ -77,7 +77,7 @@ where
             instance,
             app_vm_vk,
             app_exe_commit: OnceLock::new(),
-            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            #[cfg(feature = "cuda")]
             prove_app: VB::continuation_prover(),
         }
     }
@@ -132,7 +132,7 @@ where
             self.app_vm_vk.inner.max_constraint_degree(),
         );
         let input: Streams = input.into();
-        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        #[cfg(feature = "cuda")]
         let proof = match self.prove_app.as_mut() {
             Some(prove) => prove(&mut self.instance, input, self.program_name.as_deref())?,
             None => {
@@ -145,7 +145,7 @@ where
                 ContinuationVmProver::prove(&mut self.instance, input)?
             }
         };
-        #[cfg(not(all(feature = "cuda", feature = "rvr")))]
+        #[cfg(not(feature = "cuda"))]
         let proof = {
             let _prove_span = info_span!(
                 "app_prove",

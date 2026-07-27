@@ -3,12 +3,16 @@ use std::{any::Any, collections::BTreeMap};
 use openvm_algebra_circuit::AlgebraPreflightGpuTracegen;
 use openvm_bigint_circuit::Int256PreflightGpuTracegen;
 use openvm_circuit::arch::{
-    instructions::program::Program,
-    rvr::cuda::{
-        CheckpointReplayProgram, GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
-        GpuPostflightTranscript, PostflightAccessRegistry, PostflightOpcodeBases,
+    cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
-    GenerationError, PreflightExecution, VirtualMachine,
+    instructions::program::Program,
+    GenerationError, VirtualMachine,
+};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::{
+    rvr::cuda::{CheckpointReplayProgram, PostflightAccessRegistry},
+    PreflightExecution,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
@@ -45,8 +49,29 @@ struct SdkPreflightGpuTracegen<'a> {
 }
 
 impl SdkVmGpuBuilder {
+    /// Uploads the immutable program used by interpreter preflight postflight
+    /// and trace generation.
+    #[cfg(not(feature = "rvr"))]
+    pub(crate) fn upload_preflight_program<F: PrimeField32>(
+        vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
+        program: &Program<F>,
+    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        let config = vm.config().to_inner();
+        validate_preflight_config(
+            config.modular.is_some(),
+            config.fp2.is_some(),
+            config.ecc.is_some(),
+        )?;
+        GpuPostflightProgram::upload(
+            program,
+            &config.system.memory_config,
+            &vm.engine.device().device_ctx,
+        )
+    }
+
     /// Uploads one immutable program together with all postflight access
     /// schedules enabled by this SDK configuration.
+    #[cfg(feature = "rvr")]
     pub(crate) fn upload_preflight_program<F: PrimeField32>(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
@@ -101,6 +126,7 @@ impl SdkVmGpuBuilder {
     /// This layer deliberately does not guess executor buffer limits. The
     /// segment's metered instruction and residual counts must be used when
     /// constructing `PreflightLimits`.
+    #[cfg(feature = "rvr")]
     pub(crate) fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &CheckpointReplayProgram,
@@ -196,8 +222,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
             })
             .transpose()?;
 
-        let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
-        let mut ownership = OpcodeOwnership::new(native);
+        let mut ownership = OpcodeOwnership::new();
         if keccak.is_some() {
             ownership.claim("Keccak", Keccak256PreflightGpuTracegen::extension_opcodes())?;
         }
@@ -343,14 +368,12 @@ fn validate_preflight_config(
 }
 
 struct OpcodeOwnership {
-    native: PostflightOpcodeBases,
     extensions: BTreeMap<u32, &'static str>,
 }
 
 impl OpcodeOwnership {
-    fn new(native: PostflightOpcodeBases) -> Self {
+    fn new() -> Self {
         Self {
-            native,
             extensions: BTreeMap::new(),
         }
     }
@@ -361,7 +384,7 @@ impl OpcodeOwnership {
         opcodes: impl IntoIterator<Item = u32>,
     ) -> Result<(), GpuPostflightError> {
         for opcode in opcodes {
-            if self.native.owns(opcode) {
+            if Rv64ImPreflightGpuTracegen::owns_opcode(opcode) {
                 return Err(GpuPostflightError::InvalidTranscript(format!(
                     "{owner} opcode {opcode:#x} collides with RV64/system"
                 )));
@@ -380,10 +403,10 @@ impl OpcodeOwnership {
         &self,
         executed: impl IntoIterator<Item = u32>,
     ) -> Result<(), GpuPostflightError> {
-        if let Some(opcode) = executed
-            .into_iter()
-            .find(|opcode| !self.native.owns(*opcode) && !self.extensions.contains_key(opcode))
-        {
+        if let Some(opcode) = executed.into_iter().find(|opcode| {
+            !Rv64ImPreflightGpuTracegen::owns_opcode(*opcode)
+                && !self.extensions.contains_key(opcode)
+        }) {
             return Err(GpuPostflightError::InvalidTranscript(format!(
                 "executed opcode {opcode:#x} has no standard SDK preflight trace producer"
             )));
@@ -398,21 +421,27 @@ impl OpcodeOwnership {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "rvr")]
     use openvm_circuit::arch::{
         MemoryConfig, PreflightEndpoint, PreflightLimits, SystemConfig, VmExecutor,
     };
+    #[cfg(feature = "rvr")]
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
         program::Program,
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
+        PUBLIC_VALUES_AS,
     };
+    use openvm_instructions::{LocalOpcode, SystemOpcode};
+    #[cfg(feature = "rvr")]
     use openvm_stark_backend::SystemParams;
+    #[cfg(feature = "rvr")]
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
 
+    #[cfg(feature = "rvr")]
     fn small_system_config() -> SystemConfig {
         let mut address_spaces = MemoryConfig::empty_address_space_configs(5);
         address_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 12;
@@ -421,6 +450,7 @@ mod tests {
         SystemConfig::new(3, MemoryConfig::new(2, address_spaces, 29, 29, 17), 32)
     }
 
+    #[cfg(feature = "rvr")]
     #[test]
     fn standard_sdk_inventory_proves_from_record_free_preflight() {
         let program = Program::from_instructions(&[Instruction::<BabyBear>::from_usize(
@@ -467,17 +497,22 @@ mod tests {
 
     #[test]
     fn opcode_ownership_rejects_duplicates_and_missing_producers() {
-        let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
-        let mut free_opcodes = (0..=u16::MAX as u32).filter(|opcode| !native.owns(*opcode));
+        let mut free_opcodes = (0..=u16::MAX as u32)
+            .filter(|opcode| !Rv64ImPreflightGpuTracegen::owns_opcode(*opcode));
         let claimed_opcode = free_opcodes.next().unwrap();
         let missing_opcode = free_opcodes.next().unwrap();
-        let mut ownership = OpcodeOwnership::new(native);
+        let mut ownership = OpcodeOwnership::new();
         ownership.claim("first", [claimed_opcode]).unwrap();
 
         let duplicate = ownership.claim("second", [claimed_opcode]).unwrap_err();
         assert!(duplicate.to_string().contains("owned by both"));
 
-        let native_collision = ownership.claim("extension", [native.phantom]).unwrap_err();
+        let native_collision = ownership
+            .claim(
+                "extension",
+                [SystemOpcode::PHANTOM.global_opcode().as_usize() as u32],
+            )
+            .unwrap_err();
         assert!(native_collision.to_string().contains("RV64/system"));
 
         let missing = ownership.validate_executed([missing_opcode]).unwrap_err();
@@ -486,7 +521,10 @@ mod tests {
             .contains("has no standard SDK preflight trace producer"));
 
         ownership
-            .validate_executed([native.terminate, claimed_opcode])
+            .validate_executed([
+                SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
+                claimed_opcode,
+            ])
             .unwrap();
     }
 }

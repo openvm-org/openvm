@@ -1,5 +1,10 @@
+use std::any::Any;
+
 use openvm_circuit::{
     arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
         to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, VmBuilder,
         VmChipComplex, VmProverExtension,
     },
@@ -11,30 +16,32 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_sha2_air::{Sha256Config, Sha512Config};
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
+use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-        PostflightAccessRegistry, PostflightAccessSpan,
-    },
-    openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode},
-    openvm_sha2_transpiler::Rv64Sha2Opcode,
-    openvm_stark_backend::prover::AirProvingContext,
-    std::any::Any,
+    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+    openvm_instructions::riscv::RV64_MEMORY_AS,
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{
         rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
-        GenerationError, MemoryConfig, VirtualMachine,
+        MemoryConfig,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::program::Program,
+    openvm_stark_backend::p3_field::PrimeField32,
+};
+#[cfg(any(test, feature = "test-utils"))]
+use {
+    openvm_circuit::arch::{GenerationError, VirtualMachine},
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
+    openvm_stark_backend::prover::ProvingContext,
 };
 
 use super::*;
@@ -45,12 +52,11 @@ use crate::{
 
 pub struct Sha2GpuProverExt;
 
-/// Concrete checkpoint-replay composition for RV64 plus the two SHA-2 opcodes.
+/// Concrete immutable-history replay composition for RV64 plus the two SHA-2 opcodes.
 ///
 /// A SHA instruction has two trace producers: the main AIR owns execution and
 /// memory interactions, while the block-hasher AIR owns compression. Both must
 /// be visited in the VM's existing reverse inventory walk.
-#[cfg(feature = "rvr")]
 pub struct Sha2PreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
@@ -61,7 +67,6 @@ pub struct Sha2PreflightGpuTracegen<'a> {
     pending_sha512_block: bool,
 }
 
-#[cfg(feature = "rvr")]
 impl<'a> Sha2PreflightGpuTracegen<'a> {
     #[doc(hidden)]
     pub fn extension_opcodes() -> [u32; 2] {
@@ -72,6 +77,7 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
+    #[cfg(feature = "rvr")]
     pub fn register_postflight_access_schedules(
         registry: &mut PostflightAccessRegistry,
     ) -> Result<(), GpuPostflightError> {
@@ -99,7 +105,7 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
         Ok(())
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn upload_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
@@ -117,7 +123,7 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,

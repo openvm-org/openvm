@@ -1,9 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-#[cfg(feature = "rvr")]
-use openvm_cuda_common::d_buffer::DeviceBufferView;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
+use openvm_cuda_common::{
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
+    stream::cudaStream_t,
+};
 
 pub mod count {
     use super::*;
@@ -172,7 +174,6 @@ pub mod call {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn _deferral_call_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -249,7 +250,6 @@ pub mod call {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
@@ -344,7 +344,6 @@ pub mod output {
         pub poseidon2_res: [F; DIGEST_SIZE],
     }
 
-    #[cfg(feature = "rvr")]
     #[repr(C)]
     #[derive(Debug, Clone, Copy)]
     pub struct DeferralOutputReplayCall {
@@ -352,7 +351,6 @@ pub mod output {
         pub num_rows: u32,
     }
 
-    #[cfg(feature = "rvr")]
     const _: () = assert!(std::mem::size_of::<DeferralOutputReplayCall>() == 8);
 
     #[allow(clippy::too_many_arguments)]
@@ -379,7 +377,6 @@ pub mod output {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn _deferral_output_replay_count_rows(
             d_counts: *mut u32,
             d_instructions: DeviceBufferView,
@@ -397,7 +394,6 @@ pub mod output {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn _deferral_output_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -433,7 +429,6 @@ pub mod output {
         ) -> i32;
     }
 
-    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_count_rows(
         d_counts: &DeviceBuffer<u32>,
@@ -469,7 +464,6 @@ pub mod output {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,

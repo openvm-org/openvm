@@ -1,10 +1,8 @@
 use openvm_circuit::{
     arch::{
+        cuda::postflight::GpuPostflightProgram,
         rvr::{
-            cuda::{
-                CheckpointReplayProgram, GpuPostflightProgram, PostflightAccessRegistry,
-                PostflightAccessSpan,
-            },
+            cuda::{CheckpointReplayProgram, PostflightAccessRegistry, PostflightAccessSpan},
             PreflightEndpoint, PreflightEventLog, PreflightLimits,
         },
         VirtualMachine, VmExecutor,

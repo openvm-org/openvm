@@ -16,21 +16,13 @@ fn main() {
             .include("cuda/include")
             .watch("cuda/src/count.cu")
             .watch("cuda/src/poseidon2.cu")
-            .watch("cuda/src/call.cu")
-            .watch("cuda/src/output.cu")
             .library_name("tracegen_gpu_deferral")
-            .files(["cuda/src/count.cu", "cuda/src/poseidon2.cu"]);
-
-        let builder = if std::env::var_os("CARGO_FEATURE_RVR").is_some() {
-            builder
-                .flag("-I../../../crates/vm/cuda/rvr/include")
-                .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
-                .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
-                .watch("cuda/rvr")
-                .files(["cuda/rvr/call.cu", "cuda/rvr/output.cu"])
-        } else {
-            builder.files(["cuda/src/call.cu", "cuda/src/output.cu"])
-        };
+            .files(["cuda/src/count.cu", "cuda/src/poseidon2.cu"])
+            .flag("-I../../../crates/vm/cuda/rvr/include")
+            .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
+            .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
+            .watch("cuda/rvr")
+            .files(["cuda/rvr/call.cu", "cuda/rvr/output.cu"]);
 
         builder.emit_link_directives();
         builder.build();

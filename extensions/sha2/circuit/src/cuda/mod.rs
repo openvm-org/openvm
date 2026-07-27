@@ -1,23 +1,22 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use openvm_circuit::utils::next_power_of_two_or_zero;
+use openvm_circuit::{
+    arch::cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::d_buffer::DeviceBuffer;
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha512Config};
 use openvm_stark_backend::prover::AirProvingContext;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    },
-    openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode,
-    },
-};
 
 use crate::Sha2Config;
 
@@ -44,7 +43,6 @@ impl<C: Sha2Config> Sha2MainChipGpu<C> {
         }
     }
 
-    #[cfg(feature = "rvr")]
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -117,7 +115,6 @@ pub struct Sha2BlockHasherChipGpu<C: Sha2Config> {
     bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
     /// Range checker for digest-row `final_hash` limbs.
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    #[cfg(feature = "rvr")]
     pointer_max_bits: u32,
     _marker: PhantomData<C>,
 }
@@ -126,18 +123,16 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
     pub fn new(
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-        _pointer_max_bits: u32,
+        pointer_max_bits: u32,
     ) -> Self {
         Self {
             bitwise_lookup,
             range_checker,
-            #[cfg(feature = "rvr")]
-            pointer_max_bits: _pointer_max_bits,
+            pointer_max_bits,
             _marker: PhantomData,
         }
     }
 
-    #[cfg(feature = "rvr")]
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,

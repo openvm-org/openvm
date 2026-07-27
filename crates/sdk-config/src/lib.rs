@@ -33,9 +33,9 @@ use serde::{Deserialize, Serialize};
 pub mod deferral;
 use deferral::DeferralConfig;
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 mod preflight;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 mod preflight_driver;
 
 cfg_if::cfg_if! {
@@ -442,7 +442,6 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
-    #[cfg(feature = "rvr")]
     fn continuation_prover() -> Option<ContinuationProverFn<BabyBearPoseidon2GpuEngine, Self>> {
         Some(preflight_driver::continuation_prover())
     }

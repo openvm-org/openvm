@@ -1,9 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-#[cfg(feature = "rvr")]
-use openvm_cuda_common::d_buffer::DeviceBufferView;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
+use openvm_cuda_common::{
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
+    stream::cudaStream_t,
+};
 
 pub mod sha256 {
     use super::*;
@@ -62,7 +64,6 @@ pub mod sha256 {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn launch_sha256_main_replay_tracegen(
             d_trace: *mut F,
             trace_height: usize,
@@ -86,7 +87,6 @@ pub mod sha256 {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn launch_sha256_block_replay_tracegen(
             d_trace: *mut F,
             trace_height: usize,
@@ -221,7 +221,6 @@ pub mod sha256 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn sha256_main_replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -268,7 +267,6 @@ pub mod sha256 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn sha256_block_replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -377,7 +375,6 @@ pub mod sha512 {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn launch_sha512_main_replay_tracegen(
             d_trace: *mut F,
             trace_height: usize,
@@ -401,7 +398,6 @@ pub mod sha512 {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn launch_sha512_block_replay_tracegen(
             d_trace: *mut F,
             trace_height: usize,
@@ -536,7 +532,6 @@ pub mod sha512 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn sha512_main_replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -583,7 +578,6 @@ pub mod sha512 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn sha512_block_replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
