@@ -163,6 +163,17 @@ static __device__ __forceinline__ void deferral_call_block_bytes(
     }
 }
 
+static __device__ __forceinline__ void deferral_call_pointer_bytes(
+    uint16_t const (&value)[BLOCK_FE_WIDTH], uint8_t (&out)[RV64_WORD_NUM_LIMBS]
+) {
+    static_assert(RV64_WORD_NUM_LIMBS % sizeof(uint16_t) == 0);
+#pragma unroll
+    for (size_t lane = 0; lane < RV64_WORD_NUM_LIMBS / sizeof(uint16_t); lane++) {
+        out[2 * lane] = uint8_t(value[lane]);
+        out[2 * lane + 1] = uint8_t(value[lane] >> 8);
+    }
+}
+
 __global__ void deferral_call_replay_tracegen(
     Fp *trace,
     size_t height,
@@ -278,8 +289,8 @@ __global__ void deferral_call_replay_tracegen(
     }
     record.adapter.rd_aux.prev_timestamp = rd_previous.timestamp;
     record.adapter.rs_aux.prev_timestamp = rs_previous.timestamp;
-    deferral_call_block_bytes(memory[event_start].value, record.adapter.rd_val);
-    deferral_call_block_bytes(memory[event_start + 1].value, record.adapter.rs_val);
+    deferral_call_pointer_bytes(memory[event_start].value, record.adapter.rd_val);
+    deferral_call_pointer_bytes(memory[event_start + 1].value, record.adapter.rs_val);
     uint32_t output_ptr = uint32_t(memory[event_start].value[0]) |
                           (uint32_t(memory[event_start].value[1]) << 16);
     uint32_t input_ptr = uint32_t(memory[event_start + 1].value[0]) |
