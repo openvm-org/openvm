@@ -10,6 +10,7 @@
 //! the very symbols they define. It is scoped to this crate so the rest of the guest still gets
 //! normal libcall recognition.
 
+#![cfg(any(test, openvm_intrinsics, target_os = "openvm"))]
 #![no_std]
 #![no_builtins]
 
@@ -97,7 +98,7 @@ unsafe fn copy_tail(dest: *mut u8, src: *const u8, n: usize) {
 /// `src` must be valid for reads of `n` bytes and `dest` valid for writes of `n` bytes. The
 /// ranges may overlap only when `dest <= src`.
 #[inline(always)]
-pub unsafe fn copy_forward(dest: *mut u8, src: *const u8, n: usize) {
+unsafe fn copy_forward(dest: *mut u8, src: *const u8, n: usize) {
     let (mut dest, mut src, mut rem) = (dest, src, n);
     while rem >= BLOCK {
         store::<BLOCK>(dest, load::<BLOCK>(src));
@@ -122,7 +123,7 @@ pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut
 /// `src` must be valid for reads of `n` bytes and `dest` valid for writes of `n` bytes. The
 /// ranges may overlap only when `dest >= src`; use [`copy_forward`] otherwise.
 #[inline(always)]
-pub unsafe fn copy_backward(dest: *mut u8, src: *const u8, n: usize) {
+unsafe fn copy_backward(dest: *mut u8, src: *const u8, n: usize) {
     let mut rem = n;
     while rem >= BLOCK {
         rem -= BLOCK;
@@ -138,7 +139,7 @@ pub unsafe fn copy_backward(dest: *mut u8, src: *const u8, n: usize) {
 ///
 /// `src` must be valid for reads of `n` bytes and `dest` valid for writes of `n` bytes.
 #[inline(always)]
-pub unsafe fn move_bytes(dest: *mut u8, src: *const u8, n: usize) {
+unsafe fn move_bytes(dest: *mut u8, src: *const u8, n: usize) {
     // Copying upwards is safe unless `dest` starts inside the source range. The wrapping
     // subtraction folds `dest < src` into the same comparison: it underflows past any real `n`.
     if (dest as usize).wrapping_sub(src as usize) >= n {
@@ -195,7 +196,7 @@ unsafe fn set_tail(dest: *mut u8, word: u64, n: usize) {
 ///
 /// `dest` must be valid for writes of `n` bytes.
 #[inline(always)]
-pub unsafe fn set_bytes(dest: *mut u8, val: u8, n: usize) {
+unsafe fn set_bytes(dest: *mut u8, val: u8, n: usize) {
     let word = u64::from_ne_bytes([val; 8]);
     let (mut dest, mut rem) = (dest, n);
     while rem >= BLOCK {
@@ -238,7 +239,7 @@ fn byte_ordering(a: u64, b: u64) -> i32 {
 ///
 /// `a` and `b` must be valid for reads of `n` bytes.
 #[inline(always)]
-pub unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
+unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
     if n >= WORD {
         // Advancing the pointers keeps the loop one instruction shorter than indexing off a base.
         let (mut a, mut b, mut rem) = (a, b, n);
@@ -279,7 +280,7 @@ pub unsafe fn compare_bytes(a: *const u8, b: *const u8, n: usize) -> i32 {
 ///
 /// `a` and `b` must be valid for reads of `n` bytes.
 #[inline(always)]
-pub unsafe fn bytes_differ(a: *const u8, b: *const u8, n: usize) -> bool {
+unsafe fn bytes_differ(a: *const u8, b: *const u8, n: usize) -> bool {
     if n >= WORD {
         let (mut a, mut b, mut rem) = (a, b, n);
         while rem >= WORD {
