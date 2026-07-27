@@ -25,6 +25,6 @@ pub use cuda::*;
 mod tests;
 
 pub type DeferralCallAir = VmAirWrapper<DeferralCallAdapterAir, DeferralCallCoreAir>;
-pub type DeferralCallExecutor = DeferralCallCoreExecutor<DeferralCallAdapterExecutor>;
+pub type DeferralCallExecutor = DeferralCallCoreExecutor;
 pub type DeferralCallChip<F> =
     VmChipWrapper<F, DeferralCallCoreFiller<DeferralCallAdapterFiller, F>>;

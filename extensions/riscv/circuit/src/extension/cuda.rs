@@ -302,8 +302,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// Replay producers update their shared lookup histograms. Periphery chips
     /// are then generated from those histograms through their ordinary
     /// record-independent path. Every other chip is known to be unexecuted by
-    /// the constructor coverage check, so it receives a dummy trace without
-    /// touching a `RecordArena`.
+    /// the constructor coverage check, so it receives a dummy trace.
     pub fn generate_for_chip(
         &mut self,
         _insertion_idx: usize,

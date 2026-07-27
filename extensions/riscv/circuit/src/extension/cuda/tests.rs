@@ -120,7 +120,7 @@ fn checkpoint_branch(opcode: impl LocalOpcode, rs1: usize, rs2: usize) -> Instru
 }
 
 #[test]
-fn preflight_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
+fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
     let register_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -1142,7 +1142,7 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
 }
 
 #[test]
-fn preflight_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
+fn preflight_gpu_tracegen_proves_rv64m_airs() {
     let m_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -1400,7 +1400,7 @@ fn preflight_postflight_rejects_raw_x0_destination() {
 }
 
 #[test]
-fn preflight_gpu_replay_proves_hint_store_without_record_arenas() {
+fn preflight_gpu_replay_proves_hint_store() {
     let instructions = [
         Instruction::<F>::from_usize(
             Rv64HintStoreOpcode::HINT_STORED.global_opcode(),

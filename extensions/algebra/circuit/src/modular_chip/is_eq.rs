@@ -21,7 +21,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
 use openvm_riscv_circuit::adapters::{
     rv64_bytes_to_u16_block, rv64_bytes_to_u32, validate_memory_block_byte_ptr,
 };
@@ -282,41 +281,34 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
-    pub is_setup: bool,
-    pub b: [u16; READ_LIMBS],
-    pub c: [u16; READ_LIMBS],
-}
-
 #[derive(derive_new::new, Clone)]
 pub struct ModularIsEqualExecutor<
-    A,
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
     const LIMB_BITS: usize,
 > {
-    adapter: A,
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
 }
 
 #[derive(derive_new::new, Clone)]
 pub struct ModularIsEqualFiller<
-    A,
+    const NUM_LANES: usize,
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
     const LIMB_BITS: usize,
 > {
-    adapter: A,
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<
+        const NUM_LANES: usize,
+        const READ_LIMBS: usize,
+        const WRITE_LIMBS: usize,
+        const LIMB_BITS: usize,
+    > ModularIsEqualFiller<NUM_LANES, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 {
     pub(crate) fn fill_trace_row_from_execution_data<F: PrimeField32>(
         &self,
@@ -390,12 +382,8 @@ impl<A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usiz
 impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>
 {
-    pub fn new(
-        adapter: Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
-        offset: usize,
-        modulus_limbs: [u16; TOTAL_LIMBS],
-    ) -> Self {
-        Self(ModularIsEqualExecutor::new(adapter, offset, modulus_limbs))
+    pub fn new(offset: usize, modulus_limbs: [u16; TOTAL_LIMBS]) -> Self {
+        Self(ModularIsEqualExecutor::new(offset, modulus_limbs))
     }
 }
 

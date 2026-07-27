@@ -1,13 +1,13 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent,
+    MemoryConfig,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -15,7 +15,6 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::Program,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
@@ -42,11 +41,8 @@ use crate::{
     },
     test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
-#[cfg(feature = "cuda")]
-use crate::{
-    load::Rv64LoadByteChipGpu,
-    test_utils::memory::{dummy_range_checker, transfer_load_byte_records},
-};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::{load::Rv64LoadByteChipGpu, test_utils::memory::dummy_range_checker};
 
 type ByteHarness = TestChipHarness<F, Rv64LoadByteExecutor, Rv64LoadByteAir, Rv64LoadByteChip<F>>;
 
@@ -226,7 +222,7 @@ fn negative_split_opcode_role_test() {
         .expect_err("pranked byte load trace should fail");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuByteHarness = GpuTestChipHarness<
     F,
     Rv64LoadByteExecutor,
@@ -235,7 +231,7 @@ type GpuByteHarness = GpuTestChipHarness<
     Rv64LoadByteChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -270,9 +266,15 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_load_byte_tracegen() {
     let mut rng = create_seeded_rng();
@@ -284,7 +286,7 @@ fn test_cuda_rand_load_byte_tracegen() {
         set_and_execute_load(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             LOADBU,
             None,
@@ -293,7 +295,6 @@ fn test_cuda_rand_load_byte_tracegen() {
             Some(RV64_MEMORY_AS as usize),
         );
     }
-    transfer_load_byte_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

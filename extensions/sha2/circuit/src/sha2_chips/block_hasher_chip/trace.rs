@@ -8,9 +8,7 @@ use openvm_sha2_air::{
     Sha2RoundColsRefMut,
 };
 use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
 use crate::{

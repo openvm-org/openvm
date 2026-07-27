@@ -19,7 +19,6 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -37,8 +36,8 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
-    openvm_instructions::SystemOpcode,
-    rvr_state::{PreflightMemoryEvent, PREFLIGHT_WRITE_BIT},
+    openvm_instructions::{program::Program, SystemOpcode},
+    rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
 };
 
 use crate::{
@@ -387,20 +386,19 @@ fn postflight_xorin_rejects_corrupt_write() {
 // ////////////////////////////////////////////////////////////////////////////////////
 // CUDA TESTS
 // ////////////////////////////////////////////////////////////////////////////////////
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::{
-    testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-    DenseRecordArena,
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::arch::testing::{
+    default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
 };
 
-#[cfg(feature = "cuda")]
-use crate::{cuda::XorinVmChipGpu, xorin::trace::XorinVmRecordMut};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::cuda::XorinVmChipGpu;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChipGpu, XorinVmChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -429,13 +427,19 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_TRACE_ROWS)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn cuda_set_and_execute(
     tester: &mut GpuChipTestBuilder,
     executor: &mut XorinVmExecutor,
-    arena: &mut DenseRecordArena,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     len: Option<usize>,
 ) {
@@ -487,10 +491,10 @@ fn cuda_set_and_execute(
         [buffer_reg, input_reg, len_reg, 1, 2],
     );
 
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_xorin_cuda_tracegen() {
     let mut rng = create_seeded_rng();
@@ -504,7 +508,7 @@ fn test_xorin_cuda_tracegen() {
         cuda_set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             None,
         );
@@ -514,16 +518,11 @@ fn test_xorin_cuda_tracegen() {
         cuda_set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             Some(len),
         );
     }
-
-    harness
-        .dense_arena
-        .get_record_seeker::<XorinVmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()
@@ -533,7 +532,7 @@ fn test_xorin_cuda_tracegen() {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_xorin_cuda_tracegen_single() {
     let mut rng = create_seeded_rng();
@@ -545,15 +544,10 @@ fn test_xorin_cuda_tracegen_single() {
     cuda_set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.dense_arena,
+        &mut harness.preflight,
         &mut rng,
         Some(16),
     );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<XorinVmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()

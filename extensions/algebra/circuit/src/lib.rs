@@ -44,27 +44,16 @@ pub use extension::*;
 pub mod fields;
 pub(crate) mod trace;
 
-use fields::{get_field_type, get_fp2_field_type, FieldType};
-
 #[derive(Clone)]
 pub struct FieldExprVecHeapExecutor<const BLOCKS: usize, const IS_FP2: bool> {
     inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    pub(crate) cached_field_type: Option<FieldType>,
 }
 
 impl<const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
     pub fn new(
         inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
     ) -> Self {
-        let cached_field_type = if IS_FP2 {
-            get_fp2_field_type(inner.program().prime())
-        } else {
-            get_field_type(inner.program().prime())
-        };
-        Self {
-            inner,
-            cached_field_type,
-        }
+        Self { inner }
     }
 }
 

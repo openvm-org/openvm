@@ -55,7 +55,7 @@ use crate::{
 
 pub struct DeferralGpuProverExt;
 
-/// Concrete arena-free Deferral + RV64/system checkpoint coordinator.
+/// Concrete Deferral + RV64/system preflight coordinator.
 ///
 /// CALL expands its typed AS4 chronology. OUTPUT consumes its dynamic write
 /// count and postimages directly from the checkpoint residual stream.

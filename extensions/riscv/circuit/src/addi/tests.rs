@@ -2,19 +2,13 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder},
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::Program,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -27,15 +21,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::{Rv64BaseAluWImmU16AdapterRecord, RV64_WORD_U16_LIMBS},
-        AddICoreRecord, Rv64AddIWChipGpu,
-    },
-    openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64AddIWChipGpu,
+    openvm_circuit::arch::testing::{
+        default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
@@ -67,7 +57,7 @@ const NONCANONICAL_ZERO: [u32; BLOCK_FE_WIDTH] = [
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64AddIExecutor, Rv64AddIAir, Rv64AddIChip<F>>;
 type WHarness = TestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChip<F>>;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuWHarness =
     GpuTestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddIWChip<F>>;
 
@@ -159,7 +149,7 @@ fn create_w_harness(tester: &VmChipTestBuilder<F>) -> WHarness {
     )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
@@ -171,7 +161,12 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64AddIWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8).with_trace_generators(
+        generate_w_trace_from_postflight,
+        |chip, program, transcript, plan| {
+            chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+        },
+    )
 }
 
 fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
@@ -290,7 +285,7 @@ fn rv64_addiw_boundaries_and_sign_extension() {
         .expect("verification failed");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_addiw_tracegen() {
     let mut rng = create_seeded_rng();
@@ -307,24 +302,12 @@ fn test_cuda_addiw_tracegen() {
         set_and_execute_w(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             rs1,
             imm,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluWImmU16AdapterRecord,
-        &'a mut AddICoreRecord<RV64_WORD_U16_LIMBS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluWImmU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()

@@ -7,10 +7,7 @@ use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
-use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
 

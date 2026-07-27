@@ -27,9 +27,8 @@ use openvm_instructions::{
 };
 use openvm_riscv_adapters::{
     rv64_heap_branch_default, rv64_write_heap_default, Rv64VecHeapAdapterAir,
-    Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller, Rv64VecHeapBranchU16AdapterAir,
-    Rv64VecHeapBranchU16AdapterExecutor, Rv64VecHeapBranchU16AdapterFiller,
-    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
+    Rv64VecHeapAdapterFiller, Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapBranchU16AdapterFiller,
+    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterFiller,
 };
 use openvm_riscv_circuit::{
     adapters::RV_B_TYPE_IMM_BITS, AddSubCoreAir, AddSubFiller, BitwiseLogicCoreAir,
@@ -45,25 +44,16 @@ use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     crate::{
-        AddSub256AdapterRecord, AddSub256ChipGpu, AddSub256CoreRecord,
-        BitwiseLogic256AdapterRecord, BitwiseLogic256ChipGpu, BitwiseLogic256CoreRecord,
-        BranchEqual256AdapterRecord, BranchEqual256ChipGpu, BranchEqual256CoreRecord,
-        BranchLessThan256AdapterRecord, BranchLessThan256ChipGpu, BranchLessThan256CoreRecord,
-        LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
-        Multiplication256AdapterRecord, Multiplication256ChipGpu, Multiplication256CoreRecord,
-        ShiftLogical256ChipGpu, ShiftLogical256CoreRecord, ShiftLogical256U16AdapterRecord,
-        ShiftRightArithmetic256AdapterRecord, ShiftRightArithmetic256ChipGpu,
-        ShiftRightArithmetic256CoreRecord, INT256_NUM_MEMORY_BLOCKS, NUM_READS,
+        AddSub256ChipGpu, BitwiseLogic256ChipGpu, BranchEqual256ChipGpu, BranchLessThan256ChipGpu,
+        LessThan256ChipGpu, Multiplication256ChipGpu, ShiftLogical256ChipGpu,
+        ShiftRightArithmetic256ChipGpu,
     },
-    openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-            GpuTestChipHarness,
-        },
-        EmptyAdapterCoreLayout,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
@@ -861,7 +851,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BaseAluOpcode::ADD, 24)]
 #[test_case(BaseAluOpcode::SUB, 24)]
 fn run_add_sub_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
@@ -884,29 +874,26 @@ fn run_add_sub_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
+    let address_bits = tester.address_bits();
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| generate_add_sub_trace(chip, postflight, address_bits),
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + Rv64BaseAlu256Opcode::CLASS_OFFSET,
             None,
         );
     }
-
-    type Record<'a> = (&'a mut AddSub256AdapterRecord, &'a mut AddSub256CoreRecord);
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()
@@ -916,7 +903,7 @@ fn run_add_sub_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BaseAluOpcode::XOR, 24)]
 #[test_case(BaseAluOpcode::OR, 24)]
 #[test_case(BaseAluOpcode::AND, 24)]
@@ -936,7 +923,7 @@ fn run_bitwise_logic_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
-        dummy_range_checker_chip,
+        dummy_range_checker_chip.clone(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -946,32 +933,29 @@ fn run_bitwise_logic_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
+    let address_bits = tester.address_bits();
+    let range_checker = dummy_range_checker_chip;
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_bitwise_trace(chip, postflight, address_bits, &range_checker)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + Rv64BaseAlu256Opcode::CLASS_OFFSET,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut BitwiseLogic256AdapterRecord,
-        &'a mut BitwiseLogic256CoreRecord,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
-        );
 
     tester
         .build()
@@ -981,7 +965,7 @@ fn run_bitwise_logic_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(LessThanOpcode::SLT, 24)]
 #[test_case(LessThanOpcode::SLTU, 24)]
 fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
@@ -1004,32 +988,26 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
+    let address_bits = tester.address_bits();
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| generate_less_than_trace(chip, postflight, address_bits),
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + Rv64LessThan256Opcode::CLASS_OFFSET,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut LessThan256AdapterRecord,
-        &'a mut LessThan256CoreRecord,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()
@@ -1039,7 +1017,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(MulOpcode::MUL, 24)]
 fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, RANGE_TUPLE_SIZES);
@@ -1063,7 +1041,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         tester.execution_bridge(),
         dummy_bitwise_chip,
         dummy_range_tuple_chip,
-        dummy_range_checker_chip,
+        dummy_range_checker_chip.clone(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -1074,32 +1052,29 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
+    let address_bits = tester.address_bits();
+    let range_checker = dummy_range_checker_chip;
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_multiplication_trace(chip, postflight, address_bits, &range_checker)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + Rv64Mul256Opcode::CLASS_OFFSET,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Multiplication256AdapterRecord,
-        &'a mut Multiplication256CoreRecord,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
-        );
 
     tester
         .build()
@@ -1109,7 +1084,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(ShiftOpcode::SLL, 24)]
 #[test_case(ShiftOpcode::SRL, 24)]
 #[test_case(ShiftOpcode::SRA, 24)]
@@ -1133,32 +1108,28 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
             tester.address_bits(),
             tester.timestamp_max_bits(),
         );
+        let address_bits = tester.address_bits();
         let mut harness =
-            GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+            GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+                .with_trace_generators(
+                    move |chip, postflight| {
+                        generate_shift_arithmetic_trace(chip, postflight, address_bits)
+                    },
+                    |chip, program, transcript, plan| {
+                        chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                    },
+                );
 
         for _ in 0..num_ops {
             set_and_execute_rand(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.dense_arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode.local_usize() + Rv64Shift256Opcode::CLASS_OFFSET,
                 None,
             );
         }
-
-        type Record<'a> = (
-            &'a mut ShiftRightArithmetic256AdapterRecord,
-            &'a mut ShiftRightArithmetic256CoreRecord,
-        );
-
-        harness
-            .dense_arena
-            .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
-            );
 
         tester
             .build()
@@ -1179,32 +1150,28 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
             tester.address_bits(),
             tester.timestamp_max_bits(),
         );
+        let address_bits = tester.address_bits();
         let mut harness =
-            GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+            GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+                .with_trace_generators(
+                    move |chip, postflight| {
+                        generate_shift_logical_trace(chip, postflight, address_bits)
+                    },
+                    |chip, program, transcript, plan| {
+                        chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                    },
+                );
 
         for _ in 0..num_ops {
             set_and_execute_rand(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.dense_arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode.local_usize() + Rv64Shift256Opcode::CLASS_OFFSET,
                 None,
             );
         }
-
-        type Record<'a> = (
-            &'a mut ShiftLogical256U16AdapterRecord,
-            &'a mut ShiftLogical256CoreRecord,
-        );
-
-        harness
-            .dense_arena
-            .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
-            );
 
         tester
             .build()
@@ -1215,7 +1182,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
     }
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BranchEqualOpcode::BEQ, 24)]
 #[test_case(BranchEqualOpcode::BNE, 24)]
 fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
@@ -1231,7 +1198,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
     let (air, executor, cpu_chip) = create_beq_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_range_checker_chip,
+        dummy_range_checker_chip.clone(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -1240,35 +1207,29 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
+    let address_bits = tester.address_bits();
+    let range_checker = dummy_range_checker_chip;
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_branch_equal_trace(chip, postflight, address_bits, &range_checker)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + Rv64BranchEqual256Opcode::CLASS_OFFSET,
             Some(beq_branch_fn),
         );
     }
-
-    type Record<'a> = (
-        &'a mut BranchEqual256AdapterRecord,
-        &'a mut BranchEqual256CoreRecord,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<
-                F,
-                Rv64VecHeapBranchU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
-            >::new(),
-        );
 
     tester
         .build()
@@ -1278,7 +1239,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BranchLessThanOpcode::BLT, 24)]
 #[test_case(BranchLessThanOpcode::BLTU, 24)]
 #[test_case(BranchLessThanOpcode::BGE, 24)]
@@ -1305,35 +1266,28 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
+    let address_bits = tester.address_bits();
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_branch_less_than_trace(chip, postflight, address_bits)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + Rv64BranchLessThan256Opcode::CLASS_OFFSET,
             Some(blt_branch_fn),
         );
     }
-
-    type Record<'a> = (
-        &'a mut BranchLessThan256AdapterRecord,
-        &'a mut BranchLessThan256CoreRecord,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<
-                F,
-                Rv64VecHeapBranchU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
-            >::new(),
-        );
 
     tester
         .build()

@@ -14,8 +14,6 @@ mod hint_stream;
 mod integration_api;
 mod postflight;
 mod preflight;
-/// [RecordArena] trait definitions and implementations. Currently there are two concrete
-/// implementations: [MatrixRecordArena] and [DenseRecordArena].
 #[cfg(feature = "rvr")]
 pub mod rvr;
 /// VM state definitions

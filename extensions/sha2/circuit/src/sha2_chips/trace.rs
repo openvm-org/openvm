@@ -7,7 +7,7 @@ use openvm_instructions::{
 use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Sha2Config, Sha2MainChipConfig, SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
+use crate::{Sha2Config, SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
 pub(crate) struct Sha2ReplayRow {
     pub from_pc: u32,

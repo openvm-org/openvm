@@ -13,8 +13,7 @@ ordinary execution. Its extra job is narrowly defined:
 > replay seed from which the GPU can derive an immutable execution history.
 
 Trace generation re-executes from that history. It does not consume chip-shaped
-execution records, and the active proving path does not construct a
-`RecordArena`.
+execution records.
 
 ## Three execution modes
 
@@ -396,20 +395,20 @@ initial touched-memory view must never overwrite the final memory state carried
 to the next segment. Final public values are extracted using the final segment's
 completed memory top tree.
 
-## RecordArena boundary
+## Execution-history boundary
 
-The active compiled preflight executor, postflight, standard SDK GPU tracegen,
-and continuation proving path do not construct a `RecordArena`.
+Interpreted preflight appends the generic execution history directly. Compiled
+preflight emits checkpoints and residuals, which postflight expands into the
+same history. Standard SDK tracegen and continuation proving begin only after
+both paths have converged on that validated read-only representation.
 
 Negative tests retain a small expanded-log fixture type, and chronology tests
 retain an independent CPU oracle. Both are test utilities over postflight's
 derived history; neither is a second execution mode or production contract.
 
-`RecordArena` still exists for legacy interpreter preflight, legacy/default GPU
-builders, CPU trace generation, and tests that have not moved to read-only
-replay. Removing it from those APIs is a separate repository-wide migration.
-The compiled path must not reintroduce a record adapter merely to make that
-cleanup look complete.
+CPU trace generation replays the validated host history. GPU trace generation
+consumes the uploaded immutable history and its postflight indexes. Tests use
+the same paths rather than retaining a second execution contract.
 
 ## Current implementation status
 
@@ -510,8 +509,8 @@ seconds of preflight, 13.497 seconds of trace generation, 66.101 seconds across
 app segment proof spans, and 16.18 GB peak GPU memory.
 
 For a historical comparison, the strict pre-change baseline is the merge base,
-OpenVM `e2bced3b`, with compiled RVR metering and legacy RecordArena preflight.
-The current revision is `00afc086`. Local CUDA proofs used byte-identical guest
+OpenVM `e2bced3b`, with compiled RVR metering and legacy per-chip preflight.
+The benchmarked revision was `00afc086`. Local CUDA proofs used byte-identical guest
 ELFs, cached block inputs, and VM configuration in each pair. All six proofs
 verified, and each pair produced the same number of segments.
 
@@ -645,9 +644,6 @@ compile-time gate for pure, metered, and preflight execution.
 2. Instrument checkpoint-batch count and transfer time, then prototype
    closed-interval count overlap only if the whole Reth proof improves without
    increasing expansion or tracegen peak GPU memory.
-3. Decide separately whether legacy CPU/interpreter support is migrated far
-   enough to remove `RecordArena` from shared builder traits. The compiled
-   proving path already avoids it.
 
 ## Review stack
 

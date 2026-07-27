@@ -36,9 +36,8 @@ use serde::{Deserialize, Serialize};
 use crate::runtime::{make_deferral_compress, make_deferral_hash};
 use crate::{
     call::{
-        DeferralCallAdapterAir, DeferralCallAdapterExecutor, DeferralCallAdapterFiller,
-        DeferralCallAir, DeferralCallChip, DeferralCallCoreAir, DeferralCallCoreFiller,
-        DeferralCallExecutor,
+        DeferralCallAdapterAir, DeferralCallAdapterFiller, DeferralCallAir, DeferralCallChip,
+        DeferralCallCoreAir, DeferralCallCoreFiller, DeferralCallExecutor,
     },
     count::{DeferralCircuitCountAir, DeferralCircuitCountBus, DeferralCircuitCountChip},
     output::{DeferralOutputAir, DeferralOutputChip, DeferralOutputExecutor, DeferralOutputFiller},
@@ -105,7 +104,7 @@ impl VmExecutionExtension for DeferralExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<DeferralExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let call = DeferralCallExecutor::new(DeferralCallAdapterExecutor, self.fns.clone());
+        let call = DeferralCallExecutor::new(self.fns.clone());
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
 
         inventory.add_executor(

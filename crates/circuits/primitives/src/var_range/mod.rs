@@ -225,7 +225,7 @@ impl VariableRangeCheckerChip {
     }
 }
 
-// We allow any `R` type so this can work with arbitrary record arenas.
+// The chip does not inspect its input, so it accepts any record type.
 impl<R, SC: StarkProtocolConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,

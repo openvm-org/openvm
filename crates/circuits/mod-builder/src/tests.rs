@@ -11,8 +11,8 @@ use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
 
 use crate::{
     test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExprCols, FieldExpressionCoreRecordMut, FieldExpressionFiller, FieldExpressionProgram,
-    FieldExpressionTraceError, FieldVariable, SymbolicExpr,
+    FieldExprCols, FieldExpressionFiller, FieldExpressionProgram, FieldExpressionTraceError,
+    FieldVariable, SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
@@ -159,33 +159,28 @@ fn generate_direct_trace(
     row
 }
 
-fn generate_recorded_trace(
+fn generate_replayed_trace(
     expr: &FieldExpr,
     range_checker: &Arc<VariableRangeCheckerChip>,
     inputs: &[BigUint],
-    flags: Vec<bool>,
     width: usize,
 ) -> Vec<BabyBear> {
-    let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-        &mut buffer,
-        inputs,
-        expr.program().canonical_num_limbs(),
-    );
-    let data: Vec<u8> = inputs
+    let input_bytes: Vec<u8> = inputs
         .iter()
         .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
         .collect();
-    record.fill_from_execution_data(0, &data);
-
-    let reconstructed_inputs: Vec<BigUint> = record
-        .input_limbs
-        .chunks(expr.program().canonical_num_limbs())
-        .map(BigUint::from_bytes_le)
-        .collect();
-
+    let filler = FieldExpressionFiller::new(
+        (),
+        expr.clone(),
+        vec![0],
+        vec![],
+        range_checker.clone(),
+        false,
+    );
     let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((range_checker, reconstructed_inputs, flags), &mut row);
+    filler
+        .fill_trace_row_from_execution_data(range_checker, 0, &input_bytes, None, &mut row)
+        .unwrap();
     row
 }
 
@@ -224,15 +219,13 @@ fn test_trace_equivalence(
     expr: &FieldExpr,
     range_checker: &Arc<VariableRangeCheckerChip>,
     inputs: Vec<BigUint>,
-    flags: Vec<bool>,
     width: usize,
 ) {
-    let direct_trace =
-        generate_direct_trace(expr, range_checker, inputs.clone(), flags.clone(), width);
-    let recorded_trace = generate_recorded_trace(expr, range_checker, &inputs, flags, width);
+    let direct_trace = generate_direct_trace(expr, range_checker, inputs.clone(), vec![], width);
+    let replayed_trace = generate_replayed_trace(expr, range_checker, &inputs, width);
     assert_eq!(
-        direct_trace, recorded_trace,
-        "Direct and recorded traces must be identical for inputs: {inputs:?}"
+        direct_trace, replayed_trace,
+        "Direct and replayed traces must be identical for inputs: {inputs:?}"
     );
 }
 
@@ -520,56 +513,6 @@ fn test_symbolic_limbs_mul() {
 }
 
 #[test]
-fn test_recorded_execution_records() {
-    let prime = secp256k1_coord_prime();
-    let (_, builder) = setup(&prime);
-
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let mut x3 = x1 + x2;
-    x3.save();
-    let builder = builder.borrow().clone();
-
-    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
-
-    let x = generate_random_biguint(&prime);
-    let y = generate_random_biguint(&prime);
-    let expected = (&x + &y) % &prime;
-    let inputs = vec![x.clone(), y.clone()];
-    let flags: Vec<bool> = vec![];
-
-    // Test record creation and reconstruction
-    let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-        &mut buffer,
-        &inputs,
-        expr.program().canonical_num_limbs(),
-    );
-    let data: Vec<u8> = inputs
-        .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
-        .collect();
-    record.fill_from_execution_data(0, &data);
-    assert_eq!(*record.opcode, 0);
-
-    // Verify input reconstruction preserves data
-    let reconstructed_inputs: Vec<BigUint> = record
-        .input_limbs
-        .chunks(expr.program().canonical_num_limbs())
-        .map(BigUint::from_bytes_le)
-        .collect();
-    assert_eq!(reconstructed_inputs.len(), inputs.len());
-    for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
-        assert_eq!(original, reconstructed);
-    }
-
-    // Test standard execution and verification using reconstructed inputs
-    let trace = generate_direct_trace(&expr, &range_checker, reconstructed_inputs, flags, width);
-    extract_and_verify_result(&expr, &trace, &expected, 0);
-    verify_stark_with_traces(expr, range_checker, trace, width);
-}
-
-#[test]
 fn test_trace_mathematical_equivalence() {
     let prime = secp256k1_coord_prime();
     let (_, builder) = setup(&prime);
@@ -596,8 +539,8 @@ fn test_trace_mathematical_equivalence() {
         let inputs = vec![x.clone(), y.clone()];
         let flags: Vec<bool> = vec![];
 
-        // Test direct/recorded equivalence
-        test_trace_equivalence(&expr, &range_checker, inputs.clone(), flags.clone(), width);
+        // Test direct/replayed equivalence.
+        test_trace_equivalence(&expr, &range_checker, inputs.clone(), width);
 
         // Verify the actual computation is correct
         let direct_row = generate_direct_trace(&expr, &range_checker, inputs.clone(), flags, width);
@@ -607,110 +550,7 @@ fn test_trace_mathematical_equivalence() {
 }
 
 #[test]
-fn test_record_arena_allocation_patterns() {
-    let prime = secp256k1_coord_prime();
-    let (_, builder) = setup(&prime);
-
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let mut x3 = x1 + x2;
-    x3.save();
-    let builder = builder.borrow().clone();
-
-    let (expr, _range_checker, _width) = create_field_expr_with_setup(builder);
-
-    let inputs = vec![
-        generate_random_biguint(&prime),
-        generate_random_biguint(&prime),
-    ];
-
-    // Test record creation with various input sizes
-    let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-        &mut buffer,
-        &inputs,
-        expr.program().canonical_num_limbs(),
-    );
-    let data: Vec<u8> = inputs
-        .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
-        .collect();
-    record.fill_from_execution_data(0, &data);
-    assert_eq!(*record.opcode, 0);
-
-    // Test with maximum inputs
-    let max_inputs = vec![BigUint::one(); 40]; // MAX_INPUT_LIMBS / 4
-    let mut max_buffer = vec![0u8; 2048];
-    let max_record =
-        FieldExpressionCoreRecordMut::new_from_execution_data(&mut max_buffer, &max_inputs, 4);
-    assert_eq!(*max_record.opcode, 0);
-
-    // Test input reconstruction
-    let reconstructed_inputs: Vec<BigUint> = record
-        .input_limbs
-        .chunks(expr.program().canonical_num_limbs())
-        .map(BigUint::from_bytes_le)
-        .collect();
-    assert_eq!(reconstructed_inputs.len(), inputs.len());
-    for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
-        assert_eq!(original, reconstructed);
-    }
-}
-
-#[test]
-fn test_tracestep_tracefiller_roundtrip() {
-    let prime = secp256k1_coord_prime();
-    let (_, builder) = setup(&prime);
-
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let x3 = x1.clone() * x2.clone();
-    let x4 = x3.clone() + x1.clone();
-    let mut x5 = x4.clone();
-    x5.save();
-    let builder_data = builder.borrow().clone();
-
-    let (expr, _range_checker, _width) = create_field_expr_with_setup(builder_data);
-
-    let inputs = vec![
-        generate_random_biguint(&prime),
-        generate_random_biguint(&prime),
-    ];
-
-    let vars_direct = expr.program().execute(&inputs, &[]);
-
-    // Test record creation and reconstruction roundtrip
-    let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-        &mut buffer,
-        &inputs,
-        expr.program().canonical_num_limbs(),
-    );
-    let data: Vec<u8> = inputs
-        .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
-        .collect();
-    record.fill_from_execution_data(0, &data);
-
-    let reconstructed_inputs: Vec<BigUint> = record
-        .input_limbs
-        .chunks(expr.program().canonical_num_limbs())
-        .map(BigUint::from_bytes_le)
-        .collect();
-    let vars_reconstructed = expr.program().execute(&reconstructed_inputs, &[]);
-
-    // All intermediate variables must be preserved
-    assert_eq!(vars_direct.len(), vars_reconstructed.len());
-    for (direct, reconstructed) in vars_direct.iter().zip(vars_reconstructed.iter()) {
-        assert_eq!(
-            direct, reconstructed,
-            "Variable preservation failed in roundtrip"
-        );
-    }
-}
-
-#[test]
-fn test_direct_recorded_with_complex_operations() {
+fn test_direct_replay_with_complex_operations() {
     let prime = secp256k1_coord_prime();
     let (_, builder) = setup(&prime);
 
@@ -749,8 +589,8 @@ fn test_direct_recorded_with_complex_operations() {
         let inputs = vec![x.clone(), y.clone(), z.clone()];
         let flags = vec![];
 
-        // Test direct/recorded equivalence
-        test_trace_equivalence(&expr, &range_checker, inputs.clone(), flags.clone(), width);
+        // Test direct/replayed equivalence.
+        test_trace_equivalence(&expr, &range_checker, inputs.clone(), width);
 
         // Verify mathematical correctness
         let expected = {
@@ -766,8 +606,8 @@ fn test_direct_recorded_with_complex_operations() {
 }
 
 #[test]
-fn test_concurrent_direct_recorded_simulation() {
-    // Simulate mixed direct/recorded execution to ensure RecordArena abstraction works correctly
+fn test_concurrent_direct_replay_simulation() {
+    // Exercise direct and replayed field-expression trace generation in one test.
     let prime = secp256k1_coord_prime();
     let (_, builder) = setup(&prime);
 
@@ -782,9 +622,9 @@ fn test_concurrent_direct_recorded_simulation() {
     // Simulate multiple "concurrent" executions with different modes
     let execution_scenarios = vec![
         ("direct", true),
-        ("recorded", false),
+        ("replayed", false),
         ("direct", true),
-        ("recorded", false),
+        ("replayed", false),
     ];
 
     let mut all_traces = Vec::new();
@@ -798,7 +638,7 @@ fn test_concurrent_direct_recorded_simulation() {
         let trace = if is_direct {
             generate_direct_trace(&expr, &range_checker, inputs.clone(), vec![], width)
         } else {
-            generate_recorded_trace(&expr, &range_checker, &inputs, vec![], width)
+            generate_replayed_trace(&expr, &range_checker, &inputs, width)
         };
 
         all_traces.push((name, inputs, trace));
@@ -810,7 +650,7 @@ fn test_concurrent_direct_recorded_simulation() {
         extract_and_verify_result(&expr, trace, &expected, 0);
     }
 
-    // Verify that direct and recorded with same inputs produce same results
+    // Verify that direct and replayed execution with the same inputs agree.
     let same_inputs = vec![BigUint::from(123u32), BigUint::from(456u32)];
-    test_trace_equivalence(&expr, &range_checker, same_inputs, vec![], width);
+    test_trace_equivalence(&expr, &range_checker, same_inputs, width);
 }

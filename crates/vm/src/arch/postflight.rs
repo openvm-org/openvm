@@ -229,10 +229,29 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         }
     }
 
+    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda", feature = "rvr"))]
+    pub(crate) fn memory_predecessors_for_test(&self) -> &[u32] {
+        &self.memory_predecessors
+    }
+
+    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda", feature = "rvr"))]
+    pub(crate) fn replay_steps_for_test(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
+        self.steps.iter().map(|step| {
+            let program_index = step.0;
+            (program_index, self.memory_starts[program_index as usize])
+        })
+    }
+
+    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda", feature = "rvr"))]
+    pub(crate) fn opcode_ranges_for_test(&self) -> &BTreeMap<u32, Range<usize>> {
+        &self.opcode_ranges
+    }
+
     #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn record_test_writes(&self, memory: &mut crate::arch::testing::MemoryTester<F>)
+    pub(crate) fn record_test_writes<M>(&self, memory: &mut M)
     where
         F: crate::arch::VmField,
+        M: crate::arch::testing::memory::PostflightTestMemory<F>,
     {
         let mut first_writes = FxHashMap::<u64, usize>::default();
         for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
@@ -247,14 +266,14 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             let event = self.history.memory.accesses[event_index];
             match self.memory_config.addr_spaces[event.address_space() as usize].layout {
                 MemoryCellType::U16 => unsafe {
-                    memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+                    memory.tracing_memory().data.write::<u16, BLOCK_FE_WIDTH>(
                         event.address_space(),
                         event.pointer,
                         self.previous_u16(event_index),
                     );
                 },
                 MemoryCellType::F { size: 4 } => unsafe {
-                    memory.memory.data.write::<F, BLOCK_FE_WIDTH>(
+                    memory.tracing_memory().data.write::<F, BLOCK_FE_WIDTH>(
                         event.address_space(),
                         event.pointer,
                         self.previous_field32(event_index),
@@ -274,7 +293,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                 MemoryCellType::F { size: 4 } => self.field_value(event_index),
                 _ => unreachable!("postflight validates every accessed memory layout"),
             };
-            memory.write(
+            memory.write_block(
                 event.address_space() as usize,
                 event.pointer as usize,
                 value,

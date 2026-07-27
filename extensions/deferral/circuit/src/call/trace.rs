@@ -3,15 +3,10 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{Postflight, PostflightError, U16Access, VmField, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
-    system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord},
-        MemoryAuxColsFactory,
-    },
+    system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
-};
+use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
@@ -19,12 +14,12 @@ use openvm_instructions::{
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::{accumulator_ptrs, DeferralCallChip};
 use crate::{
-    call::{DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReads, DeferralCallWrites},
+    call::{DeferralCallAdapterCols, DeferralCallCoreCols},
     canonicity::CanonicityTraceGen,
     count::DeferralCircuitCountChip,
     poseidon2::DeferralPoseidon2Chip,
@@ -453,17 +448,8 @@ fn fill_call_core<F: VmField>(
 
 // ========================= CORE ==============================
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct DeferralCallCoreRecord<F> {
-    pub deferral_idx: F,
-    pub read_data: DeferralCallReads<u8, F>,
-    pub write_data: DeferralCallWrites<u8, F>,
-}
-
 #[derive(Clone, derive_new::new)]
-pub struct DeferralCallCoreExecutor<A> {
-    pub(in crate::call) adapter: A,
+pub struct DeferralCallCoreExecutor {
     pub(in crate::call) deferral_fns: Vec<Arc<DeferralFn>>,
 }
 
@@ -477,36 +463,6 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
 }
 
 // ========================= ADAPTER ==============================
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct DeferralCallAdapterRecord<F> {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rd_ptr: F,
-    pub rs_ptr: F,
-
-    // Heap pointers and auxiliary records
-    pub rd_val: u32,
-    pub rs_val: u32,
-    pub rd_aux: MemoryReadAuxRecord,
-    pub rs_aux: MemoryReadAuxRecord,
-
-    // Read auxiliary records
-    pub input_commit_aux: [MemoryReadAuxRecord; COMMIT_MEMORY_OPS],
-    pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
-    pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
-
-    // Heap output writes use byte chunks; accumulator writes use DEFERRAL_AS
-    // cell chunks.
-    pub output_commit_and_len_aux:
-        [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
-}
-
-#[derive(Clone, Copy)]
-pub struct DeferralCallAdapterExecutor;
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {

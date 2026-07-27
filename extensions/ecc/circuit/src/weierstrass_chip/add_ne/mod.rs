@@ -4,7 +4,6 @@ use std::{
     rc::Rc,
 };
 
-use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -64,22 +63,17 @@ pub fn ec_add_ne_program(
 }
 
 /// `BLOCKS` is the number of memory blocks needed to represent one input or output point.
-// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
+// Preflight executes this transition with fast native arithmetic.
 #[derive(Clone)]
 pub struct EcAddNeExecutor<const BLOCKS: usize> {
     pub(crate) inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    pub(crate) cached_field_type: Option<FieldType>,
 }
 
 impl<const BLOCKS: usize> EcAddNeExecutor<BLOCKS> {
     pub fn new(
         inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
     ) -> Self {
-        let cached_field_type = get_field_type(inner.program().prime());
-        Self {
-            inner,
-            cached_field_type,
-        }
+        Self { inner }
     }
 }
 

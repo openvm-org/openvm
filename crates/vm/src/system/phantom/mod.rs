@@ -4,9 +4,7 @@
 //! affect trace generation based on the operand.
 use std::{borrow::Borrow, sync::Arc};
 
-use openvm_circuit_primitives::{
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
@@ -88,20 +86,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct PhantomRecord {
-    pub pc: u32,
-    pub operands: [u32; NUM_PHANTOM_OPERANDS],
-    pub timestamp: u32,
-}
-
 /// `PhantomChip` is a special executor because it is stateful and stores all the phantom
 /// sub-executors.
 #[derive(Clone, derive_new::new)]
 pub struct PhantomExecutor {
     pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>>,
-    pub(crate) phantom_opcode: VmOpcode,
 }
 
 pub struct PhantomFiller;

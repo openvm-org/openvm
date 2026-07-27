@@ -23,9 +23,20 @@ use openvm_stark_backend::{
 };
 
 use crate::{
+    arch::testing::memory::PostflightTestMemory,
     cuda_abi::memory_testing,
     system::cuda::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
 };
+
+impl PostflightTestMemory<F> for DeviceMemoryTester {
+    fn tracing_memory(&mut self) -> &mut TracingMemory {
+        &mut self.memory
+    }
+
+    fn write_block(&mut self, address_space: usize, pointer: usize, value: [F; BLOCK_FE_WIDTH]) {
+        self.write(address_space, pointer, value);
+    }
+}
 
 pub struct DeviceMemoryTester {
     pub(crate) chip: FixedSizeMemoryTester,

@@ -1,4 +1,4 @@
-//! Arena-free checkpoint replay for algebra GPU trace generation.
+//! Immutable-history replay for algebra GPU trace generation.
 
 use std::{ops::Range, sync::Arc};
 

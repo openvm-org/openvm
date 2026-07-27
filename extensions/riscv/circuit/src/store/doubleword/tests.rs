@@ -1,28 +1,21 @@
 use std::sync::Arc;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
-use openvm_circuit::arch::{
-    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
+use openvm_circuit::arch::testing::{
+    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::PUBLIC_VALUES_AS;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::Program,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STORED};
-use openvm_stark_backend::p3_matrix::{dense::RowMajorMatrix, Matrix};
 use openvm_stark_sdk::utils::create_seeded_rng;
 
 use super::trace::generate_trace_from_postflight;
@@ -38,10 +31,10 @@ use crate::{
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     store::Rv64StoreDoublewordChipGpu,
-    test_utils::memory::{dummy_range_checker, store_gpu_memory_config, transfer_store_records},
+    test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
 type StoreDoublewordHarness = TestChipHarness<
@@ -173,7 +166,7 @@ fn run_stored_sanity_test() {
     );
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuStoreDoublewordHarness = GpuTestChipHarness<
     F,
     Rv64StoreDoublewordExecutor,
@@ -182,7 +175,7 @@ type GpuStoreDoublewordHarness = GpuTestChipHarness<
     Rv64StoreDoublewordChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStoreDoublewordHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -217,9 +210,16 @@ fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStore
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+        .with_padding(fill_padding_row)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case::test_case(RV64_MEMORY_AS as usize)]
 #[test_case::test_case(PUBLIC_VALUES_AS as usize)]
 fn test_cuda_rand_store_doubleword_tracegen(mem_as: usize) {
@@ -232,7 +232,7 @@ fn test_cuda_rand_store_doubleword_tracegen(mem_as: usize) {
         set_and_execute_store(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             STORED,
             None,
@@ -241,7 +241,6 @@ fn test_cuda_rand_store_doubleword_tracegen(mem_as: usize) {
             Some(mem_as),
         );
     }
-    transfer_store_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)
