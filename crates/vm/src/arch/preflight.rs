@@ -1,4 +1,4 @@
-use rvr_state::{
+pub use rvr_state::{
     PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
 };
 

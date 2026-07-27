@@ -3,12 +3,18 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        Arena, ExecutionBridge, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -33,11 +39,13 @@ use {
     std::sync::Arc,
 };
 
-use super::{AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
+use super::{
+    trace::generate_trace_from_postflight, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor,
+};
 use crate::{
     adapters::{
         Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
-        Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+        Rv64BaseAluRegU16AdapterFiller, U16_BITS,
     },
     add_sub::AddSubCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -152,6 +160,91 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn postflight_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let mut harness = create_harness(&tester);
+    let add = Instruction::from_usize(
+        ADD.global_opcode(),
+        [
+            24,
+            8,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    let sub = Instruction::from_usize(
+        SUB.global_opcode(),
+        [
+            32,
+            24,
+            8,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    let sentinel = Instruction::from_usize(
+        ADD.global_opcode(),
+        [
+            40,
+            8,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    unsafe {
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [1, 2, 3, 4]);
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, [5, 6, 7, 8]);
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &add, 0);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &sub, 4);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 4,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 7,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[add, sub, sentinel], 0);
+    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
