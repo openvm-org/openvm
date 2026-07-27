@@ -21,7 +21,7 @@ fn main() {
 
     let c = n * 2;
 
-    let v1 = vec![c as u32];
+    let v1 = vec![c];
     let old_v1_0 = v1[0];
 
     let heap_ptr = unsafe { sys_alloc_aligned(4, 4) };
@@ -29,7 +29,7 @@ fn main() {
     let _alloc_overflow = unsafe { sys_alloc_aligned(missing as usize, 4) };
     let _alloc_overlap = unsafe { sys_alloc_aligned((v1.as_ptr() as usize) - 4, 4) };
 
-    let v2 = vec![(c + 1) as u32];
+    let v2 = vec![c + 1];
 
     assert_eq!(v1, v2);
     assert!(old_v1_0 != v1[0]);

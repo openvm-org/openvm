@@ -4378,6 +4378,7 @@ dependencies = [
  "getrandom 0.3.3",
  "num-bigint 0.4.6",
  "openvm-custom-insn",
+ "openvm-mem",
  "openvm-platform",
  "openvm-riscv-guest",
  "serde",
@@ -5166,6 +5167,10 @@ version = "2.1.0"
 dependencies = [
  "syn 2.0.118",
 ]
+
+[[package]]
+name = "openvm-mem"
+version = "2.1.0"
 
 [[package]]
 name = "openvm-mod-circuit-builder"
