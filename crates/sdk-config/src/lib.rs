@@ -39,6 +39,10 @@ mod preflight;
 mod preflight_driver;
 #[cfg(feature = "cuda")]
 pub use preflight_driver::SegmentProver;
+#[cfg(not(feature = "cuda"))]
+mod segment_prover;
+#[cfg(not(feature = "cuda"))]
+pub use segment_prover::SegmentProver;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {

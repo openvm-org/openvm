@@ -9,7 +9,8 @@ use openvm_circuit::{
         cuda::postflight::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
-        to_byte_ptr_bits, ChipInventory, ChipInventoryError, GenerationError, VirtualMachine,
+        prepare_gpu_postflight, to_byte_ptr_bits, ChipInventory, ChipInventoryError,
+        GenerationError, Postflight, PostflightTracegen, PreflightOutput, VirtualMachine,
         VmBuilder, VmProverExtension,
     },
     system::cuda::{
@@ -28,7 +29,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_backend::{
     base::DeviceMatrix, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
@@ -37,16 +38,7 @@ use openvm_riscv_transpiler::{
     ShiftWOpcode,
 };
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-#[cfg(any(test, feature = "test-utils"))]
-use {
-    openvm_circuit::{
-        arch::{Postflight, PreflightOutput},
-        utils::{prepare_gpu_test_tracegen, TestPreflightTracegen},
-    },
-    openvm_instructions::exe::VmExe,
-    openvm_stark_sdk::config::baby_bear_poseidon2::F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
@@ -74,20 +66,19 @@ use crate::{
 
 pub struct Rv64ImGpuProverExt;
 
-#[cfg(any(test, feature = "test-utils"))]
-macro_rules! impl_test_preflight_tracegen {
+macro_rules! impl_postflight_tracegen {
     ($builder:ty) => {
-        impl TestPreflightTracegen<GpuBabyBearPoseidon2Engine> for $builder {
+        impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for $builder {
             type Prepared = GpuPostflightProgram;
 
-            fn prepare_test_tracegen(
+            fn prepare_postflight(
                 vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-                exe: &VmExe<F>,
+                program: &Program<F>,
             ) -> Result<Self::Prepared, GenerationError> {
-                prepare_gpu_test_tracegen(vm, exe)
+                prepare_gpu_postflight(vm, program)
             }
 
-            fn generate_test_proving_ctx(
+            fn generate_proving_ctx(
                 vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
                 program: &Self::Prepared,
                 output: &PreflightOutput,
@@ -104,10 +95,8 @@ macro_rules! impl_test_preflight_tracegen {
     };
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-impl_test_preflight_tracegen!(crate::Rv64IGpuBuilder);
-#[cfg(any(test, feature = "test-utils"))]
-impl_test_preflight_tracegen!(crate::Rv64ImGpuBuilder);
+impl_postflight_tracegen!(crate::Rv64IGpuBuilder);
+impl_postflight_tracegen!(crate::Rv64ImGpuBuilder);
 
 /// Segment-wide RV64I GPU trace generation from an immutable postflight transcript.
 ///

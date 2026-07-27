@@ -144,30 +144,68 @@ pub enum GenerationError {
     },
 }
 
-#[doc(hidden)]
-pub trait PostflightTracegen<SC, PB>
-where
-    SC: StarkProtocolConfig,
-    PB: ProverBackend,
-{
-    fn generate_from_postflight(
-        &mut self,
-        postflight: &Postflight<'_, Val<SC>>,
-    ) -> Result<ProvingContext<PB>, GenerationError>;
+/// Converts immutable preflight history into a backend-specific proving context.
+///
+/// Implementations may prepare backend-owned fixed-program data once and reuse it across all
+/// segments. CPU builders replay the history through their chip inventory, while GPU builders
+/// expand it into the transcript consumed by their trace-generation kernels.
+pub trait PostflightTracegen<E: StarkEngine>: VmBuilder<E> {
+    type Prepared;
+
+    fn prepare_postflight(
+        vm: &VirtualMachine<E, Self>,
+        program: &Program<Val<E::SC>>,
+    ) -> Result<Self::Prepared, GenerationError>;
+
+    fn generate_proving_ctx(
+        vm: &mut VirtualMachine<E, Self>,
+        prepared: &Self::Prepared,
+        output: &PreflightOutput,
+        postflight: &Postflight<'_, Val<E::SC>>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError>;
 }
 
-impl<SC> PostflightTracegen<SC, CpuBackend<SC>>
-    for VmChipComplex<SC, CpuBackend<SC>, SystemChipInventory<SC>>
+impl<SC, E, VB> PostflightTracegen<E> for VB
 where
     SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
     Val<SC>: VmField,
+    VB: VmBuilder<E, SystemChipInventory = SystemChipInventory<SC>>,
 {
-    fn generate_from_postflight(
-        &mut self,
-        postflight: &Postflight<'_, Val<SC>>,
-    ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
-        self.generate_proving_ctx_from_postflight(postflight)
+    type Prepared = ();
+
+    fn prepare_postflight(
+        _vm: &VirtualMachine<E, Self>,
+        _program: &Program<Val<E::SC>>,
+    ) -> Result<Self::Prepared, GenerationError> {
+        Ok(())
     }
+
+    fn generate_proving_ctx(
+        vm: &mut VirtualMachine<E, Self>,
+        _prepared: &Self::Prepared,
+        _output: &PreflightOutput,
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        vm.chip_complex
+            .generate_proving_ctx_from_postflight(postflight)
+    }
+}
+
+#[cfg(feature = "cuda")]
+pub fn prepare_gpu_postflight<VB>(
+    vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, VB>,
+    program: &Program<BabyBear>,
+) -> Result<GpuPostflightProgram, GenerationError>
+where
+    VB: VmBuilder<BabyBearPoseidon2GpuEngine>,
+{
+    GpuPostflightProgram::upload(
+        program,
+        &vm.config().as_ref().memory_config,
+        &vm.engine.device().device_ctx,
+    )
+    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
 }
 
 #[derive(Clone, Default)]
@@ -201,8 +239,8 @@ impl From<Vec<Vec<u8>>> for Streams {
     }
 }
 
-/// Typedef for [PreflightInterpretedInstance] that is generic in `VC: VmExecutionConfig<F>`
-type PreflightInterpretedInstance2<F, VC> =
+/// Preflight interpreter specialized by a VM execution config.
+type PreflightInterpreter<F, VC> =
     PreflightInterpretedInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
 
 /// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
@@ -1037,7 +1075,7 @@ where
     pub fn preflight_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    ) -> Result<PreflightInterpreter<Val<E::SC>, VB::VmConfig>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
@@ -1049,7 +1087,7 @@ where
     #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight(
         &self,
-        interpreter: &PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
         state: VmState<GuestMemory>,
     ) -> Result<PreflightOutput, ExecutionError>
     where
@@ -1065,7 +1103,7 @@ where
     #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight_for(
         &self,
-        interpreter: &PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
         state: VmState<GuestMemory>,
         num_insns: u64,
     ) -> Result<PreflightOutput, ExecutionError>
@@ -1074,6 +1112,71 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
     {
         interpreter.execute_preflight_from_state(state, Some(num_insns))
+    }
+
+    /// Proves exactly `num_insns` instructions from `state`.
+    ///
+    /// The final memory is returned only when this segment terminates successfully.
+    pub fn prove_segment(
+        &mut self,
+        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
+        program: &Program<Val<E::SC>>,
+        state: VmState<GuestMemory>,
+        num_insns: u64,
+    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
+    where
+        Val<E::SC>: VmField,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
+        VB: PostflightTracegen<E>,
+    {
+        let prepared = VB::prepare_postflight(self, program)?;
+        let (proof, output) =
+            self.prove_segment_inner(interpreter, program, &prepared, state, num_insns, |_| {})?;
+        let final_memory =
+            (output.exit_code == Some(ExitCode::Success as u32)).then_some(output.state.memory);
+        Ok((proof, final_memory))
+    }
+
+    fn prove_segment_inner(
+        &mut self,
+        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
+        program: &Program<Val<E::SC>>,
+        prepared: &VB::Prepared,
+        state: VmState<GuestMemory>,
+        num_insns: u64,
+        modify_ctx: impl FnOnce(&mut ProvingContext<E::PB>),
+    ) -> Result<(Proof<E::SC>, PreflightOutput), VirtualMachineError>
+    where
+        Val<E::SC>: VmField,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
+        VB: PostflightTracegen<E>,
+    {
+        self.transport_init_memory_to_device(&state.memory);
+        let mut output = self.execute_preflight_for(interpreter, state, num_insns)?;
+        let postflight = Postflight::new(
+            program,
+            &output.history,
+            &self.config().as_ref().memory_config,
+            output.exit_code,
+        )
+        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        #[cfg(feature = "metrics")]
+        crate::metrics::emit_opcode_counts(
+            &output.state.metrics,
+            self.postflight_opcode_counts(&postflight),
+        );
+        output
+            .state
+            .memory
+            .memory
+            .extend_touched_pages_from_touched(postflight.touched_memory());
+        let mut ctx = self.generate_proving_ctx(prepared, &output, &postflight)?;
+        modify_ctx(&mut ctx);
+        let proof = self
+            .engine
+            .prove(self.pk(), ctx)
+            .map_err(|error| GenerationError::Proving(error.to_string()))?;
+        Ok((proof, output))
     }
 
     /// Calls [`VmState::initial`] but sets more information for
@@ -1112,17 +1215,17 @@ where
     }
 
     #[instrument(name = "trace_gen", skip_all)]
-    pub(crate) fn generate_proving_ctx_from_postflight(
+    pub(crate) fn generate_proving_ctx(
         &mut self,
+        prepared: &VB::Prepared,
+        output: &PreflightOutput,
         postflight: &Postflight<'_, Val<E::SC>>,
     ) -> Result<ProvingContext<E::PB>, GenerationError>
     where
-        VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
+        VB: PostflightTracegen<E>,
     {
         begin_preflight_tracegen_session(&mut self.preflight_tracegen_poisoned)?;
-        let result = self
-            .chip_complex
-            .generate_from_postflight(postflight)
+        let result = VB::generate_proving_ctx(self, prepared, output, postflight)
             .and_then(|ctx| self.validate_proving_ctx(ctx));
         if result.is_ok() {
             self.preflight_tracegen_poisoned = false;
@@ -1671,7 +1774,7 @@ where
     VB: VmBuilder<E>,
 {
     pub vm: VirtualMachine<E, VB>,
-    pub interpreter: Option<PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>>,
+    pub interpreter: Option<PreflightInterpreter<Val<E::SC>, VB::VmConfig>>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -1722,7 +1825,7 @@ where
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
+    VB: PostflightTracegen<E>,
 {
     /// First performs metered execution to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -1742,7 +1845,7 @@ where
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
+    VB: PostflightTracegen<E>,
 {
     /// For internal use to resize trace matrices before proving.
     ///
@@ -1765,6 +1868,7 @@ where
         let metered_ctx = vm.build_metered_ctx(&self.exe);
         let metered_instance = vm.metered_instance(&self.exe)?;
         let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
+        let prepared = VB::prepare_postflight(vm, &self.exe.program)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
@@ -1777,28 +1881,14 @@ where
                 ..
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
-            vm.transport_init_memory_to_device(&from_state.memory);
-            let mut output = vm.execute_preflight_for(interpreter, from_state, num_insns)?;
-            let postflight = Postflight::new(
+            let (proof, output) = vm.prove_segment_inner(
+                interpreter,
                 &self.exe.program,
-                &output.history,
-                &vm.config().as_ref().memory_config,
-                output.exit_code,
-            )
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-            #[cfg(feature = "metrics")]
-            crate::metrics::emit_opcode_counts(
-                &output.state.metrics,
-                vm.postflight_opcode_counts(&postflight),
-            );
-            output
-                .state
-                .memory
-                .memory
-                .extend_touched_pages_from_touched(postflight.touched_memory());
-            let mut ctx = vm.generate_proving_ctx_from_postflight(&postflight)?;
-            modify_ctx(seg_idx, &mut ctx);
-            let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
+                &prepared,
+                from_state,
+                num_insns,
+                |ctx| modify_ctx(seg_idx, ctx),
+            )?;
             proofs.push(proof);
             state = Some(output.state);
         }

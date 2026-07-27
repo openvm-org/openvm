@@ -15,8 +15,8 @@ use openvm_stark_sdk::{
 use super::VmConnectorPvs;
 use crate::{
     arch::{
-        ExecutionError, Postflight, Streams, SystemConfig, VirtualMachine, VmState,
-        CONNECTOR_AIR_ID,
+        ExecutionError, Postflight, PostflightTracegen, Streams, SystemConfig, VirtualMachine,
+        VmState, CONNECTOR_AIR_ID,
     },
     system::{
         memory::{online::GuestMemory, AddressMap},
@@ -126,9 +126,8 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         output.exit_code,
     )
     .unwrap();
-    let mut ctx = vm
-        .generate_proving_ctx_from_postflight(&postflight)
-        .unwrap();
+    SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
+    let mut ctx = vm.generate_proving_ctx(&(), &output, &postflight).unwrap();
     let connector_air_ctx = &mut ctx
         .per_trace
         .iter_mut()
