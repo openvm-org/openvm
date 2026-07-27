@@ -149,7 +149,7 @@ __device__ __forceinline__ uint32_t f_of_i64(int64_t v) {
     return (uint32_t)m;
 }
 
-// Fill the core sub-row (validated logic; see tracegen_ir reference interpreter).
+// Fill the core sub-row. CUDA equivalence tests compare this output against CPU tracegen.
 // `core_row` must point at the first core column. When `is_dummy`, inputs are zero,
 // flags false, range checks skipped, is_valid = 0 (mirrors fill_dummy_trace_row).
 __device__ void field_expr_fill_core_row(

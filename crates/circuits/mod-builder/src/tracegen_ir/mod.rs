@@ -1,20 +1,17 @@
 //! Compilation of a finalized [`crate::FieldExpr`] into trace-generation IR
 //! ([`compile_tracegen_ir`]), encoding of that IR for the GPU interpreter
-//! ([`TracegenIr::encode`]), and a CPU reference interpreter that defines the exact
-//! semantics the CUDA kernel must match ([`ReferenceInterpreter`]).
+//! ([`TracegenIr::encode`]), and the types shared by the compiler and encoder.
 //!
 //! See `README.md` for the design overview.
 
 mod abi;
 mod compiler;
 mod encoding;
-mod interpreter;
 #[cfg(test)]
 mod tests;
 
 use abi::*;
 pub use compiler::{compile_tracegen_ir, TracegenCompileError};
-pub use interpreter::ReferenceInterpreter;
 
 /// Value-phase operations over `K`-word Montgomery field elements.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

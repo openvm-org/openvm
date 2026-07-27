@@ -41,40 +41,38 @@
 │  • quotient/carry sizes and bounds                          │
 │  • opcode-to-flag mapping                                   │
 │  • scratch and trace dimensions                             │
-└───────────────┬───────────────────────────┬─────────────────┘
-                │                           │
-                │ interpret                 │ encode()
-                ▼                           ▼
-┌──────────────────────────────┐  ┌────────────────────────────┐
-│ CPU Reference Interpreter    │  │ Encoded Vec<u32> Blob      │
-│                              │  │                            │
-│ Defines exact semantics and  │  │ • fixed header             │
-│ produces reference rows and  │  │ • section offsets          │
-│ range-check counts           │  │ • operation tapes          │
-└───────────────┬──────────────┘  │ • constants and metadata   │
-                │                 └──────────────┬─────────────┘
-                │ expected result               │ upload once
-                │                                ▼
-                │                 ┌────────────────────────────┐
-                │                 │ CUDA Tracegen Interpreter  │
-                │                 │                            │
-                │                 │ One thread per trace row:  │
-                │                 │                            │
-                │                 │ 1. Decode opcode/inputs    │
-                │                 │ 2. Execute value tape      │
-                │                 │ 3. Execute limb tapes      │
-                │                 │ 4. Calculate q and carries │
-                │                 │ 5. Emit range checks       │
-                │                 │ 6. Write trace columns     │
-                │                 └──────────────┬─────────────┘
-                │                                │
-                ▼                                ▼
-        ┌───────────────────────────────────────────────────┐
-        │                 Differential Validation           │
-        │                                                   │
-        │  Reference row and range counts == generate_subrow│
-        │  == CUDA-generated row and range counts           │
-        └───────────────────────────────────────────────────┘
+└──────────────────────────────┬──────────────────────────────┘
+                               │ encode()
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Encoded Vec<u32> Blob                    │
+│                                                             │
+│  • fixed header and section offsets                         │
+│  • operation tapes                                          │
+│  • constants and metadata                                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ upload once
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  CUDA Tracegen Interpreter                  │
+│                                                             │
+│  One thread per trace row:                                  │
+│                                                             │
+│  1. Decode opcode/inputs                                    │
+│  2. Execute value tape                                      │
+│  3. Execute limb tapes                                      │
+│  4. Calculate q and carries                                 │
+│  5. Emit range checks                                       │
+│  6. Write trace columns                                     │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ actual trace
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Equivalence Validation                    │
+│                                                             │
+│  CUDA trace == production CPU tracegen                      │
+│  (`FieldExpressionFiller`)                                  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 The encoder and CUDA decoder share a generated ABI:
