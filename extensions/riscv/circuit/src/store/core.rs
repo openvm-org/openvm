@@ -1,9 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
-#[cfg(test)]
 use openvm_circuit::{
-    arch::{Postflight, PostflightError, VmChipWrapper},
+    arch::{Postflight, PostflightError, VmChipWrapper, *},
+    system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
@@ -11,15 +10,13 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-#[cfg(test)]
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
-#[cfg(test)]
-use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     BaseAirWithPublicValues,
 };
 
@@ -364,7 +361,6 @@ where
     }
 }
 
-#[cfg(test)]
 pub(crate) fn generate_trace_from_postflight<
     F: PrimeField32,
     const STORE_WIDTH: usize,

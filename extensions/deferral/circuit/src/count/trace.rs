@@ -3,7 +3,10 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-use openvm_circuit::utils::next_power_of_two_or_zero;
+use openvm_circuit::{
+    arch::{Postflight, PostflightError, VmField},
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
@@ -32,6 +35,40 @@ impl DeferralCircuitCountChip {
         let val_atomic = &self.count[idx];
         val_atomic.fetch_add(1, Ordering::Relaxed);
     }
+
+    /// Generates the count trace accumulated by Deferral CALL and OUTPUT
+    /// replay. The preflight history parameter makes the dependency explicit
+    /// at registration sites; counts themselves are emitted by those primary
+    /// trace generators.
+    pub fn generate_trace_from_postflight<F: VmField>(
+        &self,
+        _postflight: &Postflight<'_, F>,
+    ) -> Result<RowMajorMatrix<F>, PostflightError> {
+        Ok(self.generate_trace())
+    }
+
+    fn generate_trace<F: PrimeCharacteristicRing + Send + Sync>(&self) -> RowMajorMatrix<F> {
+        let width = DeferralCircuitCountCols::<u8>::width();
+        let height = next_power_of_two_or_zero(self.count.len());
+        let mut trace = vec![F::ZERO; width * height];
+
+        let mut rows = trace.chunks_exact_mut(width);
+        let mut row_idx = 0u32;
+        for mult in &self.count {
+            let row = rows.next().unwrap();
+            let cols: &mut DeferralCircuitCountCols<F> = (*row).borrow_mut();
+            cols.is_valid = F::ONE;
+            cols.row_idx = F::from_u32(row_idx);
+            cols.mult = F::from_u32(mult.swap(0, Ordering::Relaxed));
+            row_idx += 1;
+        }
+        for row in rows {
+            let cols: &mut DeferralCircuitCountCols<F> = (*row).borrow_mut();
+            cols.row_idx = F::from_u32(row_idx);
+            row_idx += 1;
+        }
+        RowMajorMatrix::new(trace, width)
+    }
 }
 
 impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for DeferralCircuitCountChip
@@ -43,29 +80,6 @@ where
     }
 
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let width = DeferralCircuitCountCols::<u8>::width();
-        let height = next_power_of_two_or_zero(self.count.len());
-        let mut trace = vec![Val::<SC>::ZERO; width * height];
-
-        let mut rows = trace.chunks_exact_mut(width);
-        let mut row_idx = 0u32;
-
-        for mult in &self.count {
-            let row = rows.next().unwrap();
-            let cols: &mut DeferralCircuitCountCols<Val<SC>> = (*row).borrow_mut();
-            cols.is_valid = Val::<SC>::ONE;
-            cols.row_idx = Val::<SC>::from_u32(row_idx);
-            cols.mult = Val::<SC>::from_u32(mult.swap(0, Ordering::Relaxed));
-            row_idx += 1;
-        }
-
-        for row in rows {
-            let cols: &mut DeferralCircuitCountCols<Val<SC>> = (*row).borrow_mut();
-            cols.row_idx = Val::<SC>::from_u32(row_idx);
-            row_idx += 1;
-        }
-
-        let trace = RowMajorMatrix::new(trace, width);
-        AirProvingContext::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(self.generate_trace())
     }
 }

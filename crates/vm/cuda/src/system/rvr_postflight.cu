@@ -165,8 +165,10 @@ __device__ bool load_initial_field_block(
             )) {
             return false;
         }
-        out.values[quad] = uint32_t(bytes[0]) | (uint32_t(bytes[1]) << 8) |
-                           (uint32_t(bytes[2]) << 16) | (uint32_t(bytes[3]) << 24);
+        uint32_t raw = uint32_t(bytes[0]) | (uint32_t(bytes[1]) << 8) |
+                       (uint32_t(bytes[2]) << 16) | (uint32_t(bytes[3]) << 24);
+        if (raw >= Fp::P) return false;
+        out.values[quad] = Fp::fromRaw(raw).asUInt32();
     }
     return field_block_is_valid(out);
 }
@@ -501,6 +503,7 @@ __global__ void prepare_value_chunks(
     }
     uint8_t mask;
     uint8_t const *patch;
+    RvrFieldBlock raw_field_patch;
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len()) {
@@ -508,8 +511,17 @@ __global__ void prepare_value_chunks(
             chunks[sorted_pos] = chunk;
             return;
         }
+        if (!field_block_is_valid(field_values[reference])) {
+            preflight_set_error(error, ERROR_FIELD_VALUE);
+            chunks[sorted_pos] = chunk;
+            return;
+        }
         mask = write_masks[ordinal] == FIELD_FULL_WRITE_MASK ? VALUE_CHUNK_VALID : 0;
-        patch = reinterpret_cast<uint8_t const *>(&field_values[reference]);
+#pragma unroll
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+            raw_field_patch.values[lane] = Fp(field_values[reference].values[lane]).asRaw();
+        }
+        patch = reinterpret_cast<uint8_t const *>(&raw_field_patch);
     } else {
         mask = write_masks[ordinal];
         patch = reinterpret_cast<uint8_t const *>(event.value);
@@ -563,9 +575,44 @@ __global__ void scatter_value_chunks(
         }
         auto *words = field_values[reference].values;
         uint32_t word_offset = byte_offset / sizeof(uint32_t);
-        words[word_offset] = uint32_t(chunk.bytes);
-        words[word_offset + 1] = uint32_t(chunk.bytes >> 32);
+        uint32_t raw0 = uint32_t(chunk.bytes);
+        uint32_t raw1 = uint32_t(chunk.bytes >> 32);
+        if (raw0 >= Fp::P || raw1 >= Fp::P) {
+            preflight_set_error(error, ERROR_FIELD_VALUE);
+            return;
+        }
+        uint32_t value0 = Fp::fromRaw(raw0).asUInt32();
+        uint32_t value1 = Fp::fromRaw(raw1).asUInt32();
+        if (!preflight_is_write(event)) {
+            // Checkpoint replay emits zero placeholders for reads, while
+            // interpreter preflight records the observed canonical values.
+            // Accept either representation, but reject a supplied observation
+            // that disagrees with the reconstructed memory version.
+            bool unresolved = words[word_offset] == 0 && words[word_offset + 1] == 0;
+            if (!unresolved &&
+                (words[word_offset] != value0 || words[word_offset + 1] != value1)) {
+                preflight_set_error(error, ERROR_FIELD_VALUE);
+                return;
+            }
+        }
+        words[word_offset] = value0;
+        words[word_offset + 1] = value1;
     } else {
+        if (!preflight_is_write(event)) {
+            auto const *observed = reinterpret_cast<uint8_t const *>(event.value);
+            bool unresolved = true;
+            bool matches = true;
+#pragma unroll
+            for (uint32_t lane = 0; lane < 8; ++lane) {
+                uint8_t resolved = uint8_t(chunk.bytes >> (8 * lane));
+                unresolved &= observed[lane] == 0;
+                matches &= observed[lane] == resolved;
+            }
+            if (!unresolved && !matches) {
+                preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
+                return;
+            }
+        }
         // The transcript ABI aligns this fixed eight-byte payload to one
         // word. Store it as two words so replay resolution does not expand
         // back into eight independent byte stores.
@@ -629,7 +676,7 @@ __global__ void finalize_chronology_touched(
         }
 #pragma unroll
         for (uint32_t lane = 0; lane < 4; ++lane) {
-            record.values[lane] = field_values[reference].values[lane];
+            record.values[lane] = Fp(field_values[reference].values[lane]).asRaw();
         }
     } else {
 #pragma unroll

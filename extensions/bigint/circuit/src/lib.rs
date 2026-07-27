@@ -41,6 +41,7 @@ pub(crate) mod common;
 mod less_than;
 mod mult;
 mod shift;
+mod trace;
 
 #[cfg(feature = "cuda")]
 mod cuda;

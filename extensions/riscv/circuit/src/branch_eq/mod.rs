@@ -4,8 +4,7 @@ use crate::adapters::{Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64Branc
 
 mod core;
 mod execution;
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;
 pub use core::*;
 
 #[cfg(feature = "cuda")]

@@ -132,6 +132,10 @@ macro_rules! dispatch {
     };
 }
 impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcAddNeExecutor<BLOCKS> {
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.inner.name.clone()
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<EcAddNePreCompute>()

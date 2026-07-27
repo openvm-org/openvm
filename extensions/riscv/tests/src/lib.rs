@@ -133,9 +133,9 @@ mod tests {
 
     #[test]
     #[cfg(not(feature = "rvr"))]
-    fn interpreter_preflight_matches_legacy_memory_history() -> Result<()> {
+    fn owned_and_borrowed_preflight_instances_match() -> Result<()> {
         use openvm_circuit::{
-            arch::{PreflightExecutionOutput, Streams, VirtualMachine},
+            arch::{Streams, VirtualMachine},
             utils::test_cpu_engine,
         };
         use openvm_instructions::program::Program;
@@ -219,7 +219,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let config = test_rv64im_config();
-        let (vm, pk) =
+        let (vm, _pk) =
             VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)?;
         let mut initial = vm.create_initial_state(&exe, Streams::default());
         unsafe {
@@ -245,27 +245,22 @@ mod tests {
             .set_hint(0xaabb_ccdd_eeff_0011u64.to_le_bytes().to_vec());
 
         let preflight = vm.preflight_instance(&exe)?;
-        let output = preflight.execute_preflight_from_state(initial.clone(), None)?;
+        let output = preflight.execute_preflight_from_state::<F>(initial.clone(), None)?;
         assert_eq!(output.exit_code, Some(0));
 
-        let mut legacy = vm.preflight_interpreter(&exe)?;
-        let trace_heights = vec![16; pk.get_vk().inner.per_air.len()];
-        let PreflightExecutionOutput {
-            history: legacy_history,
-            to_state: legacy_state,
-            ..
-        } = vm.execute_preflight(&mut legacy, initial, &trace_heights)?;
+        let owned = vm.preflight_interpreter(&exe)?;
+        let owned_output = vm.execute_preflight(&owned, initial)?;
 
-        assert_eq!(output.history.program, legacy_history.program);
+        assert_eq!(output.history.program, owned_output.history.program);
         assert_eq!(
             output.history.memory.accesses,
-            legacy_history.memory.accesses
+            owned_output.history.memory.accesses
         );
         assert_eq!(
             output.history.memory.initial_writes,
-            legacy_history.memory.initial_writes
+            owned_output.history.memory.initial_writes
         );
-        assert_eq!(output.state.pc(), legacy_state.pc());
+        assert_eq!(output.state.pc(), owned_output.state.pc());
         assert_eq!(
             unsafe {
                 output
@@ -274,7 +269,8 @@ mod tests {
                     .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
             },
             unsafe {
-                legacy_state
+                owned_output
+                    .state
                     .memory
                     .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
             }
@@ -287,12 +283,39 @@ mod tests {
                     .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
             },
             unsafe {
-                legacy_state
+                owned_output
+                    .state
                     .memory
                     .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
             }
         );
         Ok(())
+    }
+
+    #[test]
+    #[cfg(not(feature = "rvr"))]
+    fn interpreter_preflight_proves_from_append_only_history() {
+        use openvm_instructions::program::Program;
+        use openvm_riscv_circuit::Rv64ImCpuBuilder;
+        use openvm_riscv_transpiler::BaseAluImmOpcode;
+
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let instructions = [
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    reg(1),
+                    reg(0),
+                    7,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::RV64_IMM_AS as usize,
+                ],
+            ),
+            Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+
+        air_test(Rv64ImCpuBuilder, test_rv64im_config(), exe);
     }
 
     #[cfg(feature = "rvr")]

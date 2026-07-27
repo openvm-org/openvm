@@ -1,12 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
-#[cfg(test)]
-use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        BLOCK_FE_WIDTH,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, Postflight,
+        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
@@ -27,9 +25,10 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-#[cfg(test)]
-use crate::adapters::checked_byte_ptr_to_u16_ptr_value;
-use crate::adapters::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_byte_ptr_to_u16_ptr_value,
+    tracing_read_u16,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -228,7 +227,6 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BranchAdapterFiller {
     }
 }
 
-#[cfg(test)]
 impl Rv64BranchAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,

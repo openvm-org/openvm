@@ -2007,6 +2007,7 @@ mod tests {
     };
     use openvm_instructions::riscv::RV64_MEMORY_AS;
     use p3_baby_bear::BabyBear;
+    use p3_field::PrimeCharacteristicRing;
     use rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     };
@@ -2329,7 +2330,7 @@ mod tests {
         }
         for (index, value) in [11u32, 12, 13, 14, 21, 22, 23, 24].into_iter().enumerate() {
             images[DEFERRAL_AS as usize][4 * index..4 * index + 4]
-                .copy_from_slice(&value.to_le_bytes());
+                .copy_from_slice(&raw_baby_bear(BabyBear::from_u32(value)).to_le_bytes());
         }
         (config, images)
     }
@@ -2405,8 +2406,14 @@ mod tests {
             touched[0].values.map(|value| value.as_canonical_u32()),
             [0x00aa, 2, 3, 4]
         );
-        assert_eq!(touched[1].values.map(raw_baby_bear), first_write.values);
-        assert_eq!(touched[2].values.map(raw_baby_bear), second_write.values);
+        assert_eq!(
+            touched[1].values.map(|value| value.as_canonical_u32()),
+            first_write.values
+        );
+        assert_eq!(
+            touched[2].values.map(|value| value.as_canonical_u32()),
+            second_write.values
+        );
         assert_eq!(
             touched
                 .iter()
@@ -2440,6 +2447,17 @@ mod tests {
         assert_eq!(predecessors, [0]);
         assert_eq!(touched.len(), 1);
         assert_eq!(touched[0].is_dirty, 0);
+
+        let observed_read = event_value(1, RV64_MEMORY_AS, 0, false, [1, 2, 3, 4]);
+        assert!(
+            gpu_chronology_with_fields(&[observed_read], &[0], &[], &initial_memory, &config)
+                .is_ok()
+        );
+        let incorrect_read = event_value(1, RV64_MEMORY_AS, 0, false, [9, 2, 3, 4]);
+        assert!(
+            gpu_chronology_with_fields(&[incorrect_read], &[0], &[], &initial_memory, &config)
+                .is_err()
+        );
 
         // Dirtiness records the write itself, even when the value is unchanged
         // and a later read is the block's final event.
@@ -2497,6 +2515,17 @@ mod tests {
         .is_err());
 
         let nonzero_read = field_event(1, 0, false, 0);
+        let observed = [PostflightFieldBlock {
+            values: [11, 12, 13, 14],
+        }];
+        assert!(gpu_chronology_with_fields(
+            &[nonzero_read],
+            &[0],
+            &observed,
+            &initial_memory,
+            &config,
+        )
+        .is_ok());
         assert!(gpu_chronology_with_fields(
             &[nonzero_read],
             &[0],

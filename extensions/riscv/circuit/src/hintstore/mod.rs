@@ -45,8 +45,7 @@ use crate::adapters::{
 
 mod execution;
 
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -423,16 +422,6 @@ where
     for<'buf> RA:
         RecordArena<'buf, MultiRowLayout<Rv64HintStoreMetadata>, Rv64HintStoreRecordMut<'buf>>,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        if opcode == HINT_STORED.global_opcode().as_usize() {
-            String::from("HINT_STORED")
-        } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
-            String::from("HINT_BUFFER")
-        } else {
-            unreachable!("unsupported opcode: {opcode}")
-        }
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

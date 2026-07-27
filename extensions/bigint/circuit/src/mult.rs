@@ -33,6 +33,13 @@ struct MultPreCompute {
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64Multiplication256Executor {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            MulOpcode::from_usize(opcode - Rv64Mul256Opcode::CLASS_OFFSET)
+        )
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<MultPreCompute>()
     }

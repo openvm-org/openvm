@@ -385,13 +385,6 @@ where
 
         Ok(())
     }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64ModularArithmeticOpcode::from_usize(opcode - self.offset)
-        )
-    }
 }
 
 impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
@@ -408,18 +401,47 @@ where
         //   ModularIsEqualCoreCols::width() elements
         // - caller ensures core_row contains a valid record written by the executor during trace
         //   generation
-        let record: &ModularIsEqualRecord<READ_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
-        let (b_cmp, b_diff_idx) =
-            run_unsigned_less_than::<READ_LIMBS>(&record.b, &self.modulus_limbs);
-        let (c_cmp, c_diff_idx) =
-            run_unsigned_less_than::<READ_LIMBS>(&record.c, &self.modulus_limbs);
+        let (is_setup, b, c) = {
+            let record: &ModularIsEqualRecord<READ_LIMBS> =
+                unsafe { get_record_from_slice(&mut core_row, ()) };
+            (record.is_setup, record.b, record.c)
+        };
+        self.fill_trace_row_from_execution_data(
+            self.range_checker_chip.as_ref(),
+            is_setup,
+            b,
+            c,
+            core_row,
+        )
+        .expect("legacy modular equality record must contain valid field elements");
+    }
+}
 
-        if !record.is_setup {
-            assert!(b_cmp, "{:?} >= {:?}", record.b, self.modulus_limbs);
+impl<A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+{
+    pub(crate) fn fill_trace_row_from_execution_data<F: PrimeField32>(
+        &self,
+        range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+        is_setup: bool,
+        b: [u16; READ_LIMBS],
+        c: [u16; READ_LIMBS],
+        core_row: &mut [F],
+    ) -> Result<(), PostflightError> {
+        let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
+        let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+
+        if !is_setup && !b_cmp {
+            return Err(PostflightError::new(
+                "modular equality left operand is not less than the modulus",
+            ));
         }
-        assert!(c_cmp, "{:?} >= {:?}", record.c, self.modulus_limbs);
+        if !c_cmp {
+            return Err(PostflightError::new(
+                "modular equality right operand is not less than the modulus",
+            ));
+        }
 
         // Writing in reverse order
         cols.c_lt_mark = if b_diff_idx == c_diff_idx {
@@ -428,15 +450,15 @@ where
             F::TWO
         };
 
-        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
-        if !record.is_setup {
-            cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
-            self.range_checker_chip.add_count(
-                (self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx] - 1) as u32,
+        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - c[c_diff_idx]);
+        if !is_setup {
+            cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - b[b_diff_idx]);
+            range_checker.add_count(
+                (self.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1) as u32,
                 LIMB_BITS,
             );
-            self.range_checker_chip.add_count(
-                (self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx] - 1) as u32,
+            range_checker.add_count(
+                (self.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1) as u32,
                 LIMB_BITS,
             );
         } else {
@@ -453,16 +475,17 @@ where
             }
         });
 
-        cols.c = record.c.map(F::from_u16);
-        cols.b = record.b.map(F::from_u16);
+        cols.c = c.map(F::from_u16);
+        cols.b = b.map(F::from_u16);
         let sub_air = IsEqArraySubAir::<READ_LIMBS>;
         sub_air.generate_subrow(
             (&cols.b, &cols.c),
             (&mut cols.eq_marker, &mut cols.cmp_result),
         );
 
-        cols.is_setup = F::from_bool(record.is_setup);
+        cols.is_setup = F::from_bool(is_setup);
         cols.is_valid = F::ONE;
+        Ok(())
     }
 }
 
@@ -553,6 +576,13 @@ impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecuto
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64ModularArithmeticOpcode::from_usize(opcode - self.0.offset)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()

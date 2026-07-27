@@ -7,8 +7,7 @@ mod core;
 mod execution;
 pub use core::*;
 
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;
 #[cfg(test)]
 pub use trace::*;
 

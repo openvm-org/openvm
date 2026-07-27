@@ -45,7 +45,7 @@ pub struct PreflightInitialWrite {
     pub initial_value: [u16; 4],
 }
 
-/// Four native field cells in the raw representation used by the prover.
+/// Four field cells represented by their canonical unsigned integers.
 ///
 /// Field-valued accesses store an index into a dense sidecar in the compact
 /// `value` payload of [`PreflightMemoryEvent`] and

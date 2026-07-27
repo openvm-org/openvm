@@ -11,7 +11,8 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor, MEMORY_BLOCK_BYTES,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -25,6 +26,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -32,6 +34,7 @@ use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::Matrix,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
@@ -41,15 +44,16 @@ use tiny_keccak::keccakf;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
-    openvm_instructions::{program::Program, SystemOpcode},
-    rvr_state::{
-        PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
-    },
+    openvm_instructions::SystemOpcode,
+    rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT},
 };
 
 use crate::{
-    keccakf_op::{KeccakfExecutor, KeccakfOpAir, KeccakfOpChip},
-    keccakf_perm::{KeccakfPermAir, KeccakfPermChip},
+    keccakf_op::{generate_trace_from_postflight, KeccakfExecutor, KeccakfOpAir, KeccakfOpChip},
+    keccakf_perm::{
+        generate_trace_from_postflight as generate_perm_trace_from_postflight, KeccakfPermAir,
+        KeccakfPermChip,
+    },
     KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S,
 };
 
@@ -107,12 +111,12 @@ fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarn
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let shared_records = op_chip.shared_records.clone();
+    let shared_preimages = op_chip.shared_preimages.clone();
 
     let harness = Harness::with_capacity(executor, op_air, op_chip, MAX_TRACE_ROWS);
 
     let perm_air = KeccakfPermAir::new(op_air.keccakf_state_bus);
-    let perm_chip = KeccakfPermChip::new(shared_records);
+    let perm_chip = KeccakfPermChip::new(shared_preimages);
 
     TestHarness {
         harness,
@@ -219,6 +223,108 @@ fn rand_keccakf_positive_tests() {
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+fn keccakf_postflight_fixture() -> (
+    TestHarness<openvm_circuit::arch::MatrixRecordArena<F>>,
+    Program<F>,
+    PreflightHistory,
+) {
+    let mut tester = VmChipTestBuilder::default();
+    let mut test_harness = create_test_harness(&mut tester);
+    let instruction = Instruction::from_usize(
+        KeccakfOpcode::KECCAKF.global_opcode(),
+        [8, 0, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+    );
+    let sentinel = instruction.clone();
+    let block = |bytes: [u8; MEMORY_BLOCK_BYTES]| {
+        std::array::from_fn(|index| u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]]))
+    };
+    unsafe {
+        let memory = &mut tester.memory.memory.data;
+        memory.write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
+        for word_index in 0..KECCAK_WIDTH_BYTES / MEMORY_BLOCK_BYTES {
+            memory.write::<u16, BLOCK_FE_WIDTH>(
+                RV64_MEMORY_AS,
+                0x80 + (word_index * BLOCK_FE_WIDTH) as u32,
+                block(std::array::from_fn(|byte| {
+                    (word_index * MEMORY_BLOCK_BYTES + byte) as u8
+                })),
+            );
+        }
+    }
+    tester.execute_with_pc(
+        &mut test_harness.harness.executor,
+        &mut test_harness.harness.arena,
+        &instruction,
+        0,
+    );
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: DEFAULT_PC_STEP,
+                timestamp: 27,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
+    (test_harness, program, history)
+}
+
+#[test]
+fn postflight_keccakf_traces_match_record_arena_traces() {
+    let (
+        TestHarness {
+            harness,
+            perm,
+            bitwise: _,
+        },
+        program,
+        history,
+    ) = keccakf_postflight_fixture();
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+
+    let actual_op = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_perm = generate_perm_trace_from_postflight(&perm.1, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected_op = openvm_stark_backend::p3_matrix::dense::RowMajorMatrix::new(
+        expected_values,
+        harness.arena.width,
+    );
+    harness.chip.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected_op,
+        rows_used,
+    );
+    let expected_perm = generate_perm_trace_from_postflight(&perm.1, &postflight).unwrap();
+
+    assert_eq!(actual_op.width(), expected_op.width());
+    assert_eq!(actual_op.height(), expected_op.height());
+    assert_eq!(actual_op.values, expected_op.values);
+    assert_eq!(actual_perm.width(), expected_perm.width());
+    assert_eq!(actual_perm.height(), expected_perm.height());
+    assert_eq!(actual_perm.values, expected_perm.values);
+}
+
+#[test]
+fn postflight_keccakf_rejects_corrupt_write() {
+    let (test_harness, program, mut history) = keccakf_postflight_fixture();
+    history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let error =
+        generate_trace_from_postflight(&test_harness.harness.chip, &postflight).unwrap_err();
+
+    assert!(error.to_string().contains("unexpected write"));
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

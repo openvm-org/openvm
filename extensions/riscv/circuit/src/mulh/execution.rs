@@ -57,6 +57,13 @@ impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<MulHPreCompute>()

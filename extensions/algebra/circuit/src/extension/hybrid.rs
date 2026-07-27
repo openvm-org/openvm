@@ -53,6 +53,10 @@ use {
 use crate::{
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
+    trace::{
+        generate_field_expression_trace_from_postflight,
+        generate_modular_is_equal_trace_from_postflight,
+    },
     AlgebraRecord, Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config,
     FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
@@ -410,7 +414,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridModularChip::new(addsub, device_ctx.clone());
-                inventory.add_executor_chip(addsub);
+                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_32>(
@@ -428,7 +443,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridModularChip::new(muldiv, device_ctx.clone());
-                inventory.add_executor_chip(muldiv);
+                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 let modulus_limbs = std::array::from_fn(|i| {
                     if i < modulus_limbs.len() {
@@ -463,7 +489,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 #[cfg(not(feature = "rvr"))]
                 let is_eq = HybridModularIsEqualChip::new(is_eq, device_ctx.clone());
-                inventory.add_executor_chip(is_eq);
+                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                    let trace = generate_modular_is_equal_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -490,7 +527,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridModularChip::new(addsub, device_ctx.clone());
-                inventory.add_executor_chip(addsub);
+                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_48>(
@@ -508,7 +556,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridModularChip::new(muldiv, device_ctx.clone());
-                inventory.add_executor_chip(muldiv);
+                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 let modulus_limbs = std::array::from_fn(|i| {
                     if i < modulus_limbs.len() {
@@ -543,7 +602,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 #[cfg(not(feature = "rvr"))]
                 let is_eq = HybridModularIsEqualChip::new(is_eq, device_ctx.clone());
-                inventory.add_executor_chip(is_eq);
+                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                    let trace = generate_modular_is_equal_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
             } else {
                 panic!("Modulus too large");
             }
@@ -1171,7 +1241,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridFp2Chip::new(addsub, device_ctx.clone());
-                inventory.add_executor_chip(addsub);
+                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_32>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_32>(
@@ -1189,7 +1270,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridFp2Chip::new(muldiv, device_ctx.clone());
-                inventory.add_executor_chip(muldiv);
+                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -1213,7 +1305,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridFp2Chip::new(addsub, device_ctx.clone());
-                inventory.add_executor_chip(addsub);
+                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_48>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_48>(
@@ -1231,7 +1334,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 #[cfg(not(feature = "rvr"))]
                 let muldiv = HybridFp2Chip::new(muldiv, device_ctx.clone());
-                inventory.add_executor_chip(muldiv);
+                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                    let trace = generate_field_expression_trace_from_postflight(
+                        &chip.cpu,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
             } else {
                 panic!("Modulus too large");
             }

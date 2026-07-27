@@ -9,7 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
+use openvm_riscv_transpiler::Rv64JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv64JalrExecutor;
@@ -58,6 +60,13 @@ impl<F, A> InterpreterExecutor<F> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64JalrOpcode::from_usize(opcode - Rv64JalrOpcode::CLASS_OFFSET)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<JalrPreCompute>()

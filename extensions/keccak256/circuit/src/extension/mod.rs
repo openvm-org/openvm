@@ -17,9 +17,12 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
@@ -28,7 +31,8 @@ use openvm_riscv_circuit::{
     Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
-    interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
+    interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_keccak::KeccakExtension;
@@ -247,7 +251,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -257,25 +263,32 @@ where
             XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), byte_ptr_max_bits),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(xorin_chip);
+        inventory.add_postflight_executor_chip(xorin_chip, |chip, postflight| {
+            crate::xorin::trace::generate_trace_from_postflight(chip, postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         inventory.next_air::<KeccakfPermAir>()?;
-        let shared_records = Arc::new(Mutex::new(Vec::new()));
-        let periphery_chip = KeccakfPermChip::new(shared_records.clone());
-        // Clone the Arc Mutex and pass to the OpChip.
-        // WARNING: the OpChip must be added _after_ the periphery chip so that its tracegen is done
-        // _first_. After OpChip tracegen, the shared_record is set to the execution records,
-        // effectively passing the records to the periphery chip.
-        inventory.add_periphery_chip(periphery_chip);
+        let shared_preimages = Arc::new(Mutex::new(Vec::new()));
+        let periphery_chip = KeccakfPermChip::new(shared_preimages.clone());
+        // Trace generators run in reverse insertion order. Register the permutation first so the
+        // operation generator publishes its preimages before they are consumed here.
+        inventory.add_postflight_periphery_chip(periphery_chip, |chip, postflight| {
+            crate::keccakf_perm::generate_trace_from_postflight(chip, postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChip::new(
             range_checker.clone(),
             byte_ptr_max_bits,
             mem_helper.clone(),
-            shared_records,
+            shared_preimages,
         );
-        inventory.add_executor_chip(op_chip);
+        inventory.add_postflight_executor_chip(op_chip, |chip, postflight| {
+            crate::keccakf_op::generate_trace_from_postflight(chip, postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         Ok(())
     }

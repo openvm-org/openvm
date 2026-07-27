@@ -11,7 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::ShiftWOpcode;
+use openvm_riscv_transpiler::{ShiftOpcode, ShiftWOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{ShiftWLogicalExecutor, ShiftWRightArithmeticExecutor};
@@ -93,6 +93,10 @@ impl<F, A> InterpreterExecutor<F> for ShiftWLogicalExecutor<A>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftWOpcode::from_usize(opcode - self.offset))
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftWPreCompute>()
     }
@@ -129,6 +133,10 @@ impl<F, A> InterpreterExecutor<F> for ShiftWRightArithmeticExecutor<A>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftWPreCompute>()
     }

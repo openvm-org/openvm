@@ -96,6 +96,10 @@ impl DeferralOutputExecutor {
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        format!("{:?}", DeferralOpcode::OUTPUT)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<DeferralOutputPrecompute>()
     }

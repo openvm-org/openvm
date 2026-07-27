@@ -257,13 +257,6 @@ where
         ),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
-        )
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

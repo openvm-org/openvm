@@ -9,8 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
-use openvm_riscv_transpiler::ShiftImmOpcode;
+use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftRightArithmeticImmExecutor;
@@ -64,6 +65,14 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if NUM_LIMBS * LIMB_BITS == 32 {
+            format!("{:?}", ShiftWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        }
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftRightArithmeticImmPreCompute>()
     }

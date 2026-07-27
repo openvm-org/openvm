@@ -243,6 +243,10 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
 impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor<F>
     for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.inner.name.clone()
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<FieldExpressionPreCompute>()

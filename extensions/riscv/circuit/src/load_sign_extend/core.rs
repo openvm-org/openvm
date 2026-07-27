@@ -15,8 +15,6 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-#[cfg(test)]
-use crate::load_sign_extend::common::load_sign_extend_write_data;
 use crate::{
     adapters::{
         is_signed_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
@@ -25,6 +23,7 @@ use crate::{
         RV64_U16_SIGN_BIT, U16_BITS, WORD_ACCESS_WIDTH,
     },
     load::LoadRecord,
+    load_sign_extend::common::load_sign_extend_write_data,
 };
 
 /// The single opcode handled by the signed load chip of the given width.
@@ -269,7 +268,6 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     LoadSignExtendFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
     /// Re-executes one signed load from immutable preflight history and fills its final trace row.
-    #[cfg(test)]
     pub(crate) fn replay<F: PrimeField32>(
         &self,
         postflight: &Postflight<'_, F>,

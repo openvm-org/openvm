@@ -9,7 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::AddIExecutor;
@@ -52,6 +54,14 @@ impl<F, A, const NUM_LIMBS: usize> InterpreterExecutor<F> for AddIExecutor<A, NU
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if NUM_LIMBS * U16_BITS == 32 {
+            format!("{:?}", BaseAluWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
+        }
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<AddIPreCompute>()

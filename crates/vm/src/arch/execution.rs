@@ -94,6 +94,8 @@ pub enum ExecutionError {
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
     #[error("instruction counter overflow: {instret} + {num_insns} > u64::MAX")]
     InstretOverflow { instret: u64, num_insns: u64 },
+    #[error("preflight retired {actual} instructions, expected exactly {expected}")]
+    RetiredInstructionCountMismatch { expected: u64, actual: u64 },
     #[error("inventory error: {0}")]
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
@@ -141,6 +143,9 @@ pub type Handler<CTX> = unsafe fn(
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
 pub trait InterpreterExecutor<F> {
+    /// Returns the display name for an absolute opcode supported by this executor.
+    fn get_opcode_name(&self, opcode: usize) -> String;
+
     fn pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -220,10 +225,6 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
         state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
-
-    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
-    /// if it is a supported opcode by the present executor.
-    fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
 /// Global VM state accessible during instruction execution.

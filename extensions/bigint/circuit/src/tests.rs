@@ -10,7 +10,8 @@ use openvm_circuit::{
             TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, VmChipWrapper, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -41,7 +42,10 @@ use openvm_riscv_circuit::{
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
+use openvm_stark_backend::{
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
@@ -69,15 +73,16 @@ use {
 };
 
 use crate::{
-    AluAdapterAir, AluAdapterExecutor, AluU16AdapterAir, AluU16AdapterExecutor, BranchAdapterAir,
-    BranchAdapterExecutor, Rv64AddSub256Air, Rv64AddSub256Chip, Rv64AddSub256Executor,
-    Rv64BitwiseLogic256Air, Rv64BitwiseLogic256Chip, Rv64BitwiseLogic256Executor,
-    Rv64BranchEqual256Air, Rv64BranchEqual256Chip, Rv64BranchEqual256Executor,
-    Rv64BranchLessThan256Air, Rv64BranchLessThan256Chip, Rv64BranchLessThan256Executor,
-    Rv64LessThan256Air, Rv64LessThan256Chip, Rv64LessThan256Executor, Rv64Multiplication256Air,
-    Rv64Multiplication256Chip, Rv64Multiplication256Executor, Rv64ShiftLogical256Air,
-    Rv64ShiftLogical256Chip, Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Air,
-    Rv64ShiftRightArithmetic256Chip, Rv64ShiftRightArithmetic256Executor, INT256_NUM_U8_LIMBS,
+    trace::generate_add_sub_trace, AluAdapterAir, AluAdapterExecutor, AluU16AdapterAir,
+    AluU16AdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, Rv64AddSub256Air,
+    Rv64AddSub256Chip, Rv64AddSub256Executor, Rv64BitwiseLogic256Air, Rv64BitwiseLogic256Chip,
+    Rv64BitwiseLogic256Executor, Rv64BranchEqual256Air, Rv64BranchEqual256Chip,
+    Rv64BranchEqual256Executor, Rv64BranchLessThan256Air, Rv64BranchLessThan256Chip,
+    Rv64BranchLessThan256Executor, Rv64LessThan256Air, Rv64LessThan256Chip,
+    Rv64LessThan256Executor, Rv64Multiplication256Air, Rv64Multiplication256Chip,
+    Rv64Multiplication256Executor, Rv64ShiftLogical256Air, Rv64ShiftLogical256Chip,
+    Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Air, Rv64ShiftRightArithmetic256Chip,
+    Rv64ShiftRightArithmetic256Executor, INT256_NUM_U8_LIMBS,
 };
 
 type F = BabyBear;
@@ -87,6 +92,20 @@ const RANGE_TUPLE_SIZES: [u32; 2] = [
     1 << RV64_BYTE_BITS,
     (INT256_NUM_U8_LIMBS * (1 << RV64_BYTE_BITS)) as u32,
 ];
+
+fn legacy_trace<Filler: TraceFiller<F>>(
+    chip: &VmChipWrapper<F, Filler>,
+    arena: openvm_circuit::arch::MatrixRecordArena<F>,
+) -> RowMajorMatrix<F> {
+    let rows_used = arena.trace_offset / arena.width;
+    let width = arena.width;
+    let mut values = arena.trace_buffer;
+    values.truncate(rows_used.next_power_of_two() * width);
+    let mut trace = RowMajorMatrix::new(values, width);
+    chip.inner
+        .fill_trace(&chip.mem_helper.as_borrowed(), &mut trace, rows_used);
+    trace
+}
 
 fn create_add_sub_harness_fields(
     memory_bridge: MemoryBridge,
@@ -500,6 +519,67 @@ fn run_add_sub_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         .load_periphery((bitwise_chip.air, bitwise_chip))
         .finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn add_sub_postflight_matches_legacy_and_rejects_truncated_history() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let address_bits = tester.address_bits();
+    let (air, executor, chip) = create_add_sub_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.range_checker(),
+        tester.memory_helper(),
+        address_bits,
+    );
+    let mut harness: TestChipHarness<F, _, _, _> =
+        TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let b = generate_long_number::<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>(&mut rng);
+    let c = generate_long_number::<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>(&mut rng);
+    let instruction = rv64_write_heap_default(
+        &mut tester,
+        vec![b.map(F::from_u32)],
+        vec![c.map(F::from_u32)],
+        Rv64BaseAlu256Opcode(BaseAluOpcode::ADD)
+            .global_opcode()
+            .as_usize(),
+    );
+    let initial_memory = tester.memory.memory.data().clone();
+    tester.memory.memory =
+        openvm_circuit::system::memory::online::TracingMemory::from_image(initial_memory);
+    let from_timestamp = tester.memory.memory.timestamp;
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
+    let to_timestamp = tester.memory.memory.timestamp;
+    let memory = tester.memory.memory.take_log();
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: from_timestamp,
+            },
+            PreflightProgramEvent {
+                pc: DEFAULT_PC_STEP,
+                timestamp: to_timestamp,
+            },
+        ],
+        memory,
+    };
+    let program = openvm_instructions::program::Program::new_without_debug_infos(
+        &[instruction.clone(), instruction],
+        0,
+    );
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = generate_add_sub_trace(&harness.chip, &postflight, address_bits).unwrap();
+    let expected = legacy_trace(&harness.chip, harness.arena);
+    assert_eq!(actual.width, expected.width);
+    assert_eq!(actual.values, expected.values);
+
+    let mut malformed_history = history;
+    malformed_history.memory.accesses[0].pointer += BLOCK_FE_WIDTH as u32;
+    let malformed = Postflight::new(&program, &malformed_history, &memory_config, None).unwrap();
+    assert!(generate_add_sub_trace(&harness.chip, &malformed, address_bits).is_err());
 }
 
 #[test_case(BaseAluOpcode::XOR, 24)]

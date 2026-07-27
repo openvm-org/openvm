@@ -66,6 +66,10 @@ impl<F, A, const NUM_LIMBS: usize> InterpreterExecutor<F> for BranchEqualExecuto
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", BranchEqualOpcode::from_usize(opcode - self.offset))
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchEqualPreCompute>()

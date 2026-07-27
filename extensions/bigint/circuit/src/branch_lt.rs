@@ -47,6 +47,10 @@ macro_rules! dispatch {
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThan256Executor {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        InterpreterExecutor::<F>::get_opcode_name(&self.0, opcode)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchLtPreCompute>()
     }

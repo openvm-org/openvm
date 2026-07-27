@@ -7,7 +7,6 @@ mod core;
 mod execution;
 pub use core::*;
 
-#[cfg(test)]
 pub(crate) mod trace;
 
 #[cfg(feature = "cuda")]

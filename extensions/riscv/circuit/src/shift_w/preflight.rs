@@ -1,6 +1,6 @@
 use openvm_circuit::{arch::*, system::memory::online::TracingMemory};
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{ShiftOpcode, ShiftWOpcode};
+use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
@@ -37,10 +37,6 @@ where
         ),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftWOpcode::from_usize(opcode - self.offset))
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

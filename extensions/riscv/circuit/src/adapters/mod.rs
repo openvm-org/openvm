@@ -253,7 +253,6 @@ pub fn byte_ptr_to_u16_ptr_value(byte_ptr: u32) -> u32 {
     byte_ptr >> 1
 }
 
-#[cfg(test)]
 #[inline(always)]
 pub(crate) fn checked_byte_ptr_to_u16_ptr_value(
     byte_ptr: u32,

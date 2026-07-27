@@ -2,22 +2,12 @@ use std::{collections::BTreeMap, mem};
 
 use backtrace::Backtrace;
 use cycle_tracker::CycleTracker;
-#[cfg(feature = "perf-metrics")]
-use itertools::Itertools;
 use metrics::counter;
 use openvm_instructions::{
     exe::{FnBound, FnBounds},
     program::ProgramDebugInfo,
 };
 use openvm_stark_backend::prover::{DeviceMultiStarkProvingKey, ProverBackend};
-
-use crate::{
-    arch::{
-        execution_mode::RecordCtx, interpreter_preflight::PcEntry, Arena, PreflightExecutor,
-        VmExecState,
-    },
-    system::memory::online::TracingMemory,
-};
 
 pub mod cycle_tracker;
 
@@ -51,63 +41,6 @@ pub struct VmMetrics {
     /// Cycle span by function if function start/end addresses are available
     #[allow(dead_code)]
     pub(crate) current_fn: FnBound,
-}
-
-/// We assume this will be called after execute_instruction, so less error-handling is needed.
-#[allow(unused_variables)]
-#[inline(always)]
-pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmExecState<TracingMemory, RecordCtx<RA>>,
-    executor: &Executor,
-    prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
-    pc_entry: &PcEntry<F>,
-) where
-    F: Clone + Send + Sync,
-    RA: Arena,
-    Executor: PreflightExecutor<F, RA>,
-{
-    #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
-    {
-        let pc = state.pc();
-        state.metrics.update_backtrace(pc);
-    }
-
-    #[cfg(feature = "perf-metrics")]
-    {
-        use std::iter::zip;
-
-        let pc = state.pc();
-        let opcode = pc_entry.insn.opcode;
-        let opcode_name = executor.get_opcode_name(opcode.as_usize());
-
-        let debug_info = state.metrics.debug_infos.get(prev_pc);
-        let dsl_instr = debug_info.as_ref().map(|info| info.dsl_instruction.clone());
-
-        let now_trace_heights: Vec<usize> = state
-            .ctx
-            .arenas
-            .iter()
-            .map(|arena| arena.current_trace_height())
-            .collect();
-        let now_trace_cells = zip(&state.metrics.main_widths, &now_trace_heights)
-            .map(|(main_width, h)| main_width * h)
-            .collect_vec();
-        state
-            .metrics
-            .update_trace_cells(now_trace_cells, opcode_name, dsl_instr);
-
-        state.metrics.update_current_fn(pc);
-    }
-}
-
-// We clear the current trace cell counts so there aren't negative diffs at the start of the next
-// segment.
-#[cfg(feature = "perf-metrics")]
-pub fn end_segment_metrics<RA>(state: &mut VmExecState<TracingMemory, RecordCtx<RA>>)
-where
-    RA: Arena,
-{
-    state.metrics.current_trace_cells.fill(0);
 }
 
 #[cfg(feature = "metrics")]

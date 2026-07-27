@@ -906,7 +906,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     };
 
     use crate::{
-        arch::{PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmState},
+        arch::{Postflight, Streams, SystemConfig, VirtualMachine, VmState},
         system::{
             memory::{online::GuestMemory, AddressMap},
             SystemCpuBuilder,
@@ -944,21 +944,21 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         0,
     )]);
     let vm_exe: VmExe<BabyBear> = program.into();
-    let max_trace_heights = vec![0; vk.inner.per_air.len()];
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
-    let mut interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
-    let PreflightExecutionOutput {
-        system_records,
-        record_arenas,
-        ..
-    } = vm
-        .execute_preflight(&mut interpreter, from_state, &max_trace_heights)
-        .unwrap();
+    let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
+    let output = vm.execute_preflight(&interpreter, from_state).unwrap();
+    let postflight = Postflight::new(
+        &vm_exe.program,
+        &output.history,
+        &vm_config.memory_config,
+        output.exit_code,
+    )
+    .unwrap();
     let mut ctx = vm
-        .generate_proving_ctx(system_records, record_arenas)
+        .generate_proving_ctx_from_postflight(&postflight)
         .unwrap();
 
     // Overwrite the merkle + poseidon2 contexts with the fraudulent ones.

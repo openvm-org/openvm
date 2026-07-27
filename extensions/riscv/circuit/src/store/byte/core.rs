@@ -1,11 +1,9 @@
 use std::borrow::{Borrow, BorrowMut};
 
-#[cfg(test)]
-use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
-        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, Postflight, PostflightError,
+        PostflightStep, TraceFiller, VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
     },
     system::memory::MemoryAuxColsFactory,
 };
@@ -237,7 +235,6 @@ where
     }
 }
 
-#[cfg(test)]
 impl StoreByteFiller<Rv64StoreByteAdapterFiller> {
     pub(super) fn replay<F: PrimeField32>(
         &self,

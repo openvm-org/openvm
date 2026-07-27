@@ -1,8 +1,9 @@
 use std::array::from_fn;
 
 use itertools::Itertools;
-use openvm_circuit::arch::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES};
+use openvm_circuit::arch::{PostflightError, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES};
 use openvm_instructions::riscv::RV64_BYTE_BITS;
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr_value, rv64_u16_block_to_bytes};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
@@ -16,6 +17,55 @@ pub const DIGEST_BYTE_MEMORY_OPS: usize = num_byte_memory_ops(DIGEST_SIZE);
 pub const DIGEST_F_MEMORY_OPS: usize = num_f_memory_ops(DIGEST_SIZE);
 pub const COMMIT_MEMORY_OPS: usize = num_byte_memory_ops(COMMIT_NUM_BYTES);
 pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_byte_memory_ops(OUTPUT_TOTAL_BYTES);
+
+pub(crate) fn checked_u16_pointer(
+    byte_pointer: u32,
+    name: &'static str,
+) -> Result<u32, PostflightError> {
+    if byte_pointer & 1 != 0 {
+        return Err(PostflightError::new(format!(
+            "{name} is not two-byte aligned"
+        )));
+    }
+    Ok(byte_ptr_to_u16_ptr_value(byte_pointer))
+}
+
+pub(crate) fn logged_u32_pointer(
+    value: [u16; BLOCK_FE_WIDTH],
+    name: &'static str,
+) -> Result<u32, PostflightError> {
+    let bytes = rv64_u16_block_to_bytes(value);
+    if bytes[4..] != [0; 4] {
+        return Err(PostflightError::new(format!(
+            "{name} has nonzero upper bits"
+        )));
+    }
+    Ok(u32::from_le_bytes(bytes[..4].try_into().unwrap()))
+}
+
+pub(crate) fn require_block_alignment(
+    pointer: u32,
+    name: &'static str,
+) -> Result<(), PostflightError> {
+    if !pointer.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
+        return Err(PostflightError::new(format!(
+            "{name} is not memory-block aligned"
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) fn checked_pointer_offset(
+    pointer: u32,
+    offset: usize,
+    message: &'static str,
+) -> Result<u32, PostflightError> {
+    pointer
+        .checked_add(
+            u32::try_from(offset).map_err(|_| PostflightError::new("memory offset exceeds u32"))?,
+        )
+        .ok_or_else(|| PostflightError::new(message))
+}
 
 #[inline(always)]
 pub const fn num_byte_memory_ops(total_bytes: usize) -> usize {

@@ -14,8 +14,7 @@ pub type DivRemWCoreAir = DivRemCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type DivRemWExecutor<A> = DivRemExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type DivRemWFiller<A> = DivRemFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;
 
 #[cfg(feature = "cuda")]
 mod cuda;

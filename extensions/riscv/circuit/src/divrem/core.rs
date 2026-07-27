@@ -537,10 +537,6 @@ where
         (A::RecordMut<'buf>, &'buf mut DivRemCoreRecord<NUM_LIMBS>),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

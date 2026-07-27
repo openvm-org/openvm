@@ -5,6 +5,7 @@ pub(crate) enum ExecutionMetric {
     Pure,
     Metered,
     MeteredCost,
+    Preflight,
 }
 
 impl ExecutionMetric {
@@ -13,6 +14,7 @@ impl ExecutionMetric {
             Self::Pure => "execute_pure_insns",
             Self::Metered => "execute_metered_insns",
             Self::MeteredCost => "execute_metered_cost_insns",
+            Self::Preflight => "execute_preflight_insns",
         }
     }
 
@@ -21,6 +23,7 @@ impl ExecutionMetric {
             Self::Pure => "execute_pure_insn_mi/s",
             Self::Metered => "execute_metered_insn_mi/s",
             Self::MeteredCost => "execute_metered_cost_insn_mi/s",
+            Self::Preflight => "execute_preflight_insn_mi/s",
         }
     }
 }
@@ -36,14 +39,6 @@ impl ExecutionMetricTimer {
         Self {
             counter_name: metric.counter_name(),
             gauge_name: metric.gauge_name(),
-            start: Instant::now(),
-        }
-    }
-
-    pub(crate) fn start_custom(counter_name: &'static str, gauge_name: &'static str) -> Self {
-        Self {
-            counter_name,
-            gauge_name,
             start: Instant::now(),
         }
     }

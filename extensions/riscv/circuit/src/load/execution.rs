@@ -105,6 +105,13 @@ impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<LoadPreCompute>()

@@ -202,10 +202,6 @@ where
         (A::RecordMut<'buf>, &'buf mut AddSubCoreRecord<NUM_LIMBS>),
     >,
 {
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
-    }
-
     fn execute(
         &self,
         state: VmStateMut<TracingMemory, RA>,

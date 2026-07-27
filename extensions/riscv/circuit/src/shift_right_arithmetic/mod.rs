@@ -7,8 +7,7 @@ use super::adapters::{
 
 mod core;
 mod execution;
-#[cfg(test)]
-mod trace;
+pub(crate) mod trace;
 pub use core::*;
 
 #[cfg(feature = "cuda")]

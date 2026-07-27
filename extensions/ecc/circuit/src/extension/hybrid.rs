@@ -18,9 +18,12 @@ use openvm_cuda_backend::{
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
     openvm_algebra_circuit::{
@@ -35,12 +38,9 @@ use {
         GenerationError, VirtualMachine,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
-    openvm_ecc_transpiler::Rv64WeierstrassOpcode,
-    openvm_instructions::LocalOpcode,
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
     openvm_stark_backend::prover::ProvingContext,
     std::{any::Any, collections::BTreeSet, sync::Arc},
-    strum::EnumCount,
 };
 #[cfg(all(feature = "rvr", test))]
 use {
@@ -51,9 +51,12 @@ use {
 #[cfg(feature = "rvr")]
 use crate::CurveConfig;
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
-    WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
-    NUM_LIMBS_48,
+    get_ec_addne_chip, get_ec_double_chip,
+    weierstrass_chip::{
+        generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
+    },
+    EccRecord, Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip, WeierstrassExtension,
+    ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 #[cfg(feature = "rvr")]
@@ -573,11 +576,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
 
         for (curve_idx, curve) in extension.supported_curves.iter().enumerate() {
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
-            #[cfg(feature = "rvr")]
             let opcode_base =
                 Rv64WeierstrassOpcode::CLASS_OFFSET + curve_idx * Rv64WeierstrassOpcode::COUNT;
-            #[cfg(not(feature = "rvr"))]
-            let _ = curve_idx;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -602,7 +602,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addne = HybridWeierstrassChip::new(addne, device_ctx.clone());
-                inventory.add_executor_chip(addne);
+                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                    let trace =
+                        generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_32>(
@@ -621,7 +628,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 #[cfg(not(feature = "rvr"))]
                 let double = HybridWeierstrassChip::new(double, device_ctx.clone());
-                inventory.add_executor_chip(double);
+                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                    let trace =
+                        generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -645,7 +659,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addne = HybridWeierstrassChip::new(addne, device_ctx.clone());
-                inventory.add_executor_chip(addne);
+                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                    let trace =
+                        generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_48>(
@@ -664,7 +685,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 #[cfg(not(feature = "rvr"))]
                 let double = HybridWeierstrassChip::new(double, device_ctx.clone());
-                inventory.add_executor_chip(double);
+                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                    let trace =
+                        generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
             } else {
                 panic!("Modulus too large");
             }
