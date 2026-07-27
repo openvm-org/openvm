@@ -57,7 +57,7 @@ pub struct Rv64BaseAluWImmU16AdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
-const _: () = assert!(size_of::<Rv64BaseAluWImmU16AdapterCols<u8>>() == 17);
+const _: () = assert!(size_of::<Rv64BaseAluWImmU16AdapterCols<u8>>() == 15);
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64BaseAluWImmU16AdapterCols<u8>)]

@@ -69,7 +69,7 @@ impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLtTestAir<A
         let local: &AssertLessThanCols<_, AUX_LEN> = (*local).borrow();
 
         let io = AssertLessThanIo::new(local.x, local.y, local.count);
-        self.0.eval(builder, (io, &local.aux.lower_decomp));
+        self.0.eval(builder, (io, &local.aux.diff_decomp));
     }
 }
 
@@ -102,7 +102,7 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
                 row.count = F::ONE;
                 self.air
                     .0
-                    .generate_subrow((&self.range_checker, x, y), &mut row.aux.lower_decomp);
+                    .generate_subrow((&self.range_checker, x, y), &mut row.aux.diff_decomp);
             });
 
         RowMajorMatrix::new(rows, width)
@@ -122,8 +122,8 @@ fn test_borrow_mut_roundtrip() {
     lt_cols.y = 8;
     lt_cols.count = 1;
 
-    lt_cols.aux.lower_decomp[0] = 1;
-    lt_cols.aux.lower_decomp[1] = 0;
+    lt_cols.aux.diff_decomp[0] = 1;
+    lt_cols.aux.diff_decomp[1] = 0;
 
     assert_eq!(all_cols[0], 2);
     assert_eq!(all_cols[1], 8);

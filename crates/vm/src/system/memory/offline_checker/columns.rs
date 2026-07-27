@@ -5,7 +5,6 @@ use openvm_circuit_primitives::{
     is_less_than::LessThanAuxCols, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
 
@@ -15,17 +14,8 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow, StructReflection)]
 pub struct MemoryBaseAuxCols<T> {
-    /// The previous timestamps in which the cells were accessed.
-    pub prev_timestamp: T,
-    /// The auxiliary columns to perform the less than check.
+    /// The limbs of `timestamp - prev_timestamp - 1` used to derive `prev_timestamp` in the AIR.
     pub timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
-}
-
-impl<F: PrimeField32> MemoryBaseAuxCols<F> {
-    #[inline(always)]
-    pub fn set_prev(&mut self, prev_timestamp: F) {
-        self.prev_timestamp = prev_timestamp;
-    }
 }
 
 #[repr(C)]
@@ -67,25 +57,10 @@ pub struct MemoryReadAuxCols<T> {
     pub(in crate::system::memory) base: MemoryBaseAuxCols<T>,
 }
 
-impl<F: PrimeField32> MemoryReadAuxCols<F> {
-    pub fn new(prev_timestamp: u32, timestamp_lt_aux: LessThanAuxCols<F, AUX_LEN>) -> Self {
-        Self {
-            base: MemoryBaseAuxCols {
-                prev_timestamp: F::from_u32(prev_timestamp),
-                timestamp_lt_aux,
-            },
-        }
-    }
-
+impl<T> MemoryReadAuxCols<T> {
     #[inline(always)]
-    pub fn get_base(self) -> MemoryBaseAuxCols<F> {
+    pub fn get_base(self) -> MemoryBaseAuxCols<T> {
         self.base
-    }
-
-    /// Sets the previous timestamp **without** updating the less than auxiliary columns.
-    #[inline(always)]
-    pub fn set_prev(&mut self, timestamp: F) {
-        self.base.prev_timestamp = timestamp;
     }
 }
 
