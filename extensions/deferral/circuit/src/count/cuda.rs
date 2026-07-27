@@ -1,10 +1,7 @@
-#[cfg(feature = "rvr")]
-use std::mem::size_of;
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::cuda::GpuPostflightError;
+use openvm_circuit::arch::cuda::postflight::GpuPostflightError;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
@@ -18,7 +15,6 @@ pub struct DeferralCircuitCountChipGpu {
     pub device_ctx: GpuDeviceCtx,
 }
 
-#[cfg(feature = "rvr")]
 impl DeferralCircuitCountChipGpu {
     /// Generates the periphery trace directly from the shared histogram. No
     /// execution arena is consumed; the caller supplies the existing padded

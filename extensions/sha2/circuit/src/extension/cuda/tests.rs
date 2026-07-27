@@ -1,6 +1,7 @@
 use openvm_circuit::{
     arch::{
-        rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog, PreflightLimits},
+        cuda::postflight::GpuPostflightProgram,
+        rvr::{PreflightEndpoint, PreflightEventLog, PreflightLimits},
         VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},

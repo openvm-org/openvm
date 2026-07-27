@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use openvm_circuit::arch::cuda::postflight::GpuPostflightError;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
@@ -250,13 +251,11 @@ impl DeferralPoseidon2ChipGpu {
         Ok(AirProvingContext::simple_no_pis(trace))
     }
 
-    #[cfg(feature = "rvr")]
     pub fn generate_proving_ctx_direct(
         &self,
         max_trace_height: usize,
-    ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuPostflightError>
-    {
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         self.generate_proving_ctx_checked(max_trace_height)
-            .map_err(openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript)
+            .map_err(GpuPostflightError::InvalidTranscript)
     }
 }

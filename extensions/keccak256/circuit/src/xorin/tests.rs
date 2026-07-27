@@ -35,7 +35,10 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
+    openvm_circuit::arch::{
+        cuda::postflight::GpuPostflightProgram,
+        rvr::{PreflightEndpoint, PreflightEventLog},
+    },
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
 };

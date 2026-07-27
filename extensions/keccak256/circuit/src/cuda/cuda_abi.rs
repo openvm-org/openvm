@@ -22,7 +22,6 @@ pub mod xorin {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn _xorin_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -77,7 +76,6 @@ pub mod xorin {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
@@ -146,7 +144,6 @@ pub mod keccakf_op {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn _keccakf_op_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -200,7 +197,6 @@ pub mod keccakf_op {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
@@ -269,7 +265,6 @@ pub mod keccakf_perm {
             stream: cudaStream_t,
         ) -> i32;
 
-        #[cfg(feature = "rvr")]
         fn _keccakf_perm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -310,7 +305,6 @@ pub mod keccakf_perm {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,

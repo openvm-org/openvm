@@ -1,9 +1,17 @@
-#[cfg(feature = "rvr")]
-use std::any::Any;
-use std::sync::{Arc, Mutex};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex},
+};
 
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan};
 use openvm_circuit::{
-    arch::to_byte_ptr_bits,
+    arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        to_byte_ptr_bits, VmBuilder,
+    },
     system::cuda::{
         extensions::{
             get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
@@ -12,29 +20,26 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
+use openvm_instructions::LocalOpcode;
+use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
+use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-#[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-        PostflightAccessRegistry, PostflightAccessSpan,
-    },
-    openvm_circuit::arch::VmBuilder,
-    openvm_instructions::LocalOpcode,
-    openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode},
-    openvm_stark_backend::prover::AirProvingContext,
-};
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{
         rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
-        GenerationError, MemoryConfig, VirtualMachine,
+        MemoryConfig,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::program::Program,
+    openvm_stark_backend::p3_field::PrimeField32,
+};
+#[cfg(any(test, feature = "test-utils"))]
+use {
+    openvm_circuit::arch::{GenerationError, VirtualMachine},
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
+    openvm_stark_backend::prover::ProvingContext,
 };
 
 use super::*;
@@ -45,13 +50,12 @@ use crate::{
 
 pub struct Keccak256GpuProverExt;
 
-/// Keccak-owned checkpoint replay producers.
+/// Keccak-owned immutable-history replay producers.
 ///
 /// This is deliberately a concrete inventory helper rather than a generic tracegen
 /// trait. The caller composes it with RV64 replay during the VM's existing reverse
 /// inventory walk, then calls [`Self::finish`] to fail closed if either the op AIR or
 /// its permutation AIR was skipped.
-#[cfg(feature = "rvr")]
 pub struct Keccak256PreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
@@ -61,7 +65,6 @@ pub struct Keccak256PreflightGpuTracegen<'a> {
     pending_keccakf_perm: bool,
 }
 
-#[cfg(feature = "rvr")]
 impl<'a> Keccak256PreflightGpuTracegen<'a> {
     #[doc(hidden)]
     pub fn extension_opcodes() -> [u32; 2] {
@@ -72,6 +75,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
+    #[cfg(feature = "rvr")]
     pub fn register_postflight_access_schedules(
         registry: &mut PostflightAccessRegistry,
     ) -> Result<(), GpuPostflightError> {
@@ -125,7 +129,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     /// Uploads a program with the concrete RV64+Keccak checkpoint replay
     /// schedules installed once. Callers do not need to construct or merge the
     /// experimental registry themselves.
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn upload_postflight_program<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
@@ -143,7 +147,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,

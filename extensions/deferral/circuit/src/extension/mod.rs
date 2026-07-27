@@ -52,9 +52,8 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
-        pub use self::cuda::Rv64DeferralGpuBuilder as Rv64DeferralBuilder;
-        #[cfg(feature = "rvr")]
         pub use self::cuda::DeferralPreflightGpuTracegen;
+        pub use self::cuda::Rv64DeferralGpuBuilder as Rv64DeferralBuilder;
 
     } else {
         pub use self::DeferralCpuProverExt as DeferralProverExt;

@@ -48,6 +48,6 @@ extern "C" int _phantom_tracegen(
     return CHECK_KERNEL();
 }
 
-#ifdef OPENVM_RVR_REPLAY
+#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../../rvr/src/system/phantom.inc.cuh"
 #endif

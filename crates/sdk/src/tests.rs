@@ -397,7 +397,7 @@ fn test_sdk_fibonacci() -> Result<()> {
     prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 #[test]
 fn test_preflight_app_prover_reuse() -> Result<()> {
     setup_tracing();

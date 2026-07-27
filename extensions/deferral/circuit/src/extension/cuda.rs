@@ -1,9 +1,10 @@
-#[cfg(feature = "rvr")]
-use std::any::Any;
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 use openvm_circuit::{
     arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
         to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, VmBuilder,
         VmChipComplex, VmProverExtension,
     },
@@ -19,31 +20,34 @@ use openvm_cuda_backend::{
     prelude::F as CudaF, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::d_buffer::DeviceBuffer;
+use openvm_deferral_transpiler::DeferralOpcode;
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
+use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::{
-        rvr::cuda::{
-            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-            PostflightAccessRegistry, PostflightAccessSpan,
-        },
+        rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
         MEMORY_BLOCK_BYTES,
     },
-    openvm_deferral_transpiler::DeferralOpcode,
-    openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode},
-    openvm_stark_backend::prover::AirProvingContext,
+    openvm_instructions::riscv::RV64_MEMORY_AS,
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{
         rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
-        GenerationError, MemoryConfig, VirtualMachine,
+        MemoryConfig,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_instructions::program::Program,
+    openvm_stark_backend::p3_field::PrimeField32,
+};
+#[cfg(any(test, feature = "test-utils"))]
+use {
+    openvm_circuit::arch::{GenerationError, VirtualMachine},
     openvm_riscv_circuit::Rv64ImPreflightGpuTracegen,
-    openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
+    openvm_stark_backend::prover::ProvingContext,
 };
 
 use crate::{
@@ -59,8 +63,7 @@ pub struct DeferralGpuProverExt;
 /// Concrete Deferral + RV64/system preflight coordinator.
 ///
 /// CALL expands its typed AS4 chronology. OUTPUT consumes its dynamic write
-/// count and postimages directly from the checkpoint residual stream.
-#[cfg(feature = "rvr")]
+/// count and postimages directly from immutable execution history.
 pub struct DeferralPreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
@@ -69,7 +72,6 @@ pub struct DeferralPreflightGpuTracegen<'a> {
     coverage: DeferralPreflightCoverage,
 }
 
-#[cfg(feature = "rvr")]
 struct DeferralPreflightCoverage {
     pending_output: bool,
     pending_call: bool,
@@ -77,7 +79,6 @@ struct DeferralPreflightCoverage {
     pending_count: bool,
 }
 
-#[cfg(feature = "rvr")]
 impl DeferralPreflightCoverage {
     fn new() -> Self {
         Self {
@@ -121,7 +122,6 @@ impl DeferralPreflightCoverage {
     }
 }
 
-#[cfg(feature = "rvr")]
 impl<'a> DeferralPreflightGpuTracegen<'a> {
     #[doc(hidden)]
     pub fn extension_opcodes() -> [u32; 2] {
@@ -132,6 +132,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     }
 
     #[doc(hidden)]
+    #[cfg(feature = "rvr")]
     pub fn register_postflight_access_schedules(
         registry: &mut PostflightAccessRegistry,
     ) -> Result<(), GpuPostflightError> {
@@ -168,7 +169,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
@@ -186,7 +187,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,

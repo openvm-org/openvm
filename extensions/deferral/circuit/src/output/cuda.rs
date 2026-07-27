@@ -1,31 +1,28 @@
 use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
+use openvm_circuit::arch::cuda::postflight::{
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use openvm_instructions::riscv::RV64_BYTE_BITS;
+use openvm_cuda_common::{
+    copy::{MemCopyD2H, MemCopyH2D},
+    d_buffer::DeviceBuffer,
+};
+use openvm_deferral_transpiler::DeferralOpcode;
+use openvm_instructions::{
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-#[cfg(feature = "rvr")]
-use {
-    crate::cuda_abi::output::DeferralOutputReplayCall,
-    openvm_circuit::arch::rvr::cuda::{
-        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
-    },
-    openvm_cuda_common::copy::MemCopyD2H,
-    openvm_deferral_transpiler::DeferralOpcode,
-    openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode,
-    },
-};
 
 use super::DeferralOutputCols;
 use crate::{
-    cuda_abi::output::{self},
+    cuda_abi::output::{self, DeferralOutputReplayCall},
     poseidon2::{DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer},
 };
 
@@ -40,7 +37,6 @@ pub struct DeferralOutputChipGpu {
     pub(crate) poseidon2: DeferralPoseidon2SharedBuffer,
 }
 
-#[cfg(feature = "rvr")]
 pub(crate) fn checked_replay_trace_shape(
     rows_used: u64,
     trace_width: usize,
@@ -78,7 +74,6 @@ pub(crate) fn checked_replay_trace_shape(
     Ok((rows_used, trace_height))
 }
 
-#[cfg(feature = "rvr")]
 impl DeferralOutputChipGpu {
     /// Generates OUTPUT directly from canonical program/memory logs. The only
     /// CPU-derived data is the compact call/row prefix index; no execution
