@@ -28,8 +28,7 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller, Rv64VecHeapBranchU16AdapterAir,
-    Rv64VecHeapBranchU16AdapterFiller, Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterFiller,
+    Rv64VecHeapAdapterAir, Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapU16AdapterAir,
 };
 use openvm_riscv_circuit::Rv64ImCpuProverExt;
 use openvm_riscv_transpiler::{BaseAluOpcode, ShiftOpcode};
@@ -360,13 +359,8 @@ where
         };
 
         inventory.next_air::<Rv64AddSub256Air>()?;
-        let add_sub = Rv64AddSub256Chip::new(
-            AddSubFiller::new(
-                Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                range_checker.clone(),
-            ),
-            mem_helper.clone(),
-        );
+        let add_sub =
+            Rv64AddSub256Chip::new(AddSubFiller::new(range_checker.clone()), mem_helper.clone());
         inventory.add_postflight_executor_chip(add_sub, move |chip, postflight| {
             crate::trace::generate_add_sub_trace(chip, postflight, byte_ptr_max_bits)
                 .map(AirProvingContext::simple_no_pis)
@@ -374,10 +368,7 @@ where
 
         inventory.next_air::<Rv64BitwiseLogic256Air>()?;
         let bitwise = Rv64BitwiseLogic256Chip::new(
-            BitwiseLogicFiller::new(
-                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                bitwise_lu.clone(),
-            ),
+            BitwiseLogicFiller::new(bitwise_lu.clone()),
             mem_helper.clone(),
         );
         let bitwise_range_checker = range_checker.clone();
@@ -393,10 +384,7 @@ where
 
         inventory.next_air::<Rv64LessThan256Air>()?;
         let lt = Rv64LessThan256Chip::new(
-            LessThanFiller::new(
-                Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                range_checker.clone(),
-            ),
+            LessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_postflight_executor_chip(lt, move |chip, postflight| {
@@ -406,11 +394,7 @@ where
 
         inventory.next_air::<Rv64BranchEqual256Air>()?;
         let beq = Rv64BranchEqual256Chip::new(
-            BranchEqualFiller::new(
-                Rv64VecHeapBranchU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                Rv64BranchEqual256Opcode::CLASS_OFFSET,
-                DEFAULT_PC_STEP,
-            ),
+            BranchEqualFiller::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
             mem_helper.clone(),
         );
         let branch_equal_range_checker = range_checker.clone();
@@ -427,7 +411,6 @@ where
         inventory.next_air::<Rv64BranchLessThan256Air>()?;
         let blt = Rv64BranchLessThan256Chip::new(
             BranchLessThanFiller::new(
-                Rv64VecHeapBranchU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
                 Rv64BranchLessThan256Opcode::CLASS_OFFSET,
             ),
@@ -441,7 +424,6 @@ where
         inventory.next_air::<Rv64Multiplication256Air>()?;
         let mult = Rv64Multiplication256Chip::new(
             MultiplicationFiller::new(
-                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_tuple_checker.clone(),
                 bitwise_lu.clone(),
                 Rv64Mul256Opcode::CLASS_OFFSET,
@@ -461,10 +443,7 @@ where
 
         inventory.next_air::<Rv64ShiftLogical256Air>()?;
         let shift_logical = Rv64ShiftLogical256Chip::new(
-            ShiftLogicalFiller::new(
-                Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                range_checker.clone(),
-            ),
+            ShiftLogicalFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_postflight_executor_chip(shift_logical, move |chip, postflight| {
@@ -474,10 +453,7 @@ where
 
         inventory.next_air::<Rv64ShiftRightArithmetic256Air>()?;
         let shift_right_arithmetic = Rv64ShiftRightArithmetic256Chip::new(
-            ShiftRightArithmeticFiller::new(
-                Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                range_checker.clone(),
-            ),
+            ShiftRightArithmeticFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_postflight_executor_chip(shift_right_arithmetic, move |chip, postflight| {
