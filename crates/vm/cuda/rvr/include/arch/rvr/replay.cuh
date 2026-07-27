@@ -5,41 +5,7 @@
 #include "primitives/constants.h"
 #include "system/memory/params.cuh"
 
-#include <cstdio>
-
 static constexpr uint32_t RV64_REPLAY_THREADS = 256;
-
-static inline int check_rv64_replay_kernel_launch(
-    char const *launch_site,
-    dim3 grid,
-    dim3 block
-) {
-    cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess) {
-        fprintf(
-            stderr,
-            "CUDA replay kernel launch failed: site=%s grid=(%u,%u,%u) "
-            "block=(%u,%u,%u): %s (%s)\n",
-            launch_site,
-            grid.x,
-            grid.y,
-            grid.z,
-            block.x,
-            block.y,
-            block.z,
-            cudaGetErrorString(error),
-            cudaGetErrorName(error)
-        );
-    }
-    return error;
-}
-
-// `launcher.cuh` intentionally returns only the CUDA error code in release
-// builds. Replay launch failures also need the wrapper and launch dimensions:
-// the error otherwise surfaces later at a stream synchronization with no AIR
-// attribution.
-#undef CHECK_KERNEL
-#define CHECK_KERNEL() check_rv64_replay_kernel_launch(__func__, grid, block)
 
 struct ReplayPreviousValue {
     uint32_t timestamp;
