@@ -27,8 +27,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_adapters::{
     rv64_heap_branch_default, rv64_write_heap_default, Rv64VecHeapAdapterAir,
-    Rv64VecHeapAdapterFiller, Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapBranchU16AdapterFiller,
-    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterFiller,
+    Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapU16AdapterAir,
 };
 use openvm_riscv_circuit::{
     adapters::RV_B_TYPE_IMM_BITS, AddSubCoreAir, AddSubFiller, BitwiseLogicCoreAir,
@@ -104,13 +103,7 @@ fn create_add_sub_harness_fields(
         AddSubCoreAir::new(range_checker_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
     );
     let executor = Rv64AddSub256Executor;
-    let chip = Rv64AddSub256Chip::new(
-        AddSubFiller::new(
-            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
-            range_checker_chip,
-        ),
-        memory_helper,
-    );
+    let chip = Rv64AddSub256Chip::new(AddSubFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -136,13 +129,7 @@ fn create_bitwise_logic_harness_fields(
         BitwiseLogicCoreAir::new(bitwise_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
     );
     let executor = Rv64BitwiseLogic256Executor;
-    let chip = Rv64BitwiseLogic256Chip::new(
-        BitwiseLogicFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
-            bitwise_chip,
-        ),
-        memory_helper,
-    );
+    let chip = Rv64BitwiseLogic256Chip::new(BitwiseLogicFiller::new(bitwise_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -171,13 +158,7 @@ fn create_lt_harness_fields(
         ),
     );
     let executor = Rv64LessThan256Executor;
-    let chip = Rv64LessThan256Chip::new(
-        LessThanFiller::new(
-            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
-            range_checker_chip,
-        ),
-        memory_helper,
-    );
+    let chip = Rv64LessThan256Chip::new(LessThanFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -210,7 +191,6 @@ fn create_mul_harness_fields(
     let executor = Rv64Multiplication256Executor;
     let chip = Rv64Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             range_tuple_chip,
             bitwise_chip,
             Rv64Mul256Opcode::CLASS_OFFSET,
@@ -241,13 +221,8 @@ fn create_shift_logical_harness_fields(
         ShiftLogicalCoreAir::new(range_checker_chip.bus(), Rv64Shift256Opcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftLogical256Executor;
-    let chip = Rv64ShiftLogical256Chip::new(
-        ShiftLogicalFiller::new(
-            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
-            range_checker_chip,
-        ),
-        memory_helper,
-    );
+    let chip =
+        Rv64ShiftLogical256Chip::new(ShiftLogicalFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -276,10 +251,7 @@ fn create_shift_right_arithmetic_harness_fields(
     );
     let executor = Rv64ShiftRightArithmetic256Executor;
     let chip = Rv64ShiftRightArithmetic256Chip::new(
-        ShiftRightArithmeticFiller::new(
-            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
-            range_checker_chip,
-        ),
+        ShiftRightArithmeticFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -308,11 +280,7 @@ fn create_beq_harness_fields(
     );
     let executor = Rv64BranchEqual256Executor;
     let chip = Rv64BranchEqual256Chip::new(
-        BranchEqualFiller::new(
-            Rv64VecHeapBranchU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
-            Rv64BranchEqual256Opcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
-        ),
+        BranchEqualFiller::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         memory_helper,
     );
     (air, executor, chip)
@@ -345,7 +313,6 @@ fn create_blt_harness_fields(
     let executor = Rv64BranchLessThan256Executor;
     let chip = Rv64BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
-            Rv64VecHeapBranchU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),
