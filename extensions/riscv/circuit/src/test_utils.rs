@@ -32,7 +32,10 @@ pub fn rv64_rand_write_register_or_imm(
         }
         pointer
     });
-    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mut rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    while rd == 0 {
+        rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    }
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {
