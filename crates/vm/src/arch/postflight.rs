@@ -229,12 +229,12 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         }
     }
 
-    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda", feature = "rvr"))]
+    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda"))]
     pub(crate) fn memory_predecessors_for_test(&self) -> &[u32] {
         &self.memory_predecessors
     }
 
-    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda", feature = "rvr"))]
+    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda"))]
     pub(crate) fn replay_steps_for_test(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
         self.steps.iter().map(|step| {
             let program_index = step.0;
@@ -242,7 +242,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         })
     }
 
-    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda", feature = "rvr"))]
+    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda"))]
     pub(crate) fn opcode_ranges_for_test(&self) -> &BTreeMap<u32, Range<usize>> {
         &self.opcode_ranges
     }

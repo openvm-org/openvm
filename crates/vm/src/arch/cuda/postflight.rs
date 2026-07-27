@@ -336,7 +336,8 @@ impl GpuPostflightProgram {
     /// the segment-start memory image. Tests already carry exact first-write
     /// seeds, so they can upload the validated predecessor index directly.
     #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn upload_history_for_test<F: PrimeField32>(
+    #[doc(hidden)]
+    pub fn upload_history_for_test<F: PrimeField32>(
         &self,
         program: &Program<F>,
         history: &PreflightHistory,
@@ -512,6 +513,7 @@ impl GpuPostflightProgram {
         Ok((transcript, plan))
     }
 
+    #[cfg(feature = "rvr")]
     pub(crate) const fn device_ctx(&self) -> &GpuDeviceCtx {
         &self.device_ctx
     }
@@ -533,10 +535,12 @@ impl GpuPostflightProgram {
         validate_initial_memory_lengths(&self.memory_config, &byte_lengths)
     }
 
+    #[cfg(feature = "rvr")]
     pub(crate) const fn timestamp_max_bits(&self) -> u32 {
         self.timestamp_max_bits
     }
 
+    #[cfg(feature = "rvr")]
     pub(crate) const fn cell_pointer_max_bits(&self) -> u32 {
         self.cell_pointer_max_bits
     }
@@ -685,7 +689,7 @@ fn instruction_to_replay<F: PrimeField32>(
     })
 }
 
-fn gpu_buffer<T>(len: usize, device_ctx: &GpuDeviceCtx) -> DeviceBuffer<T> {
+pub(crate) fn gpu_buffer<T>(len: usize, device_ctx: &GpuDeviceCtx) -> DeviceBuffer<T> {
     if len == 0 {
         DeviceBuffer::new()
     } else {

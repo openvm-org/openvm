@@ -27,7 +27,7 @@ use crate::{
             GpuPostflightTranscript, PostflightFieldBlock, PostflightInstruction,
         },
         rvr::{bridge::read_rv64_registers, preflight::PreflightExecution, PreflightEndpoint},
-        to_byte_ptr_bits, MemoryConfig,
+        to_byte_ptr_bits, MemoryConfig, BLOCK_FE_WIDTH,
     },
     cuda_abi::rvr_checkpoint_replay,
 };

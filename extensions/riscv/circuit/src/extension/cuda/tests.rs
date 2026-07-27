@@ -5,7 +5,7 @@ use openvm_circuit::{
         rvr::{
             cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightEventLog, PreflightLimits,
         },
-        VirtualMachine, VmExecutor,
+        PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -1299,9 +1299,17 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
     drop(gpu_transcript);
 
     let reject = |transcript: &PreflightEventLog, expected_code| {
+        let history = PreflightHistory {
+            program: transcript.program_log.clone(),
+            memory: PreflightMemoryLog {
+                accesses: transcript.memory_log.clone(),
+                initial_writes: transcript.initial_write_log.clone(),
+                ..Default::default()
+            },
+        };
         let (gpu_transcript, replay_plan) = gpu_program
             .program()
-            .upload_transcript(transcript, PreflightEndpoint::Terminated)
+            .upload_history_for_test(&program, &history)
             .unwrap();
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
