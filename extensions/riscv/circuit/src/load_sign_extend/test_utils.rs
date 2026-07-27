@@ -1,5 +1,5 @@
 use std::array;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
         memory::{gen_nonzero_register_pointer, gen_register_pointer},
         TestBuilder,
     },
-    Executor, MemoryConfig, MEMORY_BLOCK_BYTES,
+    MemoryConfig, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
@@ -16,21 +16,12 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::{Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, WORD_ACCESS_WIDTH},
-        load::{LoadByteRecord, LoadRecord},
-    },
-    openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    openvm_circuit::arch::testing::default_var_range_checker_bus,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
-#[cfg(feature = "cuda")]
-use crate::adapters::{Rv64LoadByteAdapterExecutor, Rv64LoadMultiByteAdapterExecutor};
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
@@ -148,38 +139,9 @@ pub(crate) fn memory_config_for() -> MemoryConfig {
 //
 //  Ensure GPU tracegen is equivalent to CPU tracegen.
 // ////////////////////////////////////////////////////////////////////////////////////
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
     Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
     ))
-}
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
-    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
-) {
-    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>::new(),
-        );
-}
-
-// Byte and multi-byte adapters have different row widths, so record transfer must use the
-// matching layout.
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_load_sign_extend_byte_records<G, C, A, E>(
-    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
-) {
-    type Record<'a> = (&'a mut Rv64LoadByteAdapterRecord, &'a mut LoadByteRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadByteAdapterExecutor>::new(),
-        );
 }

@@ -25,6 +25,21 @@ pub struct MemoryTester<F: VmField> {
     pub(super) controller: MemoryController<F>,
 }
 
+pub(crate) trait PostflightTestMemory<F: VmField> {
+    fn tracing_memory(&mut self) -> &mut TracingMemory;
+    fn write_block(&mut self, address_space: usize, pointer: usize, value: [F; BLOCK_FE_WIDTH]);
+}
+
+impl<F: VmField> PostflightTestMemory<F> for MemoryTester<F> {
+    fn tracing_memory(&mut self) -> &mut TracingMemory {
+        &mut self.memory
+    }
+
+    fn write_block(&mut self, address_space: usize, pointer: usize, value: [F; BLOCK_FE_WIDTH]) {
+        self.write(address_space, pointer, value);
+    }
+}
+
 impl<F: VmField> MemoryTester<F> {
     pub fn new(controller: MemoryController<F>, memory: TracingMemory) -> Self {
         let chip = MemoryDummyChip::new(MemoryDummyAir::new(controller.memory_bus));

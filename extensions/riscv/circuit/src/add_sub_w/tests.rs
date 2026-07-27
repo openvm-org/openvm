@@ -2,16 +2,13 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder},
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
-};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BaseAluWOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -25,13 +22,10 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64BaseAluWRegU16AdapterRecord, AddSubCoreRecord, Rv64AddSubWChipGpu},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64AddSubWChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
@@ -427,7 +421,7 @@ fn run_subw_noncanonical_upper_bytes_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64AddSubWExecutor,
@@ -436,7 +430,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64AddSubWChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -451,9 +445,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let gpu_chip = Rv64AddSubWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BaseAluWOpcode::ADDW, 100)]
 #[test_case(BaseAluWOpcode::SUBW, 100)]
 fn test_cuda_rand_add_sub_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
@@ -465,26 +465,13 @@ fn test_cuda_rand_add_sub_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluWRegU16AdapterRecord,
-        &'a mut AddSubCoreRecord<RV64_WORD_U16_LIMBS>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluWRegU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()

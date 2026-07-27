@@ -9,8 +9,6 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
-#[cfg(feature = "tco")]
-use openvm_instructions::exe::VmExe;
 use openvm_instructions::{
     instruction::Instruction, program::Program, riscv::RV64_REGISTER_NUM_LIMBS,
 };
@@ -31,24 +29,19 @@ use openvm_stark_sdk::{
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-#[cfg(not(feature = "tco"))]
-use crate::arch::{execution_mode::PreflightCtx, interpreter::AlignedBuf};
-#[cfg(feature = "tco")]
-use crate::arch::{
-    execution_mode::PreflightCtx, ExecutorInventory, InterpretedInstance, SystemConfig,
-};
 use crate::{
     arch::{
         testing::{
+            execute_test_preflight,
             execution::air::ExecutionDummyAir,
             program::{air::ProgramDummyAir, ProgramTester},
             ExecutionTester, MemoryTester, TestBuilder, TestChipHarness, TestPreflight,
             TestPreflightExecution, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
             POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
-        to_byte_ptr_bits, vm_poseidon2_config, ExecutionBridge, ExecutionBus, ExecutionCtxTrait,
-        ExecutionState, Executor, MemoryConfig, Postflight, Streams, VmExecState, VmField, VmState,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
+        to_byte_ptr_bits, vm_poseidon2_config, ExecutionBridge, ExecutionBus, ExecutionState,
+        Executor, MemoryConfig, Postflight, Streams, VmField, VmState, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         memory::{
@@ -101,64 +94,13 @@ where
     {
         let program =
             Program::new_without_debug_infos(std::slice::from_ref(instruction), initial_pc);
-        #[cfg(not(feature = "tco"))]
-        let output = {
-            let pre_compute_size = executor.pre_compute_size();
-            let pre_compute_align = pre_compute_size.next_power_of_two();
-            let pre_compute = AlignedBuf::uninit(pre_compute_size, pre_compute_align);
-            let pre_compute_data =
-                unsafe { std::slice::from_raw_parts_mut(pre_compute.ptr, pre_compute_size) };
-            let handler = executor
-                .pre_compute::<PreflightCtx>(initial_pc, instruction, pre_compute_data)
-                .expect("test instruction must be statically valid");
-
-            let empty_memory = GuestMemory::new(AddressMap::from_mem_config(
-                self.memory.controller.memory_config(),
-            ));
-            let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
-            let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
-            state.rng = self.rng.clone();
-
-            let ctx = PreflightCtx::new::<F>(&state.memory, Some(1));
-            let mut exec_state = VmExecState::new(state, ctx);
-            assert!(!exec_state.should_suspend());
-            PreflightCtx::on_instruction_start(&mut exec_state, initial_pc);
-            unsafe { handler(pre_compute.ptr, &mut exec_state) };
-            if let Err(error) = exec_state.exit_code {
-                panic!("{error}");
-            }
-            let final_pc = exec_state.vm_state.pc();
-            let history = exec_state.ctx.finish(final_pc);
-            crate::arch::PreflightOutput {
-                history,
-                state: exec_state.vm_state,
-                exit_code: None,
-            }
-        };
-
-        #[cfg(feature = "tco")]
-        let output = {
-            let exe = VmExe::new(program.clone()).with_pc_start(initial_pc);
-            let system_config =
-                SystemConfig::default_from_memory(self.memory.controller.memory_config().clone());
-            let mut inventory = ExecutorInventory::<E>::new(system_config);
-            inventory
-                .add_executor(executor.clone(), [instruction.opcode])
-                .expect("test executor opcode must be unique");
-            let interpreter = InterpretedInstance::new(&inventory, &exe)
-                .expect("test instruction must be statically valid");
-            let mut state = VmState::new_with_defaults(
-                initial_pc,
-                self.memory.memory.data.clone(),
-                self.streams.clone(),
-                0,
-            );
-            state.rng = self.rng.clone();
-            let output = interpreter
-                .execute_preflight_from_state::<F>(state, Some(1))
-                .expect("test instruction preflight must succeed");
-            output
-        };
+        let empty_memory = GuestMemory::new(AddressMap::from_mem_config(
+            self.memory.controller.memory_config(),
+        ));
+        let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
+        let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
+        state.rng = self.rng.clone();
+        let output = execute_test_preflight(executor, instruction, &program, initial_pc, state);
         let initial_state = ExecutionState::new(initial_pc, 1u32);
         let final_event = *output
             .history

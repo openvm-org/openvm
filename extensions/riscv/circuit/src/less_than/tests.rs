@@ -2,17 +2,14 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder},
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::i32_to_f,
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
-};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LessThanOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -26,15 +23,12 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64BaseAluRegU16AdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64LessThanChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {openvm_circuit_primitives::var_range::VariableRangeCheckerChip, std::sync::Arc};
 
 use super::{
@@ -485,7 +479,7 @@ fn run_less_than_equal_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64LessThanExecutor,
@@ -494,7 +488,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64LessThanChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -509,9 +503,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let gpu_chip = Rv64LessThanChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(LessThanOpcode::SLT, 100)]
 #[test_case(LessThanOpcode::SLTU, 100)]
 fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
@@ -523,25 +523,13 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluRegU16AdapterRecord,
-        &'a mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()

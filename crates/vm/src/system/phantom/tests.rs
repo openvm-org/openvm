@@ -87,7 +87,7 @@ fn test_nops_and_terminate() {
         PhantomDiscriminant(SysPhantom::Nop as u16),
         Arc::new(NopPhantomExecutor),
     );
-    let executor = PhantomExecutor::new(phantom_executors, phantom_opcode);
+    let executor = PhantomExecutor::new(phantom_executors);
     let chip = PhantomChip::new(PhantomFiller, tester.memory_helper());
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
@@ -123,7 +123,7 @@ fn postflight_trace_does_not_replay_callbacks() {
     );
 
     let mut tester = VmChipTestBuilder::default();
-    let executor = PhantomExecutor::new(phantom_executors, phantom_opcode);
+    let executor = PhantomExecutor::new(phantom_executors);
     let chip = PhantomChip::new(PhantomFiller, tester.memory_helper());
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
@@ -204,22 +204,22 @@ fn postflight_trace_rejects_phantom_history_with_memory_events() {
     assert!(error.to_string().contains("left 1 memory events unread"));
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_phantom_tracegen() {
-    use crate::{
-        arch::{
-            testing::{GpuChipTestBuilder, GpuTestChipHarness},
-            EmptyMultiRowLayout,
-        },
-        system::{cuda::phantom::PhantomChipGPU, phantom::PhantomRecord},
-    };
+    use crate::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
 
     const NUM_NOPS: usize = 100;
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
     let mut tester = GpuChipTestBuilder::default();
 
-    let executor = PhantomExecutor::new(Default::default(), phantom_opcode);
+    let mut phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>> =
+        FxHashMap::default();
+    phantom_executors.insert(
+        PhantomDiscriminant(SysPhantom::Nop as u16),
+        Arc::new(NopPhantomExecutor),
+    );
+    let executor = PhantomExecutor::new(phantom_executors);
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
         phantom_opcode,
@@ -227,20 +227,21 @@ fn test_cuda_phantom_tracegen() {
     let gpu_chip = PhantomChipGPU::new(tester.range_checker().device_ctx.clone());
     let cpu_chip = PhantomChip::new(PhantomFiller, tester.dummy_memory_helper());
     let mut harness =
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, NUM_NOPS);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, NUM_NOPS)
+            .with_trace_generators(
+                |_, postflight| generate_trace_from_postflight(postflight),
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            );
 
     run_phantom_test(
         &mut tester,
         &mut harness.executor,
-        &mut harness.dense_arena,
+        &mut harness.preflight,
         phantom_opcode,
         NUM_NOPS,
     );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<&mut PhantomRecord, EmptyMultiRowLayout>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()

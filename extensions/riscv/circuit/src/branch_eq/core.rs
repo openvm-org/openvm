@@ -3,7 +3,6 @@ use std::borrow::Borrow;
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
-use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

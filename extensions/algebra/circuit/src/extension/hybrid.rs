@@ -1,10 +1,7 @@
-//! GPU prover extension. Record-based trace generation uses the CPU fallback. Preflight
-//! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
-//! projection for other field expressions.
+//! GPU prover extension. Preflight replay uses native GPU trace generation for recognized
+//! fields and a CPU postflight projection for other field expressions.
 
-#[cfg(feature = "rvr")]
-use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 #[cfg(all(feature = "rvr", test))]
 use openvm_circuit::arch::rvr::PreflightExecution;
 use openvm_circuit::{
@@ -18,7 +15,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu, Chip,
+    bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu,
 };
 use openvm_cuda_backend::{
     prelude::{F, SC},
@@ -27,7 +24,6 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_riscv_adapters::Rv64IsEqualModU16AdapterFiller;
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::prover::AirProvingContext;
 use strum::EnumCount;
@@ -167,7 +163,7 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
     {
         let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
-                "Modular chip was constructed without checkpoint replay".to_string(),
+                "Modular chip was constructed without postflight replay".to_string(),
             )
         })?;
         match replay {
@@ -189,7 +185,7 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
     > {
         let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
-                "Modular chip was constructed without checkpoint replay".to_string(),
+                "Modular chip was constructed without postflight replay".to_string(),
             )
         })?;
         let opcode_base = match replay {
@@ -205,8 +201,7 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
     }
 }
 
-// Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
-// of Dense->Matrix Record Arena, cpu tracegen, and then H2D transfer of the trace matrix.
+/// Hybrid prover chip that can generate a CPU trace and transfer it to the GPU.
 pub struct HybridModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize> {
     cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
     device_ctx: GpuDeviceCtx,
@@ -266,7 +261,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
             .as_ref()
             .ok_or_else(|| {
                 openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
-                    "ModularIsEqual chip was constructed without checkpoint replay".to_string(),
+                    "ModularIsEqual chip was constructed without postflight replay".to_string(),
                 )
             })?
             .generate_proving_ctx_from_postflight(program, transcript, replay_plan)
@@ -283,7 +278,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
             .as_ref()
             .ok_or_else(|| {
                 openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
-                    "ModularIsEqual chip was constructed without checkpoint replay".to_string(),
+                    "ModularIsEqual chip was constructed without postflight replay".to_string(),
                 )
             })?
             .postflight_opcodes()
@@ -392,15 +387,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()?;
                 let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
-                    ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(
-                            byte_ptr_max_bits,
-                            range_checker.clone(),
-                        ),
-                        start_offset,
-                        modulus_limbs,
-                        range_checker.clone(),
-                    ),
+                    ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
                     mem_helper.clone(),
                 );
                 #[cfg(feature = "rvr")]
@@ -505,15 +492,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()?;
                 let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
-                    ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(
-                            byte_ptr_max_bits,
-                            range_checker.clone(),
-                        ),
-                        start_offset,
-                        modulus_limbs,
-                        range_checker.clone(),
-                    ),
+                    ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
                     mem_helper.clone(),
                 );
                 #[cfg(feature = "rvr")]
@@ -592,7 +571,7 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
     {
         let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
-                "Fp2 chip was constructed without checkpoint replay".to_string(),
+                "Fp2 chip was constructed without postflight replay".to_string(),
             )
         })?;
         replay.generate_proving_ctx(&self.cpu, program, transcript, replay_plan)
@@ -607,7 +586,7 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
     > {
         let replay = self.replay.as_ref().ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript(
-                "Fp2 chip was constructed without checkpoint replay".to_string(),
+                "Fp2 chip was constructed without postflight replay".to_string(),
             )
         })?;
         replay
@@ -618,7 +597,7 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
     }
 }
 
-/// Concrete algebra checkpoint producers for the existing reverse inventory
+/// Concrete algebra postflight producers for the existing reverse inventory
 /// walk. Coverage is derived from configured opcode ranges and fails closed.
 #[cfg(feature = "rvr")]
 pub struct AlgebraPreflightGpuTracegen<'a> {
@@ -1088,17 +1067,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        // Only replay opcode selection needs the modulus index.
-        #[cfg(feature = "rvr")]
         let supported_moduli = extension.supported_moduli.iter().enumerate();
-        #[cfg(not(feature = "rvr"))]
-        let supported_moduli = extension.supported_moduli.iter().map(|entry| ((), entry));
 
-        for (_modulus_idx, (_, modulus)) in supported_moduli {
+        for (modulus_idx, (_, modulus)) in supported_moduli {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
-            #[cfg(feature = "rvr")]
-            let start_offset = Fp2Opcode::CLASS_OFFSET + _modulus_idx * Fp2Opcode::COUNT;
+            let start_offset = Fp2Opcode::CLASS_OFFSET + modulus_idx * Fp2Opcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {

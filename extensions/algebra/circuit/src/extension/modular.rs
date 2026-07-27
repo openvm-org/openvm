@@ -18,9 +18,7 @@ use openvm_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_riscv_adapters::{
-    Rv64IsEqualModU16AdapterAir, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
-};
+use openvm_riscv_adapters::Rv64IsEqualModU16AdapterAir;
 use openvm_riscv_circuit::adapters::U16_BITS;
 use openvm_stark_backend::{
     p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
@@ -144,11 +142,7 @@ impl VmExecutionExtension for ModularExtension {
                     }
                 });
 
-                let is_eq = VmModularIsEqualU16Executor::new(
-                    Rv64IsEqualModU16AdapterExecutor::new(byte_ptr_max_bits),
-                    start_offset,
-                    modulus_limbs,
-                );
+                let is_eq = VmModularIsEqualU16Executor::new(start_offset, modulus_limbs);
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv64_32(is_eq),
@@ -198,11 +192,7 @@ impl VmExecutionExtension for ModularExtension {
                     }
                 });
 
-                let is_eq = VmModularIsEqualU16Executor::new(
-                    Rv64IsEqualModU16AdapterExecutor::new(byte_ptr_max_bits),
-                    start_offset,
-                    modulus_limbs,
-                );
+                let is_eq = VmModularIsEqualU16Executor::new(start_offset, modulus_limbs);
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv64_48(is_eq),
@@ -410,10 +400,6 @@ where
                 let is_eq =
                     ModularIsEqualU16Chip::<Val<SC>, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
                         ModularIsEqualFiller::new(
-                            Rv64IsEqualModU16AdapterFiller::new(
-                                byte_ptr_max_bits,
-                                range_checker.clone(),
-                            ),
                             start_offset,
                             modulus_limbs,
                             range_checker.clone(),
@@ -482,10 +468,6 @@ where
                 let is_eq =
                     ModularIsEqualU16Chip::<Val<SC>, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
                         ModularIsEqualFiller::new(
-                            Rv64IsEqualModU16AdapterFiller::new(
-                                byte_ptr_max_bits,
-                                range_checker.clone(),
-                            ),
                             start_offset,
                             modulus_limbs,
                             range_checker.clone(),

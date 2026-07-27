@@ -1,4 +1,4 @@
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::sync::Arc;
 use std::{str::FromStr, sync::atomic::Ordering};
 
@@ -26,7 +26,7 @@ use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     crate::extension::HybridWeierstrassChip,
     openvm_circuit::arch::testing::{
@@ -39,11 +39,11 @@ use {
     openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
-        arch::{DenseRecordArena, PreflightProgramEvent, VirtualMachine, VmExecutor},
+        arch::{
+            PreflightHistory, PreflightMemoryLog, PreflightProgramEvent, VirtualMachine, VmExecutor,
+        },
         utils::{test_gpu_engine, test_system_config},
     },
-    openvm_circuit_primitives::Chip,
-    openvm_cuda_backend::{base::DeviceMatrix, GpuBackend},
     openvm_cuda_common::copy::MemCopyD2H,
     openvm_instructions::{
         exe::{SparseMemoryImage, VmExe},
@@ -51,7 +51,7 @@ use {
         SystemOpcode,
     },
     openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram},
-    openvm_stark_backend::{prover::AirProvingContext, StarkEngine},
+    openvm_stark_backend::StarkEngine,
     rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT},
     strum::EnumCount,
 };
@@ -273,6 +273,18 @@ fn repeat_vec_heap_transcript(
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
+fn history_from_event_log(transcript: &PreflightEventLog) -> PreflightHistory {
+    PreflightHistory {
+        program: transcript.program_log.clone(),
+        memory: PreflightMemoryLog {
+            accesses: transcript.memory_log.clone(),
+            initial_writes: transcript.initial_write_log.clone(),
+            ..Default::default()
+        },
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn field_expression_output(
     program: &FieldExpressionProgram,
     input_bytes: &[u8],
@@ -398,16 +410,6 @@ fn combine_two_vec_heap_transcripts(
     )
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-struct NonWeierstrassChip;
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-impl Chip<DenseRecordArena, GpuBackend> for NonWeierstrassChip {
-    fn generate_proving_ctx(&self, _arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        AirProvingContext::simple_no_pis(DeviceMatrix::dummy())
-    }
-}
-
 mod ec_addne_tests {
     use num_traits::One;
 
@@ -459,7 +461,7 @@ mod ec_addne_tests {
         })
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     type GpuHarness<const BLOCKS: usize> = GpuTestChipHarness<
         F,
         EcAddNeExecutor<BLOCKS>,
@@ -468,7 +470,7 @@ mod ec_addne_tests {
         WeierstrassChip<F, 2, BLOCKS>,
     >;
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     fn create_cuda_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
@@ -519,6 +521,17 @@ mod ec_addne_tests {
             HybridWeierstrassChip::new(gpu_cpu_chip, tester.range_checker().device_ctx.clone());
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_add_ne_trace_from_postflight(chip, postflight, offset)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            )
+            .with_batch_trace_generator(move |chip, postflights| {
+                generate_add_ne_trace_from_postflights(chip, postflights, offset)
+            })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -833,13 +846,11 @@ mod ec_addne_tests {
         assert_eq!(range_counts_after, range_counts_before);
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     fn run_cuda_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
     ) {
-        use crate::EccRecord;
-
         let mut rng = create_seeded_rng();
 
         let mut tester = GpuChipTestBuilder::default();
@@ -852,10 +863,10 @@ mod ec_addne_tests {
 
         let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             true,
@@ -864,10 +875,10 @@ mod ec_addne_tests {
             None,
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             false,
@@ -876,10 +887,10 @@ mod ec_addne_tests {
             Some(SampleEcPoints[1].clone()),
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             false,
@@ -887,14 +898,6 @@ mod ec_addne_tests {
             Some(SampleEcPoints[2].clone()),
             Some(SampleEcPoints[3].clone()),
         );
-
-        harness
-            .dense_arena
-            .get_record_seeker::<EccRecord<2, BLOCKS>, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                harness.executor.get_record_layout::<F>(),
-            );
 
         tester
             .build()
@@ -904,7 +907,7 @@ mod ec_addne_tests {
             .unwrap();
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_weierstrass_addne_cuda_2x32() {
         run_cuda_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(
@@ -913,7 +916,7 @@ mod ec_addne_tests {
         );
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_weierstrass_addne_cuda_6x16() {
         run_cuda_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(
@@ -934,7 +937,7 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
         let mut tester = GpuChipTestBuilder::default();
-        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
+        let harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
         let values = if is_setup {
             vec![
                 modulus,
@@ -980,14 +983,6 @@ mod ec_addne_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
-        // This isolated chip proof still needs the harness's memory lookup
-        // counterpart. The chip trace itself remains the replay-derived context below.
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &instruction,
-            0,
-        );
         let device_ctx = tester.range_checker().device_ctx.clone();
         let (program, mut transcript) = make_vec_heap_transcript::<2, BLOCKS>(
             instruction,
@@ -998,6 +993,8 @@ mod ec_addne_tests {
             &input_bytes,
             &output_bytes,
         );
+        let valid_history = history_from_event_log(&transcript);
+        tester.record_preflight_history(&program, &valid_history, Some(0));
         let gpu_program = GpuPostflightProgram::upload(
             &program,
             &openvm_circuit::arch::MemoryConfig::default(),
@@ -1024,12 +1021,13 @@ mod ec_addne_tests {
             .is_err());
         assert_eq!(replay_counts, gpu_range_counts(&tester));
 
+        let mut tester = tester.build();
+        tester.balance_preflight_history(&program, &valid_history, Some(0));
         tester
-            .build()
             .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
             .finalize()
             .simple_test()
-            .expect("Weierstrass add checkpoint replay proof failed");
+            .expect("Weierstrass add postflight proof failed");
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -1146,10 +1144,7 @@ mod ec_addne_tests {
             &gpu_transcript,
             &replay_plan,
         );
-        assert!(incomplete
-            .generate_for_chip(&NonWeierstrassChip)
-            .unwrap()
-            .is_none());
+        assert!(incomplete.generate_for_chip(&()).unwrap().is_none());
         drop(
             incomplete
                 .generate_for_chip(&first.gpu_chip)
@@ -1419,7 +1414,7 @@ mod ec_double_tests {
         })
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     type GpuHarness<const BLOCKS: usize> = GpuTestChipHarness<
         F,
         EcDoubleExecutor<BLOCKS>,
@@ -1428,7 +1423,7 @@ mod ec_double_tests {
         WeierstrassChip<F, 1, BLOCKS>,
     >;
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     fn create_cuda_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
@@ -1483,6 +1478,17 @@ mod ec_double_tests {
             HybridWeierstrassChip::new(gpu_cpu_chip, tester.range_checker().device_ctx.clone());
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_double_trace_from_postflight(chip, postflight, offset)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            )
+            .with_batch_trace_generator(move |chip, postflights| {
+                generate_double_trace_from_postflights(chip, postflights, offset)
+            })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1756,15 +1762,13 @@ mod ec_double_tests {
         generate_double_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     fn run_ec_double_cuda_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
         num_ops: usize,
         a: BigUint,
     ) {
-        use crate::EccRecord;
-
         let mut rng = create_seeded_rng();
 
         let mut tester = GpuChipTestBuilder::default();
@@ -1779,10 +1783,10 @@ mod ec_double_tests {
 
         // Run some operations
         for i in 0..num_ops {
-            set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+            set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.dense_arena,
+                &mut harness.preflight,
                 &mut rng,
                 &modulus,
                 &a,
@@ -1793,10 +1797,10 @@ mod ec_double_tests {
             );
         }
 
-        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             &a,
@@ -1806,10 +1810,10 @@ mod ec_double_tests {
             Some(SampleEcPoints[0].1.clone()),
         );
 
-        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             &a,
@@ -1831,10 +1835,10 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             &a,
@@ -1844,14 +1848,6 @@ mod ec_double_tests {
             Some(p1_y),
         );
 
-        harness
-            .dense_arena
-            .get_record_seeker::<EccRecord<1, BLOCKS>, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                harness.executor.get_record_layout::<F>(),
-            );
-
         tester
             .build()
             .load_gpu_harness(harness)
@@ -1860,7 +1856,7 @@ mod ec_double_tests {
             .unwrap();
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_ec_double_cuda_2x32() {
         run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
@@ -1871,7 +1867,7 @@ mod ec_double_tests {
         );
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_ec_double_cuda_2x32_nonzero_a_1() {
         let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
@@ -1885,7 +1881,7 @@ mod ec_double_tests {
         );
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_ec_double_cuda_6x16() {
         run_ec_double_cuda_test::<ECC_BLOCKS_48, NUM_LIMBS_48>(
@@ -1910,7 +1906,7 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
         let mut tester = GpuChipTestBuilder::default();
-        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone());
+        let harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone());
         let values = if is_setup {
             vec![modulus, a]
         } else {
@@ -1951,16 +1947,6 @@ mod ec_double_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
-        // This isolated chip proof still needs the harness's memory lookup
-        // counterpart. The chip trace itself remains the replay-derived context below.
-        for row in 0..rows {
-            tester.execute_with_pc(
-                &mut harness.executor,
-                &mut harness.dense_arena,
-                &instruction,
-                row as u32 * 4,
-            );
-        }
         let device_ctx = tester.range_checker().device_ctx.clone();
         let (_, transcript) = make_vec_heap_transcript::<1, BLOCKS>(
             instruction.clone(),
@@ -1972,6 +1958,8 @@ mod ec_double_tests {
             &output_bytes,
         );
         let (program, mut transcript) = repeat_vec_heap_transcript(instruction, transcript, rows);
+        let valid_history = history_from_event_log(&transcript);
+        tester.record_preflight_history(&program, &valid_history, Some(0));
         let gpu_program = GpuPostflightProgram::upload(
             &program,
             &openvm_circuit::arch::MemoryConfig::default(),
@@ -1998,12 +1986,13 @@ mod ec_double_tests {
             .is_err());
         assert_eq!(replay_counts, gpu_range_counts(&tester));
 
+        let mut tester = tester.build();
+        tester.balance_preflight_history(&program, &valid_history, Some(0));
         tester
-            .build()
             .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
             .finalize()
             .simple_test()
-            .expect("Weierstrass double checkpoint replay proof failed");
+            .expect("Weierstrass double postflight proof failed");
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]

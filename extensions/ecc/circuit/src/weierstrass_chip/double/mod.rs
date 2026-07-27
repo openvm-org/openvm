@@ -22,10 +22,7 @@ use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
 };
 
-use super::{
-    curves::{get_curve_type, CurveType},
-    WeierstrassAir, WeierstrassChip,
-};
+use super::{WeierstrassAir, WeierstrassChip};
 
 mod execution;
 
@@ -83,26 +80,17 @@ pub fn ec_double_ne_program(
 }
 
 /// `BLOCKS` is the number of memory blocks needed to represent one input or output point.
-// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
+// Preflight executes this transition with fast native arithmetic.
 #[derive(Clone)]
 pub struct EcDoubleExecutor<const BLOCKS: usize> {
     pub(crate) inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
-    pub(crate) cached_curve_type: Option<CurveType>,
 }
 
 impl<const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
     pub fn new(
         inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
     ) -> Self {
-        let cached_curve_type = inner
-            .program()
-            .setup_values()
-            .first()
-            .and_then(|a| get_curve_type(inner.program().prime(), a));
-        Self {
-            inner,
-            cached_curve_type,
-        }
+        Self { inner }
     }
 }
 

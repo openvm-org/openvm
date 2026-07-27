@@ -101,23 +101,19 @@ mod guest_tests {
         };
         use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
         use serde::{Deserialize, Serialize};
+        #[cfg(not(feature = "cuda"))]
+        use {
+            openvm_circuit::{arch::VmField, system::SystemChipInventory},
+            openvm_cpu_backend::{CpuBackend, CpuDevice},
+            openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val},
+        };
         #[cfg(feature = "cuda")]
         use {
             openvm_circuit::{
-                arch::DenseRecordArena,
                 openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend},
                 system::cuda::SystemChipInventoryGPU,
             },
             openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-        };
-        #[cfg(not(feature = "cuda"))]
-        use {
-            openvm_circuit::{
-                arch::{MatrixRecordArena, VmField},
-                system::SystemChipInventory,
-            },
-            openvm_cpu_backend::{CpuBackend, CpuDevice},
-            openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val},
         };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -160,17 +156,14 @@ mod guest_tests {
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;
-            type RecordArena = MatrixRecordArena<Val<SC>>;
 
             fn create_chip_complex(
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<SC>,
                 device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-            ) -> Result<
-                VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-                ChipInventoryError,
-            > {
+            ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError>
+            {
                 let mut chip_complex = VmBuilder::<E>::create_chip_complex(
                     &Rv64WeierstrassBuilder,
                     &config.weierstrass,
@@ -178,11 +171,7 @@ mod guest_tests {
                     device_ctx,
                 )?;
                 let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<E, _, _>::extend_prover(
-                    &Sha2ProverExt,
-                    &config.sha2,
-                    inventory,
-                )?;
+                VmProverExtension::<E, _>::extend_prover(&Sha2ProverExt, &config.sha2, inventory)?;
                 Ok(chip_complex)
             }
         }
@@ -191,7 +180,6 @@ mod guest_tests {
         impl VmBuilder<BabyBearPoseidon2GpuEngine> for EcdsaBuilder {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventoryGPU;
-            type RecordArena = DenseRecordArena;
 
             fn create_chip_complex(
                 &self,
@@ -199,12 +187,7 @@ mod guest_tests {
                 circuit: AirInventory<BabyBearPoseidon2Config>,
                 device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
             ) -> Result<
-                VmChipComplex<
-                    BabyBearPoseidon2Config,
-                    Self::RecordArena,
-                    GpuBackend,
-                    Self::SystemChipInventory,
-                >,
+                VmChipComplex<BabyBearPoseidon2Config, GpuBackend, Self::SystemChipInventory>,
                 ChipInventoryError,
             > {
                 let mut chip_complex =
@@ -215,7 +198,7 @@ mod guest_tests {
                         device_ctx,
                     )?;
                 let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
+                VmProverExtension::<BabyBearPoseidon2GpuEngine, _>::extend_prover(
                     &Sha2ProverExt,
                     &config.sha2,
                     inventory,

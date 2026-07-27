@@ -1,5 +1,5 @@
 use std::borrow::BorrowMut;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::sync::Arc;
 
 use openvm_circuit::{
@@ -8,8 +8,7 @@ use openvm_circuit::{
             memory::{gen_pointer, gen_register_pointer},
             TestBuilder, TestChipHarness, VmChipTestBuilder,
         },
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{pack_u8_block_value, MemoryBridge},
@@ -19,7 +18,6 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{
     instruction::Instruction,
-    program::Program,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -37,9 +35,9 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{Rv64HintStoreChipGpu, Rv64HintStoreLayout},
+    crate::Rv64HintStoreChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
@@ -525,7 +523,7 @@ fn execute_roundtrip_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64HintStoreExecutor,
@@ -534,7 +532,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64HintStoreChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -554,9 +552,22 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+        .with_rows_used(|trace| {
+            trace
+                .values
+                .chunks_exact(trace.width)
+                .take_while(|row| row[0] + row[1] != F::ZERO)
+                .count()
+        })
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_hintstore_tracegen() {
     let mut rng = create_seeded_rng();
@@ -573,16 +584,11 @@ fn test_cuda_rand_hintstore_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
         );
     }
-
-    harness
-        .dense_arena
-        .get_record_seeker::<_, Rv64HintStoreLayout>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()

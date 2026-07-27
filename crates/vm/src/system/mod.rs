@@ -25,9 +25,9 @@ use self::{connector::VmConnectorAir, program::ProgramAir};
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, AirRefWithColumns, BusIndexManager,
-        ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState,
-        ExecutorInventory, ExecutorInventoryError, PhantomSubExecutor, Postflight, SystemConfig,
-        VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField, BLOCK_FE_WIDTH,
+        ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutorInventory,
+        ExecutorInventoryError, PhantomSubExecutor, Postflight, SystemConfig, VmBuilder,
+        VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField, BLOCK_FE_WIDTH,
         BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
     },
     system::{
@@ -91,17 +91,6 @@ pub trait SystemWithFixedTraceHeights {
     /// `heights` will have length equal to number of system AIRs, in AIR ID order. This function
     /// must guarantee that the system trace matrices generated have the required heights.
     fn override_trace_heights(&mut self, heights: &[u32]);
-}
-
-pub struct SystemRecords<F> {
-    pub from_state: ExecutionState<u32>,
-    pub to_state: ExecutionState<u32>,
-    pub exit_code: Option<u32>,
-    /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
-    /// `program.instructions_and_debug_infos` to remove gaps.
-    pub filtered_exec_frequencies: Vec<u32>,
-    // Perf[jpw]: this should be computed on-device and changed to just touched blocks
-    pub touched_memory: TouchedMemory<F>,
 }
 
 /// A memory block touched during a segment: final values and last-access
@@ -225,7 +214,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
             PhantomDiscriminant(SysPhantom::CtEnd as u16),
             Arc::new(CycleEndPhantomExecutor),
         );
-        let phantom = PhantomExecutor::new(phantom_executors, phantom_opcode);
+        let phantom = PhantomExecutor::new(phantom_executors);
         inventory.add_executor(phantom, [phantom_opcode])?;
 
         Ok(inventory)

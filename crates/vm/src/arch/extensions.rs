@@ -863,8 +863,7 @@ impl<SC> VmChipComplex<SC, GpuBackend, SystemChipInventoryGPU>
 where
     SC: StarkProtocolConfig,
 {
-    /// Generates a complete GPU proving context from one preflight segment without
-    /// constructing any system or extension record arenas.
+    /// Generates a complete GPU proving context from one preflight segment.
     pub(crate) fn generate_proving_ctx_from_postflight(
         &mut self,
         program: &GpuPostflightProgram,

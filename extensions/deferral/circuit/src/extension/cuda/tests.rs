@@ -62,7 +62,7 @@ fn deferral_coverage_rejects_missing_and_duplicate_producers() {
 }
 
 #[test]
-fn deferral_output_coordinator_proves_without_record_arenas() {
+fn deferral_output_coordinator_proves_from_preflight_history() {
     let rd = 8u32;
     let rs = 16u32;
     let output_ptr = 0x100u32;

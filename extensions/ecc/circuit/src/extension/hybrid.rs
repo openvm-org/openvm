@@ -1,6 +1,5 @@
-//! GPU prover extension. Record-based trace generation uses the CPU fallback. Preflight
-//! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
-//! projection for other field expressions.
+//! GPU prover extension. Preflight replay uses native GPU trace generation for recognized
+//! fields and a CPU postflight projection for other field expressions.
 
 use openvm_algebra_circuit::Rv64ModularHybridBuilder;
 use openvm_circuit::{
@@ -10,7 +9,7 @@ use openvm_circuit::{
         memory::SharedMemoryHelper,
     },
 };
-use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu, Chip};
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
@@ -174,19 +173,18 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let replay = self.replay.as_ref().ok_or_else(|| {
             GpuPostflightError::InvalidTranscript(
-                "Weierstrass chip was constructed without checkpoint replay".to_string(),
+                "Weierstrass chip was constructed without postflight replay".to_string(),
             )
         })?;
         replay.generate_proving_ctx(&self.cpu, program, transcript, replay_plan)
     }
 }
 
-// Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
-// of Dense->Matrix Record Arena, cpu tracegen, and then H2D transfer of the trace matrix.
+/// Prover extension for hybrid CPU trace generation and GPU proving.
 #[derive(Clone, Copy, Default)]
 pub struct EccHybridProverExt;
 
-/// Concrete inventory visitor for arena-free Weierstrass checkpoint tracegen.
+/// Concrete inventory visitor for Weierstrass postflight trace generation.
 ///
 /// Multiple configured curves may have the same Rust chip type, so coverage is
 /// tracked by each chip's concrete opcode base rather than by downcast type.
@@ -404,7 +402,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let base = chip.opcode_base().ok_or_else(|| {
             GpuPostflightError::InvalidTranscript(
-                "Weierstrass inventory chip has no checkpoint replay configuration".to_string(),
+                "Weierstrass inventory chip has no postflight replay configuration".to_string(),
             )
         })?;
         for local in HybridWeierstrassChip::<F, NUM_READS, BLOCKS>::local_opcodes()? {
@@ -448,7 +446,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     }
 
     /// Generates the complete RISC-V + modular + optional Fp2 + Weierstrass proving context
-    /// from one checkpoint transcript, without constructing execution records.
+    /// from one preflight execution.
     pub fn generate_proving_ctx<VB>(
         self,
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,

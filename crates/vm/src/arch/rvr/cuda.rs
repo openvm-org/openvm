@@ -34,6 +34,8 @@ use thiserror::Error;
 #[cfg(feature = "test-utils")]
 use super::PreflightEventLog;
 use super::{bridge::read_rv64_registers, preflight::PreflightExecution, PreflightEndpoint};
+#[cfg(any(test, feature = "test-utils"))]
+use crate::arch::Postflight;
 use crate::{
     arch::{
         to_byte_ptr_bits, ExecutionState, MemoryCellType, MemoryConfig, PreflightHistory,
@@ -1110,6 +1112,58 @@ impl GpuPostflightProgram {
             segment_identity,
         )?;
         Ok((gpu, plan))
+    }
+
+    /// Uploads an interpreter-produced history for CPU/GPU trace comparison.
+    ///
+    /// Production interpreter proving derives chronology on the device from
+    /// the segment-start memory image. Tests already carry exact first-write
+    /// seeds, so they can upload the validated predecessor index directly.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) fn upload_history_for_test<F: PrimeField32>(
+        &self,
+        program: &Program<F>,
+        history: &PreflightHistory,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let postflight = Postflight::new_for_test(program, history, &self.memory_config)
+            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        let replay_steps = postflight
+            .replay_steps_for_test()
+            .map(|(program_index, memory_start)| RvrReplayStep {
+                program_index,
+                memory_start,
+            })
+            .collect::<Vec<_>>();
+        let segment_identity = Arc::new(());
+        let transcript = GpuPostflightTranscript {
+            program_log: upload(&history.program, &self.device_ctx)?,
+            memory_log: upload(&history.memory.accesses, &self.device_ctx)?,
+            initial_write_log: upload(&history.memory.initial_writes, &self.device_ctx)?,
+            field_values: upload(&history.memory.field_values, &self.device_ctx)?,
+            field_initial_values: upload(&history.memory.field_initial_values, &self.device_ctx)?,
+            memory_predecessors: upload(
+                postflight.memory_predecessors_for_test(),
+                &self.device_ctx,
+            )?,
+            touched_blocks: DeviceBuffer::new(),
+            num_touched_blocks: 0,
+            error: [0u32].to_device_on(&self.device_ctx)?,
+            device_ctx: self.device_ctx.clone(),
+            program_identity: self.identity.clone(),
+            segment_identity: segment_identity.clone(),
+        };
+        let plan = GpuPostflightPlan {
+            steps: upload(&replay_steps, &self.device_ctx)?,
+            program_frequencies: upload(postflight.filtered_exec_frequencies(), &self.device_ctx)?,
+            opcode_ranges: postflight.opcode_ranges_for_test().clone(),
+            from_state: postflight.from_state(),
+            to_state: postflight.to_state(),
+            exit_code: None,
+            device_ctx: self.device_ctx.clone(),
+            program_identity: self.identity.clone(),
+            segment_identity,
+        };
+        Ok((transcript, plan))
     }
 
     /// Uploads expanded history produced by serial interpreter preflight.
@@ -2192,6 +2246,43 @@ mod tests {
             program.identity.clone(),
             segment_identity,
         )
+    }
+
+    #[test]
+    fn empty_program_cannot_terminate_without_a_terminate_step() {
+        let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
+        let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
+        let program = gpu_program(&[terminate], &device_ctx);
+        let transcript = PreflightEventLog {
+            program_log: vec![PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            }],
+            memory_log: Vec::new(),
+            initial_write_log: Vec::new(),
+        };
+        let segment_identity = Arc::new(());
+        let gpu_transcript = GpuPostflightTranscript::upload(
+            &transcript,
+            &program.memory_config,
+            &program.device_ctx,
+            program.identity.clone(),
+            segment_identity.clone(),
+        )
+        .unwrap();
+        let state = ExecutionState::new(0u32, 1u32);
+        let error = match GpuPostflightPlan::build(
+            &program,
+            &gpu_transcript,
+            PreflightEndpoint::Terminated,
+            (state, state, Some(0)),
+            program.identity.clone(),
+            segment_identity,
+        ) {
+            Ok(_) => panic!("empty program must not terminate without a terminate step"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("code 115"));
     }
 
     #[test]

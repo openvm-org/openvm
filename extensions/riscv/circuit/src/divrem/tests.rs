@@ -1,8 +1,4 @@
-use std::{
-    array,
-    borrow::BorrowMut,
-    sync::{atomic::Ordering, Arc},
-};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
@@ -10,8 +6,7 @@ use openvm_circuit::{
             memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -26,9 +21,7 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
-use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::DivRemOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -42,20 +35,19 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64MultAdapterRecord, DivRemCoreRecord, Rv64DivRemChipGpu},
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64DivRemChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
 use super::{core::run_divrem, trace::generate_trace_from_postflight};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64MultAdapterAir, Rv64MultAdapterExecutor,
-        Rv64MultAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
+        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS,
     },
     divrem::{
         run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv64DivRemChip,
@@ -304,35 +296,6 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
         .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
-}
-
-type LookupCounts = Vec<(usize, u32)>;
-
-fn bitwise_counts(
-    chip: &SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-) -> (LookupCounts, LookupCounts) {
-    let nonzero = |counts: &[std::sync::atomic::AtomicU32]| {
-        counts
-            .iter()
-            .enumerate()
-            .filter_map(|(index, count)| {
-                let count = count.load(Ordering::Relaxed);
-                (count != 0).then_some((index, count))
-            })
-            .collect()
-    };
-    (nonzero(&chip.count_range), nonzero(&chip.count_xor))
-}
-
-fn range_tuple_counts(chip: &SharedRangeTupleCheckerChip<2>) -> Vec<(usize, u32)> {
-    chip.count
-        .iter()
-        .enumerate()
-        .filter_map(|(index, count)| {
-            let count = count.load(Ordering::Relaxed);
-            (count != 0).then_some((index, count))
-        })
-        .collect()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -807,11 +770,11 @@ fn run_mul_unsigned_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
@@ -838,9 +801,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(DIV, 100)]
 #[test_case(DIVU, 100)]
 #[test_case(REM, 100)]
@@ -860,7 +829,7 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -870,23 +839,10 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute_special_cases(
         &mut tester,
         &mut harness.executor,
-        &mut harness.dense_arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
     );
-
-    type Record<'a> = (
-        &'a mut Rv64MultAdapterRecord,
-        &'a mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
-        );
 
     tester
         .build()

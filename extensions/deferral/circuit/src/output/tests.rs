@@ -27,13 +27,12 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng, RngCore};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    super::{DeferralOutputChipGpu, DeferralOutputRecordMut},
+    super::DeferralOutputChipGpu,
     crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        DenseRecordArena,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
 };
@@ -64,7 +63,7 @@ type BitwisePeriphery = (
 type CountPeriphery = (DeferralCircuitCountAir, Arc<DeferralCircuitCountChip>);
 type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>>);
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     DeferralOutputExecutor,
@@ -72,18 +71,10 @@ type GpuHarness = GpuTestChipHarness<
     DeferralOutputChipGpu,
     DeferralOutputChip<F>,
 >;
-#[cfg(feature = "cuda")]
-type CudaCountPeriphery = (
-    DeferralCircuitCountAir,
-    DeferralCircuitCountChipGpu,
-    DenseRecordArena,
-);
-#[cfg(feature = "cuda")]
-type CudaPoseidon2Periphery = (
-    DeferralPoseidon2Air<F>,
-    DeferralPoseidon2ChipGpu,
-    DenseRecordArena,
-);
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type CudaCountPeriphery = (DeferralCircuitCountAir, DeferralCircuitCountChipGpu);
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type CudaPoseidon2Periphery = (DeferralPoseidon2Air<F>, DeferralPoseidon2ChipGpu);
 
 struct CpuHarnessBundle {
     harness: Harness,
@@ -92,7 +83,7 @@ struct CpuHarnessBundle {
     poseidon2: Poseidon2Periphery,
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 struct CudaHarnessBundle {
     harness: GpuHarness,
     count: CudaCountPeriphery,
@@ -261,7 +252,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
     }
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[allow(clippy::type_complexity)]
 fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> CudaHarnessBundle {
     let bitwise_bus = default_bitwise_lookup_bus();
@@ -309,19 +300,32 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         poseidon2_chip_gpu.shared_buffer(),
     );
 
-    let harness = GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+    let harness = GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            super::generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(
+                    program,
+                    transcript,
+                    plan,
+                    MAX_INS_CAPACITY,
+                )
+            },
+        )
+        .with_rows_used(|trace| {
+            trace
+                .values
+                .chunks_exact(trace.width)
+                .take_while(|row| row[0] != F::ZERO)
+                .count()
+        });
     CudaHarnessBundle {
         harness,
         count: (
             DeferralCircuitCountAir::new(count_bus, num_deferrals),
             DeferralCircuitCountChipGpu::new(count, num_deferrals, device_ctx),
-            DenseRecordArena::with_byte_capacity(0),
         ),
-        poseidon2: (
-            deferral_poseidon2_air(poseidon2_bus.0),
-            poseidon2_chip_gpu,
-            DenseRecordArena::with_byte_capacity(0),
-        ),
+        poseidon2: (deferral_poseidon2_air(poseidon2_bus.0), poseidon2_chip_gpu),
     }
 }
 
@@ -512,7 +516,7 @@ fn deferral_output_multi_row_trace_test() {
         .expect("Verification failed");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_deferral_output_tracegen() {
     let mut rng = create_seeded_rng();
@@ -533,22 +537,24 @@ fn test_cuda_rand_deferral_output_tracegen() {
         set_and_execute_output(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             NUM_DEFERRALS,
         );
     }
 
-    harness
-        .dense_arena
-        .get_record_seeker::<DeferralOutputRecordMut<'_>, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
-
+    let mut tester = tester.build().load_gpu_harness(harness);
+    let count_ctx = count
+        .1
+        .generate_proving_ctx_direct(MAX_INS_CAPACITY)
+        .expect("Deferral Count postflight trace generation must succeed");
+    tester = tester.load_air_proving_ctx(Arc::new(count.0), count_ctx);
+    let poseidon2_ctx = poseidon2
+        .1
+        .generate_proving_ctx_direct(MAX_INS_CAPACITY)
+        .expect("Deferral Poseidon2 postflight trace generation must succeed");
     tester
-        .build()
-        .load_gpu_harness(harness)
-        .load(count.0, count.1, count.2)
-        .load(poseidon2.0, poseidon2.1, poseidon2.2)
+        .load_air_proving_ctx(Arc::new(poseidon2.0), poseidon2_ctx)
         .finalize()
         .simple_test()
         .expect("Verification failed");

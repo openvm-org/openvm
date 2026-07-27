@@ -1,10 +1,4 @@
-use std::{
-    borrow::BorrowMut,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
-};
+use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
@@ -12,8 +6,7 @@ use openvm_circuit::{
             memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -28,9 +21,7 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
-use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::MulHOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -44,12 +35,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64MultAdapterRecord, MulHCoreRecord, Rv64MulHChipGpu},
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64MulHChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
@@ -71,16 +61,6 @@ const TUPLE_CHECKER_SIZES: [u32; 2] = [
 ];
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChip<F>>;
-
-fn nonzero_counts<'a>(counts: impl Iterator<Item = &'a AtomicU32>) -> Vec<(usize, u32)> {
-    counts
-        .enumerate()
-        .filter_map(|(index, count)| {
-            let count = count.load(Ordering::Relaxed);
-            (count != 0).then_some((index, count))
-        })
-        .collect()
-}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -522,11 +502,11 @@ fn run_mulhsu_neg_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulHChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
@@ -552,9 +532,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(MulHOpcode::MULH, 100)]
 #[test_case(MulHOpcode::MULHSU, 100)]
 #[test_case(MulHOpcode::MULHU, 100)]
@@ -573,26 +559,13 @@ fn test_cuda_rand_mulh_tracegen(opcode: MulHOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64MultAdapterRecord,
-        &'a mut MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
-        );
 
     tester
         .build()

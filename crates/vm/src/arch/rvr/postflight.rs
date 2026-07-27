@@ -698,14 +698,5 @@ mod tests {
                 memory_start: 0
             }]
         );
-        assert!(ReplayData::build(
-            8,
-            &[phantom, phantom],
-            &transcript,
-            PreflightEndpoint::Suspended,
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("does not match"));
     }
 }

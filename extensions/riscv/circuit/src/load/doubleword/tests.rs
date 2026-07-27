@@ -1,24 +1,19 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
+    MemoryConfig,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{
-    instruction::Instruction,
-    program::Program,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADD};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -44,11 +39,8 @@ use crate::{
     },
     test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
-#[cfg(feature = "cuda")]
-use crate::{
-    load::Rv64LoadDoublewordChipGpu,
-    test_utils::memory::{dummy_range_checker, transfer_load_records},
-};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::{load::Rv64LoadDoublewordChipGpu, test_utils::memory::dummy_range_checker};
 
 type DoublewordHarness = TestChipHarness<
     F,
@@ -215,7 +207,7 @@ fn negative_split_opcode_role_test() {
     assert_pranked_load_doubleword_fails(|core| core.selector[0] += F::ONE);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuDoublewordHarness = GpuTestChipHarness<
     F,
     Rv64LoadDoublewordExecutor,
@@ -224,7 +216,7 @@ type GpuDoublewordHarness = GpuTestChipHarness<
     Rv64LoadDoublewordChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -259,9 +251,15 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_load_doubleword_tracegen() {
     let mut rng = create_seeded_rng();
@@ -273,7 +271,7 @@ fn test_cuda_rand_load_doubleword_tracegen() {
         set_and_execute_load(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             LOADD,
             None,
@@ -282,7 +280,6 @@ fn test_cuda_rand_load_doubleword_tracegen() {
             Some(RV64_MEMORY_AS as usize),
         );
     }
-    transfer_load_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

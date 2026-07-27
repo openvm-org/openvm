@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use hex::FromHex;
 use itertools::Itertools;
@@ -6,8 +6,7 @@ use openvm_circuit::{
     arch::{
         testing::{
             memory::{gen_distinct_register_pointers, gen_pointer},
-            TestBuilder, TestChipHarness, TestPreflight, TestSC, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
+            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
         Executor, MemoryConfig, Postflight,
     },
@@ -21,7 +20,7 @@ use openvm_circuit_primitives::{
     },
     encoder::Encoder,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
-    Chip, ColumnsAir, SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -45,9 +44,9 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu, Sha2RecordMut},
+    crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -882,7 +881,7 @@ fn negative_sha256_round_only_trace_rejected() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type Sha2GpuTestChip<C> = GpuTestChipHarness<
     F,
     Sha2VmExecutor<C>,
@@ -891,18 +890,43 @@ type Sha2GpuTestChip<C> = GpuTestChipHarness<
     Sha2MainChip<F, C>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type Sha2BlockGpuTestChip<C> = GpuTestChipHarness<
+    F,
+    (),
+    Sha2BlockHasherVmAir<C>,
+    Sha2BlockHasherChipGpu<C>,
+    Sha2BlockHasherChip<F, C>,
+>;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 struct GpuHarness<C: Sha2Config> {
     pub main: Sha2GpuTestChip<C>,
-    block_air: Sha2BlockHasherVmAir<C>,
-    block_gpu: Sha2BlockHasherChipGpu<C>,
-    block_cpu: Sha2BlockHasherChip<F, C>,
+    block: Sha2BlockGpuTestChip<C>,
     bitwise_air: BitwiseOperationLookupAir<RV64_BYTE_BITS>,
     bitwise_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
 }
 
-#[cfg(feature = "cuda")]
-fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<C: Sha2Config> GpuHarness<C> {
+    fn into_parts(
+        mut self,
+    ) -> (
+        Sha2GpuTestChip<C>,
+        Sha2BlockGpuTestChip<C>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        Arc<BitwiseOperationLookupChipGPU<8>>,
+    ) {
+        // Production visits the main chip before the block chip in the reverse
+        // inventory walk. Both chips replay the same immutable histories and
+        // update the same GPU lookup chips in that order.
+        self.block.preflight = self.main.preflight.clone();
+        (self.main, self.block, self.bitwise_air, self.bitwise_gpu)
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn create_cuda_harness<C: Sha2Config + 'static>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
     const GPU_MAX_INS_CAPACITY: usize = 8192;
     let bitwise_bus = default_bitwise_lookup_bus();
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -930,19 +954,15 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         dummy_range_checker_chip,
         tester.address_bits(),
         tester.dummy_memory_helper(),
-        main_chip.records.clone(),
     );
 
-    let shared_records_gpu = Arc::new(Mutex::new(None));
     let main_gpu_chip = Sha2MainChipGpu::new(
-        shared_records_gpu.clone(),
         tester.range_checker(),
         tester.address_bits() as u32,
         tester.timestamp_max_bits() as u32,
     );
 
     let block_gpu_chip = Sha2BlockHasherChipGpu::new(
-        shared_records_gpu.clone(),
         tester.bitwise_op_lookup(),
         tester.range_checker(),
         tester.address_bits() as u32,
@@ -958,16 +978,35 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
             main_gpu_chip,
             main_chip,
             GPU_MAX_INS_CAPACITY,
-        ),
-        block_air: block_hasher_air,
-        block_gpu: block_gpu_chip,
-        block_cpu: block_hasher_chip,
+        )
+        .with_trace_generators(
+            crate::generate_main_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+        .with_batch_trace_generator(crate::generate_main_trace_from_postflights),
+        block: GpuTestChipHarness::with_capacity(
+            (),
+            block_hasher_air,
+            block_gpu_chip,
+            block_hasher_chip,
+            GPU_MAX_INS_CAPACITY,
+        )
+        .with_trace_generators(
+            crate::generate_block_hasher_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+        .with_batch_trace_generator(crate::generate_block_hasher_trace_from_postflights)
+        .without_memory_balance(),
         bitwise_air,
         bitwise_gpu,
     }
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester =
@@ -980,7 +1019,7 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
         set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.main.executor,
-            &mut harness.main.dense_arena,
+            &mut harness.main.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -988,44 +1027,33 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
         );
     }
 
-    harness
-        .main
-        .dense_arena
-        .get_record_seeker::<Sha2RecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
-
+    let (main, block, bitwise_air, bitwise_gpu) = harness.into_parts();
     let mut tester = tester.build();
-    tester = tester.load_gpu_harness(harness.main);
-    tester = tester.load_and_compare(
-        harness.block_air,
-        harness.block_gpu,
-        (),
-        harness.block_cpu,
-        (),
-    );
-    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester = tester.load_gpu_harness(main);
+    tester = tester.load_gpu_harness(block);
+    tester = tester.load_periphery(bitwise_air, bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_sha256_multi_block() {
     test_cuda_rand_sha2_multi_block::<Sha256Config>();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_sha512_multi_block() {
     test_cuda_rand_sha2_multi_block::<Sha512Config>();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_sha384_multi_block() {
     test_cuda_rand_sha2_multi_block::<Sha384Config>();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, &str)]) {
     let mut rng = create_seeded_rng();
     let mut tester =
@@ -1041,34 +1069,22 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
         set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.main.executor,
-            &mut harness.main.dense_arena,
+            &mut harness.main.preflight,
             &mut rng,
             C::OPCODE,
             Some(&input),
             Some(input.len()),
         );
     }
-    // No block-hasher arena needed; GPU block chip ignores the arena input.
-    harness
-        .main
-        .dense_arena
-        .get_record_seeker::<Sha2RecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
-
+    let (main, block, bitwise_air, bitwise_gpu) = harness.into_parts();
     let mut tester = tester.build();
-    tester = tester.load_gpu_harness(harness.main);
-    tester = tester.load_and_compare(
-        harness.block_air,
-        harness.block_gpu,
-        (),
-        harness.block_cpu,
-        (),
-    );
-    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester = tester.load_gpu_harness(main);
+    tester = tester.load_gpu_harness(block);
+    tester = tester.load_periphery(bitwise_air, bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_sha256_known_vectors() {
     let test_vectors = [
@@ -1083,7 +1099,7 @@ fn test_cuda_sha256_known_vectors() {
     test_cuda_sha2_known_vectors::<Sha256Config>(&test_vectors);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_sha512_known_vectors() {
     let test_vectors = [
@@ -1103,7 +1119,7 @@ fn test_cuda_sha512_known_vectors() {
     test_cuda_sha2_known_vectors::<Sha512Config>(&test_vectors);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_sha384_known_vectors() {
     let test_vectors = [
@@ -1124,7 +1140,7 @@ fn test_cuda_sha384_known_vectors() {
 }
 
 // GPU edge-case length tests mirroring the CPU suite.
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester =
@@ -1137,7 +1153,7 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
         set_and_execute_full_message::<C, _>(
             &mut tester,
             &mut harness.main.executor,
-            &mut harness.main.dense_arena,
+            &mut harness.main.preflight,
             &mut rng,
             C::OPCODE,
             None,
@@ -1145,38 +1161,27 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
         );
     }
 
-    harness
-        .main
-        .dense_arena
-        .get_record_seeker::<Sha2RecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
-
+    let (main, block, bitwise_air, bitwise_gpu) = harness.into_parts();
     let mut tester = tester.build();
-    tester = tester.load_gpu_harness(harness.main);
-    tester = tester.load_and_compare(
-        harness.block_air,
-        harness.block_gpu,
-        (),
-        harness.block_cpu,
-        (),
-    );
-    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester = tester.load_gpu_harness(main);
+    tester = tester.load_gpu_harness(block);
+    tester = tester.load_periphery(bitwise_air, bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_sha256_edge_test_lengths() {
     cuda_sha2_edge_test_lengths::<Sha256Config>();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_sha512_edge_test_lengths() {
     cuda_sha2_edge_test_lengths::<Sha512Config>();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_sha384_edge_test_lengths() {
     cuda_sha2_edge_test_lengths::<Sha384Config>();

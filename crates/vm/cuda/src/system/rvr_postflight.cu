@@ -996,6 +996,9 @@ static constexpr uint32_t ERROR_ENDPOINT = 115;
 static constexpr uint32_t ERROR_MEMORY_BOUNDARY = 116;
 static constexpr uint32_t ERROR_TIMESTAMP_DOMAIN = 117;
 
+static constexpr uint32_t ENDPOINT_TERMINATED = 0;
+static constexpr uint32_t ENDPOINT_SUSPENDED = 1;
+
 struct RvrOpcodeRange {
     uint32_t start;
     uint32_t end;
@@ -1061,7 +1064,8 @@ __global__ void prepare_program_steps(
         return;
     }
     if (is_terminate &&
-        (endpoint_kind != 0 || program_index + 1 != num_steps || from.pc != to.pc ||
+        (endpoint_kind != ENDPOINT_TERMINATED || program_index + 1 != num_steps ||
+         from.pc != to.pc ||
          from.timestamp != to.timestamp)) {
         preflight_set_error(error, ERROR_TERMINATE_SCHEDULE);
         return;
@@ -1082,12 +1086,12 @@ __global__ void prepare_program_steps(
             preflight_set_error(error, ERROR_TIMESTAMP_DOMAIN);
             return;
         }
-        if (endpoint_kind == 0) {
+        if (endpoint_kind == ENDPOINT_TERMINATED) {
             if (!is_terminate) {
                 preflight_set_error(error, ERROR_ENDPOINT);
                 return;
             }
-        } else {
+        } else if (endpoint_kind == ENDPOINT_SUSPENDED) {
             RvrReplayInstruction const *resume_instruction = nullptr;
             size_t resume_slot = 0;
             resume_instruction =
@@ -1097,6 +1101,9 @@ __global__ void prepare_program_steps(
                 preflight_set_error(error, ERROR_ENDPOINT);
                 return;
             }
+        } else {
+            preflight_set_error(error, ERROR_ENDPOINT);
+            return;
         }
     }
 
@@ -1126,9 +1133,16 @@ __global__ void validate_empty_program(
         resolve_replay_instruction(instructions, pc_base, sentinel.pc, &resume_slot);
     if (sentinel.timestamp >= (uint32_t{1} << timestamp_max_bits)) {
         preflight_set_error(error, ERROR_TIMESTAMP_DOMAIN);
-    } else if (endpoint_kind != 1 || sentinel.timestamp != 1 || sentinel.pc != resume_pc ||
-        sentinel.timestamp != final_timestamp || memory.len() != 0 ||
-        resume_instruction == nullptr) {
+    } else if (endpoint_kind == ENDPOINT_TERMINATED) {
+        preflight_set_error(error, ERROR_ENDPOINT);
+    } else if (
+        endpoint_kind == ENDPOINT_SUSPENDED &&
+        (sentinel.timestamp != 1 || sentinel.pc != resume_pc ||
+         sentinel.timestamp != final_timestamp || memory.len() != 0 ||
+         resume_instruction == nullptr)
+    ) {
+        preflight_set_error(error, ERROR_ENDPOINT);
+    } else if (endpoint_kind != ENDPOINT_SUSPENDED) {
         preflight_set_error(error, ERROR_ENDPOINT);
     }
 }

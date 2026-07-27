@@ -2,11 +2,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{
-            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-        },
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        ExecutionBridge, MemoryConfig, Postflight, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -20,7 +17,6 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{
     instruction::Instruction,
     program::{Program, PC_BITS},
-    riscv::RV64_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
@@ -35,15 +31,12 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64JalrAdapterRecord, Rv64JalrChipGpu, Rv64JalrCoreRecord},
-    openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-            GpuTestChipHarness,
-        },
-        EmptyAdapterCoreLayout,
+    crate::Rv64JalrChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
     },
 };
 
@@ -603,11 +596,11 @@ fn jalr_x0_write_suppression_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChipGpu, Rv64JalrChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
@@ -626,9 +619,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let gpu_chip = Rv64JalrChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_jalr_tracegen() {
     let mut tester =
@@ -641,7 +640,7 @@ fn test_cuda_rand_jalr_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             JALR,
             None,
@@ -651,15 +650,6 @@ fn test_cuda_rand_jalr_tracegen() {
             None,
         );
     }
-
-    type Record<'a> = (&'a mut Rv64JalrAdapterRecord, &'a mut Rv64JalrCoreRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new(),
-        );
 
     tester
         .build()

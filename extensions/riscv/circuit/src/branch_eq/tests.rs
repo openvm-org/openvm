@@ -3,15 +3,13 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP, PC_BITS},
-    riscv::RV64_REGISTER_AS,
+    program::{DEFAULT_PC_STEP, PC_BITS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BranchEqualOpcode;
@@ -27,13 +25,10 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64BranchAdapterRecord, BranchEqualCoreRecord, Rv64BranchEqualChipGpu},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64BranchEqualChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
 use super::{
@@ -404,7 +399,7 @@ fn run_ne_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64BranchEqualExecutor,
@@ -413,7 +408,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64BranchEqualChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -422,9 +417,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
     let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BranchEqualOpcode::BEQ, 100)]
 #[test_case(BranchEqualOpcode::BNE, 100)]
 fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
@@ -437,7 +438,7 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -445,18 +446,6 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BranchAdapterRecord,
-        &'a mut BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new(),
-        );
 
     tester
         .build()

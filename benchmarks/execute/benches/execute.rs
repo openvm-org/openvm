@@ -162,17 +162,13 @@ where
 {
     type VmConfig = ExecuteConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &ExecuteConfig,
         circuit: AirInventory<SC>,
         device_ctx: &EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -180,32 +176,20 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Int256CpuProverExt,
-            &config.bigint,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Int256CpuProverExt, &config.bigint, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(
             &Keccak256CpuProverExt,
             &config.keccak,
             inventory,
         )?;
-        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraCpuProverExt,
-            &config.modular,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &EccCpuProverExt,
-            &config.weierstrass,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.modular, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&EccCpuProverExt, &config.weierstrass, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
         Ok(chip_complex)
     }
 }

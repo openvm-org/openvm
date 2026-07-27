@@ -2,11 +2,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{
-            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-        },
-        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
-        PreflightProgramEvent, BLOCK_FE_WIDTH,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -14,9 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
-};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -30,14 +25,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluRegAdapterRecord, BitwiseLogicCoreRecord, Rv64BitwiseLogicChipGpu,
-    },
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64BitwiseLogicChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
@@ -318,7 +310,7 @@ fn run_and_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64BitwiseLogicExecutor,
@@ -327,7 +319,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64BitwiseLogicChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -347,9 +339,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BaseAluOpcode::XOR, 100)]
 #[test_case(BaseAluOpcode::OR, 100)]
 #[test_case(BaseAluOpcode::AND, 100)]
@@ -363,26 +361,13 @@ fn test_cuda_rand_bitwise_logic_tracegen(opcode: BaseAluOpcode, num_ops: usize) 
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluRegAdapterRecord,
-        &'a mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegAdapterExecutor>::new(),
-        );
 
     tester
         .build()
