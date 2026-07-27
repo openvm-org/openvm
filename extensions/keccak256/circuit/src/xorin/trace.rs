@@ -258,19 +258,19 @@ fn replay_input<F: PrimeField32>(
 
     let mut buffer_write_aux_cols =
         [MemoryWriteBytesAuxRecord::<MEMORY_BLOCK_BYTES>::default(); KECCAK_RATE_MEM_OPS];
-    for index in 0..num_reads {
+    for (index, write_aux) in buffer_write_aux_cols.iter_mut().enumerate().take(num_reads) {
         let mut output = [0u8; MEMORY_BLOCK_BYTES];
-        for byte in 0..MEMORY_BLOCK_BYTES {
+        for (byte, output_byte) in output.iter_mut().enumerate() {
             let offset = index * MEMORY_BLOCK_BYTES + byte;
-            output[byte] = buffer_limbs[offset] ^ input_limbs[offset];
+            *output_byte = buffer_limbs[offset] ^ input_limbs[offset];
         }
         let access = replay.write_u16(
             RV64_MEMORY_AS,
             byte_ptr_to_u16_ptr_value(buffer) + (index * BLOCK_FE_WIDTH) as u32,
             rv64_bytes_to_u16_block(output),
         )?;
-        buffer_write_aux_cols[index].prev_timestamp = access.previous_timestamp;
-        buffer_write_aux_cols[index].prev_data = rv64_u16_block_to_bytes(access.previous_value);
+        write_aux.prev_timestamp = access.previous_timestamp;
+        write_aux.prev_data = rv64_u16_block_to_bytes(access.previous_value);
     }
     let next_pc = from_pc
         .checked_add(DEFAULT_PC_STEP)

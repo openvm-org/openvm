@@ -437,10 +437,10 @@ where
 
 impl<E> ContinuationProverBuilder<E> for SdkVmCpuBuilder
 where
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>> + 'static,
 {
     fn continuation_prover() -> ContinuationProverFn<E, Self> {
-        Box::new(|instance, input| ContinuationVmProver::prove(instance, input))
+        Box::new(ContinuationVmProver::prove)
     }
 }
 

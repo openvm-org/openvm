@@ -56,7 +56,7 @@ where
     ];
     if register_ptrs.iter().any(|&ptr| {
         ptr as usize >= RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS
-            || ptr as usize % RV64_REGISTER_NUM_LIMBS != 0
+            || !(ptr as usize).is_multiple_of(RV64_REGISTER_NUM_LIMBS)
     }) {
         return Err(PostflightError::new(
             "SHA-2 instruction has a non-canonical register pointer",
@@ -84,7 +84,7 @@ where
         (state_ptr, C::STATE_BYTES),
         (input_ptr, C::BLOCK_BYTES),
     ] {
-        if pointer as usize % SHA2_READ_SIZE != 0 {
+        if !(pointer as usize).is_multiple_of(SHA2_READ_SIZE) {
             return Err(PostflightError::new(
                 "SHA-2 memory pointer is not eight-byte aligned",
             ));

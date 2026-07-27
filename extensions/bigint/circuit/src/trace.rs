@@ -170,10 +170,10 @@ fn replay_alu_u16<F: PrimeField32>(
     let mut reads = [[[0u16; BLOCK_FE_WIDTH]; INT256_NUM_MEMORY_BLOCKS]; NUM_READS];
     let mut read_accesses = Vec::with_capacity(NUM_READS * INT256_NUM_MEMORY_BLOCKS);
     for i in 0..NUM_READS {
-        for j in 0..INT256_NUM_MEMORY_BLOCKS {
+        for (j, block) in reads[i].iter_mut().enumerate() {
             let byte_pointer = rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32;
             let access = replay.read_u16(RV64_MEMORY_AS, byte_pointer / 2)?;
-            reads[i][j] = access.value;
+            *block = access.value;
             read_accesses.push(access);
         }
     }
@@ -252,10 +252,10 @@ fn replay_alu_bytes<F: PrimeField32>(
     let mut reads = [[[0u8; MEMORY_BLOCK_BYTES]; INT256_NUM_MEMORY_BLOCKS]; NUM_READS];
     let mut read_accesses = Vec::with_capacity(NUM_READS * INT256_NUM_MEMORY_BLOCKS);
     for i in 0..NUM_READS {
-        for j in 0..INT256_NUM_MEMORY_BLOCKS {
+        for (j, block) in reads[i].iter_mut().enumerate() {
             let byte_pointer = rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32;
             let access = replay.read_u16(RV64_MEMORY_AS, byte_pointer / 2)?;
-            reads[i][j] = u16_block_to_bytes(access.value);
+            *block = u16_block_to_bytes(access.value);
             read_accesses.push(access);
         }
     }
@@ -335,10 +335,10 @@ fn replay_branch<F: PrimeField32>(
     let mut reads = [[[0u16; BLOCK_FE_WIDTH]; INT256_NUM_MEMORY_BLOCKS]; NUM_READS];
     let mut read_accesses = Vec::with_capacity(NUM_READS * INT256_NUM_MEMORY_BLOCKS);
     for i in 0..NUM_READS {
-        for j in 0..INT256_NUM_MEMORY_BLOCKS {
+        for (j, block) in reads[i].iter_mut().enumerate() {
             let byte_pointer = rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32;
             let access = replay.read_u16(RV64_MEMORY_AS, byte_pointer / 2)?;
-            reads[i][j] = access.value;
+            *block = access.value;
             read_accesses.push(access);
         }
     }
