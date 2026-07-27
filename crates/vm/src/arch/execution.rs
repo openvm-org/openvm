@@ -17,11 +17,8 @@ use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError, MatrixRecordArena},
-    system::{
-        memory::online::{GuestMemory, TracingMemory},
-        program::ProgramBus,
-    },
+    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError},
+    system::{memory::online::GuestMemory, program::ProgramBus},
 };
 
 /// The reason an execution call returned, together with its mode-specific output.
@@ -213,30 +210,16 @@ pub trait InterpreterMeteredExecutor<F> {
 pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
 impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 
-/// Trait for preflight execution via a host interpreter. The trait methods allow execution of
-/// instructions via enum dispatch within an interpreter. This execution is specialized to record
-/// "records" of execution which will be ingested later for trace matrix generation. The records are
-/// stored in a record arena, which is provided in the [VmStateMut] argument.
-pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
-    /// Runtime execution of the instruction, if the instruction is owned by the
-    /// current instance. May internally store records of this call for later trace generation.
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>;
-}
-
 /// Global VM state accessible during instruction execution.
-/// The state is generic in guest memory `MEM` and additional record arena `RA`.
+/// The state is generic in guest memory `MEM` and execution context `CTX`.
 /// The host state is execution context specific.
 #[derive(derive_new::new)]
-pub struct VmStateMut<'a, MEM, RA> {
+pub struct VmStateMut<'a, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
     pub streams: &'a mut Streams,
     pub rng: &'a mut StdRng,
-    pub ctx: &'a mut RA,
+    pub ctx: &'a mut CTX,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,
 }

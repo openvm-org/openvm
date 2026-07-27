@@ -36,8 +36,6 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         pub use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu};
         pub use openvm_cuda_backend::BabyBearPoseidon2GpuEngine as TestStarkEngine;
-        use crate::arch::DenseRecordArena;
-        pub type TestRecordArena = DenseRecordArena;
 
         pub fn test_gpu_engine() -> TestStarkEngine {
             setup_tracing();
@@ -47,18 +45,15 @@ cfg_if::cfg_if! {
         }
     } else {
         pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as TestStarkEngine;
-        use crate::arch::MatrixRecordArena;
-        pub type TestRecordArena = MatrixRecordArena<BabyBear>;
     }
 }
-type RA = TestRecordArena;
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
-    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
@@ -66,7 +61,6 @@ where
         Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
     VmChipComplex<
         BabyBearPoseidon2Config,
-        RA,
         <TestStarkEngine as StarkEngine>::PB,
         VB::SystemChipInventory,
     >: PostflightTracegen<BabyBearPoseidon2Config, <TestStarkEngine as StarkEngine>::PB>,
@@ -83,7 +77,7 @@ pub fn air_test_with_min_segments<VB, VC>(
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
@@ -91,7 +85,6 @@ where
         Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
     VmChipComplex<
         BabyBearPoseidon2Config,
-        RA,
         <TestStarkEngine as StarkEngine>::PB,
         VB::SystemChipInventory,
     >: PostflightTracegen<BabyBearPoseidon2Config, <TestStarkEngine as StarkEngine>::PB>,
@@ -311,8 +304,7 @@ where
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
-        PostflightTracegen<E::SC, E::PB>,
+    VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
     Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     setup_tracing();

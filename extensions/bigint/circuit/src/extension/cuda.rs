@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{to_byte_ptr_bits, DenseRecordArena},
+    arch::to_byte_ptr_bits,
     system::cuda::{
         extensions::{
             get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
@@ -140,11 +140,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.postflight(
             program,
@@ -259,11 +255,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = Self::extension_opcodes();
         let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
@@ -302,13 +294,11 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
-    for Int256GpuProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverExt {
     fn extend_prover(
         &self,
         extension: &Int256,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -409,7 +399,6 @@ type E = GpuBabyBearPoseidon2Engine;
 impl VmBuilder<E> for Int256Rv64GpuBuilder {
     type VmConfig = Int256Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -417,12 +406,7 @@ impl VmBuilder<E> for Int256Rv64GpuBuilder {
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
-        VmChipComplex<
-            <E as StarkEngine>::SC,
-            Self::RecordArena,
-            <E as StarkEngine>::PB,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<<E as StarkEngine>::SC, <E as StarkEngine>::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
@@ -432,14 +416,10 @@ impl VmBuilder<E> for Int256Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Int256GpuProverExt,
-            &config.bigint,
-            inventory,
-        )?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Int256GpuProverExt, &config.bigint, inventory)?;
         Ok(chip_complex)
     }
 }

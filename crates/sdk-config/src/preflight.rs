@@ -121,7 +121,7 @@ impl SdkVmGpuBuilder {
     }
 
     /// Generates the standard SDK proving context from one postflight segment
-    /// without constructing a `RecordArena`.
+    /// directly from the immutable preflight history.
     pub(crate) fn generate_preflight_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &GpuPostflightProgram,

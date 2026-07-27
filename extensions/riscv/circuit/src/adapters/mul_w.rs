@@ -1,17 +1,16 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, Postflight,
-        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
+        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
+        MinimalInstruction, Postflight, PostflightError, PostflightStep, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
         },
-        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -21,7 +20,6 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_BYTE_BITS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
 };
@@ -33,8 +31,7 @@ use openvm_stark_backend::{
 
 use super::{
     byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, pack_high_u16, pack_rv64_u16_block,
-    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, tracing_read, tracing_write,
-    RV64_PTR_U16_LIMBS,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, RV64_PTR_U16_LIMBS,
 };
 
 #[repr(C)]
@@ -202,136 +199,6 @@ pub struct Rv64MultWAdapterRecord {
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
     pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
-}
-
-impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64MultWAdapterExecutor {
-    const WIDTH: usize = size_of::<Rv64MultWAdapterCols<u8>>();
-    type ReadData = [[u8; RV64_WORD_NUM_LIMBS]; 2];
-    type WriteData = [[u8; RV64_WORD_NUM_LIMBS]; 1];
-    type RecordMut<'a> = &'a mut Rv64MultWAdapterRecord;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64MultWAdapterRecord) {
-        record.from_pc = pc;
-        record.from_timestamp = memory.timestamp;
-    }
-
-    #[inline(always)]
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut &mut Rv64MultWAdapterRecord,
-    ) -> Self::ReadData {
-        let &Instruction { b, c, d, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-
-        record.rs1_ptr = b.as_canonical_u32();
-        let rs1_full: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
-            memory,
-            RV64_REGISTER_AS,
-            record.rs1_ptr,
-            &mut record.reads_aux[0].prev_timestamp,
-        );
-        record
-            .rs1_high
-            .copy_from_slice(&rs1_full[RV64_WORD_NUM_LIMBS..]);
-        let rs1 = rs1_full[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-
-        record.rs2_ptr = c.as_canonical_u32();
-        let rs2_full: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
-            memory,
-            RV64_REGISTER_AS,
-            record.rs2_ptr,
-            &mut record.reads_aux[1].prev_timestamp,
-        );
-        record
-            .rs2_high
-            .copy_from_slice(&rs2_full[RV64_WORD_NUM_LIMBS..]);
-        let rs2 = rs2_full[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-
-        [rs1, rs2]
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut &mut Rv64MultWAdapterRecord,
-    ) {
-        let &Instruction { a, d, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-
-        record.rd_ptr = a.as_canonical_u32();
-        let write_low = data[0];
-        record.result_word_msl = write_low[RV64_WORD_NUM_LIMBS - 1];
-        record.result_sign = record.result_word_msl >> (RV64_BYTE_BITS as u8 - 1);
-        let sign_extend_limb = ((1u16 << RV64_BYTE_BITS) - 1) as u8 * record.result_sign;
-        let mut write_data = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
-        write_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&write_low);
-        tracing_write(
-            memory,
-            RV64_REGISTER_AS,
-            record.rd_ptr,
-            write_data,
-            &mut record.writes_aux.prev_timestamp,
-            &mut record.writes_aux.prev_data,
-        );
-    }
-}
-
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64MultWAdapterCols<u8>>();
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        let record: &Rv64MultWAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
-
-        // We must assign in reverse
-        let mut timestamp = record.from_timestamp + 2;
-
-        adapter_row
-            .writes_aux
-            .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));
-        mem_helper.fill(
-            record.writes_aux.prev_timestamp,
-            timestamp,
-            adapter_row.writes_aux.as_mut(),
-        );
-        timestamp -= 1;
-
-        mem_helper.fill(
-            record.reads_aux[1].prev_timestamp,
-            timestamp,
-            adapter_row.reads_aux[1].as_mut(),
-        );
-        timestamp -= 1;
-
-        mem_helper.fill(
-            record.reads_aux[0].prev_timestamp,
-            timestamp,
-            adapter_row.reads_aux[0].as_mut(),
-        );
-        self.bitwise_lookup_chip
-            .request_xor(record.result_word_msl as u32, 1u32 << (RV64_BYTE_BITS - 1));
-
-        // Pack before overwriting the row; the source bytes live in the overlaid record buffer.
-        let rs2_high_packed = pack_high_u16(&record.rs2_high);
-        let rs1_high_packed = pack_high_u16(&record.rs1_high);
-        adapter_row.result_sign = F::from_u8(record.result_sign);
-        adapter_row.rs2_high = rs2_high_packed;
-        adapter_row.rs1_high = rs1_high_packed;
-        adapter_row.rs2_ptr = F::from_u32(record.rs2_ptr);
-        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
-        adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_u32(timestamp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
-    }
 }
 
 impl Rv64MultWAdapterFiller {

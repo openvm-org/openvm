@@ -1,24 +1,17 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::{DEFAULT_PC_STEP, PC_BITS},
-    LocalOpcode,
-};
+use openvm_instructions::{program::PC_BITS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
@@ -169,91 +162,6 @@ pub struct Rv64AuipcExecutor<A = Rv64RdWriteAdapterExecutor> {
 pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64AuipcExecutor<A>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64AuipcCoreRecord),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        core_record.from_pc = *state.pc;
-        core_record.imm = instruction.c.as_canonical_u32();
-
-        let rd = run_auipc(*state.pc, core_record.imm);
-
-        self.adapter
-            .write(state.memory, instruction, rd, &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A> TraceFiller<F> for Rv64AuipcFiller<A>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64AuipcCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64AuipcCoreRecord written by the executor
-        // during trace generation
-        let record: &Rv64AuipcCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let core_row: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
-
-        let imm_bytes = record.imm.to_le_bytes();
-        debug_assert_eq!(imm_bytes[3], 0);
-        let imm_low_8 = imm_bytes[0];
-        let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << RV64_BYTE_BITS);
-        let [pc_low, pc_high] = ptr_to_u16_limbs(record.from_pc);
-
-        let rd_block = run_auipc(record.from_pc, record.imm);
-        let rd_lo = rd_block[0];
-        let rd_hi = rd_block[1];
-        let is_sign_extend = rd_block[2] != 0;
-        let imm_sign = (imm_high_16 >> (U16_BITS - 1)) & 1;
-
-        // range checks:
-        self.range_checker_chip.add_count(pc_low as u32, U16_BITS);
-        self.range_checker_chip
-            .add_count(pc_high as u32, PC_BITS - U16_BITS);
-        self.range_checker_chip
-            .add_count(imm_low_8 as u32, RV64_BYTE_BITS);
-        self.range_checker_chip.add_count(imm_high_16, U16_BITS);
-        self.range_checker_chip.add_count(rd_lo as u32, U16_BITS);
-        self.range_checker_chip.add_count(rd_hi as u32, U16_BITS);
-        // Check that imm_sign matches the top bit of imm_high_16.
-        let imm_magnitude_check = 2u32 * imm_high_16 - imm_sign * (1 << U16_BITS);
-        self.range_checker_chip
-            .add_count(imm_magnitude_check, U16_BITS);
-
-        // Writing in reverse order
-        core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
-        core_row.imm_low_8 = F::from_u8(imm_low_8);
-        core_row.imm_high_16 = F::from_u32(imm_high_16);
-        core_row.pc_high = F::from_u16(pc_high);
-        core_row.is_sign_extend = F::from_bool(is_sign_extend);
-        core_row.is_valid = F::ONE;
-    }
 }
 
 // returns rd_data

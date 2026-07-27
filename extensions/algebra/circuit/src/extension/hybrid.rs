@@ -20,21 +20,16 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu, Chip,
 };
-use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
-    base::DeviceMatrix,
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
-use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
-use openvm_riscv_adapters::{
-    Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
-    Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
-};
+use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_riscv_adapters::Rv64IsEqualModU16AdapterFiller;
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::prover::AirProvingContext;
 use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
@@ -57,9 +52,9 @@ use crate::{
         generate_field_expression_trace_from_postflight,
         generate_modular_is_equal_trace_from_postflight,
     },
-    AlgebraRecord, Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config,
-    FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32,
-    NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
+    Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config, FP2_BLOCKS_32,
+    FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16,
+    NUM_LIMBS_48, NUM_LIMBS_48_U16,
 };
 
 pub struct HybridModularChip<F, const BLOCKS: usize> {
@@ -212,41 +207,6 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
 // of Dense->Matrix Record Arena, cpu tracegen, and then H2D transfer of the trace matrix.
-impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularChip<F, BLOCKS> {
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.program().canonical_num_limbs();
-        let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
-            F,
-            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,
-        >::new(total_input_limbs));
-
-        let record_size =
-            RecordSeeker::<DenseRecordArena, AlgebraRecord<2, BLOCKS>, _>::get_aligned_record_size(
-                &layout,
-            );
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena.get_record_seeker::<AlgebraRecord<2, BLOCKS>, AdapterCoreLayout<
-            FieldExpressionMetadata<F, Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-        >>();
-        let adapter_width = Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS>::width();
-        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
-    }
-}
-
 pub struct HybridModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize> {
     cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
     device_ctx: GpuDeviceCtx,
@@ -330,48 +290,14 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     }
 }
 
-impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, GpuBackend>
-    for HybridModularIsEqualChip<F, NUM_LANES, TOTAL_LIMBS>
-{
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let record_size = size_of::<(
-            Rv64IsEqualModU16AdapterRecord<2, NUM_LANES>,
-            ModularIsEqualRecord<TOTAL_LIMBS>,
-        )>();
-        let trace_width = Rv64IsEqualModU16AdapterCols::<F, 2, NUM_LANES>::width()
-            + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena.get_record_seeker::<(
-            &mut Rv64IsEqualModU16AdapterRecord<2, NUM_LANES>,
-            &mut ModularIsEqualRecord<TOTAL_LIMBS>,
-        ), EmptyAdapterCoreLayout<
-            F,
-            Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
-        >>();
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
-    }
-}
-
 #[derive(Clone, Copy, Default)]
 pub struct AlgebraHybridProverExt;
 
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExtension>
-    for AlgebraHybridProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for AlgebraHybridProverExt {
     fn extend_prover(
         &self,
         extension: &ModularExtension,
-        inventory: &mut ChipInventory<SC, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<SC, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -692,40 +618,6 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
     }
 }
 
-impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridFp2Chip<F, BLOCKS> {
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.program().canonical_num_limbs();
-        let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
-            F,
-            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,
-        >::new(total_input_limbs));
-
-        let record_size =
-            RecordSeeker::<DenseRecordArena, AlgebraRecord<2, BLOCKS>, _>::get_aligned_record_size(
-                &layout,
-            );
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena.get_record_seeker::<AlgebraRecord<2, BLOCKS>, AdapterCoreLayout<
-            FieldExpressionMetadata<F, Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-        >>();
-        let adapter_width = Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS>::width();
-        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
-    }
-}
-
 /// Concrete algebra checkpoint producers for the existing reverse inventory
 /// walk. Coverage is derived from configured opcode ranges and fails closed.
 #[cfg(feature = "rvr")]
@@ -966,11 +858,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.postflight(
             program,
@@ -1150,11 +1038,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = self.configured_opcodes.clone();
         let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
@@ -1191,13 +1075,11 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
     }
 }
 
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extension>
-    for AlgebraHybridProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybridProverExt {
     fn extend_prover(
         &self,
         extension: &Fp2Extension,
-        inventory: &mut ChipInventory<SC, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<SC, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -1364,17 +1246,13 @@ type E = GpuBabyBearPoseidon2Engine;
 impl VmBuilder<E> for Rv64ModularHybridBuilder {
     type VmConfig = Rv64ModularConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
         config: &Rv64ModularConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
@@ -1382,10 +1260,10 @@ impl VmBuilder<E> for Rv64ModularHybridBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(
             &AlgebraHybridProverExt,
             &config.modular,
             inventory,
@@ -1401,17 +1279,13 @@ pub struct Rv64ModularWithFp2HybridBuilder;
 impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
     type VmConfig = Rv64ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
         config: &Rv64ModularWithFp2Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &Rv64ModularHybridBuilder,
             &config.modular,
@@ -1419,11 +1293,7 @@ impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraHybridProverExt,
-            &config.fp2,
-            inventory,
-        )?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraHybridProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)
     }
 }

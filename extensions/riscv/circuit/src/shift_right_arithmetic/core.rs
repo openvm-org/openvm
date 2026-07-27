@@ -1,20 +1,17 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
@@ -222,127 +219,6 @@ pub struct ShiftRightArithmeticExecutor<A, const NUM_LIMBS: usize, const LIMB_BI
 pub struct ShiftRightArithmeticFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut ShiftRightArithmeticCoreRecord<NUM_LIMBS, LIMB_BITS>,
-        ),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert_eq!(local_opcode, ShiftOpcode::SRA);
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let (output, _, _) = run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
-
-        core_record.b = rs1;
-        core_record.c = rs2;
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            [output].into(),
-            &mut adapter_record,
-        );
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftRightArithmeticFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // ShiftRightArithmeticCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid ShiftRightArithmeticCoreRecord written by the
-        // executor during trace generation
-        let record: &ShiftRightArithmeticCoreRecord<NUM_LIMBS, LIMB_BITS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let (a, limb_shift, bit_shift) =
-            run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
-
-        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
-        self.range_checker_chip.add_count(
-            ((record.c[0] as usize - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
-            LIMB_BITS - num_bits_log as usize,
-        );
-
-        // carry = the low bit_shift bits of b[k] that cross into the previous limb;
-        // aux = the remaining (LIMB_BITS - bit_shift) bits. Both are computed via u32 intermediates
-        // so a zero shift amount does not produce a shift-by-LIMB_BITS overflow.
-        let aux_bits = LIMB_BITS - bit_shift;
-        let mut bit_shift_carry = [F::ZERO; NUM_LIMBS];
-        let mut bit_shift_aux = [F::ZERO; NUM_LIMBS];
-        for k in 0..NUM_LIMBS {
-            let limb = record.b[k] as u32;
-            let carry = limb & ((1u32 << bit_shift) - 1);
-            let aux = limb >> bit_shift;
-            self.range_checker_chip.add_count(carry, bit_shift);
-            self.range_checker_chip.add_count(aux, aux_bits);
-            bit_shift_carry[k] = F::from_u32(carry);
-            bit_shift_aux[k] = F::from_u32(aux);
-        }
-
-        let mut limb_shift_marker = [F::ZERO; NUM_LIMBS];
-        limb_shift_marker[limb_shift] = F::ONE;
-        let mut bit_shift_marker = [F::ZERO; LIMB_BITS];
-        bit_shift_marker[bit_shift] = F::ONE;
-
-        let b_sign = record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
-        // b_sign correctness: range check the low LIMB_BITS-1 bits of b[NUM_LIMBS - 1].
-        self.range_checker_chip.add_count(
-            (record.b[NUM_LIMBS - 1] as u32) - ((b_sign as u32) << (LIMB_BITS - 1)),
-            LIMB_BITS - 1,
-        );
-
-        let core_row: &mut ShiftRightArithmeticCoreCols<F, NUM_LIMBS, LIMB_BITS> =
-            core_row.borrow_mut();
-        core_row.b_sign = F::from_u16(b_sign);
-        core_row.bit_shift_marker = bit_shift_marker;
-        core_row.limb_shift_marker = limb_shift_marker;
-        core_row.bit_shift_aux = bit_shift_aux;
-        core_row.bit_shift_carry = bit_shift_carry;
-        core_row.c = record.c.map(F::from_u16);
-        core_row.b = record.b.map(F::from_u16);
-        core_row.a = a.map(F::from_u16);
-    }
 }
 
 // Returns (result, limb_shift, bit_shift)

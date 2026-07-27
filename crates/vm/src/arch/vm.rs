@@ -71,7 +71,6 @@ use super::rvr::{
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::rvr::{PreflightEndpoint, PreflightExecution};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::DenseRecordArena;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::ExecutionState;
 #[cfg(feature = "metrics")]
@@ -85,7 +84,7 @@ use super::{
     hint_stream::HintStream,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
-    AirInventoryError, Arena, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
+    AirInventoryError, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
     ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
     VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
@@ -106,7 +105,7 @@ use crate::{
             AddressMap,
         },
         program::trace::generate_cached_trace,
-        SystemChipComplex, SystemChipInventory, SystemRecords, SystemWithFixedTraceHeights,
+        SystemChipComplex, SystemChipInventory, SystemWithFixedTraceHeights,
     },
 };
 
@@ -118,8 +117,6 @@ impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_D
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
-    #[error("unexpected number of arenas: {actual} (expected num_airs={expected})")]
-    UnexpectedNumArenas { actual: usize, expected: usize },
     #[error("extension trace generation failed: {0}")]
     ExtensionTracegen(String),
     #[error("proof generation failed: {0}")]
@@ -156,11 +153,10 @@ where
     ) -> Result<ProvingContext<PB>, GenerationError>;
 }
 
-impl<SC, RA> PostflightTracegen<SC, CpuBackend<SC>>
-    for VmChipComplex<SC, RA, CpuBackend<SC>, SystemChipInventory<SC>>
+impl<SC> PostflightTracegen<SC, CpuBackend<SC>>
+    for VmChipComplex<SC, CpuBackend<SC>, SystemChipInventory<SC>>
 where
     SC: StarkProtocolConfig,
-    RA: Arena,
     Val<SC>: VmField,
 {
     fn generate_from_postflight(
@@ -758,8 +754,7 @@ fn begin_preflight_tracegen_session(poisoned: &mut bool) -> Result<(), Generatio
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
 /// API is specific to a particular [StarkEngine], which specifies a fixed [StarkProtocolConfig] and
-/// [ProverBackend] via associated types. The [VmBuilder] also fixes the choice of
-/// `RecordArena` associated to the prover backend via an associated type.
+/// [ProverBackend] via associated types.
 ///
 /// In other words, this struct _is_ the zkVM.
 #[derive(Getters, MutGetters, Setters, WithSetters)]
@@ -775,7 +770,7 @@ where
     executor: VmExecutor<Val<E::SC>, VB::VmConfig>,
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
-    chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
+    chip_complex: VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>,
     /// Preflight trace generation mutates shared lookup histograms. Once a segment
     /// starts, the VM remains poisoned until its outermost coordinator has
     /// validated every producer and explicitly completes the session.
@@ -1123,38 +1118,13 @@ where
         state
     }
 
-    /// This function mutates `self` but should only depend on internal state in the sense that:
-    /// - program must already be loaded as cached trace via [`load_program`](Self::load_program).
-    /// - initial memory image was already sent to device via
-    ///   [`transport_init_memory_to_device`](Self::transport_init_memory_to_device).
-    /// - all other state should be given by `system_records` and `record_arenas`
-    #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
-        &mut self,
-        system_records: SystemRecords<Val<E::SC>>,
-        record_arenas: Vec<VB::RecordArena>,
-    ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        if self.preflight_tracegen_poisoned {
-            return Err(GenerationError::ExtensionTracegen(
-                "VM is poisoned by an incomplete or failed preflight tracegen session".to_string(),
-            ));
-        }
-        // main tracegen call:
-        let ctx = self
-            .chip_complex
-            .generate_proving_ctx(system_records, record_arenas)?;
-
-        self.validate_proving_ctx(ctx)
-    }
-
     #[instrument(name = "trace_gen", skip_all)]
     pub(crate) fn generate_proving_ctx_from_postflight(
         &mut self,
         postflight: &Postflight<'_, Val<E::SC>>,
     ) -> Result<ProvingContext<E::PB>, GenerationError>
     where
-        VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
-            PostflightTracegen<E::SC, E::PB>,
+        VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
     {
         begin_preflight_tracegen_session(&mut self.preflight_tracegen_poisoned)?;
         let result = self
@@ -1414,11 +1384,7 @@ where
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 impl<VB> VirtualMachine<BabyBearPoseidon2GpuEngine, VB>
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2GpuEngine,
-        RecordArena = DenseRecordArena,
-        SystemChipInventory = SystemChipInventoryGPU,
-    >,
+    VB: VmBuilder<BabyBearPoseidon2GpuEngine, SystemChipInventory = SystemChipInventoryGPU>,
 {
     /// Expands one compact preflight execution against the segment's
     /// already-uploaded immutable memory image into the read-only replay data
@@ -1745,8 +1711,7 @@ where
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
-        PostflightTracegen<E::SC, E::PB>,
+    VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
 {
     /// First performs metered execution to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -1766,8 +1731,7 @@ where
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>:
-        PostflightTracegen<E::SC, E::PB>,
+    VmChipComplex<E::SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<E::SC, E::PB>,
 {
     /// For internal use to resize trace matrices before proving.
     ///

@@ -3,12 +3,12 @@ use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
-        VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -82,7 +82,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
     }
 }
 
-#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
     Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32>), // Fp2AddSub
@@ -246,18 +246,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, E, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
+impl<SC, E> VmProverExtension<E, Fp2Extension> for AlgebraCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &Fp2Extension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

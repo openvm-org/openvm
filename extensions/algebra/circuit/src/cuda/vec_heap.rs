@@ -8,7 +8,7 @@ use openvm_circuit::{
         rvr::cuda::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
-        TraceFiller, VmChipWrapper,
+        VmChipWrapper,
     },
     system::memory::SharedMemoryHelper,
 };
@@ -305,7 +305,8 @@ pub(crate) fn generate_field_expression_ctx_from_projection<
         })?;
     if projection.len() < height {
         let mut dummy_row = F::zero_vec(width);
-        chip.inner.fill_dummy_trace_row(&mut dummy_row);
+        chip.inner
+            .fill_dummy_core_row(&mut dummy_row[adapter_width..]);
         values
             .par_chunks_exact_mut(width)
             .skip(projection.len())

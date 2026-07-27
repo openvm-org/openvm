@@ -12,9 +12,7 @@ use super::{
 };
 
 mod execution;
-mod preflight;
 pub(crate) mod trace;
-pub use preflight::*;
 
 // SLLW/SRLW/SRAW all use the u16 shift cores over the W adapter (low 32-bit word in,
 // sign-extended 64-bit write).
@@ -22,6 +20,11 @@ pub type ShiftWLogicalCoreAir = ShiftLogicalCoreAir<RV64_WORD_U16_LIMBS, U16_BIT
 pub type ShiftWRightArithmeticCoreAir = ShiftRightArithmeticCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
 pub type ShiftWRightArithmeticExecutor<A> =
     ShiftRightArithmeticExecutor<A, RV64_WORD_U16_LIMBS, U16_BITS>;
+#[derive(Clone, Copy, derive_new::new)]
+pub struct ShiftWLogicalExecutor<A> {
+    _adapter: A,
+    pub offset: usize,
+}
 pub type ShiftWLogicalFiller<A> = ShiftLogicalFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
 pub type ShiftWRightArithmeticFiller<A> =
     ShiftRightArithmeticFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;

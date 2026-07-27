@@ -28,7 +28,7 @@ use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_A
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
-        Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
+        ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
         memory::{
@@ -148,8 +148,7 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 /// around Rust orphan rules.
 pub trait VmBuilder<E: StarkEngine>: Sized {
     type VmConfig: VmConfig<E::SC>;
-    type RecordArena: Arena;
-    type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
+    type SystemChipInventory: SystemChipComplex<E::PB>;
 
     /// Returns a backend-specific continuation proving driver, when one is available.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -165,10 +164,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
         device_ctx: &EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    >;
+    ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError>;
 }
 
 impl<SC, VC> VmConfig<SC> for VC

@@ -1,16 +1,12 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS},
     LocalOpcode,
 };
@@ -23,9 +19,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_bytes_to_u32,
-    rv64_u16_block_to_bytes, rv64_u32_to_u16_block, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
-    RV64_PTR_U16_LIMBS, U16_BITS,
+    expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_u32_to_u16_block,
+    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -184,89 +179,6 @@ impl<A> Rv64JalrFiller<A> {
             adapter,
             range_checker_chip,
         }
-    }
-}
-
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalrExecutor<A>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<F, ReadData = [u16; BLOCK_FE_WIDTH], WriteData = [u16; BLOCK_FE_WIDTH]>,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64JalrCoreRecord),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, c, g, .. } = *instruction;
-
-        debug_assert_eq!(
-            opcode.local_opcode_idx(Rv64JalrOpcode::CLASS_OFFSET),
-            JALR as usize
-        );
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let rs1_data = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record);
-        let rs1_bytes = rv64_u16_block_to_bytes(rs1_data);
-        core_record.rs1_val = rv64_bytes_to_u32(rs1_bytes);
-
-        core_record.imm = c.as_canonical_u32() as u16;
-        core_record.imm_sign = g.is_one();
-        core_record.from_pc = *state.pc;
-
-        let (to_pc, rd_data) = run_jalr(
-            core_record.from_pc,
-            core_record.rs1_val,
-            core_record.imm,
-            core_record.imm_sign,
-        );
-
-        self.adapter
-            .write(state.memory, instruction, rd_data, &mut adapter_record);
-
-        // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
-        *state.pc = to_pc & !1;
-
-        Ok(())
-    }
-}
-
-impl<F, A> TraceFiller<F> for Rv64JalrFiller<A>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64JalrCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64JalrCoreRecord written by the executor
-        // during trace generation
-        let record: &Rv64JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let core_row: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
-
-        let (to_pc, rd_data) =
-            run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
-        self.fill_core_row(
-            core_row,
-            record.rs1_val,
-            record.imm,
-            record.imm_sign,
-            to_pc,
-            rd_data,
-        );
     }
 }
 

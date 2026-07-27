@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, VmBuilder,
+        VmChipComplex, VmProverExtension,
     },
     system::cuda::{
         extensions::{
@@ -13,6 +13,7 @@ use openvm_circuit::{
         },
         SystemChipInventoryGPU,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{
     prelude::F as CudaF, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
@@ -192,11 +193,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         vm.postflight(
             program,
@@ -289,11 +286,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError>
     where
-        VB: VmBuilder<
-            GpuBabyBearPoseidon2Engine,
-            RecordArena = DenseRecordArena,
-            SystemChipInventory = SystemChipInventoryGPU,
-        >,
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = Self::extension_opcodes();
         let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
@@ -330,13 +323,11 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     }
 }
 
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExtension>
-    for DeferralGpuProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, DeferralExtension> for DeferralGpuProverExt {
     fn extend_prover(
         &self,
         extension: &DeferralExtension,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let num_deferral_circuits = extension.fns.len();
         let address_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
@@ -360,7 +351,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
             num_deferral_circuits,
             range_checker.device_ctx.clone(),
         ));
-        inventory.add_periphery_chip(count_chip);
+        inventory.add_periphery_chip_with_height(
+            count_chip,
+            Some(next_power_of_two_or_zero(num_deferral_circuits)),
+        );
 
         inventory.next_air::<DeferralPoseidon2Air<CudaF>>()?;
         let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(
@@ -404,7 +398,6 @@ pub struct Rv64DeferralGpuBuilder;
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
     type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -412,12 +405,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
-        VmChipComplex<
-            BabyBearPoseidon2Config,
-            Self::RecordArena,
-            GpuBackend,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<BabyBearPoseidon2Config, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
@@ -427,22 +415,22 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &Rv64ImGpuProverExt,
             &config.rv64i,
             inventory,
         )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &Rv64ImGpuProverExt,
             &config.rv64m,
             inventory,
         )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &Rv64ImGpuProverExt,
             &config.io,
             inventory,
         )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &DeferralGpuProverExt,
             &config.deferral,
             inventory,

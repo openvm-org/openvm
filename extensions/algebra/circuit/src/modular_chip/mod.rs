@@ -1,5 +1,4 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
-use openvm_circuit_derive::PreflightExecutor;
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_riscv_adapters::{
     Rv64IsEqualModU16AdapterAir, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
@@ -33,7 +32,7 @@ pub type ModularIsEqualU16Air<const NUM_LANES: usize, const TOTAL_LIMBS: usize> 
     ModularIsEqualCoreAir<TOTAL_LIMBS, BLOCK_FE_WIDTH, U16_BITS>,
 >;
 
-#[derive(Clone, PreflightExecutor)]
+#[derive(Clone)]
 pub struct VmModularIsEqualU16Executor<const NUM_LANES: usize, const TOTAL_LIMBS: usize>(
     ModularIsEqualExecutor<
         Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,

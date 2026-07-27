@@ -1,12 +1,9 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -152,90 +149,6 @@ pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA>
-    for BranchEqualExecutor<A, NUM_LIMBS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u16; NUM_LIMBS]; 2]>, WriteData = ()>,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut BranchEqualCoreRecord<NUM_LIMBS>,
-        ),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let &Instruction { opcode, c: imm, .. } = instruction;
-
-        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.a = rs1;
-        core_record.b = rs2;
-        core_record.imm = imm.as_canonical_u32();
-        core_record.local_opcode = branch_eq_opcode as u8;
-
-        if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {
-            *state.pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
-        } else {
-            *state.pc = state.pc.wrapping_add(self.pc_step);
-        }
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualFiller<A, NUM_LIMBS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // BranchEqualCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid BranchEqualCoreRecord written by the executor
-        // during trace generation
-        let record: &BranchEqualCoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut BranchEqualCoreCols<F, NUM_LIMBS> = core_row.borrow_mut();
-
-        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(
-            record.local_opcode == BranchEqualOpcode::BEQ as u8,
-            &record.a,
-            &record.b,
-        );
-        core_row.diff_inv_marker = [F::ZERO; NUM_LIMBS];
-        core_row.diff_inv_marker[diff_idx] = diff_inv_val;
-
-        core_row.opcode_bne_flag =
-            F::from_bool(record.local_opcode == BranchEqualOpcode::BNE as u8);
-        core_row.opcode_beq_flag =
-            F::from_bool(record.local_opcode == BranchEqualOpcode::BEQ as u8);
-
-        core_row.imm = F::from_u32(record.imm);
-        core_row.cmp_result = F::from_bool(cmp_result);
-
-        core_row.b = record.b.map(F::from_u16);
-        core_row.a = record.a.map(F::from_u16);
-    }
 }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])

@@ -1,14 +1,10 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::*,
     system::memory::{
-        offline_checker::{
-            pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
-        },
-        online::TracingMemory,
-        MemoryAddress, MemoryAuxColsFactory,
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
@@ -16,31 +12,27 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
-use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode,
     Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
     MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_field::{Field, PrimeCharacteristicRing},
+    p3_matrix::Matrix,
     p3_maybe_rayon::prelude::*,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, read_rv64_register, tracing_read, tracing_read_reg_ptr, tracing_write,
-    u16_limbs_to_ptr, validate_memory_block_byte_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    validate_memory_block_byte_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 mod execution;
@@ -309,101 +301,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Rv64HintStoreMetadata {
-    num_words: usize,
-}
-
-impl MultiRowMetadata for Rv64HintStoreMetadata {
-    #[inline(always)]
-    fn get_num_rows(&self) -> usize {
-        self.num_words
-    }
-}
-
-pub type Rv64HintStoreLayout = MultiRowLayout<Rv64HintStoreMetadata>;
-
-// This is the part of the record that we keep only once per instruction
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64HintStoreRecordHeader {
-    pub num_words: u32,
-
-    pub from_pc: u32,
-    pub timestamp: u32,
-
-    pub mem_ptr_ptr: u32,
-    pub mem_ptr: u32,
-    pub mem_ptr_aux_record: MemoryReadAuxRecord,
-
-    // will set `num_words_ptr` to `u32::MAX` in case of single hint
-    pub num_words_ptr: u32,
-    pub num_words_read: MemoryReadAuxRecord,
-}
-
-// This is the part of the record that we keep `num_words` times per instruction
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64HintStoreVar {
-    pub data_write_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
-    pub data: [u8; RV64_REGISTER_NUM_LIMBS],
-}
-
-/// **SAFETY**: the order of the fields in `Rv64HintStoreRecord` and `Rv64HintStoreVar` is
-/// important. The chip also assumes that the offset of the fields `write_aux` and `data` in
-/// `Rv64HintStoreCols` is bigger than `size_of::<Rv64HintStoreRecord>()`
-#[derive(Debug)]
-pub struct Rv64HintStoreRecordMut<'a> {
-    pub inner: &'a mut Rv64HintStoreRecordHeader,
-    pub var: &'a mut [Rv64HintStoreVar],
-}
-
-/// Custom borrowing that splits the buffer into a fixed `Rv64HintStoreRecord` header
-/// followed by a slice of `Rv64HintStoreVar`'s of length `num_words` provided at runtime.
-/// Uses `align_to_mut()` to make sure the slice is properly aligned to `Rv64HintStoreVar`.
-/// Has debug assertions to make sure the above works as expected.
-impl<'a> CustomBorrow<'a, Rv64HintStoreRecordMut<'a>, Rv64HintStoreLayout> for [u8] {
-    fn custom_borrow(&'a mut self, layout: Rv64HintStoreLayout) -> Rv64HintStoreRecordMut<'a> {
-        // SAFETY:
-        // - Caller guarantees through the layout that self has sufficient length for all splits
-        // - size_of::<Rv64HintStoreRecordHeader>() is guaranteed <= self.len() by layout
-        //   precondition
-        let (header_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<Rv64HintStoreRecordHeader>()) };
-
-        // SAFETY:
-        // - rest contains bytes that will be interpreted as Rv64HintStoreVar records
-        // - align_to_mut ensures proper alignment for Rv64HintStoreVar type
-        // - The layout guarantees sufficient space for layout.metadata.num_words records
-        let (_, vars, _) = unsafe { rest.align_to_mut::<Rv64HintStoreVar>() };
-        Rv64HintStoreRecordMut {
-            inner: header_buf.borrow_mut(),
-            var: &mut vars[..layout.metadata.num_words],
-        }
-    }
-
-    unsafe fn extract_layout(&self) -> Rv64HintStoreLayout {
-        let header: &Rv64HintStoreRecordHeader = self.borrow();
-        MultiRowLayout::new(Rv64HintStoreMetadata {
-            num_words: header.num_words as usize,
-        })
-    }
-}
-
-impl SizedRecord<Rv64HintStoreLayout> for Rv64HintStoreRecordMut<'_> {
-    fn size(layout: &Rv64HintStoreLayout) -> usize {
-        let mut total_len = size_of::<Rv64HintStoreRecordHeader>();
-        // Align the pointer to the alignment of `Rv64HintStoreVar`
-        total_len = total_len.next_multiple_of(align_of::<Rv64HintStoreVar>());
-        total_len += size_of::<Rv64HintStoreVar>() * layout.metadata.num_words;
-        total_len
-    }
-
-    fn alignment(_layout: &Rv64HintStoreLayout) -> usize {
-        align_of::<Rv64HintStoreRecordHeader>()
-    }
-}
-
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64HintStoreExecutor {
     pub pointer_max_bits: usize,
@@ -414,225 +311,6 @@ pub struct Rv64HintStoreExecutor {
 pub struct Rv64HintStoreFiller {
     pointer_max_bits: usize,
     range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, RA> PreflightExecutor<F, RA> for Rv64HintStoreExecutor
-where
-    F: PrimeField32,
-    for<'buf> RA:
-        RecordArena<'buf, MultiRowLayout<Rv64HintStoreMetadata>, Rv64HintStoreRecordMut<'buf>>,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let &Instruction {
-            opcode, a, b, d, e, ..
-        } = instruction;
-
-        let a = a.as_canonical_u32();
-        let b = b.as_canonical_u32();
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
-
-        let local_opcode = Rv64HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        // We do untraced read of `num_words` in order to allocate the record first
-        let num_words = if local_opcode == HINT_STORED {
-            1u64
-        } else {
-            read_rv64_register(state.memory.data(), a)
-        };
-        let num_words = u32::from(validate_hint_buffer_num_words(*state.pc, num_words)?);
-
-        let record = state.ctx.alloc(MultiRowLayout::new(Rv64HintStoreMetadata {
-            num_words: num_words as usize,
-        }));
-
-        record.inner.from_pc = *state.pc;
-        record.inner.timestamp = state.memory.timestamp;
-        record.inner.mem_ptr_ptr = b;
-
-        record.inner.mem_ptr = validate_hint_store_mem_ptr(
-            *state.pc,
-            tracing_read_reg_ptr(
-                state.memory,
-                b,
-                &mut record.inner.mem_ptr_aux_record.prev_timestamp,
-                self.pointer_max_bits,
-            ),
-        )?;
-
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
-
-        record.inner.num_words = num_words;
-        if local_opcode == HINT_STORED {
-            state.memory.increment_timestamp();
-            record.inner.num_words_ptr = u32::MAX;
-        } else {
-            record.inner.num_words_ptr = a;
-            tracing_read::<RV64_REGISTER_NUM_LIMBS>(
-                state.memory,
-                RV64_REGISTER_AS,
-                record.inner.num_words_ptr,
-                &mut record.inner.num_words_read.prev_timestamp,
-            );
-        };
-
-        let num_bytes = RV64_REGISTER_NUM_LIMBS * num_words as usize;
-        if state.streams.hint_stream.remaining() < num_bytes {
-            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
-        }
-
-        for idx in 0..(num_words as usize) {
-            if idx != 0 {
-                state.memory.increment_timestamp();
-                state.memory.increment_timestamp();
-            }
-
-            let mut data = [0; RV64_REGISTER_NUM_LIMBS];
-            state.streams.hint_stream.copy_to_slice(&mut data);
-
-            record.var[idx].data = data;
-
-            tracing_write(
-                state.memory,
-                RV64_MEMORY_AS,
-                record.inner.mem_ptr + (RV64_REGISTER_NUM_LIMBS * idx) as u32,
-                data,
-                &mut record.var[idx].data_write_aux.prev_timestamp,
-                &mut record.var[idx].data_write_aux.prev_data,
-            );
-        }
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
-    fn fill_trace(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut RowMajorMatrix<F>,
-        rows_used: usize,
-    ) {
-        if rows_used == 0 {
-            return;
-        }
-
-        let width = trace.width;
-        debug_assert_eq!(width, size_of::<Rv64HintStoreCols<u8>>());
-        let mut trace = &mut trace.values[..width * rows_used];
-        let mut sizes = Vec::with_capacity(rows_used);
-        let mut chunks = Vec::with_capacity(rows_used);
-
-        while !trace.is_empty() {
-            // SAFETY:
-            // - caller ensures `trace` contains a valid record representation that was previously
-            //   written by the executor
-            // - header is the first element of the record
-            let record: &Rv64HintStoreRecordHeader =
-                unsafe { get_record_from_slice(&mut trace, ()) };
-            let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
-            sizes.push(record.num_words);
-            chunks.push(chunk);
-            trace = rest;
-        }
-
-        chunks
-            .par_iter_mut()
-            .zip(sizes.par_iter())
-            .for_each(|(chunk, &num_words)| {
-                // SAFETY:
-                // - caller ensures `trace` contains a valid record representation that was
-                //   previously written by the executor
-                // - chunk contains a valid Rv64HintStoreRecordMut with the exact layout specified
-                // - get_record_from_slice will correctly split the buffer into header and variable
-                //   components based on this layout
-                let record: Rv64HintStoreRecordMut = unsafe {
-                    get_record_from_slice(
-                        chunk,
-                        MultiRowLayout::new(Rv64HintStoreMetadata {
-                            num_words: num_words as usize,
-                        }),
-                    )
-                };
-                debug_assert!(
-                    num_words <= MAX_HINT_BUFFER_DWORDS as u32,
-                    "num_words must be <= MAX_HINT_BUFFER_DWORDS"
-                );
-                // Range check for mem_ptr (using pointer_max_bits) and num_words (using
-                // MAX_HINT_BUFFER_DWORDS_BITS).
-                self.range_checker_chip.add_count(
-                    ptr_bound_from_ptr(record.inner.mem_ptr, self.pointer_max_bits),
-                    U16_BITS,
-                );
-                self.range_checker_chip
-                    .add_count(num_words << REM_WORDS_SHIFT, U16_BITS);
-
-                let mut timestamp = record.inner.timestamp + num_words * 3;
-                let mut mem_ptr = record.inner.mem_ptr + num_words * RV64_REGISTER_NUM_LIMBS as u32;
-
-                // Assuming that `num_words` is usually small (e.g. 1 for `HINT_STORED`)
-                // it is better to do a serial pass of the rows per instruction (going from the last
-                // row to the first row) instead of a parallel pass, since need to
-                // copy the record to a new buffer in parallel case.
-                chunk
-                    .rchunks_exact_mut(width)
-                    .zip(record.var.iter().enumerate().rev())
-                    .for_each(|(row, (idx, var))| {
-                        let cols: &mut Rv64HintStoreCols<F> = row.borrow_mut();
-                        let is_single = record.inner.num_words_ptr == u32::MAX;
-                        timestamp -= 3;
-                        if idx == 0 && !is_single {
-                            mem_helper.fill(
-                                record.inner.num_words_read.prev_timestamp,
-                                timestamp + 1,
-                                cols.num_words_aux_cols.as_mut(),
-                            );
-                            cols.num_words_ptr = F::from_u32(record.inner.num_words_ptr);
-                        } else {
-                            mem_helper.fill_zero(cols.num_words_aux_cols.as_mut());
-                            cols.num_words_ptr = F::ZERO;
-                        }
-
-                        cols.is_buffer_start = F::from_bool(idx == 0 && !is_single);
-
-                        // Note: writing in reverse
-                        cols.data = pack_u8_block_bytes(&var.data);
-                        cols.write_aux
-                            .set_prev_data(pack_u8_block_bytes(&var.data_write_aux.prev_data));
-                        mem_helper.fill(
-                            var.data_write_aux.prev_timestamp,
-                            timestamp + 2,
-                            cols.write_aux.as_mut(),
-                        );
-
-                        if idx == 0 {
-                            mem_helper.fill(
-                                record.inner.mem_ptr_aux_record.prev_timestamp,
-                                timestamp,
-                                cols.mem_ptr_aux_cols.as_mut(),
-                            );
-                        } else {
-                            mem_helper.fill_zero(cols.mem_ptr_aux_cols.as_mut());
-                        }
-
-                        mem_ptr -= RV64_REGISTER_NUM_LIMBS as u32;
-                        cols.mem_ptr_limbs = ptr_to_field_u16_limbs(mem_ptr);
-                        cols.mem_ptr_ptr = F::from_u32(record.inner.mem_ptr_ptr);
-
-                        cols.from_state.timestamp = F::from_u32(timestamp);
-                        cols.from_state.pc = F::from_u32(record.inner.from_pc);
-
-                        cols.rem_words = F::from_u32(num_words - idx as u32);
-                        cols.is_buffer = F::from_bool(!is_single);
-                        cols.is_single = F::from_bool(is_single);
-                    });
-            })
-    }
 }
 
 pub type Rv64HintStoreChip<F> = VmChipWrapper<F, Rv64HintStoreFiller>;

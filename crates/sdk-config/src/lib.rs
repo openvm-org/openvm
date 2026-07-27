@@ -23,7 +23,7 @@ use openvm_sha2_circuit::*;
 use openvm_sha2_transpiler::*;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 #[cfg(feature = "rvr")]
@@ -381,17 +381,13 @@ where
 {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let config = config.to_inner();
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
@@ -401,41 +397,37 @@ where
         )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv64i) = &config.rv64i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, rv64i, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, rv64i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
         if let Some(sha2) = &config.sha2 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
         }
         if let Some(rv64m) = &config.rv64m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, rv64m, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, rv64m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
-            VmProverExtension::<E, _, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, modular, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
-            VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
         if let Some(ecc) = &config.ecc {
-            VmProverExtension::<E, _, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;
         }
         if let Some(deferral) = &config.deferral {
-            VmProverExtension::<E, _, _>::extend_prover(
-                &DeferralCpuProverExt,
-                deferral,
-                inventory,
-            )?;
+            VmProverExtension::<E, _>::extend_prover(&DeferralCpuProverExt, deferral, inventory)?;
         }
         Ok(chip_complex)
     }
@@ -449,7 +441,6 @@ pub struct SdkVmGpuBuilder;
 impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     #[cfg(feature = "rvr")]
     fn continuation_prover() -> Option<ContinuationProverFn<BabyBearPoseidon2GpuEngine, Self>> {
@@ -461,10 +452,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         type E = BabyBearPoseidon2GpuEngine;
 
         let config = config.to_inner();
@@ -476,37 +464,37 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv64i) = &config.rv64i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv64i, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, rv64i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
         }
         if let Some(sha2) = &config.sha2 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
         }
         if let Some(rv64m) = &config.rv64m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv64m, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, rv64m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
-            VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
-            VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
         if let Some(ecc) = &config.ecc {
-            VmProverExtension::<E, _, _>::extend_prover(&EccProverExt, ecc, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&EccProverExt, ecc, inventory)?;
         }
         if let Some(deferral) = &config.deferral {
-            VmProverExtension::<E, _, _>::extend_prover(&DeferralProverExt, deferral, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&DeferralProverExt, deferral, inventory)?;
         }
         Ok(chip_complex)
     }

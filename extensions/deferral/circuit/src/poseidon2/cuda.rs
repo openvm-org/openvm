@@ -4,8 +4,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use openvm_circuit::arch::DenseRecordArena;
-use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
@@ -260,12 +258,5 @@ impl DeferralPoseidon2ChipGpu {
     {
         self.generate_proving_ctx_checked(max_trace_height)
             .map_err(openvm_circuit::arch::rvr::cuda::GpuPostflightError::InvalidTranscript)
-    }
-}
-
-impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
-    fn generate_proving_ctx(&self, _: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        self.generate_proving_ctx_checked(usize::MAX)
-            .expect("Failed to generate deferral poseidon2 trace")
     }
 }

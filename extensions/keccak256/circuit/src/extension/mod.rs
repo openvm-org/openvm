@@ -8,15 +8,15 @@ use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
         ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
-        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
-        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{
         memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
         SystemPort,
     },
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, VmConfig};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -95,17 +95,13 @@ where
 {
     type VmConfig = Keccak256Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Keccak256Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -113,10 +109,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(
             &Keccak256CpuProverExt,
             &config.keccak,
             inventory,
@@ -137,7 +133,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {
     }
 }
 
-#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Keccak256Executor {
     Keccakf(KeccakfExecutor),
     Xorin(XorinVmExecutor),
@@ -223,18 +219,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
 pub struct Keccak256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, E, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
+impl<SC, E> VmProverExtension<E, Keccak256> for Keccak256CpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Keccak256,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

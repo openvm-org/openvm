@@ -51,7 +51,7 @@ impl<MEM> VmState<MEM> {
     }
 
     #[inline(always)]
-    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, MEM, RA> {
+    pub fn into_mut<'a, CTX>(&'a mut self, ctx: &'a mut CTX) -> VmStateMut<'a, MEM, CTX> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,

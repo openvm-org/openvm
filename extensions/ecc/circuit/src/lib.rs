@@ -3,11 +3,6 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
-#[cfg(feature = "cuda")]
-use {
-    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
-    openvm_riscv_adapters::Rv64VecHeapAdapterRecord,
-};
 
 mod extension;
 mod weierstrass_chip;
@@ -22,9 +17,3 @@ pub use weierstrass_chip::*;
 pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / MEMORY_BLOCK_BYTES);
 /// Blocks for ECC with 48-limb coordinates: 2 * (48 / 8) = 12 blocks
 pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / MEMORY_BLOCK_BYTES);
-
-#[cfg(feature = "cuda")]
-pub(crate) type EccRecord<'a, const NUM_READS: usize, const BLOCKS: usize> = (
-    &'a mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS>,
-    FieldExpressionCoreRecordMut<'a>,
-);

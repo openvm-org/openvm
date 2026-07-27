@@ -9,18 +9,18 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, MultiplicationExecutor};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_riscv_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u32_array, read_int256, u32_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64Multiplication256Executor, INT256_NUM_U32_LIMBS, INT256_NUM_U8_LIMBS,
+    Rv64Multiplication256Executor, INT256_NUM_U32_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64Multiplication256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
-        Self(MultiplicationExecutor::new(adapter, offset))
+    pub fn new() -> Self {
+        Self
     }
 }
 

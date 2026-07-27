@@ -5,13 +5,7 @@ use std::{
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
-use openvm_circuit::{
-    arch::*,
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
@@ -319,102 +313,6 @@ pub struct ModularIsEqualFiller<
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    PreflightExecutor<F, RA> for ModularIsEqualExecutor<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; READ_LIMBS]; 2]>,
-            WriteData: From<[u16; WRITE_LIMBS]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut ModularIsEqualRecord<READ_LIMBS>,
-        ),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        if instruction.a.as_canonical_u32() == 0 {
-            return Err(ExecutionError::Static(
-                StaticProgramError::InvalidInstruction(*state.pc),
-            ));
-        }
-
-        let local_opcode =
-            Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert!(matches!(
-            local_opcode,
-            Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
-        ));
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.is_setup = instruction.opcode.local_opcode_idx(self.offset)
-            == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize;
-
-        let mut write_data = [0u16; WRITE_LIMBS];
-        write_data[0] = (core_record.b == core_record.c) as u16;
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            write_data.into(),
-            &mut adapter_record,
-        );
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY:
-        // - row_slice is guaranteed by the caller to have at least A::WIDTH +
-        //   ModularIsEqualCoreCols::width() elements
-        // - caller ensures core_row contains a valid record written by the executor during trace
-        //   generation
-        let (is_setup, b, c) = {
-            let record: &ModularIsEqualRecord<READ_LIMBS> =
-                unsafe { get_record_from_slice(&mut core_row, ()) };
-            (record.is_setup, record.b, record.c)
-        };
-        self.fill_trace_row_from_execution_data(
-            self.range_checker_chip.as_ref(),
-            is_setup,
-            b,
-            c,
-            core_row,
-        )
-        .expect("legacy modular equality record must contain valid field elements");
-    }
 }
 
 impl<A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>

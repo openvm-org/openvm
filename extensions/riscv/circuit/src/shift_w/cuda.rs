@@ -1,10 +1,9 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_circuit::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
@@ -20,16 +19,8 @@ use {
 };
 
 use crate::{
-    adapters::{
-        Rv64BaseAluWRegU16AdapterCols, Rv64BaseAluWRegU16AdapterRecord, RV64_WORD_U16_LIMBS,
-        U16_BITS,
-    },
-    cuda_abi::shift_w_cuda::{
-        tracegen_logical as rv64_shift_w_logical_tracegen,
-        tracegen_right_arithmetic as rv64_shift_w_right_arithmetic_tracegen,
-    },
-    ShiftLogicalCoreCols, ShiftLogicalCoreRecord, ShiftRightArithmeticCoreCols,
-    ShiftRightArithmeticCoreRecord,
+    adapters::{Rv64BaseAluWRegU16AdapterCols, RV64_WORD_U16_LIMBS, U16_BITS},
+    ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
 
 #[derive(new)]
@@ -141,75 +132,5 @@ impl Rv64ShiftWRightArithmeticChipGpu {
             )?;
         }
         Ok(AirProvingContext::simple_no_pis(d_trace))
-    }
-}
-
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWLogicalChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluWRegU16AdapterRecord,
-            ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
-        )>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
-            + ShiftLogicalCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
-        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-        unsafe {
-            rv64_shift_w_logical_tracegen(
-                d_trace.buffer(),
-                trace_height,
-                &d_records,
-                &self.range_checker.count,
-                self.timestamp_max_bits as u32,
-                device_ctx.stream.as_raw(),
-            )
-            .unwrap();
-        }
-
-        AirProvingContext::simple_no_pis(d_trace)
-    }
-}
-
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWRightArithmeticChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluWRegU16AdapterRecord,
-            ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
-        )>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
-            + ShiftRightArithmeticCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
-        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-        unsafe {
-            rv64_shift_w_right_arithmetic_tracegen(
-                d_trace.buffer(),
-                trace_height,
-                &d_records,
-                &self.range_checker.count,
-                self.timestamp_max_bits as u32,
-                device_ctx.stream.as_raw(),
-            )
-            .unwrap();
-        }
-
-        AirProvingContext::simple_no_pis(d_trace)
     }
 }

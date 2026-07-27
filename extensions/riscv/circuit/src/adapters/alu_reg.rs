@@ -1,17 +1,16 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, Postflight,
-        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
+        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
+        MinimalInstruction, Postflight, PostflightError, PostflightStep, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
-            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+            pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
-        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -20,7 +19,6 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
@@ -32,7 +30,7 @@ use openvm_stark_backend::{
 
 use super::{
     byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, rv64_bytes_to_u16_block,
-    rv64_u16_block_to_bytes, tracing_read, tracing_write,
+    rv64_u16_block_to_bytes,
 };
 
 #[repr(C)]
@@ -162,126 +160,6 @@ pub struct Rv64BaseAluRegAdapterRecord {
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
     pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
-}
-
-impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluRegAdapterExecutor {
-    const WIDTH: usize = size_of::<Rv64BaseAluRegAdapterCols<u8>>();
-    type ReadData = [[u8; RV64_REGISTER_NUM_LIMBS]; 2];
-    type WriteData = [[u8; RV64_REGISTER_NUM_LIMBS]; 1];
-    type RecordMut<'a> = &'a mut Rv64BaseAluRegAdapterRecord;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64BaseAluRegAdapterRecord) {
-        record.from_pc = pc;
-        record.from_timestamp = memory.timestamp;
-    }
-
-    // @dev cannot get rid of double &mut due to trait
-    #[inline(always)]
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut &mut Rv64BaseAluRegAdapterRecord,
-    ) -> Self::ReadData {
-        let &Instruction { b, c, d, e, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV64_REGISTER_AS);
-
-        record.rs1_ptr = b.as_canonical_u32();
-        let rs1 = tracing_read(
-            memory,
-            RV64_REGISTER_AS,
-            record.rs1_ptr,
-            &mut record.reads_aux[0].prev_timestamp,
-        );
-
-        record.rs2_ptr = c.as_canonical_u32();
-        let rs2 = tracing_read(
-            memory,
-            RV64_REGISTER_AS,
-            record.rs2_ptr,
-            &mut record.reads_aux[1].prev_timestamp,
-        );
-
-        [rs1, rs2]
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut &mut Rv64BaseAluRegAdapterRecord,
-    ) {
-        let &Instruction { a, d, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-
-        record.rd_ptr = a.as_canonical_u32();
-        tracing_write(
-            memory,
-            RV64_REGISTER_AS,
-            record.rd_ptr,
-            data[0],
-            &mut record.writes_aux.prev_timestamp,
-            &mut record.writes_aux.prev_data,
-        );
-    }
-}
-
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluRegAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64BaseAluRegAdapterCols<u8>>();
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
-        // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field
-        // elements. This requires:
-        // - Cols struct should be repr(C) and we write in reverse order (to ensure non-overlapping)
-        // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
-        //   otherwise)
-        // - adapter_row contains a valid Rv64BaseAluRegAdapterRecord representation
-        // - get_record_from_slice correctly interprets the bytes as Rv64BaseAluRegAdapterRecord
-        let record: &Rv64BaseAluRegAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64BaseAluRegAdapterCols<F> = adapter_row.borrow_mut();
-
-        // We must assign in reverse
-        const TIMESTAMP_DELTA: u32 = 2;
-        let mut timestamp = record.from_timestamp + TIMESTAMP_DELTA;
-
-        adapter_row
-            .writes_aux
-            .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));
-        mem_helper.fill(
-            record.writes_aux.prev_timestamp,
-            timestamp,
-            adapter_row.writes_aux.as_mut(),
-        );
-        timestamp -= 1;
-
-        mem_helper.fill(
-            record.reads_aux[1].prev_timestamp,
-            timestamp,
-            adapter_row.reads_aux[1].as_mut(),
-        );
-        timestamp -= 1;
-
-        mem_helper.fill(
-            record.reads_aux[0].prev_timestamp,
-            timestamp,
-            adapter_row.reads_aux[0].as_mut(),
-        );
-
-        adapter_row.rs2_ptr = F::from_u32(record.rs2_ptr);
-        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
-        adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_u32(timestamp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
-    }
 }
 
 impl Rv64BaseAluRegAdapterFiller {

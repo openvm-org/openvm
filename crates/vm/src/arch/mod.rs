@@ -16,7 +16,6 @@ mod postflight;
 mod preflight;
 /// [RecordArena] trait definitions and implementations. Currently there are two concrete
 /// implementations: [MatrixRecordArena] and [DenseRecordArena].
-mod record_arena;
 #[cfg(feature = "rvr")]
 pub mod rvr;
 /// VM state definitions
@@ -47,7 +46,6 @@ pub use preflight::{
     PreflightFieldBlock, PreflightHistory, PreflightInitialWrite, PreflightMemoryEvent,
     PreflightMemoryLog, PreflightOutput, PreflightProgramEvent,
 };
-pub use record_arena::*;
 #[cfg(feature = "rvr")]
 pub use rvr::{
     PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,

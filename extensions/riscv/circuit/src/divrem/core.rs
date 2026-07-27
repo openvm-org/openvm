@@ -1,14 +1,8 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
 use num_bigint::BigUint;
 use num_integer::Integer;
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -16,7 +10,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -518,90 +512,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemFiller<A, NUM_LIMB
         core_row.q = q.map(F::from_u32);
         core_row.c = c.map(F::from_u8);
         core_row.b = b.map(F::from_u8);
-    }
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for DivRemExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut DivRemCoreRecord<NUM_LIMBS>),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
-
-        let is_signed = core_record.local_opcode == DivRemOpcode::DIV as u8
-            || core_record.local_opcode == DivRemOpcode::REM as u8;
-        let is_div = core_record.local_opcode == DivRemOpcode::DIV as u8
-            || core_record.local_opcode == DivRemOpcode::DIVU as u8;
-
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let b = core_record.b.map(u32::from);
-        let c = core_record.c.map(u32::from);
-        let (q, r, _, _, _, _) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b, &c);
-
-        let rd = if is_div {
-            q.map(|x| x as u8)
-        } else {
-            r.map(|x| x as u8)
-        };
-
-        self.adapter
-            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for DivRemFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // DivRemCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid DivRemCoreRecord written by the executor
-        // during trace generation
-        let record: &DivRemCoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        self.fill_core_row(
-            DivRemOpcode::from_usize(record.local_opcode as usize),
-            record.b,
-            record.c,
-            core_row,
-        );
     }
 }
 

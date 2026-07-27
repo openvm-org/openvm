@@ -1,12 +1,11 @@
 use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
@@ -21,10 +20,7 @@ use {
     },
 };
 
-use super::{
-    DeferralCallAdapterCols, DeferralCallAdapterRecord, DeferralCallCoreCols,
-    DeferralCallCoreRecord,
-};
+use super::{DeferralCallAdapterCols, DeferralCallCoreCols};
 use crate::{
     cuda_abi::call,
     poseidon2::{DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer},
@@ -130,54 +126,5 @@ impl DeferralCallChipGpu {
         }
         self.poseidon2.push(poseidon2);
         Ok(AirProvingContext::simple_no_pis(trace))
-    }
-}
-
-impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        type Record = (DeferralCallAdapterRecord<F>, DeferralCallCoreRecord<F>);
-        const RECORD_SIZE: usize = size_of::<Record>();
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let num_records = records.len() / RECORD_SIZE;
-        let trace_height = next_power_of_two_or_zero(num_records);
-        let trace_width =
-            DeferralCallAdapterCols::<F>::width() + DeferralCallCoreCols::<F>::width();
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-        let poseidon2 = DeferralPoseidon2ProducerBuffer::new(num_records * 2, device_ctx);
-
-        unsafe {
-            call::tracegen(
-                trace.buffer(),
-                trace_height,
-                trace_width,
-                &d_records,
-                num_records,
-                &self.count,
-                self.num_deferral_circuits,
-                &self.range_checker.count,
-                self.timestamp_max_bits as u32,
-                &self.bitwise_lookup.count,
-                &poseidon2.records,
-                &poseidon2.counts,
-                &poseidon2.idx,
-                // Length in F elements; the CUDA side converts to record count.
-                poseidon2.records.len(),
-                self.address_bits,
-                device_ctx.stream.as_raw(),
-            )
-            .expect("Failed to generate deferral call trace");
-        }
-        self.poseidon2.push(poseidon2);
-
-        AirProvingContext::simple_no_pis(trace)
     }
 }

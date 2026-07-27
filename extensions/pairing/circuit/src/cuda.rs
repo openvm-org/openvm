@@ -3,10 +3,7 @@
 //! [openvm_ecc_circuit] crates export.
 use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
 use openvm_circuit::{
-    arch::{
-        AirInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
-        VmProverExtension,
-    },
+    arch::{AirInventory, ChipInventoryError, VmBuilder, VmChipComplex, VmProverExtension},
     system::cuda::SystemChipInventoryGPU,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
@@ -48,7 +45,6 @@ impl Rv64PairingGpuBuilder {
 impl VmBuilder<E> for Rv64PairingGpuBuilder {
     type VmConfig = Rv64PairingConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -56,12 +52,7 @@ impl VmBuilder<E> for Rv64PairingGpuBuilder {
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
-        VmChipComplex<
-            BabyBearPoseidon2Config,
-            Self::RecordArena,
-            GpuBackend,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<BabyBearPoseidon2Config, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
@@ -71,9 +62,9 @@ impl VmBuilder<E> for Rv64PairingGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&EccProverExt, &config.weierstrass, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&EccProverExt, &config.weierstrass, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
         Ok(chip_complex)
     }
 }

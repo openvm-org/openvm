@@ -127,23 +127,9 @@ pub mod auipc_cuda {
 }
 
 pub mod hintstore_cuda {
-    use super::{super::hintstore::OffsetInfo, *};
+    use super::*;
 
     extern "C" {
-        pub fn _hintstore_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: *const u8,
-            rows_used: usize,
-            d_record_offsets: *const OffsetInfo,
-            pointer_max_bits: u32,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
-
         fn _hintstore_replay_count(
             d_instructions: DeviceBufferView,
             pc_base: u32,
@@ -189,33 +175,6 @@ pub mod hintstore_cuda {
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        rows_used: usize,
-        d_record_offsets: &DeviceBuffer<OffsetInfo>,
-        pointer_max_bits: u32,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_hintstore_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.as_ptr(),
-            rows_used,
-            d_record_offsets.as_ptr(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]

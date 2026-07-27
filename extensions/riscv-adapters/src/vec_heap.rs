@@ -1,5 +1,4 @@
 use std::{
-    array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::{once, zip},
 };
@@ -7,16 +6,14 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        AdapterAirContext, ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
             pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
             MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
-        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -26,14 +23,12 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, tracing_read, tracing_read_reg_ptr, tracing_write, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS, U16_BITS,
+    ptr_to_field_u16_limbs, u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -390,157 +385,6 @@ impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const BLOCKS_PER_WRIT
 {
     pub fn pointer_max_bits(&self) -> usize {
         self.pointer_max_bits
-    }
-}
-
-impl<
-        F: PrimeField32,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCKS_PER_WRITE: usize,
-    > AdapterTraceExecutor<F>
-    for Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
-{
-    const WIDTH: usize =
-        Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width();
-    type ReadData = [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS];
-    type WriteData = [[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_WRITE];
-    type RecordMut<'a> =
-        &'a mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        record.from_pc = pc;
-        record.from_timestamp = memory.timestamp;
-    }
-
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut &mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>,
-    ) -> Self::ReadData {
-        let &Instruction { a, b, c, d, e, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
-
-        // Read register values
-        record.rs_vals = from_fn(|i| {
-            record.rs_ptrs[i] = if i == 0 { b } else { c }.as_canonical_u32();
-            tracing_read_reg_ptr(
-                memory,
-                record.rs_ptrs[i],
-                &mut record.rs_read_aux[i].prev_timestamp,
-                self.pointer_max_bits,
-            )
-        });
-
-        record.rd_ptr = a.as_canonical_u32();
-        record.rd_val = tracing_read_reg_ptr(
-            memory,
-            record.rd_ptr,
-            &mut record.rd_read_aux.prev_timestamp,
-            self.pointer_max_bits,
-        );
-
-        // Read memory values
-        from_fn(|i| {
-            debug_assert!(
-                (record.rs_vals[i] as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_READ - 1) as u64)
-                    < (1u64 << self.pointer_max_bits)
-            );
-            from_fn(|j| {
-                tracing_read(
-                    memory,
-                    RV64_MEMORY_AS,
-                    record.rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32,
-                    &mut record.reads_aux[i][j].prev_timestamp,
-                )
-            })
-        })
-    }
-
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut &mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>,
-    ) {
-        debug_assert_eq!(instruction.e.as_canonical_u32(), RV64_MEMORY_AS);
-
-        debug_assert!(
-            (record.rd_val as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_WRITE - 1) as u64)
-                < (1u64 << self.pointer_max_bits)
-        );
-
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..BLOCKS_PER_WRITE {
-            tracing_write(
-                memory,
-                RV64_MEMORY_AS,
-                record.rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
-                data[i],
-                &mut record.writes_aux[i].prev_timestamp,
-                &mut record.writes_aux[i].prev_data,
-            );
-        }
-    }
-}
-
-impl<
-        F: PrimeField32,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCKS_PER_WRITE: usize,
-    > AdapterTraceFiller<F>
-    for Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
-{
-    const WIDTH: usize =
-        Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width();
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // SAFETY:
-        // - caller ensures `adapter_row` contains a valid record representation that was previously
-        //   written by the executor
-        let record: &Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-
-        let from_pc = record.from_pc;
-        let from_timestamp = record.from_timestamp;
-        let rs_ptrs = record.rs_ptrs;
-        let rd_ptr = record.rd_ptr;
-        let rs_vals = record.rs_vals;
-        let rd_val = record.rd_val;
-        let rs_prev_timestamps = record.rs_read_aux.each_ref().map(|aux| aux.prev_timestamp);
-        let rd_prev_timestamp = record.rd_read_aux.prev_timestamp;
-        let heap_prev_timestamps = record
-            .reads_aux
-            .each_ref()
-            .map(|reads| reads.each_ref().map(|aux| aux.prev_timestamp));
-        let write_prev_timestamps = record.writes_aux.each_ref().map(|aux| aux.prev_timestamp);
-        let write_predecessors = record.writes_aux.each_ref().map(|aux| {
-            from_fn(|i| u16::from_le_bytes([aux.prev_data[2 * i], aux.prev_data[2 * i + 1]]))
-        });
-        self.fill_trace_row_from_values(
-            self.range_checker_chip.as_ref(),
-            mem_helper,
-            adapter_row,
-            VecHeapTraceValues {
-                from_pc,
-                from_timestamp,
-                rs_ptrs: &rs_ptrs,
-                rd_ptr,
-                rs_vals: &rs_vals,
-                rd_val,
-                rs_prev_timestamps: &rs_prev_timestamps,
-                rd_prev_timestamp,
-                heap_prev_timestamps: &heap_prev_timestamps,
-                write_prev_timestamps: &write_prev_timestamps,
-                write_predecessors: &write_predecessors,
-            },
-        );
     }
 }
 

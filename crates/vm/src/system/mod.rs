@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use derive_more::derive::From;
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor};
 use openvm_circuit_primitives::{
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
@@ -26,10 +26,9 @@ use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, AirRefWithColumns, BusIndexManager,
         ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState,
-        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
-        Postflight, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
-        VmExecutionConfig, VmField, BLOCK_FE_WIDTH, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID,
-        PROGRAM_AIR_ID,
+        ExecutorInventory, ExecutorInventoryError, PhantomSubExecutor, Postflight, SystemConfig,
+        VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField, BLOCK_FE_WIDTH,
+        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -69,21 +68,13 @@ const POSEIDON2_INSERTION_IDX: usize = 1;
 /// can be loaded with arbitrary programs supported by the instruction set available to its
 /// configuration. The [SystemChipComplex] is meant to persist between instances of proof
 /// generation.
-pub trait SystemChipComplex<RA, PB: ProverBackend> {
+pub trait SystemChipComplex<PB: ProverBackend> {
     /// Loads the program in the form of a cached trace with prover data.
     fn load_program(&mut self, cached_program_trace: CommittedTraceData<PB>);
 
     /// Transport the initial memory state to device. This may be called before preflight execution
     /// begins and start async device processes in parallel to execution.
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory);
-
-    /// The caller must guarantee that `record_arenas` has length equal to the number of system
-    /// AIRs, although some arenas may be empty if they are unused.
-    fn generate_proving_ctx(
-        &mut self,
-        system_records: SystemRecords<PB::Val>,
-        record_arenas: Vec<RA>,
-    ) -> Vec<AirProvingContext<PB>>;
 
     /// Returns the top merkle sub-tree of the memory merkle tree
     /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
@@ -134,7 +125,7 @@ pub struct TouchedBlock<F> {
 
 pub type TouchedMemory<F> = Vec<TouchedBlock<F>>;
 
-#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, From)]
 pub enum SystemExecutor {
     Phantom(PhantomExecutor),
 }
@@ -378,9 +369,8 @@ where
     }
 }
 
-impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for SystemChipInventory<SC>
+impl<SC> SystemChipComplex<CpuBackend<SC>> for SystemChipInventory<SC>
 where
-    RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
@@ -391,33 +381,6 @@ where
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
         self.memory_controller
             .set_initial_memory(memory.memory.clone());
-    }
-
-    fn generate_proving_ctx(
-        &mut self,
-        system_records: SystemRecords<Val<SC>>,
-        _record_arenas: Vec<RA>,
-    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
-        let SystemRecords {
-            from_state,
-            to_state,
-            exit_code,
-            filtered_exec_frequencies,
-            touched_memory,
-        } = system_records;
-
-        self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
-        let program_ctx = self.program_chip.generate_proving_ctx(());
-        self.connector_chip.begin(from_state);
-        self.connector_chip.end(to_state, exit_code);
-        let connector_ctx = self.connector_chip.generate_proving_ctx(());
-
-        let memory_ctxs = self.memory_controller.generate_proving_ctx(touched_memory);
-
-        [program_ctx, connector_ctx]
-            .into_iter()
-            .chain(memory_ctxs)
-            .collect()
     }
 
     fn memory_top_tree(&self) -> Option<&[[Val<SC>; VM_DIGEST_WIDTH]]> {
@@ -437,7 +400,6 @@ where
     SC::EF: Ord,
 {
     type VmConfig = SystemConfig;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
@@ -445,10 +407,8 @@ where
         config: &SystemConfig,
         airs: AirInventory<SC>,
         _device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, CpuBackend<SC>, SystemChipInventory<SC>>, ChipInventoryError>
+    {
         let range_bus = airs.range_checker().bus;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
@@ -493,8 +453,7 @@ impl<SC: StarkProtocolConfig> SystemWithFixedTraceHeights for SystemChipInventor
 where
     Val<SC>: VmField,
 {
-    /// Warning: this does not set the override for the program chip. The program chip
-    /// override must be set via the RecordArena.
+    /// The program trace height is fixed by its cached trace.
     fn override_trace_heights(&mut self, heights: &[u32]) {
         assert_eq!(
             heights[PROGRAM_AIR_ID] as usize,

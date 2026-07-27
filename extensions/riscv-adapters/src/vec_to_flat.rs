@@ -3,19 +3,13 @@
 //! These wrappers allow using `Rv64VecHeapAdapter*` types with cores that expect flat
 //! `BasicAdapterInterface` data formats.
 
-use openvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterTraceExecutor, BasicAdapterInterface, ImmInstruction,
-        MinimalInstruction, VecHeapAdapterInterface, VecHeapBranchAdapterInterface, VmAdapterAir,
-        VmAdapterInterface,
-    },
-    system::memory::online::TracingMemory,
+use openvm_circuit::arch::{
+    AdapterAirContext, BasicAdapterInterface, ImmInstruction, MinimalInstruction,
+    VecHeapAdapterInterface, VecHeapBranchAdapterInterface, VmAdapterAir, VmAdapterInterface,
 };
 use openvm_circuit_primitives::ColumnsAir;
-use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, p3_air::BaseAir, p3_field::PrimeField32,
-    BaseAirWithPublicValues,
+    interaction::InteractionBuilder, p3_air::BaseAir, BaseAirWithPublicValues,
 };
 
 // =================================================================================================
@@ -246,82 +240,6 @@ pub struct VecToFlatAluAdapterExecutor<
     const TOTAL_WRITE_SIZE: usize,
 >(pub A);
 
-impl<
-        F,
-        A,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCKS_PER_WRITE: usize,
-        const BLOCK_VALUE_WIDTH: usize,
-        const TOTAL_READ_SIZE: usize,
-        const TOTAL_WRITE_SIZE: usize,
-    > AdapterTraceExecutor<F>
-    for VecToFlatAluAdapterExecutor<
-        A,
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        BLOCK_VALUE_WIDTH,
-        TOTAL_READ_SIZE,
-        TOTAL_WRITE_SIZE,
-    >
-where
-    F: PrimeField32,
-    A: AdapterTraceExecutor<
-        F,
-        ReadData = [[[u8; BLOCK_VALUE_WIDTH]; BLOCKS_PER_READ]; NUM_READS],
-        WriteData = [[u8; BLOCK_VALUE_WIDTH]; BLOCKS_PER_WRITE],
-    >,
-{
-    const WIDTH: usize = A::WIDTH;
-    type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
-    type WriteData = [[u8; TOTAL_WRITE_SIZE]; 1];
-    type RecordMut<'a>
-        = A::RecordMut<'a>
-    where
-        Self: 'a;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        A::start(pc, memory, record);
-    }
-
-    #[inline(always)]
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut Self::RecordMut<'_>,
-    ) -> Self::ReadData {
-        let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
-
-        core::array::from_fn(|i| {
-            let mut out = [0u8; TOTAL_READ_SIZE];
-            for (block_idx, block) in data_inner[i].iter().enumerate() {
-                let start = block_idx * BLOCK_VALUE_WIDTH;
-                out[start..start + BLOCK_VALUE_WIDTH].copy_from_slice(&block[..]);
-            }
-            out
-        })
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut Self::RecordMut<'_>,
-    ) {
-        let data_inner: <A as AdapterTraceExecutor<F>>::WriteData = core::array::from_fn(|i| {
-            let start = i * BLOCK_VALUE_WIDTH;
-            core::array::from_fn(|j| data[0][start + j])
-        });
-
-        <A as AdapterTraceExecutor<F>>::write(&self.0, memory, instruction, data_inner, record);
-    }
-}
-
 /// U16 counterpart of [`VecToFlatAluAdapterExecutor`].
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VecToFlatAluU16AdapterExecutor<
@@ -333,82 +251,6 @@ pub struct VecToFlatAluU16AdapterExecutor<
     const TOTAL_READ_SIZE: usize,
     const TOTAL_WRITE_SIZE: usize,
 >(pub A);
-
-impl<
-        F,
-        A,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCKS_PER_WRITE: usize,
-        const BLOCK_VALUE_WIDTH: usize,
-        const TOTAL_READ_SIZE: usize,
-        const TOTAL_WRITE_SIZE: usize,
-    > AdapterTraceExecutor<F>
-    for VecToFlatAluU16AdapterExecutor<
-        A,
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        BLOCK_VALUE_WIDTH,
-        TOTAL_READ_SIZE,
-        TOTAL_WRITE_SIZE,
-    >
-where
-    F: PrimeField32,
-    A: AdapterTraceExecutor<
-        F,
-        ReadData = [[[u16; BLOCK_VALUE_WIDTH]; BLOCKS_PER_READ]; NUM_READS],
-        WriteData = [[u16; BLOCK_VALUE_WIDTH]; BLOCKS_PER_WRITE],
-    >,
-{
-    const WIDTH: usize = A::WIDTH;
-    type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
-    type WriteData = [[u16; TOTAL_WRITE_SIZE]; 1];
-    type RecordMut<'a>
-        = A::RecordMut<'a>
-    where
-        Self: 'a;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        A::start(pc, memory, record);
-    }
-
-    #[inline(always)]
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut Self::RecordMut<'_>,
-    ) -> Self::ReadData {
-        let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
-
-        core::array::from_fn(|i| {
-            let mut out = [0u16; TOTAL_READ_SIZE];
-            for (block_idx, block) in data_inner[i].iter().enumerate() {
-                let start = block_idx * BLOCK_VALUE_WIDTH;
-                out[start..start + BLOCK_VALUE_WIDTH].copy_from_slice(&block[..]);
-            }
-            out
-        })
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut Self::RecordMut<'_>,
-    ) {
-        let data_inner: <A as AdapterTraceExecutor<F>>::WriteData = core::array::from_fn(|i| {
-            let start = i * BLOCK_VALUE_WIDTH;
-            core::array::from_fn(|j| data[0][start + j])
-        });
-
-        <A as AdapterTraceExecutor<F>>::write(&self.0, memory, instruction, data_inner, record);
-    }
-}
 
 // =================================================================================================
 // Branch Adapter Wrappers (reads only, no writes)
@@ -563,70 +405,3 @@ pub struct VecToFlatBranchAdapterExecutor<
     const BLOCK_VALUE_WIDTH: usize,
     const TOTAL_READ_SIZE: usize,
 >(pub A);
-
-impl<
-        F,
-        A,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCK_VALUE_WIDTH: usize,
-        const TOTAL_READ_SIZE: usize,
-    > AdapterTraceExecutor<F>
-    for VecToFlatBranchAdapterExecutor<
-        A,
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCK_VALUE_WIDTH,
-        TOTAL_READ_SIZE,
-    >
-where
-    F: PrimeField32,
-    A: AdapterTraceExecutor<
-        F,
-        ReadData = [[[u16; BLOCK_VALUE_WIDTH]; BLOCKS_PER_READ]; NUM_READS],
-        WriteData = (),
-    >,
-{
-    const WIDTH: usize = A::WIDTH;
-    type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
-    type WriteData = ();
-    type RecordMut<'a>
-        = A::RecordMut<'a>
-    where
-        Self: 'a;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        A::start(pc, memory, record);
-    }
-
-    #[inline(always)]
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut Self::RecordMut<'_>,
-    ) -> Self::ReadData {
-        let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
-
-        core::array::from_fn(|i| {
-            let mut out = [0u16; TOTAL_READ_SIZE];
-            for (block_idx, block) in data_inner[i].iter().enumerate() {
-                let start = block_idx * BLOCK_VALUE_WIDTH;
-                out[start..start + BLOCK_VALUE_WIDTH].copy_from_slice(&block[..]);
-            }
-            out
-        })
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        _memory: &mut TracingMemory,
-        _instruction: &Instruction<F>,
-        _data: Self::WriteData,
-        _record: &mut Self::RecordMut<'_>,
-    ) {
-        // Branch adapters don't write anything
-    }
-}

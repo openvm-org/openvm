@@ -1,24 +1,16 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-    iter::zip,
-};
+use std::{array, borrow::Borrow};
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
@@ -143,101 +135,6 @@ pub struct BitwiseLogicExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 pub struct BitwiseLogicFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for BitwiseLogicExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut BitwiseLogicCoreRecord<NUM_LIMBS>,
-        ),
-    >,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert!(matches!(
-            local_opcode,
-            BaseAluOpcode::XOR | BaseAluOpcode::OR | BaseAluOpcode::AND
-        ));
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let rd =
-            run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
-
-        core_record.local_opcode = local_opcode as u8;
-
-        self.adapter
-            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for BitwiseLogicFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // BitwiseLogicCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid BitwiseLogicCoreRecord written by the executor
-        // during trace generation
-        let record: &BitwiseLogicCoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut BitwiseLogicCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
-        // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
-        // This requires:
-        // - Cols and Record structs should be repr(C) and we write in reverse order (to ensure
-        //   non-overlapping)
-        // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
-        //   otherwise)
-
-        let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
-        let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
-        core_row.opcode_and_flag = F::from_bool(record.local_opcode == BaseAluOpcode::AND as u8);
-        core_row.opcode_or_flag = F::from_bool(record.local_opcode == BaseAluOpcode::OR as u8);
-        core_row.opcode_xor_flag = F::from_bool(record.local_opcode == BaseAluOpcode::XOR as u8);
-
-        for (b_val, c_val) in zip(record.b, record.c) {
-            self.bitwise_lookup_chip
-                .request_xor(b_val as u32, c_val as u32);
-        }
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = a.map(F::from_u8);
-    }
 }
 
 #[inline(always)]
