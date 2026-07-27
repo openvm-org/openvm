@@ -72,8 +72,8 @@ use super::rvr::{PreflightEndpoint, PreflightExecution};
 use super::DenseRecordArena;
 use super::{
     execution_mode::{
-        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
-        SegmentationLimits,
+        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, RecordCtx,
+        Segment, SegmentationLimits,
     },
     hasher::poseidon2::vm_poseidon2_hasher,
     hint_stream::HintStream,
@@ -245,6 +245,29 @@ where
     VC: VmExecutionConfig<F>,
     VC::Executor: Executor<F>,
 {
+    /// Creates an interpreter instance specialized for append-only preflight.
+    #[cfg(not(feature = "rvr"))]
+    pub fn preflight_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_preflight", backend = "interpreter").entered();
+        InterpretedInstance::new(&self.inventory, exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn preflight_interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_preflight", backend = "interpreter").entered();
+        InterpretedInstance::new(&self.inventory, exe)
+    }
+
     /// Creates an instance of the interpreter specialized for pure execution, without metering, of
     /// the given `exe`.
     ///
@@ -782,6 +805,42 @@ where
         &self.executor.config
     }
 
+    #[cfg(not(feature = "rvr"))]
+    pub fn preflight_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().preflight_instance(exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn preflight_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<PreflightInstance<'_>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().preflight_instance(exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn preflight_interpreter_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().preflight_interpreter_instance(exe)
+    }
+
     /// Pure execution instance.
     #[cfg(not(feature = "rvr"))]
     pub fn instance(
@@ -1047,7 +1106,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
+        let ctx = RecordCtx::new_with_capacity(&capacities, num_insns);
 
         let pc = state.pc();
         let memory = TracingMemory::from_image(state.memory);

@@ -143,6 +143,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_JAL: bool, const ENA
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(a as u32), &rd);
+    } else {
+        exec_state.ctx.advance_timestamp(1);
     }
     exec_state.set_pc(pc);
 }

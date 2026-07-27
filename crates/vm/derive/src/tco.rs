@@ -76,6 +76,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             }
 
             let pc = exec_state.vm_state.pc();
+            exec_state.ctx.on_instruction_start(pc);
             let next_handler = interpreter.get_handler(pc);
             if ::core::intrinsics::unlikely(next_handler.is_none()) {
                 exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
