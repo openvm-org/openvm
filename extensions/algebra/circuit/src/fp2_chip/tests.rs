@@ -59,7 +59,6 @@ fn create_addsub_test_chips<const BLOCKS: usize>(
     let executor = get_fp2_addsub_executor(
         config.clone(),
         tester.range_checker().bus().range_max_bits,
-        tester.address_bits(),
         offset,
     );
     let chip = get_fp2_addsub_chip(
@@ -101,7 +100,6 @@ fn create_muldiv_test_chips<const BLOCKS: usize>(
     let executor = get_fp2_muldiv_executor(
         config.clone(),
         tester.range_checker().bus().range_max_bits,
-        tester.address_bits(),
         offset,
     );
     let chip = get_fp2_muldiv_chip(
@@ -377,12 +375,7 @@ mod cuda_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_fp2_addsub_executor(
-            config.clone(),
-            range_bus.range_max_bits,
-            tester.address_bits(),
-            offset,
-        );
+        let executor = get_fp2_addsub_executor(config.clone(), range_bus.range_max_bits, offset);
 
         let cpu_chip = get_fp2_addsub_chip(
             config.clone(),
@@ -437,12 +430,7 @@ mod cuda_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_fp2_muldiv_executor(
-            config.clone(),
-            range_bus.range_max_bits,
-            tester.address_bits(),
-            offset,
-        );
+        let executor = get_fp2_muldiv_executor(config.clone(), range_bus.range_max_bits, offset);
 
         let cpu_chip = get_fp2_muldiv_chip(
             config.clone(),

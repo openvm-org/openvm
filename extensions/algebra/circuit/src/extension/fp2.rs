@@ -99,7 +99,6 @@ impl VmExecutionExtension for Fp2Extension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -111,12 +110,7 @@ impl VmExecutionExtension for Fp2Extension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addsub = get_fp2_addsub_executor(
-                    config.clone(),
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let addsub = get_fp2_addsub_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv64_32(addsub),
@@ -124,8 +118,7 @@ impl VmExecutionExtension for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv =
-                    get_fp2_muldiv_executor(config, U16_BITS, byte_ptr_max_bits, start_offset);
+                let muldiv = get_fp2_muldiv_executor(config, U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv64_32(muldiv),
@@ -138,12 +131,7 @@ impl VmExecutionExtension for Fp2Extension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addsub = get_fp2_addsub_executor(
-                    config.clone(),
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let addsub = get_fp2_addsub_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv64_48(addsub),
@@ -151,8 +139,7 @@ impl VmExecutionExtension for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv =
-                    get_fp2_muldiv_executor(config, U16_BITS, byte_ptr_max_bits, start_offset);
+                let muldiv = get_fp2_muldiv_executor(config, U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv64_48(muldiv),

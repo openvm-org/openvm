@@ -439,7 +439,6 @@ mod ec_addne_tests {
         let executor = get_ec_addne_executor::<BLOCKS>(
             config.clone(),
             tester.range_checker().bus().range_max_bits,
-            tester.address_bits(),
             offset,
         );
         let chip = get_ec_addne_chip::<F, BLOCKS>(
@@ -489,12 +488,7 @@ mod ec_addne_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_ec_addne_executor(
-            config.clone(),
-            range_bus.range_max_bits,
-            tester.address_bits(),
-            offset,
-        );
+        let executor = get_ec_addne_executor(config.clone(), range_bus.range_max_bits, offset);
 
         let cpu_chip = get_ec_addne_chip(
             config.clone(),
@@ -1335,7 +1329,6 @@ mod ec_addne_tests {
         let executor = get_ec_addne_executor::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus().range_max_bits,
-            tester.address_bits(),
             Rv64WeierstrassOpcode::CLASS_OFFSET,
         );
 
@@ -1391,7 +1384,6 @@ mod ec_double_tests {
         let executor = get_ec_double_executor(
             config.clone(),
             tester.range_checker().bus().range_max_bits,
-            tester.address_bits(),
             offset,
             a_biguint.clone(),
         );
@@ -1447,7 +1439,6 @@ mod ec_double_tests {
         let executor = get_ec_double_executor(
             config.clone(),
             range_bus.range_max_bits,
-            tester.address_bits(),
             offset,
             a_biguint.clone(),
         );
@@ -2042,7 +2033,6 @@ mod ec_double_tests {
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus().range_max_bits,
-            tester.address_bits(),
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BigUint::zero(),
         );
@@ -2074,7 +2064,6 @@ mod ec_double_tests {
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config.clone(),
             tester.range_checker().bus().range_max_bits,
-            tester.address_bits(),
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             a.clone(),
         );

@@ -12,8 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    ColumnsAir, StructReflection, StructReflectionHelper,
+    var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -163,15 +162,4 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
         let cols: &Rv64VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }
-}
-
-#[derive(derive_new::new, Clone, Copy)]
-pub struct Rv64VecHeapBranchAdapterExecutor<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pointer_max_bits: usize,
-}
-
-#[derive(derive_new::new)]
-pub struct Rv64VecHeapBranchAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pointer_max_bits: usize,
-    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }

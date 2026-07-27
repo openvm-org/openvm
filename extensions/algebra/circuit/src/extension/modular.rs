@@ -93,7 +93,6 @@ impl VmExecutionExtension for ModularExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<ModularExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -109,7 +108,6 @@ impl VmExecutionExtension for ModularExtension {
                 let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_32>(
                     config.clone(),
                     U16_BITS,
-                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -123,7 +121,6 @@ impl VmExecutionExtension for ModularExtension {
                 let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_32>(
                     config,
                     U16_BITS,
-                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -159,7 +156,6 @@ impl VmExecutionExtension for ModularExtension {
                 let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_48>(
                     config.clone(),
                     U16_BITS,
-                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -173,7 +169,6 @@ impl VmExecutionExtension for ModularExtension {
                 let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_48>(
                     config,
                     U16_BITS,
-                    byte_ptr_max_bits,
                     start_offset,
                 );
 
