@@ -36,7 +36,7 @@ use {
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    openvm_circuit::arch::{cuda::postflight::GpuPostflightProgram, rvr::PreflightEventLog},
+    openvm_circuit::arch::cuda::postflight::GpuPostflightProgram,
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
         arch::{
@@ -135,7 +135,7 @@ fn encode_field_inputs(values: &[BigUint], num_limbs: usize) -> Vec<u8> {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
+fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
     instruction: Instruction<F>,
     rs_ptrs: [u32; NUM_READS],
     rd_ptr: u32,
@@ -143,7 +143,7 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
     rd_val: u32,
     input_bytes: &[u8],
     output_bytes: &[u8],
-) -> (Program<F>, PreflightEventLog) {
+) -> (Program<F>, PreflightHistory) {
     let bytes_per_value = BLOCKS * MEMORY_BLOCK_BYTES;
     assert_eq!(input_bytes.len(), NUM_READS * bytes_per_value);
     assert_eq!(output_bytes.len(), bytes_per_value);
@@ -203,8 +203,8 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
     (
         Program::from_instructions(&[instruction, terminate]),
-        PreflightEventLog {
-            program_log: vec![
+        PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0,
                     timestamp: 1,
@@ -218,22 +218,25 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
                     timestamp: final_timestamp,
                 },
             ],
-            memory_log,
-            initial_write_log,
+            memory: PreflightMemoryLog {
+                accesses: memory_log,
+                initial_writes: initial_write_log,
+                ..Default::default()
+            },
         },
     )
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn repeat_vec_heap_transcript(
+fn repeat_vec_heap_history(
     instruction: Instruction<F>,
-    transcript: PreflightEventLog,
+    history: PreflightHistory,
     repetitions: usize,
-) -> (Program<F>, PreflightEventLog) {
+) -> (Program<F>, PreflightHistory) {
     assert!(repetitions > 0);
-    let first_timestamp = transcript.program_log[0].timestamp;
-    let timestamp_step = transcript.program_log[1].timestamp - first_timestamp;
-    let mut memory_log = Vec::with_capacity(transcript.memory_log.len() * repetitions);
+    let first_timestamp = history.program[0].timestamp;
+    let timestamp_step = history.program[1].timestamp - first_timestamp;
+    let mut memory_log = Vec::with_capacity(history.memory.accesses.len() * repetitions);
     let mut program_log = Vec::with_capacity(repetitions + 2);
     for repetition in 0..repetitions {
         let timestamp_shift = repetition as u32 * timestamp_step;
@@ -241,7 +244,7 @@ fn repeat_vec_heap_transcript(
             pc: repetition as u32 * 4,
             timestamp: first_timestamp + timestamp_shift,
         });
-        memory_log.extend(transcript.memory_log.iter().copied().map(|mut event| {
+        memory_log.extend(history.memory.accesses.iter().copied().map(|mut event| {
             event.timestamp += timestamp_shift;
             event
         }));
@@ -264,24 +267,15 @@ fn repeat_vec_heap_transcript(
     instructions.push(terminate);
     (
         Program::from_instructions(&instructions),
-        PreflightEventLog {
-            program_log,
-            memory_log,
-            initial_write_log: transcript.initial_write_log,
+        PreflightHistory {
+            program: program_log,
+            memory: PreflightMemoryLog {
+                accesses: memory_log,
+                initial_writes: history.memory.initial_writes,
+                ..Default::default()
+            },
         },
     )
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-fn history_from_event_log(transcript: &PreflightEventLog) -> PreflightHistory {
-    PreflightHistory {
-        program: transcript.program_log.clone(),
-        memory: PreflightMemoryLog {
-            accesses: transcript.memory_log.clone(),
-            initial_writes: transcript.initial_write_log.clone(),
-            ..Default::default()
-        },
-    }
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -373,22 +367,25 @@ fn gpu_range_counts(tester: &GpuChipTestBuilder) -> Vec<u32> {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn combine_two_vec_heap_transcripts(
+fn combine_two_vec_heap_histories(
     first_instruction: Instruction<F>,
-    mut first: PreflightEventLog,
+    mut first: PreflightHistory,
     second_instruction: Instruction<F>,
-    mut second: PreflightEventLog,
-) -> (Program<F>, PreflightEventLog) {
-    let second_start = first.program_log[1].timestamp;
-    let timestamp_shift = second_start - second.program_log[0].timestamp;
-    for event in &mut second.memory_log {
+    mut second: PreflightHistory,
+) -> (Program<F>, PreflightHistory) {
+    let second_start = first.program[1].timestamp;
+    let timestamp_shift = second_start - second.program[0].timestamp;
+    for event in &mut second.memory.accesses {
         event.timestamp += timestamp_shift;
     }
-    let second_end = second.program_log[1].timestamp + timestamp_shift;
-    first.memory_log.extend(second.memory_log);
-    first.initial_write_log.extend(second.initial_write_log);
-    first.program_log = vec![
-        first.program_log[0],
+    let second_end = second.program[1].timestamp + timestamp_shift;
+    first.memory.accesses.extend(second.memory.accesses);
+    first
+        .memory
+        .initial_writes
+        .extend(second.memory.initial_writes);
+    first.program = vec![
+        first.program[0],
         PreflightProgramEvent {
             pc: 4,
             timestamp: second_start,
@@ -978,7 +975,7 @@ mod ec_addne_tests {
             ],
         );
         let device_ctx = tester.range_checker().device_ctx.clone();
-        let (program, mut transcript) = make_vec_heap_transcript::<2, BLOCKS>(
+        let (program, mut history) = make_vec_heap_history::<2, BLOCKS>(
             instruction,
             rs_ptrs,
             rd_ptr,
@@ -987,7 +984,7 @@ mod ec_addne_tests {
             &input_bytes,
             &output_bytes,
         );
-        let valid_history = history_from_event_log(&transcript);
+        let valid_history = history.clone();
         tester.record_preflight_history(&program, &valid_history, Some(0));
         let gpu_program = GpuPostflightProgram::upload(
             &program,
@@ -996,7 +993,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
@@ -1005,9 +1002,9 @@ mod ec_addne_tests {
         let replay_counts = gpu_range_counts(&tester);
 
         let write_start = 3 + 2 * BLOCKS;
-        transcript.memory_log[write_start].value[0] ^= 1;
+        history.memory.accesses[write_start].value[0] ^= 1;
         let (corrupt_transcript, corrupt_plan) = gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         assert!(harness
             .gpu_chip
@@ -1094,7 +1091,7 @@ mod ec_addne_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
-        let (_, first_transcript) = make_vec_heap_transcript::<2, ECC_BLOCKS_32>(
+        let (_, first_history) = make_vec_heap_history::<2, ECC_BLOCKS_32>(
             first_instruction.clone(),
             [16, 24],
             8,
@@ -1103,7 +1100,7 @@ mod ec_addne_tests {
             &first_input,
             &first_output,
         );
-        let (_, second_transcript) = make_vec_heap_transcript::<2, ECC_BLOCKS_32>(
+        let (_, second_history) = make_vec_heap_history::<2, ECC_BLOCKS_32>(
             second_instruction.clone(),
             [40, 48],
             32,
@@ -1112,11 +1109,11 @@ mod ec_addne_tests {
             &second_input,
             &second_output,
         );
-        let (program, transcript) = combine_two_vec_heap_transcripts(
+        let (program, history) = combine_two_vec_heap_histories(
             first_instruction,
-            first_transcript,
+            first_history,
             second_instruction,
-            second_transcript,
+            second_history,
         );
         let device_ctx = tester.range_checker().device_ctx.clone();
         let gpu_program = GpuPostflightProgram::upload(
@@ -1126,7 +1123,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let extension = crate::WeierstrassExtension::new(vec![
             crate::SECP256K1_CONFIG.clone(),
@@ -1174,7 +1171,7 @@ mod ec_addne_tests {
         complete.finish().unwrap();
 
         // Exercise the actual reverse inventory walk and its ECC -> Algebra -> RV64 fallthrough
-        // on the same expanded transcript. Both curve instances have the same concrete chip types;
+        // on the same history. Both curve instances have the same concrete chip types;
         // only their opcode bases distinguish them.
         let mut init_memory = SparseMemoryImage::default();
         for (register, pointer) in [
@@ -1239,7 +1236,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (poisoned_transcript, poisoned_plan) = poisoned_gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let late_coverage_error = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
@@ -1280,7 +1277,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (vm_transcript, vm_plan) = vm_gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let proving_ctx = crate::WeierstrassPreflightGpuTracegen::new(
             &vm_config.weierstrass,
@@ -1299,7 +1296,7 @@ mod ec_addne_tests {
         // coordination clears the session poison, so restore the fixture's input image first.
         vm.transport_init_memory_to_device(&state.memory);
         let (retry_transcript, retry_plan) = vm_gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let retry_ctx = crate::WeierstrassPreflightGpuTracegen::new(
             &vm_config.weierstrass,
@@ -1939,7 +1936,7 @@ mod ec_double_tests {
             ],
         );
         let device_ctx = tester.range_checker().device_ctx.clone();
-        let (_, transcript) = make_vec_heap_transcript::<1, BLOCKS>(
+        let (_, history) = make_vec_heap_history::<1, BLOCKS>(
             instruction.clone(),
             rs_ptrs,
             rd_ptr,
@@ -1948,8 +1945,8 @@ mod ec_double_tests {
             &input_bytes,
             &output_bytes,
         );
-        let (program, mut transcript) = repeat_vec_heap_transcript(instruction, transcript, rows);
-        let valid_history = history_from_event_log(&transcript);
+        let (program, mut history) = repeat_vec_heap_history(instruction, history, rows);
+        let valid_history = history.clone();
         tester.record_preflight_history(&program, &valid_history, Some(0));
         let gpu_program = GpuPostflightProgram::upload(
             &program,
@@ -1958,7 +1955,7 @@ mod ec_double_tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
@@ -1967,9 +1964,9 @@ mod ec_double_tests {
         let replay_counts = gpu_range_counts(&tester);
 
         let write_start = 2 + BLOCKS;
-        transcript.memory_log[write_start].value[0] ^= 1;
+        history.memory.accesses[write_start].value[0] ^= 1;
         let (corrupt_transcript, corrupt_plan) = gpu_program
-            .upload_history_for_test(&program, &history_from_event_log(&transcript), Some(0))
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         assert!(harness
             .gpu_chip

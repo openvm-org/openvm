@@ -20,8 +20,6 @@ pub mod compile;
 #[cfg(feature = "cuda")]
 pub mod cuda;
 pub mod debug;
-#[cfg(all(feature = "cuda", any(test, feature = "test-utils")))]
-mod event_log;
 mod execute;
 mod initial_image;
 pub mod io;
@@ -37,8 +35,6 @@ pub use compile::{
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
-#[cfg(all(feature = "cuda", any(test, feature = "test-utils")))]
-pub use event_log::PreflightEventLog;
 pub use execute::ExecuteError;
 pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
