@@ -135,7 +135,7 @@ mod tests {
     #[cfg(not(feature = "rvr"))]
     fn interpreter_preflight_matches_legacy_memory_history() -> Result<()> {
         use openvm_circuit::{
-            arch::{ExecutionOutcome, PreflightExecutionOutput, Streams, VirtualMachine},
+            arch::{PreflightExecutionOutput, Streams, VirtualMachine},
             utils::test_cpu_engine,
         };
         use openvm_instructions::program::Program;
@@ -245,10 +245,9 @@ mod tests {
             .set_hint(0xaabb_ccdd_eeff_0011u64.to_le_bytes().to_vec());
 
         let preflight = vm.preflight_instance(&exe)?;
-        let (history, outcome) = preflight.execute_preflight_from_state(initial.clone(), None)?;
-        let ExecutionOutcome::Terminated(new_state) = outcome else {
-            panic!("program should terminate");
-        };
+        let (history, new_state, exit_code) =
+            preflight.execute_preflight_from_state(initial.clone(), None)?;
+        assert_eq!(exit_code, Some(0));
 
         let mut legacy = vm.preflight_interpreter(&exe)?;
         let trace_heights = vec![16; pk.get_vk().inner.per_air.len()];
