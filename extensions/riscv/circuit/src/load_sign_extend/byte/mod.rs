@@ -8,6 +8,9 @@ use crate::{
 mod core;
 pub use core::*;
 
+#[cfg(test)]
+mod trace;
+
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]

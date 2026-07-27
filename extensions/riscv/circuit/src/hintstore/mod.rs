@@ -45,6 +45,9 @@ use crate::adapters::{
 
 mod execution;
 
+#[cfg(test)]
+mod trace;
+
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]

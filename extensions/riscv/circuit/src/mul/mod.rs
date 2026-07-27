@@ -14,6 +14,8 @@ pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod trace;
 
 pub type Rv64MultiplicationAir = VmAirWrapper<
     Rv64MultAdapterAir,

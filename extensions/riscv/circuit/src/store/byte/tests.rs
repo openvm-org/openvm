@@ -5,16 +5,22 @@ use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
-use openvm_circuit::arch::testing::{
-    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::arch::{
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::LocalOpcode;
 #[cfg(feature = "cuda")]
-use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::PUBLIC_VALUES_AS;
+use openvm_instructions::{
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -27,6 +33,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64StoreByteAdapterAir, Rv64StoreByteAdapterExecutor,
@@ -180,6 +187,155 @@ fn run_storeb_sanity_test() {
             prev_data[1]
         ]
     );
+}
+
+#[test]
+fn postflight_store_byte_trace_matches_record_arena_trace_with_overwrites() {
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let range_checker = tester.range_checker();
+    let (mut harness, (_, bitwise)) = create_store_byte_harness(&mut tester);
+    let stores = [
+        Instruction::from_usize(
+            STOREB.global_opcode(),
+            [
+                16,
+                8,
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            STOREB.global_opcode(),
+            [
+                24,
+                8,
+                6,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            STOREB.global_opcode(),
+            [
+                32,
+                8,
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+    ];
+    let sentinel = stores[0].clone();
+    unsafe {
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            4,
+            [0x100, 0, 0, 0],
+        );
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            8,
+            [0xaa, 0, 0, 0],
+        );
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            12,
+            [0xbb, 0, 0, 0],
+        );
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            16,
+            [0xcc, 0, 0, 0],
+        );
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_MEMORY_AS,
+            0x80,
+            [0x2211, 0x4433, 0x6655, 0x8877],
+        );
+    }
+    for (index, instruction) in stores.iter().enumerate() {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.arena,
+            instruction,
+            index as u32 * 4,
+        );
+    }
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 4,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 7,
+            },
+            PreflightProgramEvent {
+                pc: 12,
+                timestamp: 10,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let writes: Vec<_> = history
+        .memory
+        .accesses
+        .iter()
+        .filter(|event| event.is_write())
+        .collect();
+    assert_eq!(writes.len(), 3);
+    assert!(writes
+        .iter()
+        .all(|event| event.address_space() == RV64_MEMORY_AS && event.pointer == 0x80));
+    assert_eq!(writes[0].value, [0xaa11, 0x4433, 0x6655, 0x8877]);
+    assert_eq!(writes[1].value, [0xaa11, 0x4433, 0x6655, 0x88bb]);
+    assert_eq!(writes[2].value, [0xcc11, 0x4433, 0x6655, 0x88bb]);
+
+    let program = Program::new_without_debug_infos(
+        &[
+            stores[0].clone(),
+            stores[1].clone(),
+            stores[2].clone(),
+            sentinel,
+        ],
+        0,
+    );
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_range = range_checker.generate_trace::<F>();
+    let actual_bitwise = bitwise.generate_trace::<F>();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+    let expected_range = range_checker.generate_trace::<F>();
+    let expected_bitwise = bitwise.generate_trace::<F>();
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
+    assert_eq!(actual_range.values, expected_range.values);
+    assert_eq!(actual_bitwise.values, expected_bitwise.values);
 }
 
 #[test]

@@ -7,13 +7,18 @@ use openvm_circuit::arch::testing::{
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    MemoryConfig,
+    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADHU, LOADW, LOADWU};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -26,6 +31,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
@@ -163,6 +169,104 @@ fn run_loadwu_sanity_test() {
         load_write_data(LOADWU, read_data, 6),
         rv64_bytes_to_u16_block([186, 29, 61, 92, 0, 0, 0, 0])
     );
+}
+
+#[test]
+fn postflight_loadwu_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, (_, bitwise)) = create_word_harness(&mut tester);
+    let range_checker = tester.range_checker();
+    let noncrossing = Instruction::from_usize(
+        LOADWU.global_opcode(),
+        [
+            16,
+            8,
+            0,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+            1,
+            0,
+        ],
+    );
+    let crossing_x0 = Instruction::from_usize(
+        LOADWU.global_opcode(),
+        [
+            0,
+            24,
+            0,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+            0,
+            0,
+        ],
+    );
+    let sentinel = noncrossing.clone();
+    unsafe {
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [64, 0, 0, 0]);
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 12, [70, 0, 0, 0]);
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_MEMORY_AS,
+            32,
+            [0x1001, 0x2002, 0x3003, 0x4004],
+        );
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_MEMORY_AS,
+            36,
+            [0x5005, 0x6006, 0x7007, 0x8008],
+        );
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &noncrossing, 0);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &crossing_x0, 4);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 5,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 9,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[noncrossing, crossing_x0, sentinel], 0);
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_range = range_checker.generate_trace::<F>();
+    let actual_bitwise = bitwise.generate_trace::<F>();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+    let expected_range = range_checker.generate_trace::<F>();
+    let expected_bitwise = bitwise.generate_trace::<F>();
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
+    assert_eq!(actual_range.values, expected_range.values);
+    assert_eq!(actual_bitwise.values, expected_bitwise.values);
 }
 
 #[test]

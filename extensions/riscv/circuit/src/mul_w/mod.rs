@@ -21,6 +21,8 @@ pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod trace;
 
 pub type Rv64MulWAir = VmAirWrapper<Rv64MultWAdapterAir, MulWCoreAir>;
 pub type Rv64MulWExecutor = MulWExecutor<Rv64MultWAdapterExecutor>;

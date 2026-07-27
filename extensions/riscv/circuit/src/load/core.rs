@@ -1,12 +1,21 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
+#[cfg(test)]
+use openvm_circuit::{
+    arch::{Postflight, PostflightError},
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
+#[cfg(test)]
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+#[cfg(test)]
+use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -14,6 +23,8 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
+#[cfg(test)]
+use crate::adapters::Rv64LoadMultiByteAdapterCols;
 use crate::{
     adapters::{
         is_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
@@ -231,31 +242,16 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     }
 }
 
-impl<F, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> TraceFiller<F>
-    for LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
-where
-    F: PrimeField32,
+impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
+    LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // LoadCoreCols::width() elements.
-        let (mut adapter_row, mut core_row) = unsafe {
-            row_slice.split_at_mut_unchecked(
-                <Rv64LoadMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
-            )
-        };
-        let adapter_record: &Rv64LoadMultiByteAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let shift = adapter_record.shift_amount();
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
-        // generation.
-        let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
-        let core_row: &mut LoadCoreCols<F, NUM_OVERLAP_CELLS> = core_row.borrow_mut();
+    fn fill_core_row<F: PrimeField32>(
+        &self,
+        shift: usize,
+        read_data: [[u16; BLOCK_FE_WIDTH]; 2],
+        core_row: &mut LoadCoreCols<F, NUM_OVERLAP_CELLS>,
+    ) {
         debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid load shift {shift}");
-
         let read_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
         // The high bytes are derived in the AIR and only range checked here.
@@ -280,4 +276,68 @@ where
         let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
     }
+}
+
+impl<F, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> TraceFiller<F>
+    for LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
+where
+    F: PrimeField32,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
+        // LoadCoreCols::width() elements.
+        let (mut adapter_row, mut core_row) = unsafe {
+            row_slice.split_at_mut_unchecked(
+                <Rv64LoadMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
+        };
+        let adapter_record: &Rv64LoadMultiByteAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let shift = adapter_record.shift_amount();
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
+        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
+        // generation.
+        let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let read_data = record.read_data;
+        let core_row: &mut LoadCoreCols<F, NUM_OVERLAP_CELLS> = core_row.borrow_mut();
+        self.fill_core_row(shift, read_data, core_row);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn generate_trace_from_postflight<
+    F: PrimeField32,
+    const LOAD_WIDTH: usize,
+    const NUM_OVERLAP_CELLS: usize,
+>(
+    chip: &VmChipWrapper<
+        F,
+        LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>,
+    >,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    let steps = postflight.steps(load_opcode::<LOAD_WIDTH>().global_opcode());
+    let adapter_width = Rv64LoadMultiByteAdapterCols::<F>::width();
+    let width = adapter_width + LoadCoreCols::<F, NUM_OVERLAP_CELLS>::width();
+    let height = next_power_of_two_or_zero(steps.len());
+    let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+
+    for (row_index, &step) in steps.iter().enumerate() {
+        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+        let (read_data, shift, _) = chip.inner.adapter.replay::<F, LOAD_WIDTH>(
+            postflight,
+            step,
+            &chip.mem_helper.as_borrowed(),
+            adapter_row.borrow_mut(),
+            |read_data, shift| {
+                crate::load::common::load_write_data(load_opcode::<LOAD_WIDTH>(), read_data, shift)
+            },
+        )?;
+        chip.inner
+            .fill_core_row(shift, read_data, core_row.borrow_mut());
+    }
+
+    Ok(trace)
 }

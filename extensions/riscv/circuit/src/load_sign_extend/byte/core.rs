@@ -183,11 +183,11 @@ where
 
 #[derive(Clone)]
 pub struct LoadSignExtendByteFiller<A = Rv64LoadByteAdapterFiller> {
-    adapter: A,
+    pub(super) adapter: A,
     pub offset: usize,
-    encoder: Encoder,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    range_checker_chip: SharedVariableRangeCheckerChip,
+    pub(super) encoder: Encoder,
+    pub(super) bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    pub(super) range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A> LoadSignExtendByteFiller<A> {

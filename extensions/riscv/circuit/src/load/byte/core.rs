@@ -162,10 +162,10 @@ where
 
 #[derive(Clone)]
 pub struct LoadByteFiller<A = Rv64LoadByteAdapterFiller> {
-    adapter: A,
+    pub(super) adapter: A,
     pub offset: usize,
-    encoder: Encoder,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    pub(super) encoder: Encoder,
+    pub(super) bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 impl<A> LoadByteFiller<A> {
