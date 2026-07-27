@@ -33,7 +33,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::rngs::StdRng;
+use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
@@ -143,7 +143,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     while rs2 == rs1 {
         rs2 = gen_register_pointer(rng, 8);
     }
-    let rd = gen_register_pointer(rng, 8);
+    let rd = rng.random_range(1..32) * RV64_REGISTER_NUM_LIMBS;
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));

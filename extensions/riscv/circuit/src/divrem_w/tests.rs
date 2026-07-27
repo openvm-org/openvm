@@ -191,7 +191,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     while rs2_ptr == rs1_ptr {
         rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     }
-    let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd_ptr = rng.random_range(1..32) * RV64_REGISTER_NUM_LIMBS;
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));
