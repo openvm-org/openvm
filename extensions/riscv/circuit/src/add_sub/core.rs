@@ -3,7 +3,7 @@ use std::{array, borrow::Borrow};
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_transpiler::BaseAluOpcode;
@@ -151,15 +151,6 @@ where
     fn start_offset(&self) -> usize {
         self.offset
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct AddSubCoreRecord<const NUM_LIMBS: usize> {
-    pub b: [u16; NUM_LIMBS],
-    pub c: [u16; NUM_LIMBS],
-    // Use u8 instead of usize for better packing
-    pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

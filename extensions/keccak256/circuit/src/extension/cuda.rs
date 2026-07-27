@@ -182,9 +182,6 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
         }
     }
 
-    /// Returns `Some` only for a Keccak AIR. This lets the concrete combined
-    /// coordinator fall through to RV64/system producers without fabricating an
-    /// empty arena for Keccak.
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
