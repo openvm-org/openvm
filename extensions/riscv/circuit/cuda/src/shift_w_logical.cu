@@ -30,48 +30,4 @@ static_assert(sizeof(Rv64ShiftWLogicalCoreRecord) == 10);
 static_assert(sizeof(ShiftWLogicalRecord) == 64);
 static_assert(offsetof(ShiftWLogicalRecord, core) == 52);
 
-__global__ void rv64_shift_w_logical_tracegen(
-    Fp *trace,
-    size_t height,
-    DeviceBufferConstView<ShiftWLogicalRecord> records,
-    uint32_t *range_ptr,
-    uint32_t range_bins,
-    uint32_t timestamp_max_bits
-) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(trace + idx, height);
-    if (idx < records.len()) {
-        auto const &rec = records[idx];
-        auto adapter = Rv64BaseAluWRegU16Adapter(
-            VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits
-        );
-        adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftWLogicalCore(VariableRangeChecker(range_ptr, range_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWLogicalCols, core)), rec.core);
-    } else {
-        row.fill_zero(0, sizeof(ShiftWLogicalCols<uint8_t>));
-    }
-}
-
-extern "C" int _rv64_shift_w_logical_tracegen(
-    Fp *__restrict__ d_trace,
-    size_t height,
-    size_t width,
-    DeviceBufferConstView<ShiftWLogicalRecord> d_records,
-    uint32_t *__restrict__ d_range_checker,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits,
-    cudaStream_t stream
-) {
-    assert(width == sizeof(ShiftWLogicalCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 512);
-
-    rv64_shift_w_logical_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
-    );
-    return CHECK_KERNEL();
-}
-
-#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/shift_w_logical.inc.cuh"
-#endif

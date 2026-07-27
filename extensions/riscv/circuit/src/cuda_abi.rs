@@ -27,16 +27,6 @@ pub mod auipc_cuda {
     use super::*;
 
     extern "C" {
-        fn _auipc_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            rc_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _auipc_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -58,26 +48,6 @@ pub mod auipc_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_auipc_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -269,16 +239,6 @@ pub mod jalr_cuda {
     use super::*;
 
     extern "C" {
-        fn _jalr_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            rc_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _jalr_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -300,27 +260,6 @@ pub mod jalr_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_jalr_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -372,16 +311,6 @@ pub mod less_than_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_less_than_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_less_than_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -406,26 +335,6 @@ pub mod less_than_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_less_than_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -483,18 +392,6 @@ pub mod load_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_byte_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_byte_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -519,30 +416,6 @@ pub mod load_byte_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_byte_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -600,18 +473,6 @@ pub mod load_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_halfword_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_halfword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -636,30 +497,6 @@ pub mod load_halfword_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_halfword_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -717,18 +554,6 @@ pub mod load_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_word_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_word_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -753,30 +578,6 @@ pub mod load_word_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_word_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -834,18 +635,6 @@ pub mod load_doubleword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_doubleword_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_doubleword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -870,30 +659,6 @@ pub mod load_doubleword_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_doubleword_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -951,18 +716,6 @@ pub mod store_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_byte_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_store_byte_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -988,30 +741,6 @@ pub mod store_byte_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_store_byte_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1071,18 +800,6 @@ pub mod store_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_halfword_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_store_halfword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1108,30 +825,6 @@ pub mod store_halfword_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_store_halfword_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     pub unsafe fn replay_tracegen(
@@ -1190,18 +883,6 @@ pub mod store_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_word_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_store_word_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1227,30 +908,6 @@ pub mod store_word_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_store_word_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     pub unsafe fn replay_tracegen(
@@ -1309,18 +966,6 @@ pub mod store_doubleword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_doubleword_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_store_doubleword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1346,30 +991,6 @@ pub mod store_doubleword_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_store_doubleword_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     pub unsafe fn replay_tracegen(
@@ -1428,18 +1049,6 @@ pub mod load_sign_extend_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_sign_extend_byte_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_sign_extend_byte_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1464,30 +1073,6 @@ pub mod load_sign_extend_byte_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_sign_extend_byte_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1545,18 +1130,6 @@ pub mod load_sign_extend_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_sign_extend_halfword_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_sign_extend_halfword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1581,30 +1154,6 @@ pub mod load_sign_extend_halfword_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_sign_extend_halfword_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1662,18 +1211,6 @@ pub mod load_sign_extend_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_sign_extend_word_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            pointer_max_bits: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_load_sign_extend_word_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1698,30 +1235,6 @@ pub mod load_sign_extend_word_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        pointer_max_bits: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_sign_extend_word_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            pointer_max_bits,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1779,19 +1292,6 @@ pub mod mul_cuda {
     use super::*;
 
     extern "C" {
-        fn _mul_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range: *mut u32,
-            range_bins: usize,
-            d_bitwise_lookup: *mut u32,
-            d_range_tuple: *mut u32,
-            range_tuple_sizes: UInt2,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _mul_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1816,34 +1316,6 @@ pub mod mul_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range: &DeviceBuffer<F>,
-        range_bins: usize,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        d_range_tuple: &DeviceBuffer<F>,
-        range_tuple_sizes: UInt2,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        let width = d_trace.len() / height;
-        CudaError::from_result(_mul_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range.as_mut_ptr() as *mut u32,
-            range_bins,
-            d_bitwise_lookup.as_ptr() as *mut u32,
-            d_range_tuple.as_ptr() as *mut u32,
-            range_tuple_sizes,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1900,19 +1372,6 @@ pub mod divrem_cuda {
     use super::*;
 
     extern "C" {
-        pub fn _rv64_div_rem_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            d_range_tuple_checker: *mut u32,
-            range_tuple_checker_sizes: UInt2,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_div_rem_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -1946,34 +1405,6 @@ pub mod divrem_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        width: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        d_range_tuple_checker: &DeviceBuffer<F>,
-        range_tuple_checker_sizes: UInt2,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_div_rem_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            d_range_tuple_checker.as_mut_ptr() as *mut u32,
-            range_tuple_checker_sizes,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2048,16 +1479,6 @@ pub mod shift_logical_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_logical_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_shift_logical_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -2082,26 +1503,6 @@ pub mod shift_logical_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_logical_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2159,16 +1560,6 @@ pub mod shift_right_arithmetic_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_right_arithmetic_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_shift_right_arithmetic_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -2190,26 +1581,6 @@ pub mod shift_right_arithmetic_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_right_arithmetic_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2260,16 +1631,6 @@ pub mod shift_right_arithmetic_cuda {
 pub mod add_sub_cuda {
     use super::*;
     extern "C" {
-        fn _add_sub_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _add_sub_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -2294,26 +1655,6 @@ pub mod add_sub_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_add_sub_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2370,16 +1711,6 @@ pub mod add_sub_cuda {
 pub mod addi_cuda {
     use super::*;
     extern "C" {
-        fn _addi_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
 
         fn _addi_replay_tracegen(
             d_trace: *mut F,
@@ -2403,26 +1734,6 @@ pub mod addi_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_addi_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2474,16 +1785,6 @@ pub mod addi_cuda {
 pub mod addi_w_cuda {
     use super::*;
     extern "C" {
-        fn _addi_w_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _addi_w_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -2506,26 +1807,6 @@ pub mod addi_w_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_addi_w_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2578,17 +1859,6 @@ pub mod addi_w_cuda {
 pub mod bitwise_logic_cuda {
     use super::*;
     extern "C" {
-        fn _bitwise_logic_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_bins: usize,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _bitwise_logic_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -2617,30 +1887,6 @@ pub mod bitwise_logic_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        range_bins: usize,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        let width = d_trace.len() / height;
-        CudaError::from_result(_bitwise_logic_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            range_bins,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2706,16 +1952,6 @@ pub mod jal_lui_cuda {
     use super::*;
 
     extern "C" {
-        fn _jal_lui_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            rc_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _jal_lui_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -2740,27 +1976,6 @@ pub mod jal_lui_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_jal_lui_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2818,16 +2033,6 @@ pub mod beq_cuda {
     use super::*;
 
     extern "C" {
-        fn _beq_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            rc_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
 
         fn _beq_replay_tracegen(
             d_trace: *mut F,
@@ -2853,27 +2058,6 @@ pub mod beq_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_beq_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2931,16 +2115,6 @@ pub mod branch_lt_cuda {
     use super::*;
 
     extern "C" {
-        fn _blt_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            rc_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
 
         fn _blt_replay_tracegen(
             d_trace: *mut F,
@@ -2972,27 +2146,6 @@ pub mod branch_lt_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_blt_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3062,19 +2215,6 @@ pub mod mulh_cuda {
     use super::*;
 
     extern "C" {
-        fn _mulh_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_bins: usize,
-            d_bitwise_lookup: *mut u32,
-            d_range_tuple_checker: *mut u32,
-            range_tuple_checker_sizes: UInt2,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _mulh_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3105,34 +2245,6 @@ pub mod mulh_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        d_range_tuple_checker: &DeviceBuffer<F>,
-        range_tuple_checker_sizes: UInt2,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_mulh_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len(),
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            d_range_tuple_checker.as_mut_ptr() as *mut u32,
-            range_tuple_checker_sizes,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3200,16 +2312,6 @@ pub mod mulh_cuda {
 pub mod add_sub_w_cuda {
     use super::*;
     extern "C" {
-        fn _rv64_add_sub_w_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _add_sub_w_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3234,26 +2336,6 @@ pub mod add_sub_w_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_add_sub_w_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3311,16 +2393,6 @@ pub mod shift_w_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_w_logical_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_shift_w_logical_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3346,16 +2418,6 @@ pub mod shift_w_cuda {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rv64_shift_w_right_arithmetic_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_shift_w_right_arithmetic_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3377,26 +2439,6 @@ pub mod shift_w_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen_logical(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_w_logical_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3442,26 +2484,6 @@ pub mod shift_w_cuda {
             sllw_opcode,
             srlw_opcode,
             register_address_space,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
-    }
-
-    pub unsafe fn tracegen_right_arithmetic(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_w_right_arithmetic_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
@@ -3518,19 +2540,6 @@ pub mod mul_w_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_mul_w_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range: *mut u32,
-            range_bins: usize,
-            d_bitwise_lookup: *mut u32,
-            d_range_tuple: *mut u32,
-            range_tuple_sizes: UInt2,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_mul_w_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3555,34 +2564,6 @@ pub mod mul_w_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range: &DeviceBuffer<F>,
-        range_bins: usize,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        d_range_tuple: &DeviceBuffer<F>,
-        range_tuple_sizes: UInt2,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        let width = d_trace.len() / height;
-        CudaError::from_result(_rv64_mul_w_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range.as_mut_ptr() as *mut u32,
-            range_bins,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            d_range_tuple.as_ptr() as *mut u32,
-            range_tuple_sizes,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3639,19 +2620,6 @@ pub mod divrem_w_cuda {
     use super::*;
 
     extern "C" {
-        pub fn _rv64_div_rem_w_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            d_range_tuple_checker: *mut u32,
-            range_tuple_checker_sizes: UInt2,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _rv64_div_rem_w_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3685,34 +2653,6 @@ pub mod divrem_w_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        width: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        d_range_tuple_checker: &DeviceBuffer<F>,
-        range_tuple_checker_sizes: UInt2,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_div_rem_w_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            d_range_tuple_checker.as_mut_ptr() as *mut u32,
-            range_tuple_checker_sizes,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3786,16 +2726,6 @@ pub mod divrem_w_cuda {
 pub mod shift_logical_imm_cuda {
     use super::*;
     extern "C" {
-        fn _shift_logical_imm_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _shift_logical_imm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3821,26 +2751,6 @@ pub mod shift_logical_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_shift_logical_imm_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3899,16 +2809,6 @@ pub mod shift_logical_imm_cuda {
 pub mod shift_w_logical_imm_cuda {
     use super::*;
     extern "C" {
-        fn _shift_w_logical_imm_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _shift_w_logical_imm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -3934,26 +2834,6 @@ pub mod shift_w_logical_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_shift_w_logical_imm_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4012,16 +2892,6 @@ pub mod shift_w_logical_imm_cuda {
 pub mod shift_right_arithmetic_imm_cuda {
     use super::*;
     extern "C" {
-        fn _shift_right_arithmetic_imm_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _shift_right_arithmetic_imm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -4044,26 +2914,6 @@ pub mod shift_right_arithmetic_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_shift_right_arithmetic_imm_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4116,16 +2966,6 @@ pub mod shift_right_arithmetic_imm_cuda {
 pub mod shift_w_right_arithmetic_imm_cuda {
     use super::*;
     extern "C" {
-        fn _shift_w_right_arithmetic_imm_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _shift_w_right_arithmetic_imm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -4148,26 +2988,6 @@ pub mod shift_w_right_arithmetic_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_shift_w_right_arithmetic_imm_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4220,16 +3040,6 @@ pub mod shift_w_right_arithmetic_imm_cuda {
 pub mod less_than_imm_cuda {
     use super::*;
     extern "C" {
-        fn _less_than_imm_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _less_than_imm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -4255,26 +3065,6 @@ pub mod less_than_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_less_than_imm_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            d_trace.len() / height,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4333,17 +3123,6 @@ pub mod less_than_imm_cuda {
 pub mod bitwise_logic_imm_cuda {
     use super::*;
     extern "C" {
-        fn _bitwise_logic_imm_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_bins: usize,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
         fn _bitwise_logic_imm_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -4373,30 +3152,6 @@ pub mod bitwise_logic_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        range_bins: usize,
-        d_bitwise_lookup: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        let width = d_trace.len() / height;
-        CudaError::from_result(_bitwise_logic_imm_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            range_bins,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            timestamp_max_bits,
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]

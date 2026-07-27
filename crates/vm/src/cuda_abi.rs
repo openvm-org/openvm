@@ -57,14 +57,6 @@ pub mod phantom {
     use super::*;
 
     extern "C" {
-        fn _phantom_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            stream: cudaStream_t,
-        ) -> i32;
-
         fn _phantom_replay_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -80,22 +72,6 @@ pub mod phantom {
             phantom_opcode: u32,
             stream: cudaStream_t,
         ) -> i32;
-    }
-
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        width: usize,
-        d_records: &DeviceBuffer<u8>,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_phantom_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            stream,
-        ))
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -22,8 +22,7 @@ fn main() {
             .watch("cuda/rvr")
             .watch("cuda/src")
             .library_name("tracegen_gpu_rv64im")
-            .files_from_glob("cuda/src/**/*.cu")
-            .flag("-DOPENVM_PREFLIGHT_REPLAY");
+            .files_from_glob("cuda/src/**/*.cu");
 
         builder.emit_link_directives();
         builder.build();
