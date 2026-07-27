@@ -24,7 +24,7 @@ struct DivRemWPreCompute {
     c: u8,
 }
 
-impl<A> DivRemWExecutor<A> {
+impl DivRemWExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -60,7 +60,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for DivRemWExecutor<A>
+impl<F> InterpreterExecutor<F> for DivRemWExecutor
 where
     F: PrimeField32,
 {
@@ -102,7 +102,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for DivRemWExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for DivRemWExecutor
 where
     F: PrimeField32,
 {

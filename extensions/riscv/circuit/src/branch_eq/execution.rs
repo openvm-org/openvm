@@ -20,7 +20,7 @@ struct BranchEqualPreCompute {
     b: u8,
 }
 
-impl<A, const NUM_LIMBS: usize> BranchEqualExecutor<A, NUM_LIMBS> {
+impl<const NUM_LIMBS: usize> BranchEqualExecutor<NUM_LIMBS> {
     /// Return `is_bne`, true if the local opcode is BNE.
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -62,7 +62,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_LIMBS: usize> InterpreterExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+impl<F, const NUM_LIMBS: usize> InterpreterExecutor<F> for BranchEqualExecutor<NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -104,8 +104,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F>
-    for BranchEqualExecutor<A, NUM_LIMBS>
+impl<F, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F> for BranchEqualExecutor<NUM_LIMBS>
 where
     F: PrimeField32,
 {

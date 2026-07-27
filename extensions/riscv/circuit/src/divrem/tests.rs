@@ -46,8 +46,7 @@ use {
 use super::{core::run_divrem, trace::generate_trace_from_postflight};
 use crate::{
     adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS,
+        Rv64MultAdapterAir, Rv64MultAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     divrem::{
         run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv64DivRemChip,
@@ -89,7 +88,7 @@ fn create_harness_fields(
             DivRemOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
+    let executor = Rv64DivRemExecutor::new(DivRemOpcode::CLASS_OFFSET);
     let chip = Rv64DivRemChip::<F>::new(
         DivRemFiller::new(
             Rv64MultAdapterFiller,

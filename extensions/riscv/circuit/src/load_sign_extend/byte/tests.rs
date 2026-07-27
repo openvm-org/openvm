@@ -27,10 +27,7 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::load_sign_extend::{test_utils::dummy_range_checker, Rv64LoadSignExtendByteChipGpu};
 use crate::{
-    adapters::{
-        Rv64LoadByteAdapterAir, Rv64LoadByteAdapterExecutor, Rv64LoadByteAdapterFiller,
-        RV64_BYTE_BITS,
-    },
+    adapters::{Rv64LoadByteAdapterAir, Rv64LoadByteAdapterFiller, RV64_BYTE_BITS},
     load_sign_extend::{
         byte::{
             trace::generate_trace_from_postflight, LoadSignExtendByteCoreAir,
@@ -75,10 +72,7 @@ fn create_byte_harness(
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendByteExecutor::new(
-        Rv64LoadByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadSignExtendByteExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
             Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -211,10 +205,7 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendByteExecutor::new(
-        Rv64LoadByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadSignExtendByteExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
             Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),

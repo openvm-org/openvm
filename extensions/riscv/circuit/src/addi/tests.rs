@@ -37,10 +37,8 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
-        Rv64BaseAluImmU16AdapterFiller, Rv64BaseAluWImmU16AdapterAir,
-        Rv64BaseAluWImmU16AdapterExecutor, Rv64BaseAluWImmU16AdapterFiller,
-        RV64_REGISTER_NUM_LIMBS, U16_BITS,
+        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluWImmU16AdapterAir, RV64_REGISTER_NUM_LIMBS,
+        U16_BITS,
     },
     addi::AddICoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -76,14 +74,10 @@ fn create_harness_fields(
         ),
     );
     let executor = Rv64AddIExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor,
         BaseAluImmOpcode::CLASS_OFFSET,
         BaseAluImmOpcode::ADDI as usize,
     );
-    let chip = Rv64AddIChip::new(
-        AddIFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker_chip),
-        memory_helper,
-    );
+    let chip = Rv64AddIChip::new(AddIFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -119,17 +113,10 @@ fn create_w_harness_fields(
         ),
     );
     let executor = Rv64AddIWExecutor::new(
-        Rv64BaseAluWImmU16AdapterExecutor,
         BaseAluWImmOpcode::CLASS_OFFSET,
         BaseAluWImmOpcode::ADDIW as usize,
     );
-    let chip = Rv64AddIWChip::new(
-        AddIFiller::new(
-            Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-            range_checker,
-        ),
-        memory_helper,
-    );
+    let chip = Rv64AddIWChip::new(AddIFiller::new(range_checker), memory_helper);
     (air, executor, chip)
 }
 

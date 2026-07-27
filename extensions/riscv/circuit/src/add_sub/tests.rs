@@ -34,10 +34,7 @@ use super::{
     trace::generate_trace_from_postflight, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
-        Rv64BaseAluRegU16AdapterFiller, U16_BITS,
-    },
+    adapters::{Rv64BaseAluRegU16AdapterAir, U16_BITS},
     add_sub::AddSubCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
     AddSubFiller, Rv64AddSubAir,
@@ -63,14 +60,8 @@ fn create_harness_fields(
         Rv64BaseAluRegU16AdapterAir::new(execution_bridge, memory_bridge),
         AddSubCoreAir::new(range_checker_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddSubExecutor::new(
-        Rv64BaseAluRegU16AdapterExecutor,
-        BaseAluOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64AddSubChip::new(
-        AddSubFiller::new(Rv64BaseAluRegU16AdapterFiller, range_checker_chip),
-        memory_helper,
-    );
+    let executor = Rv64AddSubExecutor::new(BaseAluOpcode::CLASS_OFFSET);
+    let chip = Rv64AddSubChip::new(AddSubFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 

@@ -154,19 +154,16 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct AddSubExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct AddSubExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct AddSubFiller<
-    A,
     const NUM_LIMBS: usize,
     const LIMB_BITS: usize,
     const RANGE_CHECK_TOP_LIMB: bool,
 > {
-    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

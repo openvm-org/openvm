@@ -41,10 +41,7 @@ use {
 
 use super::{core::run_mul, trace::generate_trace_from_postflight};
 use crate::{
-    adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64MultAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     mul::{MultiplicationCoreCols, Rv64MultiplicationChip},
     test_utils::rv64_rand_write_register_or_imm,
     MultiplicationCoreAir, MultiplicationFiller, Rv64MultiplicationAir, Rv64MultiplicationExecutor,
@@ -85,15 +82,9 @@ fn create_harness_fields(
             MulOpcode::CLASS_OFFSET,
         ),
     );
-    let executor =
-        Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
+    let executor = Rv64MultiplicationExecutor::new(MulOpcode::CLASS_OFFSET);
     let chip = Rv64MultiplicationChip::<F>::new(
-        MultiplicationFiller::new(
-            Rv64MultAdapterFiller,
-            range_tuple_chip,
-            bitwise_chip,
-            MulOpcode::CLASS_OFFSET,
-        ),
+        MultiplicationFiller::new(range_tuple_chip, bitwise_chip, MulOpcode::CLASS_OFFSET),
         memory_helper,
     );
     (air, executor, chip)

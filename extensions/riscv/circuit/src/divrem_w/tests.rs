@@ -48,8 +48,8 @@ use super::{
 };
 use crate::{
     adapters::{
-        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
-        Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterFiller,
+        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     divrem::{run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase},
     Rv64DivRemWAir, Rv64DivRemWExecutor,
@@ -96,7 +96,7 @@ fn create_harness_fields(
             DivRemWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64DivRemWExecutor::new(Rv64MultWAdapterExecutor, DivRemWOpcode::CLASS_OFFSET);
+    let executor = Rv64DivRemWExecutor::new(DivRemWOpcode::CLASS_OFFSET);
     let chip = Rv64DivRemWChip::<F>::new(
         DivRemWFiller::new(
             Rv64MultWAdapterFiller::new(bitwise_chip.clone()),

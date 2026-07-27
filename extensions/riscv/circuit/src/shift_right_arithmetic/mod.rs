@@ -1,9 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use super::adapters::{
-    Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller,
-    U16_BITS,
-};
+use super::adapters::{Rv64BaseAluRegU16AdapterAir, U16_BITS};
 
 mod core;
 mod execution;
@@ -23,9 +20,6 @@ pub type Rv64ShiftRightArithmeticAir = VmAirWrapper<
     Rv64BaseAluRegU16AdapterAir,
     ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>,
 >;
-pub type Rv64ShiftRightArithmeticExecutor =
-    ShiftRightArithmeticExecutor<Rv64BaseAluRegU16AdapterExecutor, BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftRightArithmeticChip<F> = VmChipWrapper<
-    F,
-    ShiftRightArithmeticFiller<Rv64BaseAluRegU16AdapterFiller, BLOCK_FE_WIDTH, U16_BITS>,
->;
+pub type Rv64ShiftRightArithmeticExecutor = ShiftRightArithmeticExecutor<BLOCK_FE_WIDTH, U16_BITS>;
+pub type Rv64ShiftRightArithmeticChip<F> =
+    VmChipWrapper<F, ShiftRightArithmeticFiller<BLOCK_FE_WIDTH, U16_BITS>>;

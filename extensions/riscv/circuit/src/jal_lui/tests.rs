@@ -40,7 +40,6 @@ use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         rv64_u16_block_to_bytes, Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols,
-        Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller,
         RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV_J_TYPE_IMM_BITS,
     },
     jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
@@ -65,16 +64,8 @@ fn create_harness_fields(
         )),
         Rv64JalLuiCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
-        crate::adapters::Rv64RdWriteAdapterExecutor::new(),
-    ));
-    let chip = VmChipWrapper::<F, _>::new(
-        Rv64JalLuiFiller::new(
-            Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller::new()),
-            range_checker_chip,
-        ),
-        memory_helper,
-    );
+    let executor = Rv64JalLuiExecutor::new();
+    let chip = VmChipWrapper::<F, _>::new(Rv64JalLuiFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 

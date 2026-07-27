@@ -38,9 +38,8 @@ use {
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols,
-        Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
-        RV64_WORD_NUM_LIMBS,
+        rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, RV64_BYTE_BITS,
+        RV64_PTR_U16_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     auipc::{run_auipc, Rv64AuipcCoreCols},
     Rv64AuipcAir, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcExecutor, Rv64AuipcFiller,
@@ -61,11 +60,8 @@ fn create_harness_fields(
         Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge),
         Rv64AuipcCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor::new());
-    let chip = VmChipWrapper::<F, _>::new(
-        Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller::new(), range_checker_chip),
-        memory_helper,
-    );
+    let executor = Rv64AuipcExecutor::new();
+    let chip = VmChipWrapper::<F, _>::new(Rv64AuipcFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 

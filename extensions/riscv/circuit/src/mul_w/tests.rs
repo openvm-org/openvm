@@ -44,8 +44,8 @@ use {
 use super::{trace::generate_trace_from_postflight, MulWCoreAir, MulWFiller, Rv64MulWChip};
 use crate::{
     adapters::{
-        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
-        Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -90,14 +90,9 @@ fn create_harness_fields(
             MulWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
+    let executor = Rv64MulWExecutor::new(MulWOpcode::CLASS_OFFSET);
     let chip = Rv64MulWChip::<F>::new(
-        MulWFiller::new(
-            Rv64MultWAdapterFiller::new(bitwise_chip.clone()),
-            range_tuple_chip,
-            bitwise_chip,
-            MulWOpcode::CLASS_OFFSET,
-        ),
+        MulWFiller::new(range_tuple_chip, bitwise_chip, MulWOpcode::CLASS_OFFSET),
         memory_helper,
     );
     (air, executor, chip)

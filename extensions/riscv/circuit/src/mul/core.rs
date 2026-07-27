@@ -114,24 +114,19 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct MultiplicationExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct MultiplicationExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone)]
-pub struct MultiplicationFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct MultiplicationFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationFiller<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        adapter: A,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
@@ -151,32 +146,11 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         );
 
         Self {
-            adapter,
             offset,
             range_tuple_chip,
             bitwise_lookup_chip,
         }
     }
-}
-
-pub(crate) fn fill_core_row<F: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    range_tuple_chip: &SharedRangeTupleCheckerChip<2>,
-    bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS>,
-    b: [u8; NUM_LIMBS],
-    c: [u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
-    fill_core_row_with_result(
-        range_tuple_chip,
-        bitwise_lookup_chip,
-        core_row,
-        b,
-        c,
-        a,
-        carry,
-    );
-    a
 }
 
 pub(crate) fn fill_core_row_with_result<

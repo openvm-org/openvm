@@ -7,8 +7,7 @@ use crate::adapters::{
 };
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadSignExtendExecutor<A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize = 2> {
-    adapter: A,
+pub struct LoadSignExtendExecutor<const LOAD_WIDTH: usize, const NUM_BLOCKS: usize = 2> {
     pub offset: usize,
 }
 

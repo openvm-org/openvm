@@ -364,8 +364,7 @@ pub(crate) type DivRemResult<const NUM_LIMBS: usize> = (
 );
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct DivRemExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct DivRemExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
@@ -403,20 +402,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemFiller<A, NUM_LIMB
             bitwise_lookup_chip,
             range_tuple_chip,
         }
-    }
-
-    pub(crate) fn fill_core_row<F: PrimeField32>(
-        &self,
-        opcode: DivRemOpcode,
-        b: [u8; NUM_LIMBS],
-        c: [u8; NUM_LIMBS],
-        core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS>,
-    ) {
-        let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
-        let b_u32 = b.map(u32::from);
-        let c_u32 = c.map(u32::from);
-        let result = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b_u32, &c_u32);
-        self.fill_core_row_with_result(opcode, b, c, result, core_row);
     }
 
     pub(crate) fn fill_core_row_with_result<F: PrimeField32>(

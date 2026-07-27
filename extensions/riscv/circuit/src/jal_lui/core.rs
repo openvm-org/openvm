@@ -19,9 +19,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, rv64_u32_to_u16_block, Rv64CondRdWriteAdapterExecutor,
-    Rv64CondRdWriteAdapterFiller, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS,
-    U16_BITS,
+    ptr_to_u16_limbs, rv64_u32_to_u16_block, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS,
+    RV_J_TYPE_IMM_BITS, U16_BITS,
 };
 
 pub(super) const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
@@ -162,13 +161,10 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalLuiExecutor<A = Rv64CondRdWriteAdapterExecutor> {
-    pub adapter: A,
-}
+pub struct Rv64JalLuiExecutor;
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
-    adapter: A,
+pub struct Rv64JalLuiFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

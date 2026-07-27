@@ -30,8 +30,8 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::{fill_padding_row, generate_trace_from_postflight};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64StoreByteAdapterAir, Rv64StoreByteAdapterExecutor,
-        Rv64StoreByteAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64StoreByteAdapterAir, Rv64StoreByteAdapterFiller,
+        RV64_BYTE_BITS,
     },
     store::{
         common::store_write_data, Rv64StoreByteAir, Rv64StoreByteChip, Rv64StoreByteExecutor,
@@ -71,10 +71,7 @@ fn create_store_byte_harness(
         ),
         StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreByteExecutor::new(
-        Rv64StoreByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreByteExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64StoreByteChip::<F>::new(
         StoreByteFiller::new(
             Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -246,10 +243,7 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
         ),
         StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreByteExecutor::new(
-        Rv64StoreByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreByteExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64StoreByteChip::<F>::new(
         StoreByteFiller::new(
             Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),

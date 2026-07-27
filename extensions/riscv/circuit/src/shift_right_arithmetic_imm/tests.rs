@@ -27,10 +27,7 @@ use super::{
     ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmFiller,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
-        Rv64BaseAluImmU16AdapterFiller, U16_BITS,
-    },
+    adapters::{Rv64BaseAluImmU16AdapterAir, U16_BITS},
     test_utils::rv64_rand_write_register_or_imm,
 };
 
@@ -48,12 +45,9 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        ShiftImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftRightArithmeticImmChip::new(
-        ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        ShiftRightArithmeticImmFiller::new(range_checker),
         tester.memory_helper(),
     );
     Harness::with_capacity(executor, air, chip, 32, generate_trace_from_postflight)
@@ -145,12 +139,9 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        ShiftImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64ShiftRightArithmeticImmChip::new(
-        ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        ShiftRightArithmeticImmFiller::new(range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64ShiftRightArithmeticImmChipGpu::new(
@@ -215,10 +206,7 @@ mod word {
     };
 
     use crate::{
-        adapters::{
-            Rv64BaseAluWImmU16AdapterAir, Rv64BaseAluWImmU16AdapterExecutor,
-            Rv64BaseAluWImmU16AdapterFiller,
-        },
+        adapters::Rv64BaseAluWImmU16AdapterAir,
         shift_right_arithmetic_imm::{
             trace::generate_word_trace_from_postflight, Rv64ShiftWRightArithmeticImmAir,
             Rv64ShiftWRightArithmeticImmChip, Rv64ShiftWRightArithmeticImmExecutor,
@@ -245,15 +233,9 @@ mod word {
             ),
             ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(
-            Rv64BaseAluWImmU16AdapterExecutor,
-            ShiftWImmOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
         let chip = Rv64ShiftWRightArithmeticImmChip::new(
-            ShiftRightArithmeticImmFiller::new(
-                Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker,
-            ),
+            ShiftRightArithmeticImmFiller::new(range_checker),
             tester.memory_helper(),
         );
         Harness::with_capacity(executor, air, chip, 16, generate_word_trace_from_postflight)
@@ -322,15 +304,9 @@ mod word {
             ),
             ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(
-            Rv64BaseAluWImmU16AdapterExecutor,
-            ShiftWImmOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
         let cpu_chip = Rv64ShiftWRightArithmeticImmChip::new(
-            ShiftRightArithmeticImmFiller::new(
-                Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker,
-            ),
+            ShiftRightArithmeticImmFiller::new(range_checker),
             tester.dummy_memory_helper(),
         );
         let gpu_chip = Rv64ShiftWRightArithmeticImmChipGpu::new(

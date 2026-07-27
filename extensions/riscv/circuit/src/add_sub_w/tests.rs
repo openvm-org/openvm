@@ -36,9 +36,8 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols,
-        Rv64BaseAluWRegU16AdapterExecutor, Rv64BaseAluWRegU16AdapterFiller,
-        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols, RV64_REGISTER_NUM_LIMBS,
+        RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     add_sub::AddSubCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -79,17 +78,8 @@ fn create_harness_fields(
         ),
         AddSubWCoreAir::new(range_checker_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddSubWExecutor::new(
-        Rv64BaseAluWRegU16AdapterExecutor,
-        BaseAluWOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64AddSubWChip::new(
-        AddSubWFiller::new(
-            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-        ),
-        memory_helper,
-    );
+    let executor = Rv64AddSubWExecutor::new(BaseAluWOpcode::CLASS_OFFSET);
+    let chip = Rv64AddSubWChip::new(AddSubWFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 

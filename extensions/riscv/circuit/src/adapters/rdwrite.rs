@@ -186,14 +186,10 @@ pub struct Rv64RdWriteAdapterFiller;
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:8\]_d, where d == 1
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64CondRdWriteAdapterExecutor {
-    inner: Rv64RdWriteAdapterExecutor,
-}
+pub struct Rv64CondRdWriteAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64CondRdWriteAdapterFiller {
-    inner: Rv64RdWriteAdapterFiller,
-}
+pub struct Rv64CondRdWriteAdapterFiller;
 
 impl Rv64RdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(

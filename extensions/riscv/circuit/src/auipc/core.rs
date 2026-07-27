@@ -16,8 +16,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, sext32_to_u64, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller,
-    RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    ptr_to_u16_limbs, sext32_to_u64, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -147,13 +146,10 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64AuipcExecutor<A = Rv64RdWriteAdapterExecutor> {
-    adapter: A,
-}
+pub struct Rv64AuipcExecutor;
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
-    adapter: A,
+pub struct Rv64AuipcFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

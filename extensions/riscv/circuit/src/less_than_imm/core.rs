@@ -174,14 +174,12 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LessThanImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct LessThanImmExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct LessThanImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct LessThanImmFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

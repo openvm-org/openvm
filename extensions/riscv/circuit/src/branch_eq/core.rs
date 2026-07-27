@@ -128,15 +128,13 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BranchEqualExecutor<A, const NUM_LIMBS: usize> {
-    adapter: A,
+pub struct BranchEqualExecutor<const NUM_LIMBS: usize> {
     pub offset: usize,
     pub pc_step: u32,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
-    adapter: A,
+pub struct BranchEqualFiller<const NUM_LIMBS: usize> {
     pub offset: usize,
     pub pc_step: u32,
 }

@@ -43,8 +43,7 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols,
-        Rv64BaseAluWRegU16AdapterExecutor, Rv64BaseAluWRegU16AdapterFiller, RV64_BYTE_BITS,
+        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols, RV64_BYTE_BITS,
         RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     shift_logical::ShiftLogicalCoreCols,
@@ -112,15 +111,9 @@ fn create_logical_harness_fields(
         ),
         ShiftWLogicalCoreAir::new(range_checker_chip.bus(), ShiftWOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftWLogicalExecutor::new(
-        Rv64BaseAluWRegU16AdapterExecutor,
-        ShiftWOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftWLogicalExecutor::new(ShiftWOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftWLogicalChip::<F>::new(
-        ShiftWLogicalFiller::new(
-            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-        ),
+        ShiftWLogicalFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -144,15 +137,9 @@ fn create_right_arithmetic_harness_fields(
         ),
         ShiftWRightArithmeticCoreAir::new(range_checker_chip.bus(), ShiftWOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftWRightArithmeticExecutor::new(
-        Rv64BaseAluWRegU16AdapterExecutor::new(),
-        ShiftWOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftWRightArithmeticExecutor::new(ShiftWOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftWRightArithmeticChip::<F>::new(
-        ShiftWRightArithmeticFiller::new(
-            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-        ),
+        ShiftWRightArithmeticFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)

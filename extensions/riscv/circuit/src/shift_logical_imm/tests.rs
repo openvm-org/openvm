@@ -27,10 +27,7 @@ use super::{
     ShiftLogicalImmFiller,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
-        Rv64BaseAluImmU16AdapterFiller, U16_BITS,
-    },
+    adapters::{Rv64BaseAluImmU16AdapterAir, U16_BITS},
     test_utils::rv64_rand_write_register_or_imm,
 };
 
@@ -48,12 +45,9 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftLogicalImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        ShiftImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftLogicalImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftLogicalImmChip::new(
-        ShiftLogicalImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        ShiftLogicalImmFiller::new(range_checker),
         tester.memory_helper(),
     );
     Harness::with_capacity(executor, air, chip, 32, generate_trace_from_postflight)
@@ -151,12 +145,9 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftLogicalImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        ShiftImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftLogicalImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64ShiftLogicalImmChip::new(
-        ShiftLogicalImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        ShiftLogicalImmFiller::new(range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip =
@@ -213,10 +204,7 @@ mod word {
     };
 
     use crate::{
-        adapters::{
-            Rv64BaseAluWImmU16AdapterAir, Rv64BaseAluWImmU16AdapterExecutor,
-            Rv64BaseAluWImmU16AdapterFiller,
-        },
+        adapters::Rv64BaseAluWImmU16AdapterAir,
         shift_logical_imm::{
             trace::generate_word_trace_from_postflight, Rv64ShiftWLogicalImmAir,
             Rv64ShiftWLogicalImmChip, Rv64ShiftWLogicalImmExecutor, ShiftLogicalImmCoreAir,
@@ -243,15 +231,9 @@ mod word {
             ),
             ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWLogicalImmExecutor::new(
-            Rv64BaseAluWImmU16AdapterExecutor,
-            ShiftWImmOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64ShiftWLogicalImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
         let chip = Rv64ShiftWLogicalImmChip::new(
-            ShiftLogicalImmFiller::new(
-                Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker,
-            ),
+            ShiftLogicalImmFiller::new(range_checker),
             tester.memory_helper(),
         );
         Harness::with_capacity(executor, air, chip, 32, generate_word_trace_from_postflight)
@@ -322,15 +304,9 @@ mod word {
             ),
             ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWLogicalImmExecutor::new(
-            Rv64BaseAluWImmU16AdapterExecutor,
-            ShiftWImmOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64ShiftWLogicalImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
         let cpu_chip = Rv64ShiftWLogicalImmChip::new(
-            ShiftLogicalImmFiller::new(
-                Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker,
-            ),
+            ShiftLogicalImmFiller::new(range_checker),
             tester.dummy_memory_helper(),
         );
         let gpu_chip =

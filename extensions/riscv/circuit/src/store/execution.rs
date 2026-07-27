@@ -39,9 +39,7 @@ struct StorePreCompute {
     e: u8,
 }
 
-impl<A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize>
-    StoreExecutor<A, STORE_WIDTH, NUM_BLOCKS>
-{
+impl<const STORE_WIDTH: usize, const NUM_BLOCKS: usize> StoreExecutor<STORE_WIDTH, NUM_BLOCKS> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -104,8 +102,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor<F>
-    for StoreExecutor<A, STORE_WIDTH, NUM_BLOCKS>
+impl<F, const STORE_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor<F>
+    for StoreExecutor<STORE_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {
@@ -150,8 +148,8 @@ where
     }
 }
 
-impl<F, A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterMeteredExecutor<F>
-    for StoreExecutor<A, STORE_WIDTH, NUM_BLOCKS>
+impl<F, const STORE_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterMeteredExecutor<F>
+    for StoreExecutor<STORE_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {

@@ -37,8 +37,7 @@ use super::{run_cmp, trace::generate_trace_from_postflight, Rv64BranchLessThanCh
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BranchAdapterAir,
-        Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_REGISTER_NUM_LIMBS,
-        RV_B_TYPE_IMM_BITS, U16_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS, U16_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
     test_utils::{rv64_marker_bytes_to_u16_marker, rv64_msb_byte_prank_to_u16_limb},
@@ -69,16 +68,9 @@ fn create_harness_fields(
         Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
         BranchLessThanCoreAir::new(range_checker_chip.bus(), BranchLessThanOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BranchLessThanExecutor::new(
-        Rv64BranchAdapterExecutor::new(),
-        BranchLessThanOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64BranchLessThanExecutor::new(BranchLessThanOpcode::CLASS_OFFSET);
     let chip = Rv64BranchLessThanChip::new(
-        BranchLessThanFiller::new(
-            Rv64BranchAdapterFiller,
-            range_checker_chip,
-            BranchLessThanOpcode::CLASS_OFFSET,
-        ),
+        BranchLessThanFiller::new(range_checker_chip, BranchLessThanOpcode::CLASS_OFFSET),
         memory_helper,
     );
     (air, executor, chip)

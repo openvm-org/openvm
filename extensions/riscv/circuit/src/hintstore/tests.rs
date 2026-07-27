@@ -73,7 +73,7 @@ fn create_harness_fields(
         Rv64HintStoreOpcode::CLASS_OFFSET,
         address_bits,
     );
-    let executor = Rv64HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
+    let executor = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);
     let chip = Rv64HintStoreChip::<F>::new(
         Rv64HintStoreFiller::new(address_bits, range_checker_chip),
         memory_helper,
