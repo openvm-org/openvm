@@ -170,7 +170,7 @@ extern "C" int _addi_replay_tracegen(
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
     addi_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

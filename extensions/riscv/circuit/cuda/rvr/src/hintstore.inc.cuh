@@ -339,7 +339,7 @@ extern "C" int _hintstore_replay_count(
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     if (num_steps == 0) return 0;
-    auto [grid, block] = kernel_launch_params(num_steps);
+    auto [grid, block] = kernel_launch_params(num_steps, RV64_REPLAY_THREADS);
     hintstore_replay_count<<<grid, block, 0, stream>>>(
         d_instructions,
         pc_base,
@@ -398,7 +398,9 @@ extern "C" int _hintstore_replay_tracegen(
         return err;
     }
     if (num_steps == 0) return 0;
-    hintstore_replay_tracegen<<<num_steps, 128, 0, stream>>>(
+    dim3 grid(num_steps);
+    dim3 block(128);
+    hintstore_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_instructions,
