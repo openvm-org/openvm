@@ -196,9 +196,16 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
     debug_assert!(addr <= (MEM_SIZE - OP::WIDTH) as u64);
     let ptr_val = addr as u32;
     let write_data = OP::read(exec_state, ptr_val);
+    if OP::WIDTH != BYTE_ACCESS_WIDTH
+        && ptr_val as usize % DOUBLEWORD_ACCESS_WIDTH + OP::WIDTH <= DOUBLEWORD_ACCESS_WIDTH
+    {
+        exec_state.ctx.advance_timestamp(1);
+    }
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
+    } else {
+        exec_state.ctx.advance_timestamp(1);
     }
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 

@@ -131,6 +131,167 @@ mod tests {
         hint
     }
 
+    #[test]
+    #[cfg(not(feature = "rvr"))]
+    fn interpreter_preflight_matches_legacy_memory_history() -> Result<()> {
+        use openvm_circuit::{
+            arch::{ExecutionOutcome, PreflightExecutionOutput, Streams, VirtualMachine},
+            utils::test_cpu_engine,
+        };
+        use openvm_instructions::program::Program;
+        use openvm_riscv_circuit::Rv64ImCpuBuilder;
+        use openvm_riscv_transpiler::{
+            BaseAluImmOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64LoadStoreOpcode,
+        };
+
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let instructions = [
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    reg(1),
+                    reg(0),
+                    32,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::RV64_IMM_AS as usize,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64LoadStoreOpcode::LOADW.global_opcode(),
+                [
+                    reg(3),
+                    reg(1),
+                    0,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64LoadStoreOpcode::LOADW.global_opcode(),
+                [
+                    reg(0),
+                    reg(1),
+                    4,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    0,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64LoadStoreOpcode::STOREW.global_opcode(),
+                [
+                    reg(2),
+                    reg(1),
+                    6,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64JalLuiOpcode::JAL.global_opcode(),
+                [
+                    0,
+                    0,
+                    4,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    0,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+                [
+                    0,
+                    reg(4),
+                    0,
+                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let config = test_rv64im_config();
+        let (vm, pk) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)?;
+        let mut initial = vm.create_initial_state(&exe, Streams::default());
+        unsafe {
+            initial.memory.write_bytes(
+                openvm_instructions::riscv::RV64_REGISTER_AS,
+                reg(2) as u32,
+                0x1122_3344_5566_7788u64.to_le_bytes(),
+            );
+            initial.memory.write_bytes(
+                openvm_instructions::riscv::RV64_MEMORY_AS,
+                32,
+                0x8877_6655_4433_2211u64.to_le_bytes(),
+            );
+            initial.memory.write_bytes(
+                openvm_instructions::riscv::RV64_REGISTER_AS,
+                reg(4) as u32,
+                64u64.to_le_bytes(),
+            );
+        }
+        initial
+            .streams
+            .hint_stream
+            .set_hint(0xaabb_ccdd_eeff_0011u64.to_le_bytes().to_vec());
+
+        let preflight = vm.preflight_instance(&exe)?;
+        let (history, outcome) = preflight.execute_preflight_from_state(initial.clone(), None)?;
+        let ExecutionOutcome::Terminated(new_state) = outcome else {
+            panic!("program should terminate");
+        };
+
+        let mut legacy = vm.preflight_interpreter(&exe)?;
+        let trace_heights = vec![16; pk.get_vk().inner.per_air.len()];
+        let PreflightExecutionOutput {
+            history: legacy_history,
+            to_state: legacy_state,
+            ..
+        } = vm.execute_preflight(&mut legacy, initial, &trace_heights)?;
+
+        assert_eq!(history.program, legacy_history.program);
+        assert_eq!(history.memory.accesses, legacy_history.memory.accesses);
+        assert_eq!(
+            history.memory.initial_writes,
+            legacy_history.memory.initial_writes
+        );
+        assert_eq!(new_state.pc(), legacy_state.pc());
+        assert_eq!(
+            unsafe {
+                new_state
+                    .memory
+                    .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
+            },
+            unsafe {
+                legacy_state
+                    .memory
+                    .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
+            }
+        );
+        assert_eq!(
+            unsafe {
+                new_state
+                    .memory
+                    .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
+            },
+            unsafe {
+                legacy_state
+                    .memory
+                    .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
+            }
+        );
+        Ok(())
+    }
+
     #[cfg(feature = "rvr")]
     fn configure_hint_state(
         mut state: VmState<GuestMemory>,

@@ -206,6 +206,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
         ptr_val,
         pre_compute.a as u32,
     );
+    if OP::WIDTH != BYTE_ACCESS_WIDTH
+        && ptr_val as usize % DOUBLEWORD_ACCESS_WIDTH + OP::WIDTH <= DOUBLEWORD_ACCESS_WIDTH
+    {
+        exec_state.ctx.advance_timestamp(1);
+    }
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())

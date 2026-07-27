@@ -162,6 +162,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     let mem_ptr = validate_hint_store_mem_ptr(pc, rv64_bytes_to_u32(mem_ptr_limbs))?;
 
     let num_words = if IS_HINT_STORED {
+        exec_state.ctx.advance_timestamp(1);
         1u64
     } else {
         let num_words_limbs = exec_state
@@ -177,6 +178,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     }
 
     for word_index in 0..num_words {
+        if word_index != 0 {
+            exec_state.ctx.advance_timestamp(2);
+        }
         let mut data = [0; RV64_REGISTER_NUM_LIMBS];
         exec_state.streams.hint_stream.copy_to_slice(&mut data);
         exec_state.vm_write_bytes(

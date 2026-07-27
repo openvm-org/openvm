@@ -13,7 +13,7 @@ use openvm_stark_backend::prover::{DeviceMultiStarkProvingKey, ProverBackend};
 
 use crate::{
     arch::{
-        execution_mode::PreflightCtx, interpreter_preflight::PcEntry, Arena, PreflightExecutor,
+        execution_mode::RecordCtx, interpreter_preflight::PcEntry, Arena, PreflightExecutor,
         VmExecState,
     },
     system::memory::online::TracingMemory,
@@ -57,7 +57,7 @@ pub struct VmMetrics {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>,
+    state: &mut VmExecState<TracingMemory, RecordCtx<RA>>,
     executor: &Executor,
     prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
     pc_entry: &PcEntry<F>,
@@ -103,7 +103,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 // We clear the current trace cell counts so there aren't negative diffs at the start of the next
 // segment.
 #[cfg(feature = "perf-metrics")]
-pub fn end_segment_metrics<RA>(state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>)
+pub fn end_segment_metrics<RA>(state: &mut VmExecState<TracingMemory, RecordCtx<RA>>)
 where
     RA: Arena,
 {

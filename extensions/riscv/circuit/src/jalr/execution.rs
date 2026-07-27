@@ -153,6 +153,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
 
     if ENABLED {
         exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    } else {
+        exec_state.ctx.advance_timestamp(1);
     }
 
     exec_state.set_pc(to_pc);

@@ -207,6 +207,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
         &pre_compute.operands,
         sub_executor,
     )?;
+    exec_state.ctx.advance_timestamp(1);
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
