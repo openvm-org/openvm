@@ -17,12 +17,13 @@ use super::{PreflightHistory, BLOCK_FE_WIDTH};
 const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const PREDECESSOR_INDEX_MASK: u32 = !PREDECESSOR_SEED_BIT;
 
-#[derive(Clone, Copy, Debug)]
-pub struct PostflightStep {
-    pub program_index: u32,
-    pub memory_start: u32,
-    pub memory_end: u32,
+#[inline]
+pub(crate) const fn memory_key(address_space: u32, pointer: u32) -> u64 {
+    ((address_space as u64) << 32) | pointer as u64
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct PostflightStep(u32);
 
 pub struct PostflightReplay<'a, 'history, F> {
     postflight: &'a Postflight<'history, F>,
@@ -47,6 +48,7 @@ pub struct Postflight<'a, F> {
     program: &'a Program<F>,
     history: &'a PreflightHistory,
     steps: Vec<PostflightStep>,
+    memory_starts: Vec<u32>,
     opcode_ranges: BTreeMap<u32, Range<usize>>,
     memory_predecessors: Vec<u32>,
 }
@@ -88,34 +90,27 @@ impl<'a, F: Field> Postflight<'a, F> {
             .iter()
             .map(|(&opcode, range)| (opcode, range.start))
             .collect::<BTreeMap<_, _>>();
-        let mut steps = vec![
-            PostflightStep {
-                program_index: 0,
-                memory_start: 0,
-                memory_end: 0,
-            };
-            opcodes.len()
-        ];
+        let mut steps = vec![PostflightStep(0); opcodes.len()];
         for (program_index, opcode) in opcodes.into_iter().enumerate() {
             let opcode = opcode.as_usize() as u32;
             let destination = next
                 .get_mut(&opcode)
                 .expect("opcode count was collected above");
-            steps[*destination] = PostflightStep {
-                program_index: u32::try_from(program_index)
+            steps[*destination] = PostflightStep(
+                u32::try_from(program_index)
                     .map_err(|_| PostflightError::new("program log exceeds u32::MAX steps"))?,
-                memory_start: memory_starts[program_index],
-                memory_end: memory_starts[program_index + 1],
-            };
+            );
             *destination += 1;
         }
 
+        let memory_predecessors = memory_predecessors(history)?;
         Ok(Self {
             program,
             history,
             steps,
+            memory_starts,
             opcode_ranges,
-            memory_predecessors: memory_predecessors(history)?,
+            memory_predecessors,
         })
     }
 
@@ -126,27 +121,24 @@ impl<'a, F: Field> Postflight<'a, F> {
     }
 
     pub fn instruction(&self, step: PostflightStep) -> &Instruction<F> {
-        resolve_instruction(self.program, self.history, step.program_index as usize)
+        resolve_instruction(self.program, self.history, step.0 as usize)
             .expect("postflight validated every program event")
     }
 
     pub fn pc(&self, step: PostflightStep) -> u32 {
-        self.history.program[step.program_index as usize].pc
+        self.history.program[step.0 as usize].pc
     }
 
     pub fn timestamp(&self, step: PostflightStep) -> u32 {
-        self.history.program[step.program_index as usize].timestamp
-    }
-
-    pub fn memory(&self, step: PostflightStep) -> &[rvr_state::PreflightMemoryEvent] {
-        &self.history.memory.accesses[step.memory_start as usize..step.memory_end as usize]
+        self.history.program[step.0 as usize].timestamp
     }
 
     pub fn replay(&self, step: PostflightStep) -> PostflightReplay<'_, 'a, F> {
+        let memory_cursor = self.memory_starts[step.0 as usize] as usize;
         PostflightReplay {
             postflight: self,
             step,
-            memory_cursor: step.memory_start as usize,
+            memory_cursor,
             timestamp: self.timestamp(step),
         }
     }
@@ -179,7 +171,7 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
         address_space: u32,
         pointer: u32,
     ) -> Result<U16Access, PostflightError> {
-        self.access_u16(address_space, pointer, None)
+        self.access_u16(address_space, pointer, false, None)
     }
 
     pub fn write_u16(
@@ -188,7 +180,55 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
         pointer: u32,
         expected_value: [u16; BLOCK_FE_WIDTH],
     ) -> Result<U16Access, PostflightError> {
-        self.access_u16(address_space, pointer, Some(expected_value))
+        self.access_u16(address_space, pointer, true, Some(expected_value))
+    }
+
+    /// Consumes a timed write whose value came from execution advice rather
+    /// than deterministic instruction semantics.
+    pub fn write_observed_u16(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+    ) -> Result<U16Access, PostflightError> {
+        self.access_u16(address_space, pointer, true, None)
+    }
+
+    /// Resolves an untimed peek from the memory version immediately after the
+    /// already-consumed timed-event prefix. Peeks append nothing and do not
+    /// advance the logical timestamp. A proof-visible peek must be anchored by
+    /// a timed event in the same instruction; peek-only advice is not replayed.
+    pub fn peek_u16(
+        &self,
+        address_space: u32,
+        pointer: u32,
+    ) -> Result<[u16; BLOCK_FE_WIDTH], PostflightError> {
+        let program_index = self.step.0 as usize;
+        let memory_start = self.postflight.memory_starts[program_index] as usize;
+        let memory_end = self.postflight.memory_starts[program_index + 1] as usize;
+        let matches = |event: &&rvr_state::PreflightMemoryEvent| {
+            event.address_space() == address_space && event.pointer == pointer
+        };
+        if let Some(event) = self.postflight.history.memory.accesses
+            [memory_start..self.memory_cursor]
+            .iter()
+            .rev()
+            .find(matches)
+        {
+            return Ok(event.value);
+        }
+        if let Some(offset) = self.postflight.history.memory.accesses
+            [self.memory_cursor..memory_end]
+            .iter()
+            .position(|event| event.address_space() == address_space && event.pointer == pointer)
+        {
+            return Ok(self.postflight.previous_u16(self.memory_cursor + offset));
+        }
+        Err(PostflightError::new(format!(
+            "instruction at PC {:#x} peeked AS={} pointer={} without a timed event",
+            self.postflight.pc(self.step),
+            address_space,
+            pointer
+        )))
     }
 
     pub fn advance_timestamp(&mut self, slots: u32) -> Result<(), PostflightError> {
@@ -200,13 +240,14 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
     }
 
     pub fn finish(self, expected_next_pc: u32) -> Result<(), PostflightError> {
-        let program_index = self.step.program_index as usize;
+        let program_index = self.step.0 as usize;
         let actual_next = self.postflight.history.program[program_index + 1];
-        if self.memory_cursor != self.step.memory_end as usize {
+        let memory_end = self.postflight.memory_starts[program_index + 1] as usize;
+        if self.memory_cursor != memory_end {
             return Err(PostflightError::new(format!(
                 "instruction at PC {:#x} left {} memory events unread",
                 self.postflight.pc(self.step),
-                self.step.memory_end as usize - self.memory_cursor
+                memory_end - self.memory_cursor
             )));
         }
         if self.timestamp != actual_next.timestamp {
@@ -231,16 +272,17 @@ impl<F: Field> PostflightReplay<'_, '_, F> {
         &mut self,
         address_space: u32,
         pointer: u32,
+        is_write: bool,
         expected_write: Option<[u16; BLOCK_FE_WIDTH]>,
     ) -> Result<U16Access, PostflightError> {
-        if self.memory_cursor >= self.step.memory_end as usize {
+        let memory_end = self.postflight.memory_starts[self.step.0 as usize + 1] as usize;
+        if self.memory_cursor >= memory_end {
             return Err(PostflightError::new(format!(
                 "instruction at PC {:#x} has too few memory events",
                 self.postflight.pc(self.step)
             )));
         }
         let event = self.postflight.history.memory.accesses[self.memory_cursor];
-        let is_write = expected_write.is_some();
         if event.timestamp != self.timestamp
             || event.address_space() != address_space
             || event.pointer != pointer
@@ -419,7 +461,7 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
 
     let mut seed_by_block = FxHashMap::default();
     for (index, seed) in seeds.iter().enumerate() {
-        let key = (seed.address_space, seed.pointer);
+        let key = memory_key(seed.address_space, seed.pointer);
         if seed_by_block
             .insert(key, u32::try_from(index).unwrap())
             .is_some()
@@ -431,10 +473,10 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
         }
     }
 
-    let mut last_event = FxHashMap::<(u32, u32), u32>::default();
+    let mut last_event = FxHashMap::<u64, u32>::default();
     let mut predecessors = Vec::with_capacity(memory.len());
     for (event_index, event) in memory.iter().enumerate() {
-        let key = (event.address_space(), event.pointer);
+        let key = memory_key(event.address_space(), event.pointer);
         let event_index = u32::try_from(event_index).unwrap();
         let predecessor = match last_event.entry(key) {
             Entry::Occupied(mut previous) => {
@@ -447,7 +489,8 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
                     let seed_index = seed_by_block.remove(&key).ok_or_else(|| {
                         PostflightError::new(format!(
                             "first event is a write without a seed for AS={} pointer={}",
-                            key.0, key.1
+                            event.address_space(),
+                            event.pointer
                         ))
                     })?;
                     PREDECESSOR_SEED_BIT | seed_index
@@ -467,4 +510,106 @@ fn memory_predecessors(history: &PreflightHistory) -> Result<Vec<u32>, Postfligh
         )));
     }
     Ok(predecessors)
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{program::Program, SystemOpcode};
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use rvr_state::PREFLIGHT_WRITE_BIT;
+
+    use super::*;
+    use crate::arch::{
+        PreflightInitialWrite, PreflightMemoryEvent, PreflightMemoryLog, PreflightProgramEvent,
+    };
+
+    #[test]
+    fn peek_uses_the_already_consumed_timed_event_prefix() {
+        let instruction =
+            Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
+        let program =
+            Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 3,
+                },
+            ],
+            memory: PreflightMemoryLog {
+                accesses: vec![
+                    PreflightMemoryEvent {
+                        timestamp: 1,
+                        address_space_and_kind: 1 | PREFLIGHT_WRITE_BIT,
+                        pointer: 0,
+                        value: [2, 0, 0, 0],
+                    },
+                    PreflightMemoryEvent {
+                        timestamp: 2,
+                        address_space_and_kind: 1 | PREFLIGHT_WRITE_BIT,
+                        pointer: 0,
+                        value: [3, 0, 0, 0],
+                    },
+                ],
+                initial_writes: vec![PreflightInitialWrite {
+                    address_space: 1,
+                    pointer: 0,
+                    initial_value: [1, 0, 0, 0],
+                }],
+                ..Default::default()
+            },
+        };
+        let postflight = Postflight::new(&program, &history, None).unwrap();
+        let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
+        let mut replay = postflight.replay(step);
+
+        assert_eq!(replay.peek_u16(1, 0).unwrap(), [1, 0, 0, 0]);
+        assert_eq!(replay.write_observed_u16(1, 0).unwrap().value, [2, 0, 0, 0]);
+        assert_eq!(replay.peek_u16(1, 0).unwrap(), [2, 0, 0, 0]);
+        assert_eq!(replay.write_observed_u16(1, 0).unwrap().value, [3, 0, 0, 0]);
+        assert_eq!(replay.peek_u16(1, 0).unwrap(), [3, 0, 0, 0]);
+        replay.finish(4).unwrap();
+    }
+
+    #[test]
+    fn peek_before_a_first_read_uses_the_read_value() {
+        let instruction =
+            Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
+        let program =
+            Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 2,
+                },
+            ],
+            memory: PreflightMemoryLog {
+                accesses: vec![PreflightMemoryEvent {
+                    timestamp: 1,
+                    address_space_and_kind: 1,
+                    pointer: 0,
+                    value: [7, 0, 0, 0],
+                }],
+                ..Default::default()
+            },
+        };
+        let postflight = Postflight::new(&program, &history, None).unwrap();
+        let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
+        let mut replay = postflight.replay(step);
+
+        assert_eq!(replay.peek_u16(1, 0).unwrap(), [7, 0, 0, 0]);
+        assert!(replay.peek_u16(1, 4).is_err());
+        assert_eq!(replay.read_u16(1, 0).unwrap().value, [7, 0, 0, 0]);
+        assert_eq!(replay.peek_u16(1, 0).unwrap(), [7, 0, 0, 0]);
+        replay.finish(4).unwrap();
+    }
 }

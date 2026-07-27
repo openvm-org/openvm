@@ -17,7 +17,9 @@ use thiserror::Error;
 #[cfg(test)]
 use super::{cuda::RvrReplayStep, PreflightEndpoint, PreflightEventLog};
 use crate::{
-    arch::{MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    arch::{
+        postflight::memory_key, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
+    },
     system::TouchedBlock,
 };
 
@@ -27,11 +29,6 @@ pub(crate) const MEMORY_PREDECESSOR_BASELINE: u32 = 0;
 /// The high bit distinguishes an initial-write seed index from an event index.
 pub(crate) const MEMORY_PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const MEMORY_PREDECESSOR_INDEX_MASK: u32 = !MEMORY_PREDECESSOR_SEED_BIT;
-
-#[inline]
-const fn memory_key(address_space: u32, pointer: u32) -> u64 {
-    ((address_space as u64) << 32) | pointer as u64
-}
 
 #[derive(Debug, Error)]
 #[error("invalid RVR preflight transcript: {0}")]
