@@ -74,6 +74,7 @@ jobs:
           - { crate: cuda, mode: default }
           - { crate: cuda, mode: rvr }
           - { crate: verify-stark, mode: rvr }
+          - { crate: caci, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/guest-lib-tests.group.yml

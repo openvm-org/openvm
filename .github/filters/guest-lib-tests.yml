@@ -20,6 +20,12 @@ cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/guest-lib-tests.cuda.yml"
   - "scripts/gpu_driver_setup.sh"
+caci:
+  - *shared
+  - "crates/sdk/**"
+  - "extensions/keccak256/**"
+  - "guest-libs/keccak256/**"
+  - "guest-libs/caci/**"
 sha2:
   - *shared
   - "crates/sdk/**"

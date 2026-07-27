@@ -4563,6 +4563,20 @@ dependencies = [
 [[package]]
 name = "openvm-caci"
 version = "2.0.0"
+dependencies = [
+ "eyre",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-keccak256",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-riscv-transpiler",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "tiny-keccak",
+]
 
 [[package]]
 name = "openvm-circuit"

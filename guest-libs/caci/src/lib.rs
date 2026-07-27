@@ -7,3 +7,8 @@
 #![no_std]
 
 pub mod types;
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+mod keccak256;
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+pub use keccak256::zkvm_keccak256;
