@@ -68,8 +68,6 @@ use super::rvr::{
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::rvr::{PreflightEndpoint, PreflightExecution};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::DenseRecordArena;
 use super::{
     execution_mode::{
         ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, RecordCtx,
@@ -85,6 +83,8 @@ use super::{
     VmExecState, VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
     PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::{DenseRecordArena, PreflightOutput};
 #[cfg(feature = "metrics")]
 use crate::metrics::emit_opcode_counts;
 #[cfg(feature = "perf-metrics")]
@@ -1556,8 +1556,7 @@ where
     pub fn postflight_history(
         &self,
         program: &GpuPostflightProgram,
-        history: &PreflightHistory,
-        system_records: &SystemRecords<BabyBear>,
+        output: &PreflightOutput,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let memory = MemTracker::start_and_reset_peak("postflight");
         let result = (|| {
@@ -1566,18 +1565,24 @@ where
                 .iter()
                 .map(|image| image.view())
                 .collect::<Vec<_>>();
-            let endpoint = if system_records.exit_code.is_some() {
+            let endpoint = if output.exit_code.is_some() {
                 PreflightEndpoint::Terminated
             } else {
                 PreflightEndpoint::Suspended
             };
+            let from = output.history.program.first().ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(
+                    "preflight history must contain a program event".to_string(),
+                )
+            })?;
+            let to = output.history.program.last().unwrap();
             program.upload_history(
-                history,
+                &output.history,
                 endpoint,
                 (
-                    system_records.from_state,
-                    system_records.to_state,
-                    system_records.exit_code,
+                    ExecutionState::new(from.pc, from.timestamp),
+                    ExecutionState::new(to.pc, to.timestamp),
+                    output.exit_code,
                 ),
                 &initial_memory_images,
             )

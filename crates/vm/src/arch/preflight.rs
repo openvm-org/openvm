@@ -2,6 +2,9 @@ use rvr_state::{
     PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
 };
 
+use super::VmState;
+use crate::system::memory::online::GuestMemory;
+
 /// Append-only memory history produced during serial preflight execution.
 ///
 /// Integer blocks are stored inline in `accesses` and `initial_writes`.
@@ -22,4 +25,15 @@ pub struct PreflightMemoryLog {
 pub struct PreflightHistory {
     pub program: Vec<PreflightProgramEvent>,
     pub memory: PreflightMemoryLog,
+}
+
+/// Result of serial preflight execution.
+///
+/// `history` is the immutable input to postflight. Architectural state and
+/// exit status remain ordinary execution outputs and are not duplicated in
+/// the history.
+pub struct PreflightOutput {
+    pub history: PreflightHistory,
+    pub state: VmState<GuestMemory>,
+    pub exit_code: Option<u32>,
 }

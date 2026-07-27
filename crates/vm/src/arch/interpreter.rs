@@ -26,7 +26,7 @@ use crate::{
             PreflightCtx, Segment,
         },
         ExecuteFunc, ExecutionError, ExecutionOutcome, Executor, ExecutorInventory, ExitCode,
-        MeteredExecutor, PreflightHistory, StaticProgramError, Streams, SystemConfig, VmExecState,
+        MeteredExecutor, PreflightOutput, StaticProgramError, Streams, SystemConfig, VmExecState,
         VmState,
     },
     system::memory::online::GuestMemory,
@@ -384,7 +384,7 @@ impl InterpretedInstance<'_, PreflightCtx> {
         &self,
         from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
-    ) -> Result<(PreflightHistory, VmState<GuestMemory>, Option<u32>), ExecutionError> {
+    ) -> Result<PreflightOutput, ExecutionError> {
         let ctx = PreflightCtx::new(&from_state.memory, num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
@@ -407,7 +407,11 @@ impl InterpretedInstance<'_, PreflightCtx> {
         }
         let pc = exec_state.vm_state.pc();
         let history = exec_state.ctx.finish(pc);
-        Ok((history, exec_state.vm_state, exit_code))
+        Ok(PreflightOutput {
+            history,
+            state: exec_state.vm_state,
+            exit_code,
+        })
     }
 }
 

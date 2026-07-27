@@ -245,9 +245,8 @@ mod tests {
             .set_hint(0xaabb_ccdd_eeff_0011u64.to_le_bytes().to_vec());
 
         let preflight = vm.preflight_instance(&exe)?;
-        let (history, new_state, exit_code) =
-            preflight.execute_preflight_from_state(initial.clone(), None)?;
-        assert_eq!(exit_code, Some(0));
+        let output = preflight.execute_preflight_from_state(initial.clone(), None)?;
+        assert_eq!(output.exit_code, Some(0));
 
         let mut legacy = vm.preflight_interpreter(&exe)?;
         let trace_heights = vec![16; pk.get_vk().inner.per_air.len()];
@@ -257,16 +256,20 @@ mod tests {
             ..
         } = vm.execute_preflight(&mut legacy, initial, &trace_heights)?;
 
-        assert_eq!(history.program, legacy_history.program);
-        assert_eq!(history.memory.accesses, legacy_history.memory.accesses);
+        assert_eq!(output.history.program, legacy_history.program);
         assert_eq!(
-            history.memory.initial_writes,
+            output.history.memory.accesses,
+            legacy_history.memory.accesses
+        );
+        assert_eq!(
+            output.history.memory.initial_writes,
             legacy_history.memory.initial_writes
         );
-        assert_eq!(new_state.pc(), legacy_state.pc());
+        assert_eq!(output.state.pc(), legacy_state.pc());
         assert_eq!(
             unsafe {
-                new_state
+                output
+                    .state
                     .memory
                     .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
             },
@@ -278,7 +281,8 @@ mod tests {
         );
         assert_eq!(
             unsafe {
-                new_state
+                output
+                    .state
                     .memory
                     .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
             },
