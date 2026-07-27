@@ -23,6 +23,8 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_cuda_common::memory_manager::MemTracker;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+#[cfg(all(feature = "cuda", feature = "metrics"))]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
