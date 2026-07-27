@@ -22,7 +22,7 @@
 //!   without tracking any cache.
 //! - **Per-node metadata**: every emitted node gets a [`NodeMeta`] (context/range tape offsets and
 //!   lengths, constant-skip indices, operand tape offsets) derived by replaying the op on a
-//!   [`CalculateOffsetsTape`](crate::halo2_opcode_impl::CalculateOffsetsTape) seeded with the
+//!   [`CalculateOffsetsTape`](crate::opcode_impl::CalculateOffsetsTape) seeded with the
 //!   builder's current cache state.
 //! - **Copy constraints**: `constrain_equal` assigns no advice cells, so it produces no node.
 //! - **Transcript / digest hashing**: the builder re-implements `TranscriptChip`'s sponge and
@@ -257,9 +257,6 @@ pub struct NodeMeta {
     pub lookups_len: usize,
     /// Absolute range-tape offset the node begins writing at.
     pub lookup_offset: usize,
-    /// Whether the node writes any constant cells, i.e. some internal
-    /// `load_constant` call missed the chips' caches at build time.
-    pub requires_constant_skip: bool,
     /// Indices of the node's `load_constant` calls that write a cell, in call
     /// order (e.g. `[1, 3]` when the second and fourth of five calls missed the
     /// cache); calls not listed hit a cache and must not write. Drives
@@ -427,7 +424,6 @@ impl Halo2IRBuilder {
             ctx_offset,
             lookups_len: meta.lookups_len,
             lookup_offset: self.lookup_offset,
-            requires_constant_skip: !meta.constant_skip_inds.is_empty(),
             constant_skip_inds: meta.constant_skip_inds,
             arg_offsets,
         });

@@ -140,18 +140,6 @@ impl StaticVerifierProvingKey {
     /// Unlike [`prove_for_evm_unwrapped`](Self::prove_for_evm_unwrapped), this
     /// returns a `Snark` (not a raw EVM proof), which should be fed into
     /// [`Halo2WrapperProvingKey::prove_for_evm`](crate::wrapper::Halo2WrapperProvingKey::prove_for_evm).
-    ///
-    /// Witness generation runs through the [`GraphProver`] (parallel graph-IR
-    /// evaluation) instead of the halo2 `BaseCircuitBuilder`; the raw advice and
-    /// range-check tapes are then laid out into physical columns and handed to
-    /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base) —
-    /// as device buffers under `halo2-gpu`, as host `Vec<Fr>` columns otherwise.
-    ///
-    /// The graph executor thread count defaults to available cores − 2; override
-    /// with `GRAPH_EXE_THREADS`. Set `STATIC_VERIFIER_COMPARE_WITNESS=1` to
-    /// additionally regenerate the witness through the legacy `BaseCircuitBuilder` +
-    /// `synthesize_witness_shplonk` path and assert both advice layouts match
-    /// (`halo2-gpu` only).
     pub fn prove_wrapped(
         &self,
         params: &Halo2Params,
@@ -190,12 +178,6 @@ impl StaticVerifierProvingKey {
     /// [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder) onto advice
     /// columns, and returns the [`AdviceColumns<Fr>`] + instance columns ready for
     /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
-    ///
-    /// Under `halo2-gpu` the advice columns are device buffers; otherwise host
-    /// `Vec<Fr>` columns — both fit the same `AdviceColumns<Fr>` alias.
-    ///
-    /// Public so benchmarks (see the `graph_executor_prove_wrapped_pipeline` test)
-    /// can time the witness path in isolation from SNARK generation.
     ///
     /// `diagnostic_params` is only consulted when `STATIC_VERIFIER_COMPARE_WITNESS`
     /// is set — see [`Self::compare_witness_with_base_builder`] (`halo2-gpu` only;

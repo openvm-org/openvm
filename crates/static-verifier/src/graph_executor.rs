@@ -3,7 +3,7 @@
 //! Lowering ([`GraphExecutor::new`]) flattens every graph node into a
 //! [`GraphCoreInst`]: ranges into flat operand-offset / constant-skip tables plus
 //! the node's precomputed tape offsets and lengths from
-//! [`NodeMeta`](crate::halo2_ir_builder::NodeMeta). The witness tape has layout
+//! [`NodeMeta`](crate::ir_builder::NodeMeta). The witness tape has layout
 //! `[advice | lookups | consts]` — fixed-column constants are deduplicated into
 //! the trailing region — so operand gathering is uniform: every operand is a
 //! tape offset.
@@ -49,7 +49,7 @@ use crate::{
 };
 
 /// One lowered graph node (replayed via
-/// [`interpret_op`](crate::halo2_opcode_impl::interpret_op)).
+/// [`interpret_op`](crate::opcode_impl::interpret_op)).
 #[derive(Copy, Clone, Debug)]
 struct GraphCoreInst {
     opcode: Halo2Opcode,
@@ -120,9 +120,9 @@ pub struct GraphExecutor {
     /// once the instruction finishes; workers spin on parent flags waiting for
     /// them to reach the current phase before executing.
     flags: Vec<AtomicU8>,
-    /// Wrapping run counter; each [`Self::run`] bumps it (skipping 0) and
-    /// stamps finished instructions' `flags` with it, so flags never need
-    /// resetting between runs.
+    /// Wrapping run counter; stamps finished instructions' `flags`. Safe to
+    /// wrap because [`Self::run`] is synchronous (workers join, tape restored)
+    /// before the next run — no reader outlives a run.
     phase: u8,
 }
 
@@ -955,8 +955,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        backend::Halo2Backend,
-        stages::{full_pipeline::load_proof_wire, proof_shape::log_heights_per_air_from_proof},
+        backend::Halo2Backend, stages::proof_shape::log_heights_per_air_from_proof,
     };
     #[cfg(feature = "halo2-gpu")]
     use crate::{
