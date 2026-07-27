@@ -53,7 +53,7 @@ __global__ void addi_replay_tracegen(
     uint32_t rs1_ptr = instruction.words[2];
     uint32_t encoded_imm = instruction.words[3];
     if (instruction.words[0] != addi_opcode || instruction.words[4] != register_address_space ||
-        instruction.words[5] != immediate_address_space || (rd_ptr & 1) != 0 ||
+        instruction.words[5] != immediate_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
         (rs1_ptr & 1) != 0) {
         preflight_set_error(error, 4);
         return;
