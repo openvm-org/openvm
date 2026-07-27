@@ -20,7 +20,7 @@ use openvm_circuit_primitives::{
     ColumnsAir,
 };
 use openvm_cpu_backend::CpuBackend;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
@@ -32,10 +32,10 @@ use openvm_stark_backend::{
 use rustc_hash::FxHashMap;
 use tracing::info_span;
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::cuda::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript};
+#[cfg(feature = "cuda")]
+use super::cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript};
 use super::{GenerationError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use crate::system::cuda::SystemChipInventoryGPU;
 use crate::system::{
     memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
@@ -858,7 +858,7 @@ where
     }
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 impl<SC> VmChipComplex<SC, GpuBackend, SystemChipInventoryGPU>
 where
     SC: StarkProtocolConfig,

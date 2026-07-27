@@ -18,7 +18,10 @@ use rustc_hash::FxHashMap;
 use super::{generate_trace_from_postflight, NopPhantomExecutor, PhantomExecutor};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
-    arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
+    arch::{
+        cuda::postflight::GpuPostflightProgram,
+        rvr::{PreflightEndpoint, PreflightEventLog},
+    },
     system::cuda::phantom::PhantomChipGPU,
 };
 use crate::{

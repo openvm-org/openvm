@@ -17,23 +17,25 @@ fn main() {
             .flag("-Xcompiler=-Wno-maybe-uninitialized");
         builder.emit_link_directives();
 
-        let mut system_builder = builder.clone().library_name("tracegen_gpu_system").files([
-            "cuda/src/system/boundary.cu",
-            "cuda/src/system/inventory.cu",
-            "cuda/src/system/memory/merkle_tree.cu",
-            "cuda/src/system/phantom.cu",
-            "cuda/src/system/poseidon2.cu",
-            "cuda/src/system/program.cu",
-        ]);
+        let mut system_builder = builder
+            .clone()
+            .include("cuda/rvr/include")
+            .watch("cuda/rvr/include")
+            .library_name("tracegen_gpu_system")
+            .flag("-DOPENVM_PREFLIGHT_REPLAY")
+            .files([
+                "cuda/src/system/boundary.cu",
+                "cuda/src/system/inventory.cu",
+                "cuda/src/system/memory/merkle_tree.cu",
+                "cuda/src/system/phantom.cu",
+                "cuda/src/system/poseidon2.cu",
+                "cuda/src/system/program.cu",
+                "cuda/src/system/postflight.cu",
+            ]);
         if cfg!(feature = "rvr") {
             system_builder = system_builder
-                .include("cuda/rvr/include")
                 .watch("cuda/rvr")
-                .flag("-DOPENVM_RVR_REPLAY")
-                .files([
-                    "cuda/src/system/rvr_checkpoint_replay.cu",
-                    "cuda/src/system/rvr_postflight.cu",
-                ]);
+                .file("cuda/src/system/rvr_checkpoint_replay.cu");
         }
         system_builder.build();
 

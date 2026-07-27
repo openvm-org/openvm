@@ -56,7 +56,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing::Level;
 
 #[cfg(feature = "rvr")]
-use crate::arch::rvr::cuda::{
+use crate::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
 #[cfg(feature = "metrics")]

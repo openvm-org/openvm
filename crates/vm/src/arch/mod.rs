@@ -1,4 +1,6 @@
 mod config;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 /// Streams-like deferral state
 pub mod deferral;
 /// Instruction execution traits and types.

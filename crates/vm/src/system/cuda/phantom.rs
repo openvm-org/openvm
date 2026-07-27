@@ -2,16 +2,15 @@ use derive_new::new;
 use openvm_circuit::{system::phantom::PhantomCols, utils::next_power_of_two_or_zero};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::stream::GpuDeviceCtx;
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
-#[cfg(feature = "rvr")]
-use {
-    crate::arch::rvr::cuda::{
+
+use crate::{
+    arch::cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
-    openvm_instructions::{LocalOpcode, SystemOpcode},
+    cuda_abi::phantom,
 };
-
-use crate::cuda_abi::phantom;
 
 #[derive(new)]
 pub struct PhantomChipGPU {
@@ -23,7 +22,6 @@ impl PhantomChipGPU {
         PhantomCols::<F>::width()
     }
 
-    #[cfg(feature = "rvr")]
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,

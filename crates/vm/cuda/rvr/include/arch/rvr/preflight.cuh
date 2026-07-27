@@ -28,25 +28,29 @@ struct PreflightInitialWrite {
 // One field-cell memory-bus block represented by canonical unsigned integers.
 // For FIELD32 events/seeds, the low 32 bits of the compact value payload index
 // the corresponding dense event/first-write sidecar; the high 32 bits are zero.
-struct RvrFieldBlock {
+struct GpuFieldBlock {
     uint32_t values[4];
 };
 
-struct RvrReplayInstruction {
+struct GpuReplayInstruction {
     uint32_t words[8];
 };
 
-struct RvrReplayStep {
+struct GpuReplayStep {
     uint32_t program_index;
     uint32_t memory_start;
 };
 
+using RvrFieldBlock = GpuFieldBlock;
+using RvrReplayInstruction = GpuReplayInstruction;
+using RvrReplayStep = GpuReplayStep;
+
 static_assert(sizeof(PreflightProgramEvent) == 8);
 static_assert(sizeof(PreflightMemoryEvent) == 20);
 static_assert(sizeof(PreflightInitialWrite) == 16);
-static_assert(sizeof(RvrFieldBlock) == 16);
-static_assert(sizeof(RvrReplayInstruction) == 32);
-static_assert(sizeof(RvrReplayStep) == 8);
+static_assert(sizeof(GpuFieldBlock) == 16);
+static_assert(sizeof(GpuReplayInstruction) == 32);
+static_assert(sizeof(GpuReplayStep) == 8);
 
 __device__ __forceinline__ uint32_t preflight_address_space(PreflightMemoryEvent const &event) {
     return event.address_space_and_kind & PREFLIGHT_ADDRESS_SPACE_MASK;

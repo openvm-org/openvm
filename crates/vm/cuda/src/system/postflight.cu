@@ -1,4 +1,4 @@
-#define CUB_WRAPPED_NAMESPACE openvm_rvr_postflight_cub
+#define CUB_WRAPPED_NAMESPACE openvm_postflight_cub
 #include "arch/rvr/replay.cuh"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace cub = openvm_rvr_postflight_cub::cub;
+namespace cub = openvm_postflight_cub::cub;
 
 namespace {
 
@@ -27,15 +27,15 @@ static constexpr uint8_t FIELD_FULL_WRITE_MASK = 0xff;
 static constexpr int BLOCK_KEY_BEGIN_BIT = 32;
 static constexpr int BLOCK_KEY_END_BIT = 64;
 
-struct RvrMemoryAddressSpace {
+struct GpuMemoryAddressSpace {
     uint64_t num_cells;
     uint32_t cell_kind;
     uint32_t padding;
 };
 
-static_assert(sizeof(RvrMemoryAddressSpace) == 16);
+static_assert(sizeof(GpuMemoryAddressSpace) == 16);
 static_assert(offsetof(PreflightMemoryEvent, value) % alignof(uint32_t) == 0);
-using RvrTouchedBlock = MemoryTouchedBlock;
+using GpuTouchedBlock = MemoryTouchedBlock;
 using AliasedU32 = uint32_t __attribute__((may_alias));
 
 struct ValueChunk {
@@ -74,7 +74,7 @@ struct LastWriteWins {
 __device__ bool compact_block_key(
     uint32_t address_space,
     uint32_t pointer,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     uint32_t address_space_offset,
     uint32_t address_space_height,
     uint32_t pointer_max_bits,
@@ -106,7 +106,7 @@ __device__ bool initial_quad(
     uint32_t address_space,
     uint32_t pointer,
     uint32_t byte_offset,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
     uint8_t (&out)[4]
 ) {
@@ -142,7 +142,7 @@ __device__ __forceinline__ void set_field_reference(uint16_t (&value)[4], uint32
     value[3] = 0;
 }
 
-__device__ __forceinline__ bool field_block_is_valid(RvrFieldBlock const &block) {
+__device__ __forceinline__ bool field_block_is_valid(GpuFieldBlock const &block) {
 #pragma unroll
     for (uint32_t lane = 0; lane < 4; ++lane) {
         if (block.values[lane] >= Fp::P) return false;
@@ -153,9 +153,9 @@ __device__ __forceinline__ bool field_block_is_valid(RvrFieldBlock const &block)
 __device__ bool load_initial_field_block(
     uint32_t address_space,
     uint32_t pointer,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
-    RvrFieldBlock &out
+    GpuFieldBlock &out
 ) {
 #pragma unroll
     for (uint32_t quad = 0; quad < 4; ++quad) {
@@ -176,8 +176,8 @@ __device__ bool load_initial_field_block(
 __global__ void prepare_chronology_entries(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
-    DeviceBufferConstView<RvrFieldBlock> field_values,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuFieldBlock> field_values,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     uint32_t address_space_offset,
     uint32_t address_space_height,
     uint32_t pointer_max_bits,
@@ -343,7 +343,7 @@ __global__ void finish_chronology_counts(
 __global__ void scatter_chronology_metadata(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
     uint64_t const *sorted_keys,
     uint64_t const *packed_positions,
@@ -351,10 +351,10 @@ __global__ void scatter_chronology_metadata(
     uint32_t *predecessors,
     PreflightInitialWrite *seeds,
     size_t num_seeds,
-    RvrFieldBlock *field_seeds,
+    GpuFieldBlock *field_seeds,
     size_t num_field_seeds,
     uint32_t field_seed_base,
-    RvrTouchedBlock *touched,
+    GpuTouchedBlock *touched,
     size_t num_touched,
     uint32_t *error
 ) {
@@ -387,7 +387,7 @@ __global__ void scatter_chronology_metadata(
                     return;
                 }
                 uint32_t field_seed_index = seed_index - field_seed_base;
-                RvrFieldBlock initial;
+                GpuFieldBlock initial;
                 if (!load_initial_field_block(
                         preflight_address_space(event),
                         event.pointer,
@@ -459,9 +459,9 @@ __global__ void scatter_chronology_metadata(
 __global__ void prepare_value_chunks(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
-    DeviceBufferConstView<RvrFieldBlock> field_values,
+    DeviceBufferConstView<GpuFieldBlock> field_values,
     uint64_t const *sorted_keys,
     size_t sorted_offset,
     size_t num_entries,
@@ -503,7 +503,7 @@ __global__ void prepare_value_chunks(
     }
     uint8_t mask;
     uint8_t const *patch;
-    RvrFieldBlock raw_field_patch;
+    GpuFieldBlock raw_field_patch;
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len()) {
@@ -545,8 +545,8 @@ __global__ void prepare_value_chunks(
 
 __global__ void scatter_value_chunks(
     DeviceBufferView<PreflightMemoryEvent> memory,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
-    DeviceBufferView<RvrFieldBlock> field_values,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
+    DeviceBufferView<GpuFieldBlock> field_values,
     uint32_t register_address_space,
     uint64_t const *sorted_keys,
     size_t sorted_offset,
@@ -630,12 +630,12 @@ __global__ void scatter_value_chunks(
 
 __global__ void finalize_chronology_touched(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
-    DeviceBufferConstView<RvrFieldBlock> field_values,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuFieldBlock> field_values,
     uint32_t register_address_space,
     uint64_t const *sorted_keys,
     ValueChunk const *chunks,
-    RvrTouchedBlock *touched,
+    GpuTouchedBlock *touched,
     size_t num_touched,
     uint32_t *error
 ) {
@@ -688,7 +688,7 @@ __global__ void finalize_chronology_touched(
 
 } // namespace
 
-extern "C" int _rvr_memory_chronology_get_temp_bytes(
+extern "C" int _postflight_memory_chronology_get_temp_bytes(
     size_t num_entries,
     size_t *h_temp_bytes_out,
     cudaStream_t stream
@@ -732,11 +732,11 @@ extern "C" int _rvr_memory_chronology_get_temp_bytes(
     return CHECK_KERNEL();
 }
 
-extern "C" int _rvr_memory_chronology_sort_and_count(
+extern "C" int _postflight_memory_chronology_sort_and_count(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
-    DeviceBufferConstView<RvrFieldBlock> field_values,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuFieldBlock> field_values,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     uint32_t address_space_offset,
     uint32_t address_space_height,
     uint32_t pointer_max_bits,
@@ -831,22 +831,22 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
     return CHECK_KERNEL();
 }
 
-extern "C" int _rvr_memory_chronology_resolve(
+extern "C" int _postflight_memory_chronology_resolve(
     DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
-    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
-    DeviceBufferView<RvrFieldBlock> field_values,
+    DeviceBufferView<GpuFieldBlock> field_values,
     uint32_t register_address_space,
     uint64_t const *sorted_keys,
     uint64_t *workspace,
     uint32_t *predecessors,
     DeviceBufferView<PreflightInitialWrite> seeds,
-    DeviceBufferView<RvrFieldBlock> field_seeds,
+    DeviceBufferView<GpuFieldBlock> field_seeds,
     uint32_t field_begin,
     uint32_t field_end,
     uint32_t field_seed_base,
-    DeviceBufferView<RvrTouchedBlock> touched,
+    DeviceBufferView<GpuTouchedBlock> touched,
     void *temp_storage,
     size_t temp_storage_bytes,
     uint32_t *error,
@@ -882,7 +882,7 @@ extern "C" int _rvr_memory_chronology_resolve(
         write_masks,
         address_spaces,
         initial_memory,
-        DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+        DeviceBufferConstView<GpuFieldBlock>{field_values.ptr, field_values.size},
         sorted_keys,
         0,
         num_entries,
@@ -931,7 +931,7 @@ extern "C" int _rvr_memory_chronology_resolve(
             write_masks,
             address_spaces,
             initial_memory,
-            DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+            DeviceBufferConstView<GpuFieldBlock>{field_values.ptr, field_values.size},
             sorted_keys,
             field_begin,
             num_field_entries,
@@ -974,7 +974,7 @@ extern "C" int _rvr_memory_chronology_resolve(
         finalize_chronology_touched<<<touched_grid, touched_block, 0, stream>>>(
             DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
             address_spaces,
-            DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+            DeviceBufferConstView<GpuFieldBlock>{field_values.ptr, field_values.size},
             register_address_space,
             sorted_keys,
             chunks,
@@ -999,12 +999,12 @@ static constexpr uint32_t ERROR_TIMESTAMP_DOMAIN = 117;
 static constexpr uint32_t ENDPOINT_TERMINATED = 0;
 static constexpr uint32_t ENDPOINT_SUSPENDED = 1;
 
-struct RvrOpcodeRange {
+struct GpuOpcodeRange {
     uint32_t start;
     uint32_t end;
 };
 
-static_assert(sizeof(RvrOpcodeRange) == 8);
+static_assert(sizeof(GpuOpcodeRange) == 8);
 
 __device__ size_t memory_lower_bound(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
@@ -1024,7 +1024,7 @@ __device__ size_t memory_lower_bound(
 }
 
 __global__ void prepare_program_steps(
-    DeviceBufferConstView<RvrReplayInstruction> instructions,
+    DeviceBufferConstView<GpuReplayInstruction> instructions,
     DeviceBufferConstView<uint32_t> dense_program_rows,
     uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program,
@@ -1035,7 +1035,7 @@ __global__ void prepare_program_steps(
     uint32_t final_timestamp,
     uint32_t terminate_opcode,
     uint32_t *opcode_keys,
-    RvrReplayStep *steps,
+    GpuReplayStep *steps,
     uint32_t *program_frequencies,
     uint32_t *error
 ) {
@@ -1048,7 +1048,7 @@ __global__ void prepare_program_steps(
     if (program_index == 0 && from.timestamp != 1) {
         preflight_set_error(error, ERROR_PROGRAM_START);
     }
-    RvrReplayInstruction const *instruction = nullptr;
+    GpuReplayInstruction const *instruction = nullptr;
     size_t instruction_slot = 0;
     instruction =
         resolve_replay_instruction(instructions, pc_base, from.pc, &instruction_slot);
@@ -1092,7 +1092,7 @@ __global__ void prepare_program_steps(
                 return;
             }
         } else if (endpoint_kind == ENDPOINT_SUSPENDED) {
-            RvrReplayInstruction const *resume_instruction = nullptr;
+            GpuReplayInstruction const *resume_instruction = nullptr;
             size_t resume_slot = 0;
             resume_instruction =
                 resolve_replay_instruction(instructions, pc_base, to.pc, &resume_slot);
@@ -1108,7 +1108,7 @@ __global__ void prepare_program_steps(
     }
 
     opcode_keys[program_index] = opcode;
-    steps[program_index] = RvrReplayStep{
+    steps[program_index] = GpuReplayStep{
         .program_index = static_cast<uint32_t>(program_index),
         .memory_start = static_cast<uint32_t>(memory_start),
     };
@@ -1116,7 +1116,7 @@ __global__ void prepare_program_steps(
 }
 
 __global__ void validate_empty_program(
-    DeviceBufferConstView<RvrReplayInstruction> instructions,
+    DeviceBufferConstView<GpuReplayInstruction> instructions,
     uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program,
     DeviceBufferConstView<PreflightMemoryEvent> memory,
@@ -1127,7 +1127,7 @@ __global__ void validate_empty_program(
     uint32_t *error
 ) {
     auto const &sentinel = program[0];
-    RvrReplayInstruction const *resume_instruction = nullptr;
+    GpuReplayInstruction const *resume_instruction = nullptr;
     size_t resume_slot = 0;
     resume_instruction =
         resolve_replay_instruction(instructions, pc_base, sentinel.pc, &resume_slot);
@@ -1179,12 +1179,12 @@ __global__ void build_opcode_ranges(
     uint32_t const *sorted_keys,
     size_t num_steps,
     DeviceBufferConstView<uint32_t> active_opcodes,
-    RvrOpcodeRange *ranges
+    GpuOpcodeRange *ranges
 ) {
     size_t opcode_index = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (opcode_index >= active_opcodes.len()) return;
     uint32_t opcode = active_opcodes[opcode_index];
-    ranges[opcode_index] = RvrOpcodeRange{
+    ranges[opcode_index] = GpuOpcodeRange{
         .start = static_cast<uint32_t>(opcode_lower_bound(sorted_keys, num_steps, opcode)),
         .end = static_cast<uint32_t>(opcode_upper_bound(sorted_keys, num_steps, opcode)),
     };
@@ -1192,7 +1192,7 @@ __global__ void build_opcode_ranges(
 
 } // namespace
 
-extern "C" int _rvr_program_index_get_temp_bytes(
+extern "C" int _postflight_program_index_get_temp_bytes(
     size_t num_steps,
     size_t *h_temp_bytes_out,
     cudaStream_t stream
@@ -1204,8 +1204,8 @@ extern "C" int _rvr_program_index_get_temp_bytes(
             temp_bytes,
             static_cast<uint32_t *>(nullptr),
             static_cast<uint32_t *>(nullptr),
-            static_cast<RvrReplayStep *>(nullptr),
-            static_cast<RvrReplayStep *>(nullptr),
+            static_cast<GpuReplayStep *>(nullptr),
+            static_cast<GpuReplayStep *>(nullptr),
             num_steps,
             0,
             32,
@@ -1216,8 +1216,8 @@ extern "C" int _rvr_program_index_get_temp_bytes(
     return CHECK_KERNEL();
 }
 
-extern "C" int _rvr_program_index(
-    DeviceBufferConstView<RvrReplayInstruction> instructions,
+extern "C" int _postflight_program_index(
+    DeviceBufferConstView<GpuReplayInstruction> instructions,
     DeviceBufferConstView<uint32_t> dense_program_rows,
     uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program,
@@ -1230,9 +1230,9 @@ extern "C" int _rvr_program_index(
     uint32_t terminate_opcode,
     uint32_t *opcode_keys_in,
     uint32_t *opcode_keys_out,
-    RvrReplayStep *steps_in,
-    RvrReplayStep *steps_out,
-    RvrOpcodeRange *ranges,
+    GpuReplayStep *steps_in,
+    GpuReplayStep *steps_out,
+    GpuOpcodeRange *ranges,
     uint32_t *program_frequencies,
     void *temp_storage,
     size_t temp_storage_bytes,
