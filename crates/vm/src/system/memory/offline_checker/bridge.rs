@@ -1,8 +1,6 @@
 use getset::CopyGetters;
 use openvm_circuit_primitives::{
-    assert_less_than::{AssertLessThanIo, AssertLtSubAir},
-    var_range::VariableRangeCheckerBus,
-    SubAir,
+    assert_less_than::AssertLtSubAir, var_range::VariableRangeCheckerBus,
 };
 use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeCharacteristicRing};
 
@@ -152,7 +150,7 @@ pub struct MemoryReadOperation<'a, T, V> {
 }
 
 /// The max degree of constraints is:
-/// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
+/// eval_prev_timestamp: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
 impl<F: PrimeCharacteristicRing, V: Copy + Into<F>> MemoryReadOperation<'_, F, V> {
     /// Evaluate constraints and send/receive interactions.
@@ -165,7 +163,7 @@ impl<F: PrimeCharacteristicRing, V: Copy + Into<F>> MemoryReadOperation<'_, F, V
         // NOTE: We do not need to constrain `address_space != 0` since this is done implicitly by
         // the memory interactions argument together with initial/final memory chips.
 
-        self.offline_checker.eval_timestamps(
+        let prev_timestamp = self.offline_checker.eval_prev_timestamp(
             builder,
             self.timestamp.clone(),
             &self.aux.base,
@@ -178,7 +176,7 @@ impl<F: PrimeCharacteristicRing, V: Copy + Into<F>> MemoryReadOperation<'_, F, V
             &self.data,
             &self.data,
             self.timestamp.clone(),
-            self.aux.base.prev_timestamp,
+            prev_timestamp,
             enabled,
         );
     }
@@ -200,7 +198,7 @@ pub struct MemoryWriteOperation<'a, T, V> {
 }
 
 /// The max degree of constraints is:
-/// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
+/// eval_prev_timestamp: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
 impl<T: PrimeCharacteristicRing, V: Copy + Into<T>> MemoryWriteOperation<'_, T, V> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
@@ -209,7 +207,7 @@ impl<T: PrimeCharacteristicRing, V: Copy + Into<T>> MemoryWriteOperation<'_, T, 
         AB: InteractionBuilder<Var = V, Expr = T>,
     {
         let enabled = enabled.into();
-        self.offline_checker.eval_timestamps(
+        let prev_timestamp = self.offline_checker.eval_prev_timestamp(
             builder,
             self.timestamp.clone(),
             self.aux_base,
@@ -222,7 +220,7 @@ impl<T: PrimeCharacteristicRing, V: Copy + Into<T>> MemoryWriteOperation<'_, T, 
             &self.data,
             &self.prev_data,
             self.timestamp,
-            self.aux_base.prev_timestamp,
+            prev_timestamp,
             enabled,
         );
     }
@@ -248,19 +246,24 @@ impl MemoryOfflineChecker {
         }
     }
 
-    /// The max degree of constraints is:
-    /// deg(enabled) + max(1, deg(timestamp))
-    /// Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
-    fn eval_timestamps<AB: InteractionBuilder>(
+    /// Range checks the timestamp difference limbs and returns
+    /// `prev_timestamp = timestamp - 1 - compose(timestamp_lt_aux)`.
+    ///
+    /// The returned expression has degree `max(1, deg(timestamp))` and is constrained to be less
+    /// than `timestamp`.
+    fn eval_prev_timestamp<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         timestamp: AB::Expr,
         base: &MemoryBaseAuxCols<AB::Var>,
         enabled: AB::Expr,
-    ) {
-        let lt_io = AssertLessThanIo::new(base.prev_timestamp, timestamp.clone(), enabled);
-        self.timestamp_lt_air
-            .eval(builder, (lt_io, &base.timestamp_lt_aux.lower_decomp));
+    ) -> AB::Expr {
+        self.timestamp_lt_air.eval_derive_x(
+            builder,
+            timestamp,
+            &base.timestamp_lt_aux.diff_decomp,
+            enabled,
+        )
     }
 
     /// At the core, eval_bulk_access is a bunch of push_sends and push_receives.
@@ -275,7 +278,7 @@ impl MemoryOfflineChecker {
         data: &[AB::Expr; BLOCK_FE_WIDTH],
         prev_data: &[AB::Expr; BLOCK_FE_WIDTH],
         timestamp: AB::Expr,
-        prev_timestamp: AB::Var,
+        prev_timestamp: AB::Expr,
         enabled: AB::Expr,
     ) where
         AB: InteractionBuilder,
