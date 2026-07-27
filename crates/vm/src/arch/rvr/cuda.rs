@@ -36,8 +36,8 @@ use super::PreflightEventLog;
 use super::{bridge::read_rv64_registers, preflight::PreflightExecution, PreflightEndpoint};
 use crate::{
     arch::{
-        to_byte_ptr_bits, ExecutionState, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET,
-        BLOCK_FE_WIDTH,
+        to_byte_ptr_bits, ExecutionState, MemoryCellType, MemoryConfig, PreflightHistory,
+        ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
     },
     cuda_abi::{rvr_checkpoint_replay, rvr_postflight},
     system::TouchedBlock,
@@ -905,8 +905,7 @@ pub struct GpuPostflightProgram {
     checkpoint_static_values: DeviceBuffer<u64>,
     checkpoint_schedule_opcodes: Vec<u32>,
     memory_address_spaces: DeviceBuffer<RvrMemoryAddressSpace>,
-    #[cfg(feature = "test-utils")]
-    /// Host layout for validating fabricated expanded logs before upload.
+    /// Host layout for validating and uploading expanded interpreter logs.
     memory_config: MemoryConfig,
     address_space_height: u32,
     /// Pointer width used by chronology keys, whose pointers count AS-native cells.
@@ -1064,7 +1063,6 @@ impl GpuPostflightProgram {
             checkpoint_static_values: upload(&registry.static_values, device_ctx)?,
             checkpoint_schedule_opcodes,
             memory_address_spaces: upload(&memory_address_spaces, device_ctx)?,
-            #[cfg(feature = "test-utils")]
             memory_config: memory_config.clone(),
             address_space_height: memory_config.addr_space_height as u32,
             cell_pointer_max_bits: memory_config.pointer_max_bits as u32,
@@ -1112,6 +1110,114 @@ impl GpuPostflightProgram {
             segment_identity,
         )?;
         Ok((gpu, plan))
+    }
+
+    /// Uploads expanded history produced by serial interpreter preflight.
+    ///
+    /// The interpreter already records full block values. Chronology still
+    /// runs once on the GPU to derive predecessor indexes and touched blocks
+    /// in the same format as compiled preflight.
+    pub(crate) fn upload_history(
+        &self,
+        history: &PreflightHistory,
+        endpoint: PreflightEndpoint,
+        boundary: ConnectorBoundary,
+        initial_memory_images: &[DeviceBufferView],
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        if history.program.is_empty() {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "preflight history must contain a final program sentinel".to_string(),
+            ));
+        }
+        if history.memory.accesses.len() >= (1usize << 31) {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "preflight memory log exceeds packed predecessor indexes".to_string(),
+            ));
+        }
+
+        let mut write_masks = Vec::with_capacity(history.memory.accesses.len());
+        let mut field_values = history.memory.field_values.clone();
+        let mut field_cursor = 0usize;
+        for event in &history.memory.accesses {
+            let address_space = event.address_space() as usize;
+            let layout = self
+                .memory_config
+                .addr_spaces
+                .get(address_space)
+                .ok_or_else(|| {
+                    GpuPostflightError::InvalidTranscript(format!(
+                        "memory event uses unknown address space {address_space}"
+                    ))
+                })?
+                .layout;
+            write_masks.push(if event.is_write() { u8::MAX } else { 0 });
+            if layout == MemoryCellType::field32() {
+                let reference =
+                    usize::try_from(u32::from(event.value[0]) | (u32::from(event.value[1]) << 16))
+                        .unwrap();
+                if event.value[2] != 0
+                    || event.value[3] != 0
+                    || reference != field_cursor
+                    || reference >= field_values.len()
+                {
+                    return Err(GpuPostflightError::InvalidTranscript(
+                        "field memory events must use dense ordered sidecar references".to_string(),
+                    ));
+                }
+                if !event.is_write() {
+                    field_values[reference] = PreflightFieldBlock::default();
+                }
+                field_cursor += 1;
+            }
+        }
+        if field_cursor != field_values.len() {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "field sidecar contains unreferenced values".to_string(),
+            ));
+        }
+
+        let program_log = upload(&history.program, &self.device_ctx)?;
+        let memory_log = upload(&history.memory.accesses, &self.device_ctx)?;
+        let field_values = upload(&field_values, &self.device_ctx)?;
+        let write_masks = upload(&write_masks, &self.device_ctx)?;
+        let error = [0u32].to_device_on(&self.device_ctx)?;
+        let (initial_write_log, field_initial_values, memory_index) = build_gpu_memory_chronology(
+            &memory_log,
+            &write_masks,
+            &field_values,
+            initial_memory_images,
+            self.address_space_height,
+            self.cell_pointer_max_bits,
+            self.memory_address_spaces.view(),
+            &error,
+            &self.device_ctx,
+        )?;
+        drop(write_masks);
+
+        let segment_identity = Arc::new(());
+        let transcript = GpuPostflightTranscript {
+            program_log,
+            memory_log,
+            initial_write_log,
+            field_values,
+            field_initial_values,
+            memory_predecessors: memory_index.predecessors,
+            touched_blocks: memory_index.touched_blocks,
+            num_touched_blocks: memory_index.num_touched_blocks,
+            error,
+            device_ctx: self.device_ctx.clone(),
+            program_identity: self.identity.clone(),
+            segment_identity: segment_identity.clone(),
+        };
+        let plan = GpuPostflightPlan::build(
+            self,
+            &transcript,
+            endpoint,
+            boundary,
+            self.identity.clone(),
+            segment_identity,
+        )?;
+        Ok((transcript, plan))
     }
 
     /// Expands checkpoint execution into ordinary program and memory logs.
@@ -1908,7 +2014,7 @@ mod tests {
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     };
 
-    use super::*;
+    use super::{super::postflight::MEMORY_PREDECESSOR_SEED_BIT, *};
 
     fn event_value(
         timestamp: u32,
@@ -2088,6 +2194,111 @@ mod tests {
             program.identity.clone(),
             segment_identity,
         )
+    }
+
+    #[test]
+    fn interpreter_history_uses_the_standard_gpu_indexes() {
+        let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
+        let opcode = 17;
+        let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
+        let program = gpu_program(&[opcode, terminate], &device_ctx);
+        let first = [1u16, 2, 3, 4];
+        let initial_second = [5u16, 6, 7, 8];
+        let written_second = [9u16, 10, 11, 12];
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 3,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 3,
+                },
+            ],
+            memory: crate::arch::PreflightMemoryLog {
+                accesses: vec![
+                    event_value(1, RV64_REGISTER_AS, 0, false, first),
+                    event_value(
+                        2,
+                        RV64_REGISTER_AS,
+                        BLOCK_FE_WIDTH as u32,
+                        true,
+                        written_second,
+                    ),
+                ],
+                initial_writes: vec![PreflightInitialWrite {
+                    address_space: RV64_REGISTER_AS,
+                    pointer: BLOCK_FE_WIDTH as u32,
+                    initial_value: initial_second,
+                }],
+                field_values: vec![],
+                field_initial_values: vec![],
+            },
+        };
+        let mut initial_registers = Vec::new();
+        for value in first.into_iter().chain(initial_second) {
+            initial_registers.extend_from_slice(&value.to_le_bytes());
+        }
+        let initial_memory = (0..program.memory_config.addr_spaces.len())
+            .map(|address_space| {
+                upload(
+                    if address_space == RV64_REGISTER_AS as usize {
+                        initial_registers.as_slice()
+                    } else {
+                        &[]
+                    },
+                    &device_ctx,
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let initial_memory_views = initial_memory
+            .iter()
+            .map(|image| image.view())
+            .collect::<Vec<_>>();
+
+        let (transcript, plan) = program
+            .upload_history(
+                &history,
+                PreflightEndpoint::Terminated,
+                (
+                    ExecutionState::new(0u32, 1u32),
+                    ExecutionState::new(4u32, 3u32),
+                    Some(0),
+                ),
+                &initial_memory_views,
+            )
+            .unwrap();
+
+        assert_eq!(
+            transcript
+                .initial_write_log
+                .to_host_on(&device_ctx)
+                .unwrap(),
+            history.memory.initial_writes
+        );
+        assert_eq!(
+            transcript
+                .memory_predecessors
+                .to_host_on(&device_ctx)
+                .unwrap(),
+            vec![0, MEMORY_PREDECESSOR_SEED_BIT]
+        );
+        assert_eq!(
+            plan.opcode_range(VmOpcode::from_usize(opcode as usize))
+                .len(),
+            1
+        );
+        assert_eq!(
+            plan.opcode_range(SystemOpcode::TERMINATE.global_opcode())
+                .len(),
+            1
+        );
     }
 
     fn mixed_chronology_fixture() -> (MemoryConfig, Vec<Vec<u8>>) {
