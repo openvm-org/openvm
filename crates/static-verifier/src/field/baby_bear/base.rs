@@ -25,10 +25,12 @@ pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
 // bits reserved so that if we do lazy range checking, we still have a valid result
 // the first reserved bit is so that we can represent negative numbers
 // the second is to accommodate lazy range checking
-const RESERVED_HIGH_BITS: usize = 2;
+pub(crate) const RESERVED_HIGH_BITS: usize = 2;
 
+/// Generic over the cell representation `F`, which is `AssignedValue<Fr>` for the halo2 backend
+/// and a node id for the graph IR backend.
 #[derive(Copy, Clone, Debug)]
-pub struct BabyBearWire {
+pub struct BabyBearWire<F = AssignedValue<Fr>> {
     /// Logically `value` is a signed integer represented as `Bn254`.
     /// Invariants:
     /// - `|value|` never overflows `Bn254`
@@ -36,7 +38,7 @@ pub struct BabyBearWire {
     ///
     /// Basically `value` could do arithmetic operations without extra constraints as long as the
     /// result doesn't overflow `Bn254`. And it's easy to track `max_bits` of the result.
-    pub value: AssignedValue<Fr>,
+    pub value: F,
     /// The value is guaranteed to be less than 2^max_bits.
     pub max_bits: usize,
 }
@@ -48,23 +50,23 @@ pub struct BabyBearWire {
 /// via `BabyBearWire::from` only drops this type-level evidence and does not add or
 /// remove constraints.
 #[derive(Copy, Clone, Debug)]
-pub struct ReducedBabyBearWire(BabyBearWire);
+pub struct ReducedBabyBearWire<F = AssignedValue<Fr>>(BabyBearWire<F>);
 
-impl ReducedBabyBearWire {
-    pub fn value(&self) -> AssignedValue<Fr> {
+impl<F: Copy> ReducedBabyBearWire<F> {
+    pub fn value(&self) -> F {
         self.0.value
     }
 }
 
-impl From<ReducedBabyBearWire> for BabyBearWire {
+impl<F> From<ReducedBabyBearWire<F>> for BabyBearWire<F> {
     /// Drops the canonicality evidence and returns the underlying arithmetic wire.
-    fn from(wire: ReducedBabyBearWire) -> Self {
+    fn from(wire: ReducedBabyBearWire<F>) -> Self {
         wire.0
     }
 }
 
-impl From<&ReducedBabyBearWire> for BabyBearWire {
-    fn from(wire: &ReducedBabyBearWire) -> Self {
+impl<F: Copy> From<&ReducedBabyBearWire<F>> for BabyBearWire<F> {
+    fn from(wire: &ReducedBabyBearWire<F>) -> Self {
         (*wire).into()
     }
 }

@@ -1,19 +1,17 @@
-use halo2_base::Context;
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use crate::{
-    field::baby_bear::{BabyBearExtChip, BabyBearWire},
-    Fr, RootF,
+    chip_traits::BabyBearExt4Inst,
+    field::baby_bear::{BabyBearExtWire, BabyBearWire},
+    RootF,
 };
 
-pub(crate) type BabyBearExtWire = crate::field::baby_bear::BabyBearExtWire;
-
-pub(crate) fn column_openings_by_rot_assigned(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    openings: &[BabyBearExtWire],
+#[allow(clippy::type_complexity)]
+pub(crate) fn column_openings_by_rot_assigned<B: BabyBearExt4Inst>(
+    b: &mut B,
+    openings: &[BabyBearExtWire<B::F>],
     need_rot: bool,
-) -> Vec<(BabyBearExtWire, BabyBearExtWire)> {
+) -> Vec<(BabyBearExtWire<B::F>, BabyBearExtWire<B::F>)> {
     if need_rot {
         assert!(
             openings.len().is_multiple_of(2),
@@ -24,7 +22,7 @@ pub(crate) fn column_openings_by_rot_assigned(
             .map(|chunk| (chunk[0], chunk[1]))
             .collect::<Vec<_>>()
     } else {
-        let zero = ext_chip.zero(ctx);
+        let zero = b.ext_zero();
         openings
             .iter()
             .map(|opening| (*opening, zero))
@@ -32,68 +30,65 @@ pub(crate) fn column_openings_by_rot_assigned(
     }
 }
 
-pub(crate) fn horner_eval_ext_poly_assigned(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    coeffs: &[BabyBearExtWire],
-    x: &BabyBearExtWire,
-) -> BabyBearExtWire {
+pub(crate) fn horner_eval_ext_poly_assigned<B: BabyBearExt4Inst>(
+    b: &mut B,
+    coeffs: &[BabyBearExtWire<B::F>],
+    x: &BabyBearExtWire<B::F>,
+) -> BabyBearExtWire<B::F> {
     if coeffs.is_empty() {
-        return ext_chip.zero(ctx);
+        return b.ext_zero();
     }
     // Pre-reduce x so that ext_mul doesn't redundantly reduce the same
     // high-max_bits components on every Horner step.
-    let x_reduced = ext_chip.reduce_max_bits(ctx, *x);
+    let x_reduced = b.ext_reduce_max_bits(*x);
     let mut acc = *coeffs.last().unwrap();
     for coeff in coeffs.iter().rev().skip(1) {
-        acc = ext_chip.mul(ctx, acc, x_reduced);
-        acc = ext_chip.add(ctx, acc, *coeff);
+        acc = b.ext_mul(acc, x_reduced);
+        acc = b.ext_add(acc, *coeff);
     }
     acc
 }
 
-pub(crate) fn horner_eval_ext_poly_f_assigned(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    coeffs: &[BabyBearExtWire],
-    x: &BabyBearWire,
-) -> BabyBearExtWire {
+pub(crate) fn horner_eval_ext_poly_f_assigned<B: BabyBearExt4Inst>(
+    b: &mut B,
+    coeffs: &[BabyBearExtWire<B::F>],
+    x: &BabyBearWire<B::F>,
+) -> BabyBearExtWire<B::F> {
     if coeffs.is_empty() {
-        return ext_chip.zero(ctx);
+        return b.ext_zero();
     }
     // Pre-reduce x so that each mul_add step inside the loop doesn't redundantly
     // reduce the same high-max_bits value on every iteration.
-    let x_reduced = ext_chip.base().reduce_max_bits(ctx, *x);
+    let x_reduced = b.bb_reduce_max_bits(*x);
     let mut acc = *coeffs.last().unwrap();
     for coeff in coeffs.iter().rev().skip(1) {
-        acc = ext_chip.scalar_mul_add(ctx, acc, x_reduced, *coeff);
+        acc = b.ext_scalar_mul_add(acc, x_reduced, *coeff);
     }
     acc
 }
 
-pub(crate) fn interpolate_quadratic_at_012_assigned(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    evals: [&BabyBearExtWire; 3],
-    x: &BabyBearExtWire,
-) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, RootF::ONE);
-    let two = ext_chip.from_base_const(ctx, RootF::TWO);
+pub(crate) fn interpolate_quadratic_at_012_assigned<B: BabyBearExt4Inst>(
+    b: &mut B,
+    evals: [&BabyBearExtWire<B::F>; 3],
+    x: &BabyBearExtWire<B::F>,
+) -> BabyBearExtWire<B::F> {
+    let one = b.ext_from_base_const(RootF::ONE);
+    let two = b.ext_from_base_const(RootF::TWO);
     let inv_two = RootF::ONE.halve();
 
-    let x_minus_one = ext_chip.sub(ctx, *x, one);
-    let x_minus_two = ext_chip.sub(ctx, *x, two);
-    let x_times_x_minus_one = ext_chip.mul(ctx, *x, x_minus_one);
-    let x_times_x_minus_two = ext_chip.mul(ctx, *x, x_minus_two);
-    let x_minus_one_times_x_minus_two = ext_chip.mul(ctx, x_minus_one, x_minus_two);
+    let x_minus_one = b.ext_sub(*x, one);
+    let x_minus_two = b.ext_sub(*x, two);
+    let x_times_x_minus_one = b.ext_mul(*x, x_minus_one);
+    let x_times_x_minus_two = b.ext_mul(*x, x_minus_two);
+    let x_minus_one_times_x_minus_two = b.ext_mul(x_minus_one, x_minus_two);
 
-    let l0 = ext_chip.mul_base_const(ctx, x_minus_one_times_x_minus_two, inv_two);
-    let l1 = ext_chip.neg(ctx, x_times_x_minus_two);
-    let l2 = ext_chip.mul_base_const(ctx, x_times_x_minus_one, inv_two);
+    let l0 = b.ext_mul_base_const(x_minus_one_times_x_minus_two, inv_two);
+    let l1 = b.ext_neg(x_times_x_minus_two);
+    let l2 = b.ext_mul_base_const(x_times_x_minus_one, inv_two);
 
-    let term0 = ext_chip.mul(ctx, *evals[0], l0);
-    let term1 = ext_chip.mul(ctx, *evals[1], l1);
-    let term2 = ext_chip.mul(ctx, *evals[2], l2);
-    let sum01 = ext_chip.add(ctx, term0, term1);
-    ext_chip.add(ctx, sum01, term2)
+    let term0 = b.ext_mul(*evals[0], l0);
+    let term1 = b.ext_mul(*evals[1], l1);
+    let term2 = b.ext_mul(*evals[2], l2);
+    let sum01 = b.ext_add(term0, term1);
+    b.ext_add(sum01, term2)
 }

@@ -1,14 +1,13 @@
 use std::borrow::Borrow;
 
-use halo2_base::{
-    gates::GateInstructions, halo2_proofs::arithmetic::Field, AssignedValue, Context, QuantumCell,
-};
+use halo2_base::halo2_proofs::arithmetic::Field;
 use openvm_continuations::circuit::root::{RootVerifierPvs, USER_PVS_COMMIT_AIR_ID};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE as APP_DIGEST_SIZE;
 use openvm_verify_stark_host::pvs::VERIFIER_PVS_AIR_ID;
 
 use crate::{
-    field::baby_bear::{BabyBearChip, ReducedBabyBearWire, BABY_BEAR_MODULUS_U64},
+    chip_traits::GateInst,
+    field::baby_bear::{ReducedBabyBearWire, BABY_BEAR_MODULUS_U64},
     stages::full_pipeline::ProofWire,
     Fr,
 };
@@ -46,15 +45,14 @@ impl<T: Clone> StaticVerifierPvs<T> {
 /// Extracts the public values from the root proof and returns them. These public values will be
 /// re-exposed as public values of the static verifier circuit, but that is **not** done in this
 /// function.
-pub fn extract_public_values(
-    ctx: &mut Context<Fr>,
-    chip: &BabyBearChip,
-    proof: &ProofWire,
-) -> StaticVerifierPvs<AssignedValue<Fr>> {
-    let root_pvs: &RootVerifierPvs<ReducedBabyBearWire> =
+pub fn extract_public_values<B: GateInst>(
+    b: &mut B,
+    proof: &ProofWire<B::F>,
+) -> StaticVerifierPvs<B::F> {
+    let root_pvs: &RootVerifierPvs<ReducedBabyBearWire<B::F>> =
         proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
-    let app_exe_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_exe_commit);
-    let app_vm_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_vm_commit);
+    let app_exe_commit = compress_babybear_wires_to_bn254(b, root_pvs.app_exe_commit);
+    let app_vm_commit = compress_babybear_wires_to_bn254(b, root_pvs.app_vm_commit);
     let user_pvs = &proof.public_values[USER_PVS_COMMIT_AIR_ID];
     let user_public_values = user_pvs.iter().map(|bb| bb.value()).collect::<Vec<_>>();
 
@@ -65,20 +63,15 @@ pub fn extract_public_values(
     }
 }
 
-pub fn compress_babybear_wires_to_bn254(
-    ctx: &mut Context<Fr>,
-    chip: &BabyBearChip,
-    base_elts: [ReducedBabyBearWire; APP_DIGEST_SIZE],
-) -> AssignedValue<Fr> {
+pub fn compress_babybear_wires_to_bn254<B: GateInst>(
+    b: &mut B,
+    base_elts: [ReducedBabyBearWire<B::F>; APP_DIGEST_SIZE],
+) -> B::F {
     let reduced_elts = base_elts.map(|bb| bb.value());
     let order = Fr::from(BABY_BEAR_MODULUS_U64);
     let mut bases = [Fr::ONE; APP_DIGEST_SIZE];
     for i in 1..APP_DIGEST_SIZE {
         bases[i] = bases[i - 1] * order;
     }
-    chip.gate().inner_product(
-        ctx,
-        reduced_elts,
-        bases.into_iter().map(QuantumCell::Constant),
-    )
+    b.inner_product_const(&reduced_elts, &bases)
 }

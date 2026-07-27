@@ -20,6 +20,8 @@
 mod context_tree;
 pub mod profiling;
 
+pub mod backend;
+pub mod chip_traits;
 mod circuit;
 #[cfg(feature = "evm-prove")]
 pub mod codec;
