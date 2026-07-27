@@ -9,6 +9,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
 };
+use rvr_state::PreflightProgramEvent;
 
 use crate::{
     arch::{
@@ -204,6 +205,11 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         if !pc_entry.is_some() {
             return Err(ExecutionError::Unreachable(pc));
         }
+
+        state.ctx.program.push(PreflightProgramEvent {
+            pc,
+            timestamp: state.memory.timestamp(),
+        });
 
         let opcode = pc_entry.insn.opcode;
         let c = pc_entry.insn.c;

@@ -82,11 +82,18 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     let mut interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
     let PreflightExecutionOutput {
         system_records,
+        history,
         record_arenas,
         ..
     } = vm
         .execute_preflight(&mut interpreter, from_state, &max_trace_heights)
         .unwrap();
+    assert_eq!(history.program.len(), 2);
+    assert_eq!(history.program[0], history.program[1]);
+    assert_eq!(history.program[0].pc, 0);
+    assert_eq!(history.program[0].timestamp, 1);
+    assert!(history.memory.accesses.is_empty());
+    assert!(history.memory.initial_writes.is_empty());
     let mut ctx = vm
         .generate_proving_ctx(system_records, record_arenas)
         .unwrap();

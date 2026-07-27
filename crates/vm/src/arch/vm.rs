@@ -47,6 +47,7 @@ use openvm_stark_backend::{
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::RvrExtensions;
+use rvr_state::PreflightProgramEvent;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -80,9 +81,9 @@ use super::{
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
-    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
-    VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
-    PROGRAM_CACHED_TRACE_INDEX,
+    PreflightHistory, StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
+    VmExecState, VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "metrics")]
 use crate::metrics::emit_opcode_counts;
@@ -200,6 +201,7 @@ pub enum ExitCode {
 
 pub struct PreflightExecutionOutput<F, RA> {
     pub system_records: SystemRecords<F>,
+    pub history: PreflightHistory,
     pub record_arenas: Vec<RA>,
     pub to_state: VmState<GuestMemory>,
 }
@@ -1081,15 +1083,23 @@ where
         end_segment_metrics(&mut exec_state);
 
         let pc = exec_state.vm_state.pc();
-        let memory = exec_state.vm_state.memory;
+        let mut memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(pc, memory.timestamp());
         let exit_code = exec_state.exit_code?;
+        exec_state.ctx.program.push(PreflightProgramEvent {
+            pc,
+            timestamp: memory.timestamp(),
+        });
         let system_records = SystemRecords {
             from_state,
             to_state,
             exit_code,
             filtered_exec_frequencies,
             touched_memory,
+        };
+        let history = PreflightHistory {
+            program: exec_state.ctx.program,
+            memory: memory.take_log(),
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
@@ -1102,6 +1112,7 @@ where
         );
         Ok(PreflightExecutionOutput {
             system_records,
+            history,
             record_arenas,
             to_state,
         })
@@ -1255,6 +1266,7 @@ where
 
         let PreflightExecutionOutput {
             system_records,
+            history: _,
             record_arenas,
             to_state,
         } = self.execute_preflight_inner(interpreter, state, num_insns, trace_heights)?;
@@ -1771,6 +1783,7 @@ where
             vm.transport_init_memory_to_device(&from_state.memory);
             let PreflightExecutionOutput {
                 system_records,
+                history: _,
                 record_arenas,
                 to_state,
             } = vm.execute_preflight_for(interpreter, from_state, num_insns, &trace_heights)?;
