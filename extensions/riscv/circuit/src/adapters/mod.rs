@@ -253,6 +253,19 @@ pub fn byte_ptr_to_u16_ptr_value(byte_ptr: u32) -> u32 {
     byte_ptr >> 1
 }
 
+#[cfg(test)]
+#[inline(always)]
+pub(crate) fn checked_byte_ptr_to_u16_ptr_value(
+    byte_ptr: u32,
+) -> Result<u32, openvm_circuit::arch::PostflightError> {
+    if byte_ptr & 1 != 0 {
+        return Err(openvm_circuit::arch::PostflightError::new(
+            "u16 memory-bus pointer must be two-byte aligned",
+        ));
+    }
+    Ok(byte_ptr >> 1)
+}
+
 /// Converts a `u64` to `u32`, requiring the upper 32 bits to be zero.
 #[inline(always)]
 pub fn u64_to_u32_checked(value: u64) -> u32 {

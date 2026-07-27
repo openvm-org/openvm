@@ -186,10 +186,20 @@ fn postflight_trace_matches_record_arena_trace() {
             RV64_REGISTER_AS as usize,
         ],
     );
-    let sentinel = Instruction::from_usize(
+    let add_again = Instruction::from_usize(
         ADD.global_opcode(),
         [
             40,
+            32,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    let sentinel = Instruction::from_usize(
+        SUB.global_opcode(),
+        [
+            48,
             8,
             16,
             RV64_REGISTER_AS as usize,
@@ -210,6 +220,7 @@ fn postflight_trace_matches_record_arena_trace() {
     }
     tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &add, 0);
     tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &sub, 4);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &add_again, 8);
 
     let history = PreflightHistory {
         program: vec![
@@ -225,12 +236,17 @@ fn postflight_trace_matches_record_arena_trace() {
                 pc: 8,
                 timestamp: 7,
             },
+            PreflightProgramEvent {
+                pc: 12,
+                timestamp: 10,
+            },
         ],
         memory: tester.memory.memory.take_log(),
     };
-    let program = Program::new_without_debug_infos(&[add, sub, sentinel], 0);
+    let program = Program::new_without_debug_infos(&[add, sub, add_again, sentinel], 0);
     let postflight = Postflight::new(&program, &history, None).unwrap();
     let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
 
     let rows_used = harness.arena.trace_offset / harness.arena.width;
     let mut expected_values = harness.arena.trace_buffer;
@@ -241,10 +257,17 @@ fn postflight_trace_matches_record_arena_trace() {
         &mut expected,
         rows_used,
     );
+    let sub_row = expected.row_slice(1).unwrap().to_vec();
+    let second_add_row = expected.row_slice(2).unwrap().to_vec();
+    let width = expected.width();
+    expected.values[width..2 * width].copy_from_slice(&second_add_row);
+    expected.values[2 * width..3 * width].copy_from_slice(&sub_row);
+    let expected_range = harness.chip.inner.range_checker_chip.generate_trace::<F>();
 
     assert_eq!(actual.width(), expected.width());
     assert_eq!(actual.height(), expected.height());
     assert_eq!(actual.values, expected.values);
+    assert_eq!(actual_range.values, expected_range.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

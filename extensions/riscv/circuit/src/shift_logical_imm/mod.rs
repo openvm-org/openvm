@@ -11,6 +11,9 @@ mod execution;
 pub use core::*;
 
 #[cfg(test)]
+mod trace;
+
+#[cfg(test)]
 mod tests;
 
 #[cfg(feature = "cuda")]

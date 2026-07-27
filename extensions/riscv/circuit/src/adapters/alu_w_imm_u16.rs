@@ -4,6 +4,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
@@ -39,6 +41,8 @@ use super::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, concat_rv64_u16_block, tracing_read_u16,
     tracing_write_u16, RV64_WORD_U16_LIMBS, U16_BITS,
 };
+#[cfg(test)]
+use super::{checked_byte_ptr_to_u16_ptr_value, is_canonical_i12};
 
 /// Adapter columns for RV64 word instructions with an immediate operand.
 ///
@@ -297,5 +301,80 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWImmU16AdapterFiller 
         adapter_row.rd_ptr = F::from_u32(rd_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
+    }
+}
+
+#[cfg(test)]
+impl Rv64BaseAluWImmU16AdapterFiller {
+    pub(crate) fn replay<F: PrimeField32>(
+        &self,
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64BaseAluWImmU16AdapterCols<F>,
+        compute: impl FnOnce([u16; RV64_WORD_U16_LIMBS], u32) -> [u16; RV64_WORD_U16_LIMBS],
+    ) -> Result<([u16; RV64_WORD_U16_LIMBS], [u16; RV64_WORD_U16_LIMBS]), PostflightError> {
+        let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || instruction.e.as_canonical_u32() != RV64_IMM_AS
+        {
+            return Err(PostflightError::new(
+                "word register-immediate ALU instruction has invalid address spaces",
+            ));
+        }
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let rs1_ptr = instruction.b.as_canonical_u32();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let immediate = instruction.c.as_canonical_u32();
+        if !is_canonical_i12(immediate) {
+            return Err(PostflightError::new(
+                "word register-immediate ALU instruction has a non-canonical immediate",
+            ));
+        }
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let input = array::from_fn(|i| rs1.value[i]);
+        let output = compute(input, immediate);
+        let result_high = output[RV64_WORD_U16_LIMBS - 1];
+        let result_sign = result_high >> (U16_BITS - 1);
+        let sign_extend_limb = if result_sign != 0 { u16::MAX } else { 0 };
+        let write_value = array::from_fn(|i| {
+            if i < RV64_WORD_U16_LIMBS {
+                output[i]
+            } else {
+                sign_extend_limb
+            }
+        });
+        let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, write_value)?;
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        self.range_checker_chip.add_count(
+            (result_high & ((1 << (U16_BITS - 1)) - 1)) as u32,
+            U16_BITS - 1,
+        );
+        adapter_row
+            .writes_aux
+            .set_prev_data(write.previous_value.map(F::from_u16));
+        mem_helper.fill(
+            write.previous_timestamp,
+            write.timestamp,
+            adapter_row.writes_aux.as_mut(),
+        );
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.reads_aux.as_mut(),
+        );
+        adapter_row.result_sign = F::from_u16(result_sign);
+        adapter_row.rs1_high = array::from_fn(|i| F::from_u16(rs1.value[RV64_WORD_U16_LIMBS + i]));
+        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.rd_ptr = F::from_u32(rd_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((input, output))
     }
 }
