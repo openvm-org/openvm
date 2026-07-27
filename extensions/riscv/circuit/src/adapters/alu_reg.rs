@@ -3,8 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
-        BLOCK_FE_WIDTH,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, Postflight,
+        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
@@ -30,7 +30,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
+use super::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read, tracing_write};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -279,4 +279,76 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluRegAdapterFiller {
         adapter_row.from_state.timestamp = F::from_u32(timestamp);
         adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
+}
+
+impl Rv64BaseAluRegAdapterFiller {
+    pub fn replay<F: PrimeField32>(
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64BaseAluRegAdapterCols<F>,
+        compute: impl FnOnce([[u8; RV64_REGISTER_NUM_LIMBS]; 2]) -> [u8; RV64_REGISTER_NUM_LIMBS],
+    ) -> Result<
+        (
+            [[u8; RV64_REGISTER_NUM_LIMBS]; 2],
+            [u8; RV64_REGISTER_NUM_LIMBS],
+        ),
+        PostflightError,
+    > {
+        let instruction = postflight.instruction(step);
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let rs1_ptr = instruction.b.as_canonical_u32();
+        let rs2_ptr = instruction.c.as_canonical_u32();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs1_ptr))?;
+        let rs2 = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs2_ptr))?;
+        let inputs = [unpack_register(rs1.value), unpack_register(rs2.value)];
+        let output = compute(inputs);
+        let write = replay.write_u16(
+            RV64_REGISTER_AS,
+            byte_ptr_to_u16_ptr_value(rd_ptr),
+            pack_register(output),
+        )?;
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        adapter_row
+            .writes_aux
+            .set_prev_data(write.previous_value.map(F::from_u16));
+        mem_helper.fill(
+            write.previous_timestamp,
+            write.timestamp,
+            adapter_row.writes_aux.as_mut(),
+        );
+        mem_helper.fill(
+            rs2.previous_timestamp,
+            rs2.timestamp,
+            adapter_row.reads_aux[1].as_mut(),
+        );
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.reads_aux[0].as_mut(),
+        );
+        adapter_row.rs2_ptr = F::from_u32(rs2_ptr);
+        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.rd_ptr = F::from_u32(rd_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((inputs, output))
+    }
+}
+
+fn pack_register(value: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
+    std::array::from_fn(|i| u16::from_le_bytes([value[2 * i], value[2 * i + 1]]))
+}
+
+fn unpack_register(value: [u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let mut bytes = [0; RV64_REGISTER_NUM_LIMBS];
+    for (i, value) in value.into_iter().enumerate() {
+        bytes[2 * i..2 * i + 2].copy_from_slice(&value.to_le_bytes());
+    }
+    bytes
 }
