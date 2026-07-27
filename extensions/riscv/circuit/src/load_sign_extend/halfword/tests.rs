@@ -6,7 +6,7 @@ use openvm_circuit::arch::testing::{
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -100,7 +100,13 @@ fn create_halfword_harness(
         tester.memory_helper(),
     );
     (
-        HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        HalfwordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -114,7 +120,7 @@ fn rand_load_sign_extend_halfword_test() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             LOADH,
             None,
@@ -132,119 +138,6 @@ fn rand_load_sign_extend_halfword_test() {
 }
 
 #[test]
-fn postflight_loadh_trace_matches_record_arena_trace() {
-    let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let range_checker = tester.range_checker();
-    let (mut harness, (_, bitwise)) = create_halfword_harness(&mut tester);
-    let crossing = Instruction::from_usize(
-        LOADH.global_opcode(),
-        [
-            16,
-            8,
-            0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-            1,
-            0,
-        ],
-    );
-    let non_crossing = Instruction::from_usize(
-        LOADH.global_opcode(),
-        [
-            0,
-            8,
-            0xfffc,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-            0,
-            1,
-        ],
-    );
-    let sentinel = Instruction::from_usize(
-        LOADH.global_opcode(),
-        [
-            32,
-            8,
-            0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-            1,
-            0,
-        ],
-    );
-    unsafe {
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(8),
-            rv64_bytes_to_u16_block([7, 0, 0, 0, 0, 0, 0, 0]),
-        );
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(16),
-            [0x1111, 0x2222, 0x3333, 0x4444],
-        );
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_MEMORY_AS,
-            byte_ptr_to_u16_ptr_value(0),
-            rv64_bytes_to_u16_block([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x34]),
-        );
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_MEMORY_AS,
-            byte_ptr_to_u16_ptr_value(8),
-            rv64_bytes_to_u16_block([0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0]),
-        );
-    }
-
-    let first_timestamp = tester.memory.memory.timestamp();
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &crossing, 0);
-    let second_timestamp = tester.memory.memory.timestamp();
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &non_crossing, 4);
-    let final_timestamp = tester.memory.memory.timestamp();
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: first_timestamp,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: second_timestamp,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: final_timestamp,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[crossing, non_crossing, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_range = range_checker.generate_trace::<F>();
-    let actual_bitwise = bitwise.generate_trace::<F>();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    let expected_range = range_checker.generate_trace::<F>();
-    let expected_bitwise = bitwise.generate_trace::<F>();
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-    assert_eq!(actual_range.values, expected_range.values);
-    assert_eq!(actual_bitwise.values, expected_bitwise.values);
-}
-
-#[test]
 fn positive_loadh_shift6_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
@@ -252,7 +145,7 @@ fn positive_loadh_shift6_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADH,
         Some([6, 0, 0, 0, 0, 0, 0, 0]),
@@ -277,7 +170,7 @@ fn assert_pranked_halfword_fails(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADH,
         None,

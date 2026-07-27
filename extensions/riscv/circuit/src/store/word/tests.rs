@@ -7,7 +7,7 @@ use openvm_circuit::arch::testing::{
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+    Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -38,8 +38,8 @@ use crate::{
         Rv64StoreMultiByteAdapterExecutor, Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     store::{
-        common::store_write_data, Rv64StoreWordAir, Rv64StoreWordChip, Rv64StoreWordExecutor,
-        StoreWordCoreAir, StoreWordFiller,
+        common::store_write_data, core::fill_padding_row, Rv64StoreWordAir, Rv64StoreWordChip,
+        Rv64StoreWordExecutor, StoreWordCoreAir, StoreWordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -88,7 +88,14 @@ fn create_store_word_harness(
         tester.memory_helper(),
     );
     (
-        StoreWordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        StoreWordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        )
+        .with_padding(fill_padding_row),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -101,7 +108,7 @@ fn positive_storew_public_values_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREW,
         Some([4, 0, 0, 0, 0, 0, 0, 0]),
@@ -127,7 +134,7 @@ fn rand_store_word_test() {
         set_and_execute_store(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             STOREW,
             None,
@@ -154,7 +161,7 @@ fn negative_store_address_wraparound_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREW,
         Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
@@ -174,7 +181,7 @@ fn negative_store_address_underflow_test() {
 
     tester.execute(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::from_usize(
             STOREW.global_opcode(),
             [
@@ -183,7 +190,7 @@ fn negative_store_address_underflow_test() {
                 u16::MAX as usize,
                 RV64_REGISTER_AS as usize,
                 RV64_MEMORY_AS as usize,
-                0,
+                1,
                 1,
             ],
         ),
@@ -230,155 +237,6 @@ fn run_storew_sanity_test() {
 }
 
 #[test]
-fn postflight_store_word_trace_matches_record_arena_across_boundaries() {
-    let memory_config = store_memory_config();
-    let mut tester = VmChipTestBuilder::from_config(memory_config.clone());
-    let range_checker = tester.range_checker();
-    let (mut harness, (_, bitwise)) = create_store_word_harness(&mut tester);
-    let stores = [
-        Instruction::from_usize(
-            STOREW.global_opcode(),
-            [
-                16,
-                8,
-                0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-                1,
-                0,
-            ],
-        ),
-        Instruction::from_usize(
-            STOREW.global_opcode(),
-            [
-                24,
-                8,
-                3,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-                1,
-                0,
-            ],
-        ),
-        Instruction::from_usize(
-            STOREW.global_opcode(),
-            [
-                32,
-                8,
-                6,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-                1,
-                0,
-            ],
-        ),
-        Instruction::from_usize(
-            STOREW.global_opcode(),
-            [
-                40,
-                8,
-                5,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-                1,
-                0,
-            ],
-        ),
-    ];
-    unsafe {
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            4,
-            [0x100, 0, 0, 0],
-        );
-        for (pointer, value) in [
-            (8, [0x2211, 0x4433, 0, 0]),
-            (12, [0x6655, 0x8877, 0, 0]),
-            (16, [0xaa99, 0xccbb, 0, 0]),
-            (20, [0xeedd, 0x100f, 0, 0]),
-        ] {
-            tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-                RV64_REGISTER_AS,
-                pointer,
-                value,
-            );
-        }
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_MEMORY_AS,
-            0x80,
-            [0x0201, 0x0403, 0x0605, 0x0807],
-        );
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_MEMORY_AS,
-            0x84,
-            [0x0a09, 0x0c0b, 0x0e0d, 0x100f],
-        );
-    }
-    for (index, instruction) in stores.iter().enumerate() {
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.arena,
-            instruction,
-            index as u32 * 4,
-        );
-    }
-
-    let history = PreflightHistory {
-        program: (0..=stores.len())
-            .map(|index| PreflightProgramEvent {
-                pc: index as u32 * 4,
-                timestamp: 1 + index as u32 * 4,
-            })
-            .collect(),
-        memory: tester.memory.memory.take_log(),
-    };
-    let writes: Vec<_> = history
-        .memory
-        .accesses
-        .iter()
-        .filter(|event| event.is_write())
-        .collect();
-    assert_eq!(writes.len(), 6);
-    assert_eq!(
-        writes
-            .iter()
-            .map(|event| event.timestamp)
-            .collect::<Vec<_>>(),
-        [3, 7, 11, 12, 15, 16]
-    );
-    assert_eq!(
-        writes.iter().map(|event| event.pointer).collect::<Vec<_>>(),
-        [0x80, 0x80, 0x80, 0x84, 0x80, 0x84]
-    );
-
-    let mut instructions = stores.to_vec();
-    instructions.push(stores[0].clone());
-    let program = Program::new_without_debug_infos(&instructions, 0);
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_range = range_checker.generate_trace::<F>();
-    let actual_bitwise = bitwise.generate_trace::<F>();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    let expected_range = range_checker.generate_trace::<F>();
-    let expected_bitwise = bitwise.generate_trace::<F>();
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-    assert_eq!(actual_range.values, expected_range.values);
-    assert_eq!(actual_bitwise.values, expected_bitwise.values);
-}
-
-#[test]
 fn negative_split_store_deferral_as_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
@@ -386,7 +244,7 @@ fn negative_split_store_deferral_as_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREW,
         None,

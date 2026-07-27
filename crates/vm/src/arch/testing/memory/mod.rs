@@ -163,6 +163,26 @@ where
     rng.random_range(0..num_aligned_regions) * len
 }
 
+pub fn gen_distinct_register_pointers<R, const N: usize>(rng: &mut R, len: usize) -> [usize; N]
+where
+    R: Rng + ?Sized,
+{
+    let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
+    assert!(N <= num_aligned_regions);
+
+    let mut pointers = [0; N];
+    for index in 0..N {
+        loop {
+            let pointer = gen_register_pointer(rng, len);
+            if !pointers[..index].contains(&pointer) {
+                pointers[index] = pointer;
+                break;
+            }
+        }
+    }
+    pointers
+}
+
 pub fn gen_nonzero_register_pointer<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,

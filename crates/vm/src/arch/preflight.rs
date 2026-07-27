@@ -9,7 +9,7 @@ use crate::system::memory::online::GuestMemory;
 ///
 /// Integer blocks are stored inline in `accesses` and `initial_writes`.
 /// Field blocks use dense sidecars so the fixed-size event ABI stays compact.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct PreflightMemoryLog {
     pub accesses: Vec<PreflightMemoryEvent>,
     pub initial_writes: Vec<PreflightInitialWrite>,
@@ -21,7 +21,7 @@ pub struct PreflightMemoryLog {
 ///
 /// Execution state and exit status remain normal VM outputs; they are not
 /// duplicated here.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct PreflightHistory {
     pub program: Vec<PreflightProgramEvent>,
     pub memory: PreflightMemoryLog,

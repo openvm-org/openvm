@@ -7,8 +7,11 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    testing::{
+        memory::{gen_pointer, gen_register_pointer},
+        TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder,
+    },
+    Executor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 use openvm_instructions::{
@@ -30,6 +33,7 @@ use crate::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_executor, get_fp2_muldiv_air,
         get_fp2_muldiv_chip, get_fp2_muldiv_executor, Fp2Air, Fp2Chip, Fp2Executor,
     },
+    trace::generate_field_expression_trace_from_postflight,
     FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
@@ -64,7 +68,21 @@ fn create_addsub_test_chips<const BLOCKS: usize>(
         tester.range_checker(),
         tester.address_bits(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    let address_bits = tester.address_bits();
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                chip,
+                postflight,
+                offset,
+                address_bits,
+            )
+        },
+    )
 }
 
 fn create_muldiv_test_chips<const BLOCKS: usize>(
@@ -92,23 +110,34 @@ fn create_muldiv_test_chips<const BLOCKS: usize>(
         tester.range_checker(),
         tester.address_bits(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    let address_bits = tester.address_bits();
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                chip,
+                postflight,
+                offset,
+                address_bits,
+            )
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
+fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut Fp2Executor<BLOCKS>,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     modulus: &BigUint,
     is_setup: bool,
     is_addsub: bool,
     offset: usize,
-) where
-    RA: Arena,
-    Fp2Executor<BLOCKS>: PreflightExecutor<F, RA>,
-{
+) {
     let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
         (
             modulus.clone(),
@@ -148,9 +177,12 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
     let ptr_as = RV64_REGISTER_AS as usize;
     let data_as = RV64_MEMORY_AS as usize;
 
-    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mut rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    while rs2_ptr == rs1_ptr {
+        rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    }
+    let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let a_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
@@ -223,7 +255,7 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
         ptr_as as isize,
         data_as as isize,
     );
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 }
 
 #[derive(new)]
@@ -293,10 +325,10 @@ fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
     };
 
     for i in 0..test_config.num_ops {
-        set_and_execute_fp2::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_fp2::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &test_config.modulus,
             i == 0,

@@ -5,18 +5,17 @@ use std::sync::{
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_cuda_common::stream::GpuDeviceCtx;
-use openvm_instructions::{instruction::Instruction, PhantomDiscriminant, SystemOpcode, VmOpcode};
+use openvm_instructions::{
+    instruction::Instruction, PhantomDiscriminant, SysPhantom, SystemOpcode, VmOpcode,
+};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS};
-use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 
-use super::{generate_trace_from_postflight, PhantomExecutor};
+use super::{generate_trace_from_postflight, NopPhantomExecutor, PhantomExecutor};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
@@ -25,9 +24,9 @@ use crate::{
 use crate::{
     arch::{
         instructions::LocalOpcode,
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionState, MemoryConfig, PhantomSubExecutor, Postflight, PreflightExecutor,
-        PreflightHistory, PreflightMemoryEvent, PreflightProgramEvent, Streams, TraceFiller,
+        testing::{TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder},
+        Executor, MemoryConfig, PhantomSubExecutor, Postflight, PreflightHistory,
+        PreflightMemoryEvent, PreflightProgramEvent, Streams,
     },
     system::{
         memory::online::GuestMemory,
@@ -55,25 +54,24 @@ impl PhantomSubExecutor for CountingPhantomExecutor {
     }
 }
 
-fn run_phantom_test<E, RA>(
+fn run_phantom_test<E>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     phantom_opcode: VmOpcode,
     num_nops: usize,
 ) where
-    E: PreflightExecutor<F, RA>,
-    RA: Arena,
+    E: Executor<F> + Clone,
 {
     let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
-    let mut state: ExecutionState<F> = ExecutionState::new(F::ZERO, F::ONE);
+    let mut pc = F::ZERO;
 
     for _ in 0..num_nops {
-        tester.execute_with_pc(executor, arena, &nop, state.pc.as_canonical_u32());
+        tester.execute_with_pc(executor, preflight, &nop, pc.as_canonical_u32());
         let new_state = tester.execution_final_state();
-        assert_eq!(state.pc + F::from_usize(4), new_state.pc);
-        assert_eq!(state.timestamp + F::ONE, new_state.timestamp);
-        state = new_state;
+        assert_eq!(pc + F::from_usize(4), new_state.pc);
+        assert_eq!(F::TWO, new_state.timestamp);
+        pc = new_state.pc;
     }
 }
 
@@ -83,18 +81,27 @@ fn test_nops_and_terminate() {
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
 
     let mut tester = VmChipTestBuilder::default();
-    let executor = PhantomExecutor::new(Default::default(), phantom_opcode);
+    let mut phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>> =
+        FxHashMap::default();
+    phantom_executors.insert(
+        PhantomDiscriminant(SysPhantom::Nop as u16),
+        Arc::new(NopPhantomExecutor),
+    );
+    let executor = PhantomExecutor::new(phantom_executors, phantom_opcode);
     let chip = PhantomChip::new(PhantomFiller, tester.memory_helper());
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
         phantom_opcode,
     };
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, NUM_NOPS);
+    let mut harness =
+        TestChipHarness::with_capacity(executor, air, chip, NUM_NOPS, |_, postflight| {
+            generate_trace_from_postflight(postflight)
+        });
 
     run_phantom_test(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         phantom_opcode,
         NUM_NOPS,
     );
@@ -104,7 +111,7 @@ fn test_nops_and_terminate() {
 }
 
 #[test]
-fn postflight_trace_matches_legacy_without_replaying_callbacks() {
+fn postflight_trace_does_not_replay_callbacks() {
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
     let discriminant = PhantomDiscriminant(0x7ffe);
     let callback_count = Arc::new(AtomicUsize::new(0));
@@ -123,7 +130,9 @@ fn postflight_trace_matches_legacy_without_replaying_callbacks() {
         phantom_opcode,
     };
     let mut harness: TestChipHarness<F, _, _, _> =
-        TestChipHarness::with_capacity(executor, air, chip, 3);
+        TestChipHarness::with_capacity(executor, air, chip, 3, |_, postflight| {
+            generate_trace_from_postflight(postflight)
+        });
     let instructions = [
         Instruction::phantom(
             discriminant,
@@ -142,63 +151,16 @@ fn postflight_trace_matches_legacy_without_replaying_callbacks() {
     for (index, instruction) in instructions.iter().enumerate() {
         tester.execute_with_pc(
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             instruction,
             index as u32 * 4,
         );
     }
     assert_eq!(callback_count.load(Ordering::Relaxed), instructions.len());
 
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: 2,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 3,
-            },
-            PreflightProgramEvent {
-                pc: 12,
-                timestamp: 4,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let sentinel = Instruction::from_usize(phantom_opcode, [0; 3]);
-    let program = openvm_instructions::program::Program::new_without_debug_infos(
-        &[
-            instructions[0].clone(),
-            instructions[1].clone(),
-            instructions[2].clone(),
-            sentinel,
-        ],
-        0,
-    );
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&postflight).unwrap();
-
+    let tester = tester.build().load(harness).finalize();
+    tester.simple_test().expect("Verification failed");
     assert_eq!(callback_count.load(Ordering::Relaxed), instructions.len());
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
 }
 
 #[test]

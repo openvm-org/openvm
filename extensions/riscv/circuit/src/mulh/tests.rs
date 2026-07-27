@@ -9,11 +9,11 @@ use std::{
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
+        PreflightProgramEvent, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -127,7 +127,13 @@ fn create_harness(
         range_tuple_chip.clone(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (
         harness,
@@ -137,10 +143,10 @@ fn create_harness(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: MulHOpcode,
     b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
@@ -155,16 +161,19 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         RV64_BYTE_BITS,
     >(rng));
 
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
-    let rd = gen_pointer(rng, 8);
+    let rs1 = gen_register_pointer(rng, 8);
+    let mut rs2 = gen_register_pointer(rng, 8);
+    while rs2 == rs1 {
+        rs2 = gen_register_pointer(rng, 8);
+    }
+    let rd = gen_register_pointer(rng, 8);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
@@ -194,7 +203,7 @@ fn run_rv64_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -209,121 +218,6 @@ fn run_rv64_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
         .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn postflight_trace_matches_record_arena_trace_and_lookup_counts() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, _, _) = create_harness(&mut tester);
-    let instructions = [
-        Instruction::from_usize(
-            MULH.global_opcode(),
-            [24, 8, 16, RV64_REGISTER_AS as usize, 0],
-        ),
-        Instruction::from_usize(
-            MULHSU.global_opcode(),
-            [32, 24, 8, RV64_REGISTER_AS as usize, 0],
-        ),
-        Instruction::from_usize(
-            MULHU.global_opcode(),
-            [40, 32, 16, RV64_REGISTER_AS as usize, 0],
-        ),
-        Instruction::from_usize(
-            MULH.global_opcode(),
-            [48, 8, 16, RV64_REGISTER_AS as usize, 0],
-        ),
-    ];
-    unsafe {
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            4,
-            [0x7285, 0x1136, 0xcdab, 0x91ef],
-        );
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            8,
-            [0xa318, 0x9c57, 0x4220, 0x8664],
-        );
-    }
-    for (pc, instruction) in instructions[..3].iter().enumerate() {
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.arena,
-            instruction,
-            (pc as u32) * 4,
-        );
-    }
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: 4,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 7,
-            },
-            PreflightProgramEvent {
-                pc: 12,
-                timestamp: 10,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&instructions, 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_bitwise_range =
-        nonzero_counts(harness.chip.inner.bitwise_lookup_chip.count_range.iter());
-    let actual_bitwise_xor =
-        nonzero_counts(harness.chip.inner.bitwise_lookup_chip.count_xor.iter());
-    let actual_range_tuple = nonzero_counts(
-        harness
-            .chip
-            .inner
-            .range_tuple_chip
-            .count
-            .iter()
-            .map(Arc::as_ref),
-    );
-    harness.chip.inner.bitwise_lookup_chip.clear();
-    harness.chip.inner.range_tuple_chip.clear();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    let expected_bitwise_range =
-        nonzero_counts(harness.chip.inner.bitwise_lookup_chip.count_range.iter());
-    let expected_bitwise_xor =
-        nonzero_counts(harness.chip.inner.bitwise_lookup_chip.count_xor.iter());
-    let expected_range_tuple = nonzero_counts(
-        harness
-            .chip
-            .inner
-            .range_tuple_chip
-            .count
-            .iter()
-            .map(Arc::as_ref),
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-    assert_eq!(actual_bitwise_range, expected_bitwise_range);
-    assert_eq!(actual_bitwise_xor, expected_bitwise_xor);
-    assert_eq!(actual_range_tuple, expected_range_tuple);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -351,7 +245,7 @@ fn run_negative_mulh_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),

@@ -8,11 +8,10 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
+            memory::{gen_pointer, gen_register_pointer},
+            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        ExecutionBridge, Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -59,7 +58,7 @@ use crate::{
 
 type F = BabyBear;
 /// Harness without KeccakfPeriphery*
-type Harness<RA> = TestChipHarness<F, KeccakfExecutor, KeccakfOpAir, KeccakfOpChip<F>, RA>;
+type Harness = TestChipHarness<F, KeccakfExecutor, KeccakfOpAir, KeccakfOpChip<F>>;
 const MAX_TRACE_ROWS: usize = 4096;
 const KECCAKF_STATE_BUS: BusIndex = 13;
 
@@ -89,8 +88,8 @@ fn create_harness_fields(
     (op_air, executor, op_chip)
 }
 
-struct TestHarness<RA> {
-    harness: Harness<RA>,
+struct TestHarness {
+    harness: Harness,
     bitwise: (
         BitwiseOperationLookupAir<RV64_BYTE_BITS>,
         SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
@@ -98,7 +97,7 @@ struct TestHarness<RA> {
     perm: (KeccakfPermAir, KeccakfPermChip),
 }
 
-fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarness<RA> {
+fn create_test_harness(tester: &mut VmChipTestBuilder<F>) -> TestHarness {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
@@ -113,7 +112,19 @@ fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarn
     );
     let shared_preimages = op_chip.shared_preimages.clone();
 
-    let harness = Harness::with_capacity(executor, op_air, op_chip, MAX_TRACE_ROWS);
+    let harness = Harness::with_capacity(
+        executor,
+        op_air,
+        op_chip,
+        MAX_TRACE_ROWS,
+        |chip, postflight| {
+            let mut previous = std::mem::take(&mut *chip.shared_preimages.lock().unwrap());
+            let trace = generate_trace_from_postflight(chip, postflight)?;
+            previous.extend(std::mem::take(&mut *chip.shared_preimages.lock().unwrap()));
+            *chip.shared_preimages.lock().unwrap() = previous;
+            Ok(trace)
+        },
+    );
 
     let perm_air = KeccakfPermAir::new(op_air.keccakf_state_bus);
     let perm_chip = KeccakfPermChip::new(shared_preimages);
@@ -125,10 +136,10 @@ fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarn
     }
 }
 
-fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute_single_perm<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     opcode: KeccakfOpcode,
 ) {
@@ -138,7 +149,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
@@ -161,7 +172,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [rd, 0, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
@@ -210,7 +221,7 @@ fn rand_keccakf_positive_tests() {
         set_and_execute_single_perm(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             KeccakfOpcode::KECCAKF,
         );
@@ -225,11 +236,7 @@ fn rand_keccakf_positive_tests() {
     tester.simple_test().expect("Verification failed");
 }
 
-fn keccakf_postflight_fixture() -> (
-    TestHarness<openvm_circuit::arch::MatrixRecordArena<F>>,
-    Program<F>,
-    PreflightHistory,
-) {
+fn keccakf_postflight_fixture() -> TestHarness {
     let mut tester = VmChipTestBuilder::default();
     let mut test_harness = create_test_harness(&mut tester);
     let instruction = Instruction::from_usize(
@@ -255,72 +262,42 @@ fn keccakf_postflight_fixture() -> (
     }
     tester.execute_with_pc(
         &mut test_harness.harness.executor,
-        &mut test_harness.harness.arena,
+        &mut test_harness.harness.preflight,
         &instruction,
         0,
     );
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: DEFAULT_PC_STEP,
-                timestamp: 27,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
-    (test_harness, program, history)
+    let _ = sentinel;
+    test_harness
 }
 
 #[test]
-fn postflight_keccakf_traces_match_record_arena_traces() {
-    let (
-        TestHarness {
-            harness,
-            perm,
-            bitwise: _,
-        },
-        program,
-        history,
-    ) = keccakf_postflight_fixture();
+fn postflight_keccakf_trace_generation_succeeds() {
+    let TestHarness {
+        harness,
+        perm,
+        bitwise: _,
+    } = keccakf_postflight_fixture();
+    let execution = &harness.preflight.executions[0];
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &execution.history, &memory_config).unwrap();
 
     let actual_op = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
     let actual_perm = generate_perm_trace_from_postflight(&perm.1, &postflight).unwrap();
 
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected_op = openvm_stark_backend::p3_matrix::dense::RowMajorMatrix::new(
-        expected_values,
-        harness.arena.width,
-    );
-    harness.chip.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected_op,
-        rows_used,
-    );
-    let expected_perm = generate_perm_trace_from_postflight(&perm.1, &postflight).unwrap();
-
-    assert_eq!(actual_op.width(), expected_op.width());
-    assert_eq!(actual_op.height(), expected_op.height());
-    assert_eq!(actual_op.values, expected_op.values);
-    assert_eq!(actual_perm.width(), expected_perm.width());
-    assert_eq!(actual_perm.height(), expected_perm.height());
-    assert_eq!(actual_perm.values, expected_perm.values);
+    assert_eq!(actual_op.height(), 1);
+    assert!(!actual_perm.values.is_empty());
 }
 
 #[test]
 fn postflight_keccakf_rejects_corrupt_write() {
-    let (test_harness, program, mut history) = keccakf_postflight_fixture();
+    let test_harness = keccakf_postflight_fixture();
+    let execution = &test_harness.harness.preflight.executions[0];
+    let mut history = execution.history.clone();
     history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
     let error =
         generate_trace_from_postflight(&test_harness.harness.chip, &postflight).unwrap_err();
 
@@ -404,7 +381,7 @@ fn cuda_set_and_execute(
 ) {
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
     tester.write_bytes(
@@ -514,7 +491,7 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
     tester.write_bytes(

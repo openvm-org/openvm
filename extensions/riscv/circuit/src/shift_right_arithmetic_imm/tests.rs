@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -67,7 +67,7 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, 32)
+    Harness::with_capacity(executor, air, chip, 32, generate_trace_from_postflight)
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn rv64_shift_right_arithmetic_immediate_boundaries() {
                 ShiftImmOpcode::SRAI.global_opcode().as_usize(),
                 &mut rng,
             );
-            tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+            tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
             let expected = ((source as i64) >> shamt) as u64;
             assert_eq!(
@@ -105,69 +105,6 @@ fn rv64_shift_right_arithmetic_immediate_boundaries() {
 }
 
 #[test]
-fn postflight_trace_matches_record_arena_trace() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&tester);
-    let first = Instruction::from_usize(
-        ShiftImmOpcode::SRAI.global_opcode(),
-        [24, 8, 17, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
-    );
-    let second = Instruction::from_usize(
-        ShiftImmOpcode::SRAI.global_opcode(),
-        [32, 24, 33, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
-    );
-    let sentinel = Instruction::from_usize(
-        ShiftImmOpcode::SRAI.global_opcode(),
-        [40, 8, 1, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
-    );
-    unsafe {
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            4,
-            [0x4321, 0x8765, 0xcba9, 0xfedc],
-        );
-    }
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &first, 0);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &second, 4);
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: 3,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 5,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[first, second, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-}
-
-#[test]
 fn rv64_shift_right_arithmetic_immediate_marker_negative() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -180,7 +117,7 @@ fn rv64_shift_right_arithmetic_immediate_marker_negative() {
         ShiftImmOpcode::SRAI.global_opcode().as_usize(),
         &mut rng,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
@@ -288,8 +225,7 @@ fn test_cuda_shift_right_arithmetic_immediate_boundaries_tracegen() {
 mod word {
     use openvm_circuit::arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller,
-        BLOCK_FE_WIDTH,
+        MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
     };
     use openvm_instructions::{
         instruction::Instruction,
@@ -359,7 +295,7 @@ mod word {
             ),
             tester.memory_helper(),
         );
-        Harness::with_capacity(executor, air, chip, 16)
+        Harness::with_capacity(executor, air, chip, 16, generate_word_trace_from_postflight)
     }
 
     #[test]
@@ -378,7 +314,7 @@ mod word {
                     ShiftWImmOpcode::SRAIW.global_opcode().as_usize(),
                     &mut rng,
                 );
-                tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+                tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
                 let expected = ((source as u32 as i32) >> shamt) as i64 as u64;
                 assert_eq!(
@@ -395,69 +331,6 @@ mod word {
             .finalize()
             .simple_test()
             .expect("verification failed");
-    }
-
-    #[test]
-    fn postflight_word_trace_matches_record_arena_trace() {
-        let mut tester = VmChipTestBuilder::default();
-        let mut harness = create_harness(&tester);
-        let first = Instruction::from_usize(
-            ShiftWImmOpcode::SRAIW.global_opcode(),
-            [24, 8, 17, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
-        );
-        let second = Instruction::from_usize(
-            ShiftWImmOpcode::SRAIW.global_opcode(),
-            [32, 24, 31, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
-        );
-        let sentinel = Instruction::from_usize(
-            ShiftWImmOpcode::SRAIW.global_opcode(),
-            [40, 8, 1, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
-        );
-        unsafe {
-            tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-                RV64_REGISTER_AS,
-                4,
-                [0x5678, 0x9234, 0xabcd, 0xef01],
-            );
-        }
-        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &first, 0);
-        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &second, 4);
-
-        let history = PreflightHistory {
-            program: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: 3,
-                },
-                PreflightProgramEvent {
-                    pc: 8,
-                    timestamp: 5,
-                },
-            ],
-            memory: tester.memory.memory.take_log(),
-        };
-        let program = Program::new_without_debug_infos(&[first, second, sentinel], 0);
-        let memory_config = MemoryConfig::default();
-        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-        let actual = generate_word_trace_from_postflight(&harness.chip, &postflight).unwrap();
-
-        let rows_used = harness.arena.trace_offset / harness.arena.width;
-        let mut expected_values = harness.arena.trace_buffer;
-        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-        harness.chip.inner.fill_trace(
-            &harness.chip.mem_helper.as_borrowed(),
-            &mut expected,
-            rows_used,
-        );
-
-        assert_eq!(actual.width(), expected.width());
-        assert_eq!(actual.height(), expected.height());
-        assert_eq!(actual.values, expected.values);
     }
 
     // ////////////////////////////////////////////////////////////////////////////////////

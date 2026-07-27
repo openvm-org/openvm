@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
         memory::{gen_nonzero_register_pointer, gen_register_pointer},
         TestBuilder,
     },
-    Arena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    Executor, MemoryConfig, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
@@ -43,10 +43,10 @@ pub(crate) const MAX_INS_CAPACITY: usize = 128;
 pub(crate) type F = BabyBear;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
@@ -104,7 +104,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [

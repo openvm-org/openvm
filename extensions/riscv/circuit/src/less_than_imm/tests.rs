@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -61,7 +61,7 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         LessThanImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, 64)
+    Harness::with_capacity(executor, air, chip, 64, generate_trace_from_postflight)
 }
 
 fn encode_i12(imm: i16) -> usize {
@@ -93,7 +93,7 @@ fn rv64_less_than_immediate_boundaries() {
                     opcode.global_opcode().as_usize(),
                     &mut rng,
                 );
-                tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+                tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
                 let mut result = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
                 result[0] = F::from_bool(expected(opcode, source, imm));
@@ -123,7 +123,7 @@ fn rv64_less_than_immediate_result_negative() {
         LessThanImmOpcode::SLTI.global_opcode().as_usize(),
         &mut rng,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
@@ -141,87 +141,6 @@ fn rv64_less_than_immediate_result_negative() {
         .finalize()
         .simple_test()
         .expect_err("altered comparison result should fail");
-}
-
-#[test]
-fn postflight_trace_matches_record_arena_trace() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&tester);
-    let slti = Instruction::from_usize(
-        LessThanImmOpcode::SLTI.global_opcode(),
-        [
-            24,
-            8,
-            encode_i12(-1),
-            RV64_REGISTER_AS as usize,
-            RV64_IMM_AS as usize,
-        ],
-    );
-    let sltiu = Instruction::from_usize(
-        LessThanImmOpcode::SLTIU.global_opcode(),
-        [
-            32,
-            24,
-            encode_i12(2047),
-            RV64_REGISTER_AS as usize,
-            RV64_IMM_AS as usize,
-        ],
-    );
-    let sentinel = Instruction::from_usize(
-        LessThanImmOpcode::SLTI.global_opcode(),
-        [
-            40,
-            8,
-            encode_i12(0),
-            RV64_REGISTER_AS as usize,
-            RV64_IMM_AS as usize,
-        ],
-    );
-    unsafe {
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            4,
-            [0, 0, 0, 1 << (U16_BITS - 1)],
-        );
-    }
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &slti, 0);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &sltiu, 4);
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: 3,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 5,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[slti, sltiu, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
 }
 
 #[cfg(feature = "cuda")]

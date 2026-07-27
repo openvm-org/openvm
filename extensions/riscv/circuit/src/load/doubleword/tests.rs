@@ -7,7 +7,7 @@ use openvm_circuit::arch::testing::{
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+    MemoryConfig, Postflight, PreflightHistory, PreflightProgramEvent, BLOCK_FE_WIDTH,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -93,7 +93,13 @@ fn create_doubleword_harness(
         tester.memory_helper(),
     );
     (
-        DoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        DoublewordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -107,7 +113,7 @@ fn rand_load_doubleword_test() {
         set_and_execute_load(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             LOADD,
             None,
@@ -134,7 +140,7 @@ fn positive_loadd_pointer_limb_boundary_cross_test() {
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADD,
         Some([0xf9, 0xff, 0x00, 0x00, 0, 0, 0, 0]),
@@ -165,104 +171,6 @@ fn run_loadd_sanity_test() {
     );
 }
 
-#[test]
-fn postflight_loadd_trace_matches_record_arena_trace() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, (_, bitwise)) = create_doubleword_harness(&mut tester);
-    let range_checker = tester.range_checker();
-    let noncrossing = Instruction::from_usize(
-        LOADD.global_opcode(),
-        [
-            16,
-            8,
-            0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-            1,
-            0,
-        ],
-    );
-    let crossing_x0 = Instruction::from_usize(
-        LOADD.global_opcode(),
-        [
-            0,
-            24,
-            0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-            0,
-            0,
-        ],
-    );
-    let sentinel = noncrossing.clone();
-    unsafe {
-        tester
-            .memory
-            .memory
-            .data
-            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [64, 0, 0, 0]);
-        tester
-            .memory
-            .memory
-            .data
-            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 12, [65, 0, 0, 0]);
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_MEMORY_AS,
-            32,
-            [0x1001, 0x2002, 0x3003, 0x4004],
-        );
-        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_MEMORY_AS,
-            36,
-            [0x5005, 0x6006, 0x7007, 0x8008],
-        );
-    }
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &noncrossing, 0);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &crossing_x0, 4);
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: 5,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 9,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[noncrossing, crossing_x0, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_range = range_checker.generate_trace::<F>();
-    let actual_bitwise = bitwise.generate_trace::<F>();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-    let expected_range = range_checker.generate_trace::<F>();
-    let expected_bitwise = bitwise.generate_trace::<F>();
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
-    assert_eq!(actual_range.values, expected_range.values);
-    assert_eq!(actual_bitwise.values, expected_bitwise.values);
-}
-
 fn assert_pranked_load_doubleword_fails(
     prank: impl Fn(&mut LoadCoreCols<F, LOAD_DOUBLEWORD_OVERLAP_CELLS>),
 ) {
@@ -272,7 +180,7 @@ fn assert_pranked_load_doubleword_fails(
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADD,
         None,

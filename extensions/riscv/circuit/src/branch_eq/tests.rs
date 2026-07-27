@@ -2,9 +2,9 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+        testing::{memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        ExecutionBridge, Executor, MemoryConfig, Postflight, PreflightHistory,
+        PreflightProgramEvent, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -90,14 +90,20 @@ fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
         tester.execution_bridge(),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
     a: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -112,15 +118,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
 
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mut rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    while rs2 == rs1 {
+        rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    }
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
     let initial_pc = rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(
         executor,
-        arena,
+        preflight,
         &Instruction::from_isize(
             opcode.global_opcode(),
             rs1 as isize,
@@ -162,7 +171,7 @@ fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -173,84 +182,6 @@ fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn postflight_trace_matches_record_arena_trace_for_taken_and_untaken_branches() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&mut tester);
-    let beq_taken = Instruction::from_usize(
-        BranchEqualOpcode::BEQ.global_opcode(),
-        [
-            8,
-            16,
-            8,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    );
-    let filler = beq_taken.clone();
-    let bne_untaken = Instruction::from_usize(
-        BranchEqualOpcode::BNE.global_opcode(),
-        [
-            8,
-            16,
-            12,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    );
-    let sentinel = beq_taken.clone();
-    unsafe {
-        tester
-            .memory
-            .memory
-            .data
-            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [1, 2, 3, 4]);
-        tester
-            .memory
-            .memory
-            .data
-            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, [1, 2, 3, 4]);
-    }
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &beq_taken, 0);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &bne_untaken, 8);
-
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 8,
-                timestamp: 3,
-            },
-            PreflightProgramEvent {
-                pc: 12,
-                timestamp: 5,
-            },
-        ],
-        memory: tester.memory.memory.take_log(),
-    };
-    let program = Program::new_without_debug_infos(&[beq_taken, filler, bne_untaken, sentinel], 0);
-    let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-
-    let rows_used = harness.arena.trace_offset / harness.arena.width;
-    let mut expected_values = harness.arena.trace_buffer;
-    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-    harness.chip.inner.fill_trace(
-        &harness.chip.mem_helper.as_borrowed(),
-        &mut expected,
-        rows_used,
-    );
-
-    assert_eq!(actual.width(), expected.width());
-    assert_eq!(actual.height(), expected.height());
-    assert_eq!(actual.values, expected.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -277,7 +208,7 @@ fn run_negative_branch_eq_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(a),
@@ -416,7 +347,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         BranchEqualOpcode::BEQ,
         Some(x),
@@ -427,7 +358,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         BranchEqualOpcode::BNE,
         Some(x),

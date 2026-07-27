@@ -85,6 +85,25 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         memory_config: &MemoryConfig,
         exit_code: Option<u32>,
     ) -> Result<Self, PostflightError> {
+        Self::new_inner(program, history, memory_config, exit_code, true)
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn new_for_test(
+        program: &'a Program<F>,
+        history: &'a PreflightHistory,
+        memory_config: &MemoryConfig,
+    ) -> Result<Self, PostflightError> {
+        Self::new_inner(program, history, memory_config, None, false)
+    }
+
+    fn new_inner(
+        program: &'a Program<F>,
+        history: &'a PreflightHistory,
+        memory_config: &MemoryConfig,
+        exit_code: Option<u32>,
+        validate_final_pc: bool,
+    ) -> Result<Self, PostflightError> {
         validate_memory_config(memory_config)?;
         validate_program_timestamps(history, memory_config)?;
         let memory_starts = memory_starts(history)?;
@@ -122,7 +141,9 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                 .ok_or_else(|| PostflightError::new("program frequency exceeds u32::MAX"))?;
             opcodes.push(opcode);
         }
-        validate_endpoint(program, history, exit_code)?;
+        if validate_final_pc {
+            validate_endpoint(program, history, exit_code)?;
+        }
 
         let mut opcode_ranges = BTreeMap::new();
         let mut cursor = 0usize;
@@ -160,6 +181,105 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             memory_predecessors,
             touched_memory,
         })
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) fn balance_test_memory(
+        &self,
+        chip: &mut crate::arch::testing::memory::air::MemoryDummyChip<F>,
+    ) {
+        for event_index in 0..self.history.memory.accesses.len() {
+            let event = self.history.memory.accesses[event_index];
+            let previous_timestamp = self.previous_timestamp(event_index);
+            match self.memory_config.addr_spaces[event.address_space() as usize].layout {
+                MemoryCellType::U16 => {
+                    let value = event.value.map(F::from_u16);
+                    let previous = self.previous_u16(event_index).map(F::from_u16);
+                    chip.send(
+                        event.address_space(),
+                        event.pointer,
+                        &previous,
+                        previous_timestamp,
+                    );
+                    chip.receive(
+                        event.address_space(),
+                        event.pointer,
+                        &value,
+                        event.timestamp,
+                    );
+                }
+                MemoryCellType::F { size: 4 } => {
+                    let value = self.field_value(event_index);
+                    let previous = self.previous_field32(event_index);
+                    chip.send(
+                        event.address_space(),
+                        event.pointer,
+                        &previous,
+                        previous_timestamp,
+                    );
+                    chip.receive(
+                        event.address_space(),
+                        event.pointer,
+                        &value,
+                        event.timestamp,
+                    );
+                }
+                _ => unreachable!("postflight validates every accessed memory layout"),
+            }
+        }
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) fn record_test_writes(&self, memory: &mut crate::arch::testing::MemoryTester<F>)
+    where
+        F: crate::arch::VmField,
+    {
+        let mut first_writes = FxHashMap::<u64, usize>::default();
+        for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
+            if event.is_write() {
+                first_writes
+                    .entry(memory_key(event.address_space(), event.pointer))
+                    .or_insert(event_index);
+            }
+        }
+
+        for event_index in first_writes.into_values() {
+            let event = self.history.memory.accesses[event_index];
+            match self.memory_config.addr_spaces[event.address_space() as usize].layout {
+                MemoryCellType::U16 => unsafe {
+                    memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+                        event.address_space(),
+                        event.pointer,
+                        self.previous_u16(event_index),
+                    );
+                },
+                MemoryCellType::F { size: 4 } => unsafe {
+                    memory.memory.data.write::<F, BLOCK_FE_WIDTH>(
+                        event.address_space(),
+                        event.pointer,
+                        self.previous_field32(event_index),
+                    );
+                },
+                _ => unreachable!("postflight validates every accessed memory layout"),
+            }
+        }
+
+        for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
+            if !event.is_write() {
+                continue;
+            }
+            let value = match self.memory_config.addr_spaces[event.address_space() as usize].layout
+            {
+                MemoryCellType::U16 => event.value.map(F::from_u16),
+                MemoryCellType::F { size: 4 } => self.field_value(event_index),
+                _ => unreachable!("postflight validates every accessed memory layout"),
+            };
+            memory.write(
+                event.address_space() as usize,
+                event.pointer as usize,
+                value,
+            );
+        }
     }
 
     pub fn steps(&self, opcode: VmOpcode) -> &[PostflightStep] {

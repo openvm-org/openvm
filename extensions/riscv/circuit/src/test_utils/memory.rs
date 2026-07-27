@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
         memory::{gen_nonzero_register_pointer, gen_register_pointer},
         TestBuilder,
     },
-    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+    Executor, MemoryConfig, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -109,10 +109,10 @@ fn random_memory_access(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
@@ -163,7 +163,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     let enabled_write = access.a != 0;
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -191,10 +191,10 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
@@ -248,7 +248,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [

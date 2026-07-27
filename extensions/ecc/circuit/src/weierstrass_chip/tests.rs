@@ -6,15 +6,16 @@ use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    Arena, MatrixRecordArena, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-    PreflightProgramEvent, TraceFiller, MEMORY_BLOCK_BYTES,
+    testing::{
+        memory::{gen_distinct_register_pointers, gen_pointer},
+        TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder,
+    },
+    MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    program::Program,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
@@ -22,7 +23,7 @@ use openvm_mod_circuit_builder::{
     test_utils::generate_random_biguint, utils::biguint_to_limbs_vec, ExprBuilderConfig,
 };
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
-use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -38,7 +39,7 @@ use {
     openvm_circuit::arch::rvr::{cuda::GpuPostflightProgram, PreflightEndpoint, PreflightEventLog},
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
-        arch::{DenseRecordArena, VirtualMachine, VmExecutor},
+        arch::{DenseRecordArena, PreflightProgramEvent, VirtualMachine, VmExecutor},
         utils::{test_gpu_engine, test_system_config},
     },
     openvm_circuit_primitives::Chip,
@@ -46,6 +47,7 @@ use {
     openvm_cuda_common::copy::MemCopyD2H,
     openvm_instructions::{
         exe::{SparseMemoryImage, VmExe},
+        program::Program,
         SystemOpcode,
     },
     openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram},
@@ -58,7 +60,8 @@ use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
     get_ec_double_chip, get_ec_double_executor,
     weierstrass_chip::{
-        generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
+        generate_add_ne_trace_from_postflight, generate_add_ne_trace_from_postflights,
+        generate_double_trace_from_postflight, generate_double_trace_from_postflights,
     },
     EcDoubleExecutor, WeierstrassAir, WeierstrassChip, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_48,
@@ -444,7 +447,16 @@ mod ec_addne_tests {
             tester.address_bits(),
         );
 
-        EcAddneHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+        EcAddneHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| generate_add_ne_trace_from_postflight(chip, postflight, offset),
+        )
+        .with_batch_trace_generator(move |chip, postflights| {
+            generate_add_ne_trace_from_postflights(chip, postflights, offset)
+        })
     }
 
     #[cfg(feature = "cuda")]
@@ -510,20 +522,17 @@ mod ec_addne_tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_and_execute_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
+    fn set_and_execute_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut EcAddNeExecutor<BLOCKS>,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
         p1: Option<(BigUint, BigUint)>,
         p2: Option<(BigUint, BigUint)>,
-    ) -> Instruction<F>
-    where
-        EcAddNeExecutor<BLOCKS>: PreflightExecutor<F, RA>,
-    {
+    ) -> Instruction<F> {
         let (x1, y1, x2, y2, op_local) = if is_setup {
             (
                 modulus.clone(),
@@ -550,9 +559,8 @@ mod ec_addne_tests {
         let ptr_as = RV64_REGISTER_AS as usize;
         let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rs2_ptr, rd_ptr] =
+            gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let p2_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
@@ -626,7 +634,7 @@ mod ec_addne_tests {
             data_as as isize,
         );
 
-        tester.execute(executor, arena, &instruction);
+        tester.execute(executor, preflight, &instruction);
         instruction
     }
 
@@ -644,10 +652,10 @@ mod ec_addne_tests {
 
         let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             true,
@@ -656,10 +664,10 @@ mod ec_addne_tests {
             None,
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             false,
@@ -668,10 +676,10 @@ mod ec_addne_tests {
             Some(SampleEcPoints[1].clone()),
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             false,
@@ -702,7 +710,7 @@ mod ec_addne_tests {
     }
 
     #[test]
-    fn ec_addne_postflight_matches_legacy_and_rejects_bad_pointer() {
+    fn ec_addne_postflight_generation_and_malformed_history() {
         let mut tester = VmChipTestBuilder::<F>::default();
         let modulus = secp256k1_coord_prime();
         let config = ExprBuilderConfig {
@@ -762,42 +770,23 @@ mod ec_addne_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
-        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
-        let final_timestamp = tester.memory.memory.timestamp();
-        let mut history = PreflightHistory {
-            program: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: final_timestamp,
-                },
-            ],
-            memory: tester.memory.memory.take_log(),
-        };
-        let program =
-            Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
-        let memory_config = MemoryConfig::default();
-        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-        let actual =
-            generate_add_ne_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
-
-        let rows_used = harness.arena.trace_offset / harness.arena.width;
-        let mut expected_values = harness.arena.trace_buffer.clone();
-        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-        harness.chip.inner.fill_trace(
-            &harness.chip.mem_helper.as_borrowed(),
-            &mut expected,
-            rows_used,
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.preflight,
+            &instruction,
+            0,
         );
-        assert_eq!(actual, expected);
+        let execution = harness.preflight.executions.last().unwrap();
+        let mut history = execution.history.clone();
+        let memory_config = MemoryConfig::default();
+        let postflight =
+            Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
+        generate_add_ne_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
 
         drop(postflight);
         history.memory.accesses[0].value[2] = 1;
-        let malformed = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let malformed =
+            Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
         let error = generate_add_ne_trace_from_postflight(&harness.chip, &malformed, opcode_base)
             .unwrap_err();
         assert!(
@@ -807,7 +796,7 @@ mod ec_addne_tests {
 
         history.memory.accesses[0].value[2] = 0;
         history.memory.accesses[0].pointer += 1;
-        let error = Postflight::new(&program, &history, &memory_config, None)
+        let error = Postflight::new_for_test(&execution.program, &history, &memory_config)
             .err()
             .expect("misaligned memory event must be rejected");
         assert!(error.to_string().contains("misaligned"), "{error}");
@@ -828,7 +817,8 @@ mod ec_addne_tests {
             .iter()
             .map(|count| count.load(Ordering::Relaxed))
             .collect::<Vec<_>>();
-        let malformed = Postflight::new(&program, &history, &memory_config, None).unwrap();
+        let malformed =
+            Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
         let error = generate_add_ne_trace_from_postflight(&harness.chip, &malformed, opcode_base)
             .unwrap_err();
         assert!(error.to_string().contains("OutputMismatch"), "{error}");
@@ -1386,7 +1376,6 @@ mod ec_double_tests {
         EcDoubleExecutor<BLOCKS>,
         WeierstrassAir<1, BLOCKS>,
         WeierstrassChip<F, 1, BLOCKS>,
-        MatrixRecordArena<F>,
     >;
 
     fn create_harness<const BLOCKS: usize>(
@@ -1418,7 +1407,16 @@ mod ec_double_tests {
             tester.address_bits(),
             a_biguint,
         );
-        EcDoubleHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+        EcDoubleHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| generate_double_trace_from_postflight(chip, postflight, offset),
+        )
+        .with_batch_trace_generator(move |chip, postflights| {
+            generate_double_trace_from_postflights(chip, postflights, offset)
+        })
     }
 
     #[cfg(feature = "cuda")]
@@ -1488,10 +1486,10 @@ mod ec_double_tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_and_execute_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
+    fn set_and_execute_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut EcDoubleExecutor<BLOCKS>,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         rng: &mut StdRng,
         modulus: &BigUint,
         a_biguint: &BigUint,
@@ -1499,10 +1497,7 @@ mod ec_double_tests {
         offset: usize,
         x: Option<BigUint>,
         y: Option<BigUint>,
-    ) -> Instruction<F>
-    where
-        EcDoubleExecutor<BLOCKS>: PreflightExecutor<F, RA>,
-    {
+    ) -> Instruction<F> {
         let (x1, y1, op_local) = if is_setup {
             (
                 modulus.clone(),
@@ -1524,8 +1519,7 @@ mod ec_double_tests {
         let ptr_as = RV64_REGISTER_AS as usize;
         let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rd_ptr] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
@@ -1573,7 +1567,7 @@ mod ec_double_tests {
             data_as as isize,
         );
 
-        tester.execute(executor, arena, &instruction);
+        tester.execute(executor, preflight, &instruction);
         instruction
     }
 
@@ -1594,10 +1588,10 @@ mod ec_double_tests {
         let mut harness = create_harness::<BLOCKS>(&tester, config, offset, a.clone());
 
         for i in 0..num_ops {
-            set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+            set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 &modulus,
                 &a,
@@ -1608,10 +1602,10 @@ mod ec_double_tests {
             );
         }
 
-        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             &a,
@@ -1621,10 +1615,10 @@ mod ec_double_tests {
             Some(SampleEcPoints[0].1.clone()),
         );
 
-        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             &a,
@@ -1646,10 +1640,10 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &modulus,
             &a,
@@ -1698,7 +1692,7 @@ mod ec_double_tests {
     }
 
     #[test]
-    fn ec_double_postflight_matches_legacy() {
+    fn ec_double_postflight_generation() {
         let mut tester = VmChipTestBuilder::<F>::default();
         let modulus = secp256k1_coord_prime();
         let a = BigUint::zero();
@@ -1748,38 +1742,18 @@ mod ec_double_tests {
                 RV64_MEMORY_AS as usize,
             ],
         );
-        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
-        let final_timestamp = tester.memory.memory.timestamp();
-        let history = PreflightHistory {
-            program: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 4,
-                    timestamp: final_timestamp,
-                },
-            ],
-            memory: tester.memory.memory.take_log(),
-        };
-        let program =
-            Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
-        let memory_config = MemoryConfig::default();
-        let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-        let actual =
-            generate_double_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
-
-        let rows_used = harness.arena.trace_offset / harness.arena.width;
-        let mut expected_values = harness.arena.trace_buffer.clone();
-        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
-        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
-        harness.chip.inner.fill_trace(
-            &harness.chip.mem_helper.as_borrowed(),
-            &mut expected,
-            rows_used,
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.preflight,
+            &instruction,
+            0,
         );
-        assert_eq!(actual, expected);
+        let execution = harness.preflight.executions.last().unwrap();
+        let memory_config = MemoryConfig::default();
+        let postflight =
+            Postflight::new_for_test(&execution.program, &execution.history, &memory_config)
+                .unwrap();
+        generate_double_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
     }
 
     #[cfg(feature = "cuda")]

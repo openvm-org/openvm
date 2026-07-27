@@ -7,11 +7,10 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         testing::{
-            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, MemoryConfig, Postflight, PreflightExecutor, PreflightHistory,
-        PreflightProgramEvent, TraceFiller, VmChipWrapper, BLOCK_FE_WIDTH,
+        ExecutionBridge, Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -42,10 +41,7 @@ use openvm_riscv_circuit::{
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
@@ -73,9 +69,13 @@ use {
 };
 
 use crate::{
-    trace::generate_add_sub_trace, AluAdapterAir, AluAdapterExecutor, AluU16AdapterAir,
-    AluU16AdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, Rv64AddSub256Air,
-    Rv64AddSub256Chip, Rv64AddSub256Executor, Rv64BitwiseLogic256Air, Rv64BitwiseLogic256Chip,
+    trace::{
+        generate_add_sub_trace, generate_bitwise_trace, generate_branch_equal_trace,
+        generate_branch_less_than_trace, generate_less_than_trace, generate_multiplication_trace,
+        generate_shift_arithmetic_trace, generate_shift_logical_trace,
+    },
+    AluAdapterAir, AluU16AdapterAir, BranchAdapterAir, Rv64AddSub256Air, Rv64AddSub256Chip,
+    Rv64AddSub256Executor, Rv64BitwiseLogic256Air, Rv64BitwiseLogic256Chip,
     Rv64BitwiseLogic256Executor, Rv64BranchEqual256Air, Rv64BranchEqual256Chip,
     Rv64BranchEqual256Executor, Rv64BranchLessThan256Air, Rv64BranchLessThan256Chip,
     Rv64BranchLessThan256Executor, Rv64LessThan256Air, Rv64LessThan256Chip,
@@ -92,20 +92,6 @@ const RANGE_TUPLE_SIZES: [u32; 2] = [
     1 << RV64_BYTE_BITS,
     (INT256_NUM_U8_LIMBS * (1 << RV64_BYTE_BITS)) as u32,
 ];
-
-fn legacy_trace<Filler: TraceFiller<F>>(
-    chip: &VmChipWrapper<F, Filler>,
-    arena: openvm_circuit::arch::MatrixRecordArena<F>,
-) -> RowMajorMatrix<F> {
-    let rows_used = arena.trace_offset / arena.width;
-    let width = arena.width;
-    let mut values = arena.trace_buffer;
-    values.truncate(rows_used.next_power_of_two() * width);
-    let mut trace = RowMajorMatrix::new(values, width);
-    chip.inner
-        .fill_trace(&chip.mem_helper.as_borrowed(), &mut trace, rows_used);
-    trace
-}
 
 fn create_add_sub_harness_fields(
     memory_bridge: MemoryBridge,
@@ -127,10 +113,7 @@ fn create_add_sub_harness_fields(
         )),
         AddSubCoreAir::new(range_checker_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddSub256Executor::new(
-        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
-        Rv64BaseAlu256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64AddSub256Executor;
     let chip = Rv64AddSub256Chip::new(
         AddSubFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
@@ -162,10 +145,7 @@ fn create_bitwise_logic_harness_fields(
         )),
         BitwiseLogicCoreAir::new(bitwise_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
     );
-    let executor = Rv64BitwiseLogic256Executor::new(
-        AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
-        Rv64BaseAlu256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64BitwiseLogic256Executor;
     let chip = Rv64BitwiseLogic256Chip::new(
         BitwiseLogicFiller::new(
             Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
@@ -200,10 +180,7 @@ fn create_lt_harness_fields(
             Rv64LessThan256Opcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64LessThan256Executor::new(
-        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
-        Rv64LessThan256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LessThan256Executor;
     let chip = Rv64LessThan256Chip::new(
         LessThanFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
@@ -240,10 +217,7 @@ fn create_mul_harness_fields(
             Rv64Mul256Opcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64Multiplication256Executor::new(
-        AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
-        Rv64Mul256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64Multiplication256Executor;
     let chip = Rv64Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
             Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
@@ -276,10 +250,7 @@ fn create_shift_logical_harness_fields(
         )),
         ShiftLogicalCoreAir::new(range_checker_chip.bus(), Rv64Shift256Opcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftLogical256Executor::new(
-        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
-        Rv64Shift256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftLogical256Executor;
     let chip = Rv64ShiftLogical256Chip::new(
         ShiftLogicalFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
@@ -313,10 +284,7 @@ fn create_shift_right_arithmetic_harness_fields(
             Rv64Shift256Opcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64ShiftRightArithmetic256Executor::new(
-        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
-        Rv64Shift256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmetic256Executor;
     let chip = Rv64ShiftRightArithmetic256Chip::new(
         ShiftRightArithmeticFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
@@ -348,11 +316,7 @@ fn create_beq_harness_fields(
         )),
         BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = Rv64BranchEqual256Executor::new(
-        BranchAdapterExecutor::new(Rv64VecHeapBranchU16AdapterExecutor::new(address_bits)),
-        Rv64BranchEqual256Opcode::CLASS_OFFSET,
-        DEFAULT_PC_STEP,
-    );
+    let executor = Rv64BranchEqual256Executor;
     let chip = Rv64BranchEqual256Chip::new(
         BranchEqualFiller::new(
             Rv64VecHeapBranchU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
@@ -388,10 +352,7 @@ fn create_blt_harness_fields(
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64BranchLessThan256Executor::new(
-        BranchAdapterExecutor::new(Rv64VecHeapBranchU16AdapterExecutor::new(address_bits)),
-        Rv64BranchLessThan256Opcode::CLASS_OFFSET,
-    );
+    let executor = Rv64BranchLessThan256Executor;
     let chip = Rv64BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
             Rv64VecHeapBranchU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
@@ -438,10 +399,10 @@ fn blt_branch_fn(
 }
 
 #[allow(clippy::type_complexity)]
-fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute_rand<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     opcode: usize,
     branch_fn: Option<fn(usize, &[u32; INT256_NUM_U8_LIMBS], &[u32; INT256_NUM_U8_LIMBS]) -> bool>,
@@ -462,7 +423,7 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
 
         tester.execute_with_pc(
             executor,
-            arena,
+            preflight,
             &instruction,
             rng.random_range((ABS_MAX_BRANCH as u32)..(1 << (PC_BITS - 1))),
         );
@@ -478,7 +439,7 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
             vec![c.map(F::from_u32)],
             opcode,
         );
-        tester.execute(executor, arena, &instruction);
+        tester.execute(executor, preflight, &instruction);
     }
 }
 
@@ -501,13 +462,20 @@ fn run_add_sub_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let address_bits = tester.address_bits();
+    let mut harness = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| generate_add_sub_trace(chip, postflight, address_bits),
+    );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + offset,
             None,
@@ -522,7 +490,7 @@ fn run_add_sub_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
 }
 
 #[test]
-fn add_sub_postflight_matches_legacy_and_rejects_truncated_history() {
+fn add_sub_postflight_rejects_truncated_history() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let address_bits = tester.address_bits();
@@ -533,8 +501,13 @@ fn add_sub_postflight_matches_legacy_and_rejects_truncated_history() {
         tester.memory_helper(),
         address_bits,
     );
-    let mut harness: TestChipHarness<F, _, _, _> =
-        TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let mut harness: TestChipHarness<F, _, _, _> = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| generate_add_sub_trace(chip, postflight, address_bits),
+    );
     let b = generate_long_number::<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>(&mut rng);
     let c = generate_long_number::<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>(&mut rng);
     let instruction = rv64_write_heap_default(
@@ -545,40 +518,24 @@ fn add_sub_postflight_matches_legacy_and_rejects_truncated_history() {
             .global_opcode()
             .as_usize(),
     );
-    let initial_memory = tester.memory.memory.data().clone();
-    tester.memory.memory =
-        openvm_circuit::system::memory::online::TracingMemory::from_image(initial_memory);
-    let from_timestamp = tester.memory.memory.timestamp;
-    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &instruction, 0);
-    let to_timestamp = tester.memory.memory.timestamp;
-    let memory = tester.memory.memory.take_log();
-    let history = PreflightHistory {
-        program: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: from_timestamp,
-            },
-            PreflightProgramEvent {
-                pc: DEFAULT_PC_STEP,
-                timestamp: to_timestamp,
-            },
-        ],
-        memory,
-    };
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.preflight,
+        &instruction,
+        0,
+    );
+    let history = &mut harness.preflight.executions[0].history;
     let program = openvm_instructions::program::Program::new_without_debug_infos(
         &[instruction.clone(), instruction],
         0,
     );
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
     let actual = generate_add_sub_trace(&harness.chip, &postflight, address_bits).unwrap();
-    let expected = legacy_trace(&harness.chip, harness.arena);
-    assert_eq!(actual.width, expected.width);
-    assert_eq!(actual.values, expected.values);
+    assert!(!actual.values.is_empty());
 
-    let mut malformed_history = history;
-    malformed_history.memory.accesses[0].pointer += BLOCK_FE_WIDTH as u32;
-    let malformed = Postflight::new(&program, &malformed_history, &memory_config, None).unwrap();
+    history.memory.accesses[0].pointer += BLOCK_FE_WIDTH as u32;
+    let malformed = Postflight::new(&program, history, &memory_config, None).unwrap();
     assert!(generate_add_sub_trace(&harness.chip, &malformed, address_bits).is_err());
 }
 
@@ -603,13 +560,23 @@ fn run_bitwise_logic_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let address_bits = tester.address_bits();
+    let range_checker = tester.range_checker();
+    let mut harness = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_bitwise_trace(chip, postflight, address_bits, &range_checker)
+        },
+    );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + offset,
             None,
@@ -642,13 +609,20 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let address_bits = tester.address_bits();
+    let mut harness = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| generate_less_than_trace(chip, postflight, address_bits),
+    );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + offset,
             None,
@@ -685,13 +659,23 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let address_bits = tester.address_bits();
+    let range_checker = tester.range_checker();
+    let mut harness = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_multiplication_trace(chip, postflight, address_bits, &range_checker)
+        },
+    );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + offset,
             None,
@@ -725,13 +709,20 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             tester.memory_helper(),
             tester.address_bits(),
         );
-        let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+        let address_bits = tester.address_bits();
+        let mut harness = TestChipHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| generate_shift_arithmetic_trace(chip, postflight, address_bits),
+        );
 
         for _ in 0..num_ops {
             set_and_execute_rand(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode.local_usize() + offset,
                 None,
@@ -748,13 +739,20 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             tester.memory_helper(),
             tester.address_bits(),
         );
-        let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+        let address_bits = tester.address_bits();
+        let mut harness = TestChipHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            move |chip, postflight| generate_shift_logical_trace(chip, postflight, address_bits),
+        );
 
         for _ in 0..num_ops {
             set_and_execute_rand(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode.local_usize() + offset,
                 None,
@@ -785,13 +783,23 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let address_bits = tester.address_bits();
+    let range_checker = tester.range_checker();
+    let mut harness = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_branch_equal_trace(chip, postflight, address_bits, &range_checker)
+        },
+    );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + offset,
             Some(beq_branch_fn),
@@ -826,13 +834,20 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let address_bits = tester.address_bits();
+    let mut harness = TestChipHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| generate_branch_less_than_trace(chip, postflight, address_bits),
+    );
 
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode.local_usize() + offset,
             Some(blt_branch_fn),

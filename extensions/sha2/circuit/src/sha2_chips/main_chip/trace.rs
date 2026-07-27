@@ -23,22 +23,50 @@ where
     C: Sha2Config,
 {
     let steps = postflight.steps(C::OPCODE.global_opcode());
-    let height = next_power_of_two_or_zero(steps.len());
-    let mut trace =
-        RowMajorMatrix::new(F::zero_vec(height * C::MAIN_CHIP_WIDTH), C::MAIN_CHIP_WIDTH);
-    let mem_helper = chip.mem_helper.as_borrowed();
     let replay_rows = steps
         .iter()
         .map(|&step| {
             crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    for (row_index, replay) in replay_rows.iter().enumerate() {
-        let row =
-            &mut trace.values[row_index * C::MAIN_CHIP_WIDTH..(row_index + 1) * C::MAIN_CHIP_WIDTH];
-        chip.fill_trace_row_from_replay(&mem_helper, row, row_index, replay);
+    Ok(chip.generate_trace_from_replays(&replay_rows))
+}
+
+#[cfg(test)]
+pub(crate) fn generate_trace_from_postflights<F, C>(
+    chip: &Sha2MainChip<F, C>,
+    postflights: &[Postflight<'_, F>],
+) -> Result<RowMajorMatrix<F>, PostflightError>
+where
+    F: PrimeField32,
+    C: Sha2Config,
+{
+    let mut replay_rows = Vec::new();
+    for postflight in postflights {
+        for &step in postflight.steps(C::OPCODE.global_opcode()) {
+            replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
+                postflight,
+                step,
+                chip.pointer_max_bits,
+            )?);
+        }
     }
-    Ok(trace)
+    Ok(chip.generate_trace_from_replays(&replay_rows))
+}
+
+impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
+    fn generate_trace_from_replays(&self, replay_rows: &[Sha2ReplayRow]) -> RowMajorMatrix<F> {
+        let height = next_power_of_two_or_zero(replay_rows.len());
+        let mut trace =
+            RowMajorMatrix::new(F::zero_vec(height * C::MAIN_CHIP_WIDTH), C::MAIN_CHIP_WIDTH);
+        let mem_helper = self.mem_helper.as_borrowed();
+        for (row_index, replay) in replay_rows.iter().enumerate() {
+            let row = &mut trace.values
+                [row_index * C::MAIN_CHIP_WIDTH..(row_index + 1) * C::MAIN_CHIP_WIDTH];
+            self.fill_trace_row_from_replay(&mem_helper, row, row_index, replay);
+        }
+        trace
+    }
 }
 
 impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {

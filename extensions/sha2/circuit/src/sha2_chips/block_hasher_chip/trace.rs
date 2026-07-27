@@ -32,15 +32,6 @@ where
     C: Sha2Config,
 {
     let steps = postflight.steps(C::OPCODE.global_opcode());
-    let rows_used = steps
-        .len()
-        .checked_mul(C::ROWS_PER_BLOCK)
-        .ok_or_else(|| PostflightError::new("SHA-2 block-hasher trace height overflow"))?;
-    let height = next_power_of_two_or_zero(rows_used);
-    let mut trace = RowMajorMatrix::new(
-        F::zero_vec(height * C::BLOCK_HASHER_WIDTH),
-        C::BLOCK_HASHER_WIDTH,
-    );
     let mut replay_rows = Vec::with_capacity(steps.len());
     for &step in steps {
         replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
@@ -49,15 +40,29 @@ where
             chip.pointer_max_bits,
         )?);
     }
-    let inputs = replay_rows
-        .iter()
-        .map(|replay| Sha2BlockTraceInput {
-            message_bytes: &replay.message_bytes,
-            prev_state: &replay.prev_state,
-        })
-        .collect::<Vec<_>>();
-    chip.fill_trace_from_inputs(&mut trace, &inputs);
-    Ok(trace)
+    chip.generate_trace_from_replays(&replay_rows)
+}
+
+#[cfg(test)]
+pub(crate) fn generate_trace_from_postflights<F, C>(
+    chip: &Sha2BlockHasherChip<F, C>,
+    postflights: &[Postflight<'_, F>],
+) -> Result<RowMajorMatrix<F>, PostflightError>
+where
+    F: PrimeField32,
+    C: Sha2Config,
+{
+    let mut replay_rows = Vec::new();
+    for postflight in postflights {
+        for &step in postflight.steps(C::OPCODE.global_opcode()) {
+            replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
+                postflight,
+                step,
+                chip.pointer_max_bits,
+            )?);
+        }
+    }
+    chip.generate_trace_from_replays(&replay_rows)
 }
 
 impl<F, C> Sha2BlockHasherChip<F, C>
@@ -65,6 +70,30 @@ where
     F: PrimeField32,
     C: Sha2BlockHasherVmConfig,
 {
+    fn generate_trace_from_replays(
+        &self,
+        replay_rows: &[crate::Sha2ReplayRow],
+    ) -> Result<RowMajorMatrix<F>, PostflightError> {
+        let rows_used = replay_rows
+            .len()
+            .checked_mul(C::ROWS_PER_BLOCK)
+            .ok_or_else(|| PostflightError::new("SHA-2 block-hasher trace height overflow"))?;
+        let height = next_power_of_two_or_zero(rows_used);
+        let mut trace = RowMajorMatrix::new(
+            F::zero_vec(height * C::BLOCK_HASHER_WIDTH),
+            C::BLOCK_HASHER_WIDTH,
+        );
+        let inputs = replay_rows
+            .iter()
+            .map(|replay| Sha2BlockTraceInput {
+                message_bytes: &replay.message_bytes,
+                prev_state: &replay.prev_state,
+            })
+            .collect::<Vec<_>>();
+        self.fill_trace_from_inputs(&mut trace, &inputs);
+        Ok(trace)
+    }
+
     fn fill_trace_from_inputs(
         &self,
         trace_matrix: &mut RowMajorMatrix<F>,
