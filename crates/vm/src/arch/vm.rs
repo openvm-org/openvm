@@ -148,7 +148,9 @@ pub enum GenerationError {
 ///
 /// Implementations may prepare backend-owned fixed-program data once and reuse it across all
 /// segments. CPU builders replay the history through their chip inventory, while GPU builders
-/// expand it into the transcript consumed by their trace-generation kernels.
+/// expand it into the transcript consumed by their trace-generation kernels. The concrete
+/// coordinator owns the complete trace-generation session, including final validation: a failed
+/// or incomplete session must leave the VM poisoned.
 pub trait PostflightTracegen<E: StarkEngine>: VmBuilder<E> {
     type Prepared;
 
@@ -187,8 +189,15 @@ where
         _output: &PreflightOutput,
         postflight: &Postflight<'_, Val<SC>>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        vm.chip_complex
+        begin_preflight_tracegen_session(&mut vm.preflight_tracegen_poisoned)?;
+        let result = vm
+            .chip_complex
             .generate_proving_ctx_from_postflight(postflight)
+            .and_then(|ctx| vm.validate_proving_ctx(ctx));
+        if result.is_ok() {
+            vm.preflight_tracegen_poisoned = false;
+        }
+        result
     }
 }
 
@@ -1224,13 +1233,7 @@ where
     where
         VB: PostflightTracegen<E>,
     {
-        begin_preflight_tracegen_session(&mut self.preflight_tracegen_poisoned)?;
-        let result = VB::generate_proving_ctx(self, prepared, output, postflight)
-            .and_then(|ctx| self.validate_proving_ctx(ctx));
-        if result.is_ok() {
-            self.preflight_tracegen_poisoned = false;
-        }
-        result
+        VB::generate_proving_ctx(self, prepared, output, postflight)
     }
 
     fn validate_proving_ctx(
