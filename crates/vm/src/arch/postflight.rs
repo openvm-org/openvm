@@ -18,7 +18,7 @@ use super::{
 };
 use crate::system::{TouchedBlock, TouchedMemory};
 
-const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
+pub(crate) const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const PREDECESSOR_INDEX_MASK: u32 = !PREDECESSOR_SEED_BIT;
 
 #[inline]
@@ -1469,5 +1469,73 @@ mod tests {
             .unwrap()
             .to_string()
             .contains("wrong cell layout"));
+    }
+
+    #[test]
+    fn rejects_invalid_memory_chronology() {
+        let read = |timestamp, pointer| PreflightMemoryEvent {
+            timestamp,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer,
+            value: [0; BLOCK_FE_WIDTH],
+        };
+        let write = |timestamp, pointer| PreflightMemoryEvent {
+            address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+            ..read(timestamp, pointer)
+        };
+        let seed = PreflightInitialWrite {
+            address_space: RV64_REGISTER_AS,
+            pointer: 0,
+            initial_value: [0; BLOCK_FE_WIDTH],
+        };
+        let history = |accesses, initial_writes| PreflightHistory {
+            memory: PreflightMemoryLog {
+                accesses,
+                initial_writes,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let error = |history: &PreflightHistory, config: &MemoryConfig| {
+            memory_index::<BabyBear>(history, config)
+                .unwrap_err()
+                .to_string()
+        };
+        let config = MemoryConfig::default();
+
+        assert!(error(&history(vec![write(1, 0)], vec![]), &config).contains("without a seed"));
+        assert!(
+            error(&history(vec![write(1, 0)], vec![seed, seed]), &config).contains("duplicate")
+        );
+        assert!(error(&history(vec![read(1, 0)], vec![seed]), &config).contains("not referenced"));
+
+        let invalid_seed = PreflightInitialWrite {
+            address_space: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+            ..seed
+        };
+        assert!(
+            error(&history(vec![write(1, 0)], vec![invalid_seed]), &config)
+                .contains("contains the write bit")
+        );
+
+        let invalid_address_space = PreflightMemoryEvent {
+            address_space_and_kind: 0,
+            ..read(1, 0)
+        };
+        assert!(
+            error(&history(vec![invalid_address_space], vec![]), &config).contains("out of range")
+        );
+        assert!(error(
+            &history(vec![read(1, 0), read(1, BLOCK_FE_WIDTH as u32)], vec![]),
+            &config,
+        )
+        .contains("not strictly increasing"));
+
+        let narrow_timestamp = MemoryConfig {
+            timestamp_max_bits: 1,
+            ..config
+        };
+        assert!(error(&history(vec![read(2, 0)], vec![]), &narrow_timestamp)
+            .contains("timestamp exceeds"));
     }
 }

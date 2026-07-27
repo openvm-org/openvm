@@ -27,8 +27,6 @@ mod initial_image;
 pub mod io;
 pub mod metered;
 pub mod metered_cost;
-#[cfg(all(feature = "cuda", any(test, feature = "test-utils")))]
-mod postflight;
 mod preflight;
 pub mod pure;
 pub mod state;

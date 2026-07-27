@@ -1063,15 +1063,20 @@ mod tests {
         copy::{MemCopyD2H, MemCopyH2D},
         stream::GpuDeviceCtx,
     };
-    use openvm_instructions::riscv::RV64_MEMORY_AS;
+    use openvm_instructions::{
+        instruction::Instruction, riscv::RV64_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode,
+    };
     use p3_baby_bear::BabyBear;
     use p3_field::PrimeCharacteristicRing;
     use rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     };
 
-    use super::{super::postflight::MEMORY_PREDECESSOR_SEED_BIT, *};
-    use crate::arch::cuda::postflight::build_memory_chronology_for_test as gpu_chronology_with_fields;
+    use super::*;
+    use crate::arch::{
+        cuda::postflight::build_memory_chronology_for_test as gpu_chronology_with_fields,
+        postflight::PREDECESSOR_SEED_BIT, Postflight, PreflightHistory, PreflightMemoryLog,
+    };
 
     fn event_value(
         timestamp: u32,
@@ -1248,7 +1253,7 @@ mod tests {
         );
         assert_eq!(
             transcript.memory_predecessors_host().unwrap(),
-            vec![0, 0, MEMORY_PREDECESSOR_SEED_BIT]
+            vec![0, 0, PREDECESSOR_SEED_BIT]
         );
         assert_eq!(
             plan.opcode_range(VmOpcode::from_usize(opcode as usize))
@@ -1629,22 +1634,32 @@ mod tests {
             initial_write_log: vec![],
         };
         let endpoint = PreflightEndpoint::Terminated;
+        let cpu_program = Program::<BabyBear>::new_without_debug_infos(
+            &[
+                Instruction::from_usize(VmOpcode::from_usize(100), [0; 5]),
+                Instruction::from_usize(VmOpcode::from_usize(200), [0; 5]),
+                Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+            ],
+            0,
+        );
+        let history = PreflightHistory {
+            program: transcript.program_log.clone(),
+            memory: PreflightMemoryLog::default(),
+        };
         let expected =
-            super::super::postflight::ReplayData::build(0, &opcodes, &transcript, endpoint)
-                .unwrap();
+            Postflight::new(&cpu_program, &history, &MemoryConfig::default(), Some(0)).unwrap();
         let actual = gpu_plan(&program, &transcript, endpoint).unwrap();
         let actual_steps = actual.steps_host().unwrap();
         let expected_steps = expected
-            .steps()
-            .iter()
-            .map(|step| [step.program_index, step.memory_start])
+            .replay_steps_for_test()
+            .map(|(program_index, memory_start)| [program_index, memory_start])
             .collect::<Vec<_>>();
         assert_eq!(actual_steps, expected_steps);
         for &opcode in &[100, 200, terminate] {
             assert_eq!(
                 actual.opcode_range(VmOpcode::from_usize(opcode as usize)),
                 expected
-                    .opcode_ranges()
+                    .opcode_ranges_for_test()
                     .get(&opcode)
                     .cloned()
                     .unwrap_or(0..0)
