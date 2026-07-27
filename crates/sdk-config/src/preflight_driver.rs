@@ -24,14 +24,14 @@ use openvm_circuit::{
     arch::{
         cuda::postflight::GpuPostflightProgram, execution_mode::Segment,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationProverFn, ContinuationVmProof,
-        GenerationError, Streams, VirtualMachineError, VmInstance,
+        ExitCode, GenerationError, Streams, VirtualMachineError, VmInstance, VmState,
     },
-    system::memory::merkle::public_values::UserPublicValuesProof,
+    system::memory::{merkle::public_values::UserPublicValuesProof, online::GuestMemory},
 };
 use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
-use openvm_stark_backend::StarkEngine;
 #[cfg(not(feature = "rvr"))]
 use openvm_stark_backend::Val;
+use openvm_stark_backend::{proof::Proof, StarkEngine};
 use tracing::info_span;
 
 #[cfg(not(feature = "rvr"))]
@@ -45,11 +45,12 @@ const CHECKPOINT_INTERVAL: usize = 512;
 type InterpretedPreflight =
     PreflightInterpretedInstance<Val<SC>, <SdkVmConfig as VmExecutionConfig<Val<SC>>>::Executor>;
 
-struct PreparedPreflight {
-    #[cfg(feature = "rvr")]
-    metered: RvrMeteredInstance<'static>,
-    #[cfg(feature = "rvr")]
-    metered_ctx: MeteredCtx,
+/// Fixed-program GPU prover for standalone, independently scheduled segments.
+///
+/// Unlike continuation proving, each call starts a fresh preflight transcript,
+/// so callers may prove segments out of order from arbitrary segment-start
+/// states.
+pub struct SegmentProver {
     #[cfg(feature = "rvr")]
     preflight: PreflightInstance<'static>,
     #[cfg(not(feature = "rvr"))]
@@ -60,15 +61,133 @@ struct PreparedPreflight {
     program: GpuPostflightProgram,
 }
 
+impl SegmentProver {
+    pub fn new(
+        instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+    ) -> Result<Self, VirtualMachineError> {
+        let _prepare = info_span!("prepare_preflight", group = "app_proof").entered();
+        Self::prepare(instance)
+    }
+
+    fn prepare(
+        instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+    ) -> Result<Self, VirtualMachineError> {
+        let exe = instance.exe();
+
+        #[cfg(feature = "rvr")]
+        let preflight = instance
+            .vm
+            .executor()
+            .preflight_instance(exe)
+            .map_err(VirtualMachineError::from)?
+            .into_owned();
+        #[cfg(not(feature = "rvr"))]
+        let preflight = instance.vm.preflight_interpreter(exe)?;
+
+        let program = info_span!("upload_preflight_program")
+            .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(&instance.vm, &exe.program))
+            .map_err(generation_error)?;
+
+        Ok(Self { preflight, program })
+    }
+
+    fn tracegen_program(&self) -> &GpuPostflightProgram {
+        #[cfg(feature = "rvr")]
+        {
+            self.program.program()
+        }
+        #[cfg(not(feature = "rvr"))]
+        {
+            &self.program
+        }
+    }
+
+    /// Proves one segment from an arbitrary segment-start state.
+    ///
+    /// Final memory is returned only when the segment terminates successfully.
+    pub fn prove(
+        &self,
+        instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<(Proof<SC>, Option<GuestMemory>), VirtualMachineError> {
+        let _prove_span = info_span!("total_proof").entered();
+        let num_insns = segment.num_insns;
+
+        // Replay resolves first reads against the immutable segment-start
+        // image, so upload it before preflight mutates host memory.
+        instance.vm.transport_init_memory_to_device(&state.memory);
+
+        #[cfg(feature = "rvr")]
+        let (state, exit_code, gpu_transcript, replay_plan) = {
+            let num_insns = u32::try_from(num_insns)
+                .map_err(|_| generation_error("metered instruction count exceeds u32"))?;
+            let limits = PreflightLimits::new(
+                num_insns as usize,
+                segment.num_preflight_residuals as usize,
+                CHECKPOINT_INTERVAL,
+            );
+            let execution = self.preflight.execute_segment(state, limits)?;
+            let exit_code = matches!(&execution.endpoint, PreflightEndpoint::Terminated)
+                .then_some(ExitCode::Success as u32);
+            let (gpu_transcript, replay_plan) =
+                SdkVmGpuBuilder::postflight(&instance.vm, &self.program, &execution, num_insns)
+                    .map_err(generation_error)?;
+            (execution.state, exit_code, gpu_transcript, replay_plan)
+        };
+
+        #[cfg(not(feature = "rvr"))]
+        let (state, exit_code, gpu_transcript, replay_plan) = {
+            let mut output =
+                instance
+                    .vm
+                    .execute_preflight_for(&self.preflight, state, num_insns)?;
+            mark_written_pages(&mut output);
+            let (gpu_transcript, replay_plan) = instance
+                .vm
+                .postflight_history(&self.program, &output)
+                .map_err(generation_error)?;
+            (output.state, output.exit_code, gpu_transcript, replay_plan)
+        };
+
+        let ctx = SdkVmGpuBuilder::generate_preflight_proving_ctx(
+            &mut instance.vm,
+            self.tracegen_program(),
+            &gpu_transcript,
+            &replay_plan,
+        )?;
+        drop(replay_plan);
+        drop(gpu_transcript);
+
+        let proof = instance
+            .vm
+            .engine
+            .prove(instance.vm.pk(), ctx)
+            .map_err(|error| GenerationError::Proving(error.to_string()))?;
+        let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(state.memory);
+        Ok((proof, final_memory))
+    }
+}
+
+struct PreparedPreflight {
+    #[cfg(feature = "rvr")]
+    metered: RvrMeteredInstance<'static>,
+    #[cfg(feature = "rvr")]
+    metered_ctx: MeteredCtx,
+    segment_prover: SegmentProver,
+}
+
 impl PreparedPreflight {
     fn new(
         instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     ) -> Result<Self, VirtualMachineError> {
         let _prepare = info_span!("prepare_preflight", group = "app_proof").entered();
+        #[cfg(feature = "rvr")]
         let exe = instance.exe();
+        let segment_prover = SegmentProver::prepare(instance)?;
 
         #[cfg(feature = "rvr")]
-        let (metered, metered_ctx, preflight) = {
+        let (metered, metered_ctx) = {
             let metered_ctx = instance.vm.build_metered_ctx(exe);
             let executor_idx_to_air_idx = instance.vm.executor_idx_to_air_idx();
             let metered = instance
@@ -82,40 +201,20 @@ impl PreparedPreflight {
                 )
                 .map_err(VirtualMachineError::from)?
                 .into_owned();
-            let preflight = instance
-                .vm
-                .executor()
-                .preflight_instance(exe)
-                .map_err(VirtualMachineError::from)?
-                .into_owned();
-            (metered, metered_ctx, preflight)
+            (metered, metered_ctx)
         };
-        #[cfg(not(feature = "rvr"))]
-        let preflight = instance.vm.preflight_interpreter(exe)?;
-
-        let program = info_span!("upload_preflight_program")
-            .in_scope(|| SdkVmGpuBuilder::upload_preflight_program(&instance.vm, &exe.program))
-            .map_err(generation_error)?;
 
         Ok(Self {
             #[cfg(feature = "rvr")]
             metered,
             #[cfg(feature = "rvr")]
             metered_ctx,
-            preflight,
-            program,
+            segment_prover,
         })
     }
 
     fn tracegen_program(&self) -> &GpuPostflightProgram {
-        #[cfg(feature = "rvr")]
-        {
-            self.program.program()
-        }
-        #[cfg(not(feature = "rvr"))]
-        {
-            &self.program
-        }
+        self.segment_prover.tracegen_program()
     }
 }
 
@@ -211,9 +310,13 @@ fn prove_inner(
             );
             let execution = match reuse.take() {
                 Some(transcript) => prepared
+                    .segment_prover
                     .preflight
                     .execute_segment_reusing(state, limits, transcript)?,
-                None => prepared.preflight.execute_segment(state, limits)?,
+                None => prepared
+                    .segment_prover
+                    .preflight
+                    .execute_segment(state, limits)?,
             };
             #[cfg(feature = "metrics")]
             {
@@ -230,9 +333,13 @@ fn prove_inner(
                 matches!(&execution.endpoint, PreflightEndpoint::Terminated),
                 segment_idx + 1 == num_segments,
             )?;
-            let (gpu_transcript, replay_plan) =
-                SdkVmGpuBuilder::postflight(&instance.vm, &prepared.program, &execution, num_insns)
-                    .map_err(generation_error)?;
+            let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::postflight(
+                &instance.vm,
+                &prepared.segment_prover.program,
+                &execution,
+                num_insns,
+            )
+            .map_err(generation_error)?;
             let PreflightExecution {
                 state: next_state,
                 mut transcript,
@@ -246,10 +353,11 @@ fn prove_inner(
 
         #[cfg(not(feature = "rvr"))]
         let (next_state, gpu_transcript, replay_plan) = {
-            let mut output =
-                instance
-                    .vm
-                    .execute_preflight_for(&prepared.preflight, state, num_insns)?;
+            let mut output = instance.vm.execute_preflight_for(
+                &prepared.segment_prover.preflight,
+                state,
+                num_insns,
+            )?;
             #[cfg(feature = "metrics")]
             {
                 preflight_time += preflight_started.elapsed();
@@ -260,7 +368,7 @@ fn prove_inner(
             mark_written_pages(&mut output);
             let (gpu_transcript, replay_plan) = instance
                 .vm
-                .postflight_history(&prepared.program, &output)
+                .postflight_history(&prepared.segment_prover.program, &output)
                 .map_err(generation_error)?;
             (output.state, gpu_transcript, replay_plan)
         };

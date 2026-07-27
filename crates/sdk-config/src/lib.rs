@@ -37,6 +37,8 @@ use deferral::DeferralConfig;
 mod preflight;
 #[cfg(feature = "cuda")]
 mod preflight_driver;
+#[cfg(feature = "cuda")]
+pub use preflight_driver::SegmentProver;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
