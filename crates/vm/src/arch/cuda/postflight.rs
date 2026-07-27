@@ -341,8 +341,9 @@ impl GpuPostflightProgram {
         &self,
         program: &Program<F>,
         history: &PreflightHistory,
+        exit_code: Option<u32>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let postflight = Postflight::new_for_test(program, history, &self.memory_config)
+        let postflight = Postflight::new(program, history, &self.memory_config, exit_code)
             .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         let replay_steps = postflight
             .replay_steps_for_test()

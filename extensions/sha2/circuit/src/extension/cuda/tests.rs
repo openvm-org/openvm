@@ -1,8 +1,7 @@
 use openvm_circuit::{
     arch::{
-        cuda::postflight::GpuPostflightProgram,
-        rvr::{PreflightEndpoint, PreflightEventLog, PreflightLimits},
-        VirtualMachine, VmExecutor,
+        cuda::postflight::GpuPostflightProgram, rvr::PreflightLimits, PreflightHistory,
+        PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -135,7 +134,7 @@ fn sha_results(state: &[u8; 64], input: &[u8; 128]) -> ([u8; 32], [u8; 64]) {
     (result256, result512)
 }
 
-fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, PreflightEventLog) {
+fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, PreflightHistory) {
     let instructions = [
         Instruction::<F>::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
@@ -217,8 +216,8 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
         initial_write_log.push(seed(RV64_MEMORY_AS, DST_PTR + index * 8, &[0; 8]));
     }
 
-    let transcript = PreflightEventLog {
-        program_log: vec![
+    let history = PreflightHistory {
+        program: vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -240,10 +239,13 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
                 timestamp: 57,
             },
         ],
-        memory_log,
-        initial_write_log,
+        memory: PreflightMemoryLog {
+            accesses: memory_log,
+            initial_writes: initial_write_log,
+            ..Default::default()
+        },
     };
-    (program, exe, transcript)
+    (program, exe, history)
 }
 
 #[test]
@@ -310,7 +312,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
     )
     .unwrap();
     let (gpu_corrupt, corrupt_plan) = gpu_program
-        .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &corrupt, Some(0))
         .unwrap();
     let error = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .generate_proving_ctx(&mut vm)
@@ -341,7 +343,8 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
     for (variant, first_write_timestamp) in [("SHA-256", 18), ("SHA-512", 49)] {
         let (_, _, mut corrupt) = fixture(false);
         let output = corrupt
-            .memory_log
+            .memory
+            .accesses
             .iter_mut()
             .find(|event| {
                 event.timestamp == first_write_timestamp
@@ -364,7 +367,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         )
         .unwrap();
         let (gpu_corrupt, corrupt_plan) = gpu_program
-            .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
+            .upload_history_for_test(&program, &corrupt, Some(0))
             .unwrap_or_else(|error| panic!("{variant}: {error}"));
         let error = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_corrupt, &corrupt_plan)
             .generate_proving_ctx(&mut vm)
@@ -389,7 +392,7 @@ fn sha_coordinator_requires_both_producers_per_executed_opcode() {
     )
     .unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &transcript, Some(0))
         .unwrap();
     let error = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan)
         .finish()

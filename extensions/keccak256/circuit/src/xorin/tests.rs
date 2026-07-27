@@ -36,8 +36,7 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::{
-        cuda::postflight::GpuPostflightProgram,
-        rvr::{PreflightEndpoint, PreflightEventLog},
+        cuda::postflight::GpuPostflightProgram, PreflightHistory, PreflightMemoryLog,
     },
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
@@ -642,8 +641,8 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
         });
     }
     let final_timestamp = 4 + 3 * num_blocks as u32;
-    let transcript = PreflightEventLog {
-        program_log: vec![
+    let history = PreflightHistory {
+        program: vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -657,8 +656,10 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
                 timestamp: final_timestamp,
             },
         ],
-        memory_log,
-        initial_write_log: Vec::new(),
+        memory: PreflightMemoryLog {
+            accesses: memory_log,
+            ..Default::default()
+        },
     };
 
     let tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -672,17 +673,17 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
     let device_ctx = &tester.range_checker().device_ctx;
     let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &history, Some(0))
         .unwrap();
     let _replay_ctx = chip
         .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);
 
-    let mut corrupt = transcript;
-    corrupt.memory_log[2].value[0] = 7;
+    let mut corrupt = history;
+    corrupt.memory.accesses[2].value[0] = 7;
     let (gpu_corrupt, corrupt_plan) = gpu_program
-        .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
+        .upload_history_for_test(&program, &corrupt, Some(0))
         .unwrap();
     let corrupt_chip = XorinVmChipGpu::new(
         tester.range_checker(),

@@ -73,11 +73,8 @@ mod tests {
     use openvm_circuit::{
         arch::{
             cuda::postflight::GpuPostflightProgram,
-            rvr::{
-                cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightEventLog,
-                PreflightLimits,
-            },
-            VirtualMachine, VmExecutor,
+            rvr::{cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightLimits},
+            PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
         },
         utils::{test_gpu_engine, test_system_config},
     };
@@ -317,8 +314,8 @@ mod tests {
             SystemOpcode::TERMINATE.global_opcode(),
             [0; 5],
         )]);
-        let transcript = PreflightEventLog {
-            program_log: vec![
+        let history = PreflightHistory {
+            program: vec![
                 PreflightProgramEvent {
                     pc: 0,
                     timestamp: 1,
@@ -328,8 +325,7 @@ mod tests {
                     timestamp: 1,
                 },
             ],
-            memory_log: vec![],
-            initial_write_log: vec![],
+            memory: PreflightMemoryLog::default(),
         };
         let mut config = Rv64PairingConfig::new(
             vec![PairingCurve::Bn254],
@@ -358,7 +354,7 @@ mod tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
+            .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
