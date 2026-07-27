@@ -25,49 +25,4 @@ struct Rv64AddSubWRecord {
     Rv64AddSubWCoreRecord core;
 };
 
-__global__ void rv64_add_sub_w_tracegen(
-    Fp *d_trace,
-    size_t height,
-    DeviceBufferConstView<Rv64AddSubWRecord> d_records,
-    uint32_t *d_range_checker_ptr,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits
-) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(d_trace + idx, height);
-    if (idx < d_records.len()) {
-        auto const &rec = d_records[idx];
-
-        Rv64BaseAluWRegU16Adapter adapter(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-        );
-        adapter.fill_trace_row(row, rec.adapter);
-
-        Rv64AddSubWCore core(VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AddSubWCols, core)), rec.core);
-    } else {
-        row.fill_zero(0, sizeof(Rv64AddSubWCols<uint8_t>));
-    }
-}
-
-extern "C" int _rv64_add_sub_w_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    DeviceBufferConstView<Rv64AddSubWRecord> d_records,
-    uint32_t *d_range_checker_ptr,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits,
-    cudaStream_t stream
-) {
-    assert(width == sizeof(Rv64AddSubWCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 512);
-    rv64_add_sub_w_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_range_checker_ptr, range_checker_num_bins, timestamp_max_bits
-    );
-    return CHECK_KERNEL();
-}
-
-#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/add_sub_w.inc.cuh"
-#endif

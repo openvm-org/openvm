@@ -1,5 +1,18 @@
-#include "../sha2_main.cu"
+#include "block_hasher/variant.cuh"
+#include "fp.h"
+#include "launcher.cuh"
+#include "main/columns.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
+#include "system/memory/controller.cuh"
+#include "system/memory/offline_checker.cuh"
 #include "rvr/replay.cuh"
+
+using namespace riscv;
+using namespace sha2;
+using openvm::U16_BITS;
 
 template <typename V>
 static __device__ __forceinline__ void sha2_main_replay_row_body(

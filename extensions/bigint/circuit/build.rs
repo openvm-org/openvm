@@ -21,7 +21,6 @@ fn main() {
             .watch("../../riscv-adapters/cuda")
             .watch("../../../crates/vm/cuda/include/system/memory")
             .library_name("tracegen_gpu_bigint")
-            .file("cuda/src/bigint.cu")
             .flag("-I../../../crates/vm/cuda/rvr/include")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")

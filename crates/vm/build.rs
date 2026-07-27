@@ -22,7 +22,6 @@ fn main() {
             .include("cuda/rvr/include")
             .watch("cuda/rvr/include")
             .library_name("tracegen_gpu_system")
-            .flag("-DOPENVM_PREFLIGHT_REPLAY")
             .files([
                 "cuda/src/system/boundary.cu",
                 "cuda/src/system/inventory.cu",

@@ -75,48 +75,4 @@ struct Rv64JalLuiRecord {
     Rv64JalLuiCoreRecord core;
 };
 
-__global__ void jal_lui_tracegen(
-    Fp *trace,
-    size_t height,
-    DeviceBufferConstView<Rv64JalLuiRecord> records,
-    uint32_t *rc_ptr,
-    uint32_t rc_bins,
-    uint32_t timestamp_max_bits
-) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(trace + idx, height);
-
-    if (idx < records.len()) {
-        auto const &full = records[idx];
-
-        Rv64CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
-        adapter.fill_trace_row(row, full.adapter);
-        Rv64JalLuiCore core(VariableRangeChecker(rc_ptr, rc_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalLuiCols, core)), full.core);
-    } else {
-        row.fill_zero(0, sizeof(Rv64JalLuiCols<uint8_t>));
-    }
-}
-extern "C" int _jal_lui_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    DeviceBufferConstView<Rv64JalLuiRecord> d_records,
-    uint32_t *d_rc,
-    uint32_t rc_bins,
-    uint32_t timestamp_max_bits,
-    cudaStream_t stream
-) {
-    assert(width == sizeof(Rv64JalLuiCols<uint8_t>));
-
-    auto [grid, block] = kernel_launch_params(height, 512);
-
-    jal_lui_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits
-    );
-    return CHECK_KERNEL();
-}
-
-#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/jal_lui.inc.cuh"
-#endif

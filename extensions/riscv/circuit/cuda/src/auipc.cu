@@ -86,49 +86,4 @@ struct Rv64AuipcRecord {
     Rv64AuipcCoreRecord core;
 };
 
-__global__ void auipc_tracegen(
-    Fp *trace,
-    size_t height,
-    DeviceBufferConstView<Rv64AuipcRecord> records,
-    uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits
-) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(trace + idx, height);
-    if (idx < records.len()) {
-        auto const &record = records[idx];
-
-        auto adapter = Rv64RdWriteAdapter(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-        );
-        adapter.fill_trace_row(row, record.adapter);
-
-        auto core =
-            Rv64AuipcCore(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AuipcCols, core)), record.core);
-    } else {
-        row.fill_zero(0, sizeof(Rv64AuipcCols<uint8_t>));
-    }
-}
-extern "C" int _auipc_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    DeviceBufferConstView<Rv64AuipcRecord> d_records,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits,
-    cudaStream_t stream
-) {
-    assert(width == sizeof(Rv64AuipcCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 512);
-    auipc_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
-    );
-    return CHECK_KERNEL();
-}
-
-#ifdef OPENVM_PREFLIGHT_REPLAY
 #include "../rvr/src/auipc.inc.cuh"
-#endif
