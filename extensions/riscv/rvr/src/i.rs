@@ -743,8 +743,8 @@ mod tests {
                 0,
                 1,
                 RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-                1,
+                0,
+                0,
                 0,
             ],
         );

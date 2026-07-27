@@ -105,7 +105,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     initial_pc: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
-    let a = rng.random_range(0..32) << 3;
+    let a = rng.random_range(1..32) << 3;
 
     tester.execute_with_pc(
         executor,
