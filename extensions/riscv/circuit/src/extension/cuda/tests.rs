@@ -402,7 +402,7 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
     let executor = VmExecutor::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
-    let interpreter = executor.preflight_interpreter_instance(&exe).unwrap();
+    let interpreter = executor.test_preflight_interpreter_instance(&exe).unwrap();
     let interpreter_state = state.clone();
 
     let (mut vm, pk) =

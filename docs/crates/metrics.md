@@ -29,7 +29,7 @@ For a segment proof, the following metrics are collected:
 - `execute_preflight_insns` (counter): The number of instructions executed by
   preflight in each segment of a reusable app proof. It carries the `segment` label and
   is emitted only after the whole proof succeeds; summing the series gives the proof-level total.
-- `execute_preflight_checkpoints`, `execute_preflight_residuals`, and
+- `execute_preflight_intervals`, `execute_preflight_residuals`, and
   `execute_preflight_transcript_bytes` (counters): The compact authoritative transcript
   size across all segments in one reusable app proof. Transcript bytes measure the logical
   initialized checkpoint and residual payload, not vector capacity or allocator overhead. These

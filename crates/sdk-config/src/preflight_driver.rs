@@ -188,7 +188,7 @@ fn prove_inner(
     #[cfg(feature = "metrics")]
     let mut preflight_retired_by_segment = Vec::with_capacity(num_segments);
     #[cfg(all(feature = "metrics", feature = "rvr"))]
-    let mut checkpoint_count = 0u64;
+    let mut interval_count = 0u64;
     #[cfg(all(feature = "metrics", feature = "rvr"))]
     let mut residual_count = 0u64;
     #[cfg(all(feature = "metrics", feature = "rvr"))]
@@ -200,7 +200,7 @@ fn prove_inner(
         let Segment {
             num_insns,
             #[cfg(feature = "rvr")]
-            num_checkpoint_residuals,
+            num_preflight_residuals,
             ..
         } = segment;
 
@@ -218,7 +218,7 @@ fn prove_inner(
                 .map_err(|_| generation_error("metered instruction count exceeds u32"))?;
             let limits = PreflightLimits::new(
                 num_insns,
-                num_checkpoint_residuals as usize,
+                num_preflight_residuals as usize,
                 CHECKPOINT_INTERVAL,
             );
             let execution = match reuse.take() {
@@ -232,7 +232,7 @@ fn prove_inner(
                 preflight_time += preflight_started.elapsed();
                 preflight_retired += u64::from(execution.retired);
                 preflight_retired_by_segment.push(u64::from(execution.retired));
-                checkpoint_count += execution.transcript.checkpoints.len() as u64;
+                interval_count += execution.transcript.checkpoints.len() as u64;
                 residual_count += execution.transcript.residuals.len() as u64;
                 transcript_bytes +=
                     std::mem::size_of_val(execution.transcript.checkpoints.as_slice()) as u64
@@ -323,7 +323,7 @@ fn prove_inner(
         }
         #[cfg(feature = "rvr")]
         {
-            metrics::counter!("execute_preflight_checkpoints").absolute(checkpoint_count);
+            metrics::counter!("execute_preflight_intervals").absolute(interval_count);
             metrics::counter!("execute_preflight_residuals").absolute(residual_count);
             metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);
         }

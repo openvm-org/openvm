@@ -286,7 +286,7 @@ impl SegmentationState {
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
 
-        self.ctx.segmentation_ctx.num_checkpoint_residuals = num_checkpoint_residuals;
+        self.ctx.segmentation_ctx.num_preflight_residuals = num_checkpoint_residuals;
         let did_segment = self
             .ctx
             .segmentation_ctx
@@ -329,7 +329,7 @@ impl SegmentationState {
             .apply_height_updates(&mut self.ctx.trace_heights);
 
         self.ctx.segmentation_ctx.instrets_until_check = remaining_counter as u64;
-        self.ctx.segmentation_ctx.num_checkpoint_residuals = num_checkpoint_residuals;
+        self.ctx.segmentation_ctx.num_preflight_residuals = num_checkpoint_residuals;
         self.ctx
             .segmentation_ctx
             .create_final_segment(&self.ctx.trace_heights);
@@ -365,7 +365,7 @@ pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8
         metering.check_counter,
         metering.num_checkpoint_residuals,
     );
-    metering.num_checkpoint_residuals = seg_state.ctx.segmentation_ctx.num_checkpoint_residuals;
+    metering.num_checkpoint_residuals = seg_state.ctx.segmentation_ctx.num_preflight_residuals;
 
     // We are at the start of a block that would cross the old countdown.
     // `remaining_counter` was used to record this block start as the metering
@@ -923,10 +923,10 @@ mod tests {
         assert_eq!(unsafe { metered_periodic_check(&mut metering) }, 1);
 
         assert_eq!(
-            seg_state.ctx.segmentation_ctx.segments[0].num_checkpoint_residuals,
+            seg_state.ctx.segmentation_ctx.segments[0].num_preflight_residuals,
             5
         );
         assert_eq!(metering.num_checkpoint_residuals, 3);
-        assert_eq!(seg_state.ctx.segmentation_ctx.num_checkpoint_residuals, 3);
+        assert_eq!(seg_state.ctx.segmentation_ctx.num_preflight_residuals, 3);
     }
 }

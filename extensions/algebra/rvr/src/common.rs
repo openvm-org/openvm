@@ -4,10 +4,9 @@ use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, Variable};
 
 use crate::{detect_known_field, format_c_byte_array, KnownField, ModOp};
 
-/// Algebra's native helpers operate on `uint64_t` blocks and use
-/// `__builtin_assume_aligned(..., 8)`. Fail before entering them rather than
-/// invoking undefined behavior for the wider two-byte alignment still accepted
-/// by the legacy AIR.
+/// Algebra operands are proof-visible system-memory blocks. The v2.1 memory
+/// equipartition requires every four-u16-cell block to start on an eight-byte
+/// boundary, and the native range helpers rely on the same alignment.
 pub(crate) fn emit_word_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
     let joined = pointers.join(" | ");
     ctx.write_line(&format!("if (unlikely((({joined}) & 7ull) != 0ull)) {{"));

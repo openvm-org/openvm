@@ -4,10 +4,14 @@ mod tests {
     use std::{sync::Barrier, thread};
 
     use eyre::Result;
+    #[cfg(not(feature = "rvr"))]
+    use openvm_circuit::arch::Streams;
     #[cfg(feature = "rvr")]
-    use openvm_circuit::arch::{ExecutionOutcome, VirtualMachine, VmState};
+    use openvm_circuit::arch::{ExecutionOutcome, VmState};
     use openvm_circuit::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
+        arch::{
+            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
+        },
         system::memory::{
             merkle::{
                 public_values::{extract_public_values, UserPublicValuesProof},
@@ -15,16 +19,19 @@ mod tests {
             },
             online::LinearMemory,
         },
-        utils::{air_test, air_test_with_min_segments, test_system_config},
+        utils::{air_test, air_test_with_min_segments, test_cpu_engine, test_system_config},
     };
     use openvm_instructions::{
-        exe::VmExe, instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
-        SystemOpcode,
+        exe::VmExe, instruction::Instruction, program::Program, riscv::RV64_REGISTER_NUM_LIMBS,
+        LocalOpcode, SystemOpcode,
     };
+    #[cfg(not(feature = "rvr"))]
+    use openvm_riscv_circuit::Rv64ImCpuBuilder;
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
-        DivRemOpcode, MulHOpcode, MulOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
+        BaseAluImmOpcode, DivRemOpcode, MulHOpcode, MulOpcode, Rv64HintStoreOpcode,
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalLuiOpcode, Rv64LoadStoreOpcode,
         Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
@@ -41,19 +48,12 @@ mod tests {
     use test_case::test_case;
     #[cfg(feature = "rvr")]
     use {
-        openvm_circuit::{
-            system::memory::online::{GuestMemory, PAGE_SIZE},
-            utils::test_cpu_engine,
-        },
+        openvm_circuit::system::memory::online::{GuestMemory, PAGE_SIZE},
         openvm_instructions::{
-            program::Program,
             riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
             SysPhantom, PUBLIC_VALUES_AS,
         },
-        openvm_riscv_transpiler::{
-            BaseAluImmOpcode, BranchEqualOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
-            Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
-        },
+        openvm_riscv_transpiler::{BranchEqualOpcode, Rv64JalrOpcode, Rv64Phantom},
     };
 
     type F = BabyBear;
@@ -134,16 +134,6 @@ mod tests {
     #[test]
     #[cfg(not(feature = "rvr"))]
     fn owned_and_borrowed_preflight_instances_match() -> Result<()> {
-        use openvm_circuit::{
-            arch::{Streams, VirtualMachine},
-            utils::test_cpu_engine,
-        };
-        use openvm_instructions::program::Program;
-        use openvm_riscv_circuit::Rv64ImCpuBuilder;
-        use openvm_riscv_transpiler::{
-            BaseAluImmOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64LoadStoreOpcode,
-        };
-
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_usize(
@@ -295,10 +285,6 @@ mod tests {
     #[test]
     #[cfg(not(feature = "rvr"))]
     fn interpreter_preflight_proves_from_append_only_history() {
-        use openvm_instructions::program::Program;
-        use openvm_riscv_circuit::Rv64ImCpuBuilder;
-        use openvm_riscv_transpiler::BaseAluImmOpcode;
-
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_usize(
@@ -712,7 +698,7 @@ mod tests {
             .execute_metered_from_state(metered_initial, metered_ctx)?;
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].num_insns, instructions.len() as u64);
-        assert_eq!(segments[0].num_checkpoint_residuals, 2);
+        assert_eq!(segments[0].num_preflight_residuals, 2);
         Ok(())
     }
 

@@ -142,10 +142,6 @@ __device__ __forceinline__ void u64_to_limbs(uint64_t value, uint16_t (&limbs)[4
     for (uint32_t i = 0; i < 4; i++) limbs[i] = uint16_t(value >> (16 * i));
 }
 
-__device__ __forceinline__ bool canonical_register(uint32_t pointer) {
-    return pointer < NUM_REGISTERS * REGISTER_BYTES && pointer % REGISTER_BYTES == 0;
-}
-
 __device__ __forceinline__ void load_initial_state(
     DeviceBufferConstView<uint8_t> initial_registers,
     uint32_t pc,
@@ -195,7 +191,7 @@ __device__ __forceinline__ bool opcode_in_family(
 }
 
 __device__ __forceinline__ bool decode_register(uint32_t pointer, uint32_t &reg) {
-    if (!canonical_register(pointer)) return false;
+    if (!replay_canonical_register_pointer(pointer)) return false;
     reg = pointer / REGISTER_BYTES;
     return true;
 }
@@ -493,8 +489,10 @@ __device__ __forceinline__ bool validate_load_store(
     uint32_t imm = instruction.words[3];
     uint32_t needs_write = instruction.words[6];
     uint32_t imm_sign = instruction.words[7];
-    if (instruction.words[4] != register_as || !canonical_register(rd_or_rs2_ptr) ||
-        !canonical_register(rs1_ptr) || imm > UINT16_MAX || imm_sign > 1) return false;
+    if (instruction.words[4] != register_as ||
+        !replay_canonical_register_pointer(rd_or_rs2_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr) || imm > UINT16_MAX || imm_sign > 1)
+        return false;
     if (decoded.is_load) {
         if (instruction.words[5] != memory_as ||
             needs_write != uint32_t(rd_or_rs2_ptr != 0)) return false;

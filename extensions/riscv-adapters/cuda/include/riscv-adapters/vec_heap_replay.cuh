@@ -27,10 +27,6 @@ constexpr size_t VEC_HEAP_TRACE_INPUT_BYTES =
 
 static constexpr uint32_t VEC_HEAP_REPLAY_ERROR = 0x56010001;
 
-static __device__ bool vec_heap_canonical_register(uint32_t pointer) {
-    return pointer < 32u * 8u && (pointer & 7u) == 0;
-}
-
 static __device__ bool vec_heap_replay_event(
     size_t event_index,
     uint32_t timestamp,
@@ -108,10 +104,11 @@ __global__ void vec_heap_replay_gather(
     auto const &instruction = *transition.instruction;
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || instruction.words[6] != 0 ||
-        instruction.words[7] != 0 || !vec_heap_canonical_register(instruction.words[1]) ||
-        !vec_heap_canonical_register(instruction.words[2]) ||
+        instruction.words[7] != 0 ||
+        !replay_canonical_register_pointer(instruction.words[1]) ||
+        !replay_canonical_register_pointer(instruction.words[2]) ||
         (NUM_READS == 1 && instruction.words[3] != 0) ||
-        (NUM_READS == 2 && !vec_heap_canonical_register(instruction.words[3]))) {
+        (NUM_READS == 2 && !replay_canonical_register_pointer(instruction.words[3]))) {
         preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
         return;
     }

@@ -30,7 +30,7 @@ use openvm_cuda_backend::{
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
@@ -43,7 +43,10 @@ use {
 };
 
 use crate::{
-    cuda::field_expr::FieldExprReplayChip,
+    cuda::{
+        field_expr::FieldExprReplayChip, modular_addsub::ModularAddSubReplayChipGpu,
+        ModularIsEqualReplayChipGpu,
+    },
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
     trace::{
@@ -63,7 +66,7 @@ pub struct HybridModularChip<F, const BLOCKS: usize> {
 
 enum ModularReplay<const BLOCKS: usize> {
     FieldExpr(FieldExprReplayChip<2, BLOCKS>),
-    AddSub(crate::cuda::modular_addsub::ModularAddSubReplayChipGpu<BLOCKS>),
+    AddSub(ModularAddSubReplayChipGpu<BLOCKS>),
 }
 
 #[cfg(feature = "rvr")]
@@ -79,15 +82,12 @@ fn validate_modular_is_eq_destinations<F: PrimeField32>(
     Ok(())
 }
 
-fn checked_replay_opcode(
-    base: usize,
-    local: usize,
-) -> Result<openvm_instructions::VmOpcode, GpuPostflightError> {
+fn checked_replay_opcode(base: usize, local: usize) -> Result<VmOpcode, GpuPostflightError> {
     let opcode = base.checked_add(local).ok_or_else(|| {
         GpuPostflightError::InvalidTranscript("field-expression opcode overflow".to_string())
     })?;
     u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
-    Ok(openvm_instructions::VmOpcode::from_usize(opcode))
+    Ok(VmOpcode::from_usize(opcode))
 }
 
 impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
@@ -193,7 +193,7 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
 pub struct HybridModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize> {
     cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
     device_ctx: GpuDeviceCtx,
-    replay: Option<crate::cuda::ModularIsEqualReplayChipGpu<NUM_LANES, TOTAL_LIMBS>>,
+    replay: Option<ModularIsEqualReplayChipGpu<NUM_LANES, TOTAL_LIMBS>>,
 }
 
 impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
@@ -217,14 +217,12 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         opcode_base: usize,
         pointer_max_bits: usize,
         timestamp_max_bits: usize,
-        range_checker_gpu: std::sync::Arc<
-            openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
-        >,
+        range_checker_gpu: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
         Self {
             cpu,
             device_ctx,
-            replay: Some(crate::cuda::ModularIsEqualReplayChipGpu::new(
+            replay: Some(ModularIsEqualReplayChipGpu::new(
                 modulus_limbs,
                 opcode_base,
                 pointer_max_bits,

@@ -68,9 +68,8 @@ fn generate_trace_from_preimages<F: PrimeField32>(
     let states = preimages
         .iter()
         .map(|preimage| {
-            // p3-keccak-air now uses standard Keccak indexing:
-            // input[x + 5*y] = state[x][y], matching the byte buffer layout.
-            // The previous transposition workaround (plonky3 issue #672) is no longer needed.
+            // p3-keccak-air indexes input[x + 5*y] = state[x][y], matching the
+            // byte-buffer layout.
             from_fn(|i| u64::from_le_bytes(preimage.bytes[i * 8..i * 8 + 8].try_into().unwrap()))
         })
         .collect::<Vec<_>>();

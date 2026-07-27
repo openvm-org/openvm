@@ -60,5 +60,5 @@ fn xorin_metering_counts_runtime_replay_words() {
 
     assert_eq!(segments.len(), 1);
     assert_eq!(segments[0].num_insns, 2);
-    assert_eq!(segments[0].num_checkpoint_residuals, 17);
+    assert_eq!(segments[0].num_preflight_residuals, 17);
 }

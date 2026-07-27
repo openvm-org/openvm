@@ -808,7 +808,7 @@ pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
-pub const EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL: &str = "execute_preflight_checkpoints";
+pub const EXECUTE_PREFLIGHT_INTERVALS_LABEL: &str = "execute_preflight_intervals";
 pub const EXECUTE_PREFLIGHT_RESIDUALS_LABEL: &str = "execute_preflight_residuals";
 pub const EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL: &str = "execute_preflight_transcript_bytes";
 pub const COMPILE_PURE_TIME_LABEL: &str = "compile_pure_time_ms";
@@ -863,7 +863,9 @@ fn canonical_metric_name(name: &str) -> &str {
         "app_prove_rvr_checkpoint_time_ms" => APP_PROVE_TIME_LABEL,
         "expand_checkpoint_replay_time_ms" => POSTFLIGHT_TIME_LABEL,
         "execute_checkpoint_preflight_insns" => EXECUTE_PREFLIGHT_INSNS_LABEL,
-        "execute_checkpoint_preflight_checkpoints" => EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL,
+        "execute_preflight_checkpoints" | "execute_checkpoint_preflight_checkpoints" => {
+            EXECUTE_PREFLIGHT_INTERVALS_LABEL
+        }
         "execute_checkpoint_preflight_residuals" => EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
         "execute_checkpoint_preflight_transcript_bytes" => EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
         "execute_checkpoint_preflight_time_ms" => EXECUTE_PREFLIGHT_TIME_LABEL,
@@ -890,7 +892,7 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_METERED_INSNS_LABEL,
     EXECUTE_METERED_COST_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
-    EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL,
+    EXECUTE_PREFLIGHT_INTERVALS_LABEL,
     EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
     EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
     EXECUTE_PREFLIGHT_INSNS_LABEL,
@@ -945,6 +947,10 @@ mod tests {
         assert_eq!(
             canonical_metric_name("execute_checkpoint_preflight_time_ms"),
             EXECUTE_PREFLIGHT_TIME_LABEL
+        );
+        assert_eq!(
+            canonical_metric_name("execute_preflight_checkpoints"),
+            EXECUTE_PREFLIGHT_INTERVALS_LABEL
         );
         assert_eq!(
             canonical_metric_name("expand_checkpoint_replay_time_ms"),
@@ -1061,7 +1067,7 @@ mod tests {
             COMPILE_PREFLIGHT_TIME_LABEL,
             PREPARE_PREFLIGHT_TIME_LABEL,
             UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
-            EXECUTE_PREFLIGHT_CHECKPOINTS_LABEL,
+            EXECUTE_PREFLIGHT_INTERVALS_LABEL,
             EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
             EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
             POSTFLIGHT_TIME_LABEL,

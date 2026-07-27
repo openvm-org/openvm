@@ -12,11 +12,6 @@ struct ReplayHintStoreInput {
     bool is_single;
 };
 
-static __device__ __forceinline__ bool canonical_register_pointer(uint32_t pointer) {
-    return pointer < 32 * RV64_REGISTER_NUM_LIMBS &&
-           pointer % RV64_REGISTER_NUM_LIMBS == 0;
-}
-
 static __device__ __forceinline__ uint64_t replay_hint_u64(
     uint16_t const (&value)[BLOCK_FE_WIDTH]
 ) {
@@ -54,9 +49,10 @@ static __device__ bool replay_hintstore_instruction(
     if ((!is_single && instruction.words[0] != hint_buffer_opcode) ||
         instruction.words[3] != 0 || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || instruction.words[6] != 0 ||
-        instruction.words[7] != 0 || !canonical_register_pointer(instruction.words[2]) ||
+        instruction.words[7] != 0 ||
+        !replay_canonical_register_pointer(instruction.words[2]) ||
         (is_single ? instruction.words[1] != 0
-                   : !canonical_register_pointer(instruction.words[1]))) {
+                   : !replay_canonical_register_pointer(instruction.words[1]))) {
         return false;
     }
 

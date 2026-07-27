@@ -40,10 +40,6 @@ static constexpr uint32_t MODULAR_IS_EQ_LOCAL_OPCODE = 6;
 static constexpr uint32_t MODULAR_SETUP_IS_EQ_LOCAL_OPCODE = 7;
 static constexpr uint32_t MODULAR_IS_EQ_REPLAY_ERROR = 0x4d010001;
 
-static __device__ bool modular_is_eq_canonical_register(uint32_t pointer) {
-    return pointer < 32u * 8u && (pointer & 7u) == 0;
-}
-
 static __device__ bool modular_is_eq_event(
     size_t event_index,
     uint32_t timestamp,
@@ -173,9 +169,9 @@ __global__ void modular_is_eq_replay_tracegen(
     if ((!is_setup && instruction.words[0] != opcode_base + MODULAR_IS_EQ_LOCAL_OPCODE) ||
         instruction.words[4] != register_as || instruction.words[5] != memory_as ||
         instruction.words[6] != 0 || instruction.words[7] != 0 ||
-        !modular_is_eq_canonical_register(instruction.words[1]) ||
-        !modular_is_eq_canonical_register(instruction.words[2]) ||
-        !modular_is_eq_canonical_register(instruction.words[3]) || pointer_max_bits > 32) {
+        !replay_canonical_register_pointer(instruction.words[1]) ||
+        !replay_canonical_register_pointer(instruction.words[2]) ||
+        !replay_canonical_register_pointer(instruction.words[3]) || pointer_max_bits > 32) {
         preflight_set_error(error, MODULAR_IS_EQ_REPLAY_ERROR);
         return;
     }
