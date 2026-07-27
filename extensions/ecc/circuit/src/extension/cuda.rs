@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use openvm_algebra_circuit::Rv64ModularHybridBuilder;
+use openvm_algebra_circuit::Rv64ModularGpuBuilder;
 use openvm_circuit::{
     arch::*,
     system::{
@@ -27,12 +27,12 @@ use crate::{
     NUM_LIMBS_48,
 };
 
-pub struct HybridWeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize> {
+pub struct WeierstrassChipGpu<F, const NUM_READS: usize, const BLOCKS: usize> {
     gpu: FieldExprChipGpu,
     _phantom: std::marker::PhantomData<WeierstrassChip<F, NUM_READS, BLOCKS>>,
 }
 
-impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_READS, BLOCKS> {
+impl<const NUM_READS: usize, const BLOCKS: usize> WeierstrassChipGpu<F, NUM_READS, BLOCKS> {
     pub fn new(
         cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
         byte_ptr_max_bits: usize,
@@ -70,7 +70,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
 // GPU tracegen: the field_expr kernel fills adapter + core columns directly from
 // the dense records (see openvm_mod_circuit_builder::cuda).
 impl<const NUM_READS: usize, const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend>
-    for HybridWeierstrassChip<F, NUM_READS, BLOCKS>
+    for WeierstrassChipGpu<F, NUM_READS, BLOCKS>
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         self.gpu.generate_proving_ctx(arena.allocated())
@@ -78,10 +78,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> Chip<DenseRecordArena, GpuBack
 }
 
 #[derive(Clone, Copy, Default)]
-pub struct EccHybridProverExt;
+pub struct EccGpuProverExt;
 
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, WeierstrassExtension>
-    for EccHybridProverExt
+    for EccGpuProverExt
 {
     fn extend_prover(
         &self,
@@ -111,7 +111,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(
+                inventory.add_executor_chip(WeierstrassChipGpu::new(
                     addne,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -126,7 +126,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(
+                inventory.add_executor_chip(WeierstrassChipGpu::new(
                     double,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -146,7 +146,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(
+                inventory.add_executor_chip(WeierstrassChipGpu::new(
                     addne,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -161,7 +161,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(
+                inventory.add_executor_chip(WeierstrassChipGpu::new(
                     double,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -176,14 +176,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
     }
 }
 
-/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and ecc
-/// extensions on CPU.
+/// GPU builder for the RV64IM, modular, and elliptic-curve extensions.
 #[derive(Clone)]
-pub struct Rv64WeierstrassHybridBuilder;
+pub struct Rv64WeierstrassGpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
+impl VmBuilder<E> for Rv64WeierstrassGpuBuilder {
     type VmConfig = Rv64WeierstrassConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -198,14 +197,14 @@ impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv64ModularHybridBuilder,
+            &Rv64ModularGpuBuilder,
             &config.modular,
             circuit,
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
-            &EccHybridProverExt,
+            &EccGpuProverExt,
             &config.weierstrass,
             inventory,
         )?;

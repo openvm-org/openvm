@@ -324,7 +324,7 @@ mod cuda_tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::extension::HybridFp2Chip;
+    use crate::extension::Fp2ChipGpu;
 
     pub type GpuHarness<const BLOCKS: usize, T> =
         GpuTestChipHarness<F, Fp2Executor<BLOCKS>, Fp2Air<BLOCKS>, T, Fp2Chip<F, BLOCKS>>;
@@ -333,7 +333,7 @@ mod cuda_tests {
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, HybridFp2Chip<F, BLOCKS>> {
+    ) -> GpuHarness<BLOCKS, Fp2ChipGpu<F, BLOCKS>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
@@ -360,7 +360,7 @@ mod cuda_tests {
             dummy_range_checker_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(
+        let gpu_chip = Fp2ChipGpu::new(
             get_fp2_addsub_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -372,14 +372,14 @@ mod cuda_tests {
             tester.range_checker(),
         );
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn create_muldiv_cuda_test_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, HybridFp2Chip<F, BLOCKS>> {
+    ) -> GpuHarness<BLOCKS, Fp2ChipGpu<F, BLOCKS>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
@@ -406,7 +406,7 @@ mod cuda_tests {
             dummy_range_checker_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(
+        let gpu_chip = Fp2ChipGpu::new(
             get_fp2_muldiv_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -418,7 +418,7 @@ mod cuda_tests {
             tester.range_checker(),
         );
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(

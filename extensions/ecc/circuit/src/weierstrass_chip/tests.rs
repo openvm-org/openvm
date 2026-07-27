@@ -25,7 +25,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::HybridWeierstrassChip,
+    crate::extension::WeierstrassChipGpu,
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -138,7 +138,7 @@ mod ec_addne_tests {
         F,
         EcAddNeExecutor<BLOCKS>,
         WeierstrassAir<2, BLOCKS>,
-        HybridWeierstrassChip<F, 2, BLOCKS>,
+        WeierstrassChipGpu<F, 2, BLOCKS>,
         WeierstrassChip<F, 2, BLOCKS>,
     >;
 
@@ -175,7 +175,7 @@ mod ec_addne_tests {
             tester.address_bits(),
         );
 
-        let hybrid_chip = HybridWeierstrassChip::new(
+        let gpu_chip = WeierstrassChipGpu::new(
             get_ec_addne_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -187,7 +187,7 @@ mod ec_addne_tests {
             tester.range_checker(),
         );
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -562,7 +562,7 @@ mod ec_double_tests {
         F,
         EcDoubleExecutor<BLOCKS>,
         WeierstrassAir<1, BLOCKS>,
-        HybridWeierstrassChip<F, 1, BLOCKS>,
+        WeierstrassChipGpu<F, 1, BLOCKS>,
         WeierstrassChip<F, 1, BLOCKS>,
     >;
 
@@ -602,7 +602,7 @@ mod ec_double_tests {
             tester.address_bits(),
             a_biguint.clone(),
         );
-        let hybrid_chip = HybridWeierstrassChip::new(
+        let gpu_chip = WeierstrassChipGpu::new(
             get_ec_double_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -615,7 +615,7 @@ mod ec_double_tests {
             tester.range_checker(),
         );
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[allow(clippy::too_many_arguments)]

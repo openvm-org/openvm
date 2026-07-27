@@ -29,7 +29,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{cuda::ModularIsEqualChipGpu, extension::HybridModularChip},
+    crate::{cuda::ModularIsEqualChipGpu, extension::ModularChipGpu},
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -94,7 +94,7 @@ mod addsub_tests {
         F,
         ModularExecutor<BLOCKS>,
         ModularAir<BLOCKS>,
-        HybridModularChip<F, BLOCKS>,
+        ModularChipGpu<F, BLOCKS>,
         ModularChip<F, BLOCKS>,
     >;
 
@@ -131,8 +131,7 @@ mod addsub_tests {
             tester.address_bits(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(
+        let gpu_chip = ModularChipGpu::new(
             get_modular_addsub_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -144,7 +143,7 @@ mod addsub_tests {
             tester.range_checker(),
         );
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn set_and_execute_addsub<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
@@ -421,7 +420,7 @@ mod muldiv_tests {
         F,
         ModularExecutor<BLOCKS>,
         ModularAir<BLOCKS>,
-        HybridModularChip<F, BLOCKS>,
+        ModularChipGpu<F, BLOCKS>,
         ModularChip<F, BLOCKS>,
     >;
 
@@ -458,8 +457,7 @@ mod muldiv_tests {
             tester.address_bits(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(
+        let gpu_chip = ModularChipGpu::new(
             get_modular_muldiv_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -471,7 +469,7 @@ mod muldiv_tests {
             tester.range_checker(),
         );
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn set_and_execute_muldiv<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
@@ -924,14 +922,14 @@ mod is_equal_tests {
             tester.dummy_memory_helper(),
         );
 
-        let hybrid_chip = ModularIsEqualChipGpu::<NUM_LANES, TOTAL_LIMBS>::new(
+        let gpu_chip = ModularIsEqualChipGpu::<NUM_LANES, TOTAL_LIMBS>::new(
             modulus_limbs,
             tester.address_bits(),
             tester.timestamp_max_bits(),
             tester.range_checker(),
         );
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[cfg(feature = "cuda")]

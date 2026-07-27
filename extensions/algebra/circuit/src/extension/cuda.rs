@@ -35,12 +35,12 @@ use crate::{
     NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
 };
 
-pub struct HybridModularChip<F, const BLOCKS: usize> {
+pub struct ModularChipGpu<F, const BLOCKS: usize> {
     gpu: FieldExprChipGpu,
     _phantom: std::marker::PhantomData<ModularChip<F, BLOCKS>>,
 }
 
-impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
+impl<const BLOCKS: usize> ModularChipGpu<F, BLOCKS> {
     pub fn new(
         cpu: ModularChip<F, BLOCKS>,
         byte_ptr_max_bits: usize,
@@ -77,17 +77,17 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
 
 // GPU tracegen: the field_expr kernel fills adapter + core columns directly from
 // the dense records (see openvm_mod_circuit_builder::cuda).
-impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularChip<F, BLOCKS> {
+impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for ModularChipGpu<F, BLOCKS> {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         self.gpu.generate_proving_ctx(arena.allocated())
     }
 }
 
 #[derive(Clone, Copy, Default)]
-pub struct AlgebraHybridProverExt;
+pub struct AlgebraGpuProverExt;
 
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExtension>
-    for AlgebraHybridProverExt
+    for AlgebraGpuProverExt
 {
     fn extend_prover(
         &self,
@@ -120,7 +120,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(
+                inventory.add_executor_chip(ModularChipGpu::new(
                     addsub,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -134,7 +134,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(
+                inventory.add_executor_chip(ModularChipGpu::new(
                     muldiv,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -171,7 +171,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(
+                inventory.add_executor_chip(ModularChipGpu::new(
                     addsub,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -185,7 +185,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(
+                inventory.add_executor_chip(ModularChipGpu::new(
                     muldiv,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -217,12 +217,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
     }
 }
 
-pub struct HybridFp2Chip<F, const BLOCKS: usize> {
+pub struct Fp2ChipGpu<F, const BLOCKS: usize> {
     gpu: FieldExprChipGpu,
     _phantom: std::marker::PhantomData<Fp2Chip<F, BLOCKS>>,
 }
 
-impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
+impl<const BLOCKS: usize> Fp2ChipGpu<F, BLOCKS> {
     pub fn new(
         cpu: Fp2Chip<F, BLOCKS>,
         byte_ptr_max_bits: usize,
@@ -259,14 +259,14 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
 
 // GPU tracegen: the field_expr kernel fills adapter + core columns directly from
 // the dense records (see openvm_mod_circuit_builder::cuda).
-impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridFp2Chip<F, BLOCKS> {
+impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for Fp2ChipGpu<F, BLOCKS> {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         self.gpu.generate_proving_ctx(arena.allocated())
     }
 }
 
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extension>
-    for AlgebraHybridProverExt
+    for AlgebraGpuProverExt
 {
     fn extend_prover(
         &self,
@@ -297,7 +297,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(
+                inventory.add_executor_chip(Fp2ChipGpu::new(
                     addsub,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -311,7 +311,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(
+                inventory.add_executor_chip(Fp2ChipGpu::new(
                     muldiv,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -331,7 +331,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(
+                inventory.add_executor_chip(Fp2ChipGpu::new(
                     addsub,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -345,7 +345,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(
+                inventory.add_executor_chip(Fp2ChipGpu::new(
                     muldiv,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
@@ -360,14 +360,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
     }
 }
 
-/// This builder will do tracegen for the RV64IM extensions on GPU but the modular extensions on
-/// CPU.
+/// GPU builder for the RV64IM and modular extensions.
 #[derive(Clone)]
-pub struct Rv64ModularHybridBuilder;
+pub struct Rv64ModularGpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Rv64ModularHybridBuilder {
+impl VmBuilder<E> for Rv64ModularGpuBuilder {
     type VmConfig = Rv64ModularConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -392,7 +391,7 @@ impl VmBuilder<E> for Rv64ModularHybridBuilder {
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.mul, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraHybridProverExt,
+            &AlgebraGpuProverExt,
             &config.modular,
             inventory,
         )?;
@@ -400,12 +399,11 @@ impl VmBuilder<E> for Rv64ModularHybridBuilder {
     }
 }
 
-/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and complex
-/// extensions on CPU.
+/// GPU builder for the RV64IM, modular, and complex-field extensions.
 #[derive(Clone)]
-pub struct Rv64ModularWithFp2HybridBuilder;
+pub struct Rv64ModularWithFp2GpuBuilder;
 
-impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
+impl VmBuilder<E> for Rv64ModularWithFp2GpuBuilder {
     type VmConfig = Rv64ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -420,17 +418,13 @@ impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv64ModularHybridBuilder,
+            &Rv64ModularGpuBuilder,
             &config.modular,
             circuit,
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraHybridProverExt,
-            &config.fp2,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)
     }
 }
