@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     utils::{not, select},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_transpiler::DivRemOpcode;
@@ -362,14 +362,6 @@ pub(crate) type DivRemResult<const NUM_LIMBS: usize> = (
     bool,
     DivRemCoreSpecialCase,
 );
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct DivRemCoreRecord<const NUM_LIMBS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
-    pub local_opcode: u8,
-}
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct DivRemExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {

@@ -6,16 +6,11 @@ use openvm_circuit::{
         PostflightError, PostflightStep, SignedImmInstruction, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    utils::not, AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
 use openvm_stark_backend::{
@@ -138,20 +133,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         let cols: &Rv64JalrAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalrAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-
-    pub rs1_ptr: u32,
-    // Will use u32::MAX to indicate no write
-    pub rd_ptr: u32,
-
-    pub reads_aux: MemoryReadAuxRecord,
-    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
 // This adapter reads from register [b]_d (rs1) and writes to register [a]_d (rd)

@@ -7,15 +7,14 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxInput,
+            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxInput,
         },
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -208,36 +207,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
         let local_cols: &Rv64StoreByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
-    }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64StoreByteAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rs1_val: u32,
-    pub rs1_aux_record: MemoryReadAuxRecord,
-    pub read_data_aux: MemoryReadAuxRecord,
-    pub write_prev_timestamp: u32,
-    pub imm: u16,
-    pub rs1_ptr: u8,
-    pub rs2_ptr: u8,
-    pub imm_sign: bool,
-    pub mem_as: u8,
-}
-
-impl Rv64StoreByteAdapterRecord {
-    pub(crate) fn effective_ptr(&self) -> u32 {
-        let addr = rv64_address_add_imm(
-            self.rs1_val,
-            sign_extend_imm16(self.imm as u32, self.imm_sign as u32),
-        );
-        u32::try_from(addr).expect("effective address exceeds u32 range")
-    }
-
-    pub(crate) fn shift_amount(&self) -> usize {
-        (self.effective_ptr() & (MEMORY_BLOCK_BYTES as u32 - 1)) as usize
     }
 }
 

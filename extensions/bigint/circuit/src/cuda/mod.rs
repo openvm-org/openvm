@@ -8,8 +8,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterCols, Rv64VecHeapAdapterRecord, Rv64VecHeapBranchU16AdapterCols,
-    Rv64VecHeapBranchU16AdapterRecord, Rv64VecHeapU16AdapterCols, Rv64VecHeapU16AdapterRecord,
+    Rv64VecHeapAdapterCols, Rv64VecHeapBranchU16AdapterCols, Rv64VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
     adapters::{RV64_BYTE_BITS, U16_BITS},
@@ -46,8 +45,6 @@ use crate::{INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U16_LIMBS, INT256_NUM_U8_LIMBS,
 //////////////////////////////////////////////////////////////////////////////////////
 /// AddSub (u16 limbs, range checker)
 //////////////////////////////////////////////////////////////////////////////////////
-pub type AddSub256AdapterRecord =
-    Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
 pub type AddSub256CoreRecord = AddSubCoreRecord<INT256_NUM_U16_LIMBS>;
 
 #[derive(new)]
@@ -60,8 +57,6 @@ pub struct AddSub256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// BitwiseLogic (byte limbs, bitwise lookup)
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BitwiseLogic256AdapterRecord =
-    Rv64VecHeapAdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
 pub type BitwiseLogic256CoreRecord = BitwiseLogicCoreRecord<INT256_NUM_U8_LIMBS>;
 
 #[derive(new)]
@@ -75,8 +70,6 @@ pub struct BitwiseLogic256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Branch Equal
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BranchEqual256AdapterRecord =
-    Rv64VecHeapBranchU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
 pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_U16_LIMBS>;
 
 #[derive(new)]
@@ -89,11 +82,6 @@ pub struct BranchEqual256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Less Than
 //////////////////////////////////////////////////////////////////////////////////////
-pub type LessThan256AdapterRecord = openvm_riscv_adapters::Rv64VecHeapU16AdapterRecord<
-    NUM_READS,
-    INT256_NUM_MEMORY_BLOCKS,
-    INT256_NUM_MEMORY_BLOCKS,
->;
 pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 
 #[derive(new)]
@@ -106,8 +94,6 @@ pub struct LessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Branch Less Than
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BranchLessThan256AdapterRecord =
-    Rv64VecHeapBranchU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
 pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 
 #[derive(new)]
@@ -120,9 +106,6 @@ pub struct BranchLessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Shift
 //////////////////////////////////////////////////////////////////////////////////////
-pub type ShiftLogical256U16AdapterRecord =
-    Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
-pub type ShiftRightArithmetic256AdapterRecord = ShiftLogical256U16AdapterRecord;
 pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 pub type ShiftRightArithmetic256CoreRecord =
     ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
@@ -144,8 +127,6 @@ pub struct ShiftRightArithmetic256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Multiplication
 //////////////////////////////////////////////////////////////////////////////////////
-pub type Multiplication256AdapterRecord =
-    Rv64VecHeapAdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
 pub type Multiplication256CoreRecord =
     MultiplicationCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
 

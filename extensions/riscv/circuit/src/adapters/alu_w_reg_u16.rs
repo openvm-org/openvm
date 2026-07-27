@@ -7,16 +7,13 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
@@ -175,23 +172,6 @@ pub struct Rv64BaseAluWRegU16AdapterExecutor;
 #[derive(derive_new::new)]
 pub struct Rv64BaseAluWRegU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BaseAluWRegU16AdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub rs1_high: [u16; RV64_WORD_U16_LIMBS],
-    pub rs2_ptr: u32,
-    pub rs2_high: [u16; RV64_WORD_U16_LIMBS],
-    /// Most significant low-word limb of the result, used to recover the sign bit and its 15-bit
-    /// range-check witness.
-    pub result_high: u16,
-    pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
 impl Rv64BaseAluWRegU16AdapterFiller {

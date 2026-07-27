@@ -1,25 +1,10 @@
 use openvm_circuit::arch::BLOCK_FE_WIDTH;
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, LOADWU};
 
 use crate::adapters::{
     rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
     HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
-pub struct LoadRecord {
-    /// The memory block containing the effective address, followed by the second block, which is
-    /// all-zero unless the access crosses a block boundary.
-    pub read_data: [[u16; BLOCK_FE_WIDTH]; 2],
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
-pub struct LoadByteRecord {
-    pub read_data: [u16; BLOCK_FE_WIDTH],
-}
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct LoadExecutor<A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize = 2> {

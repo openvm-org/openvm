@@ -6,16 +6,13 @@ use openvm_circuit::{
         Postflight, PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -162,21 +159,6 @@ pub struct Rv64BaseAluWImmU16AdapterExecutor;
 pub struct Rv64BaseAluWImmU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BaseAluWImmU16AdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub rs1_high: [u16; RV64_WORD_U16_LIMBS],
-    pub result_high: u16,
-    pub reads_aux: MemoryReadAuxRecord,
-    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
-}
-
-const _: () = assert!(size_of::<Rv64BaseAluWImmU16AdapterRecord>() == 40);
 
 impl Rv64BaseAluWImmU16AdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(

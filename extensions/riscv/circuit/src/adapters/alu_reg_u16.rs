@@ -7,16 +7,11 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
 use openvm_stark_backend::{
@@ -140,18 +135,6 @@ pub struct Rv64BaseAluRegU16AdapterExecutor;
 
 #[derive(Clone, Copy, Default, derive_new::new)]
 pub struct Rv64BaseAluRegU16AdapterFiller;
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BaseAluRegU16AdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub rs2_ptr: u32,
-    pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
-}
 
 impl Rv64BaseAluRegU16AdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(

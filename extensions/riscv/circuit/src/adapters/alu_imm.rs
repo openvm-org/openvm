@@ -6,16 +6,11 @@ use openvm_circuit::{
         Postflight, PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
-        },
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
@@ -137,17 +132,6 @@ pub struct Rv64BaseAluImmAdapterExecutor;
 
 #[derive(Clone, derive_new::new)]
 pub struct Rv64BaseAluImmAdapterFiller;
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BaseAluImmAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub reads_aux: MemoryReadAuxRecord,
-    pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
-}
 
 impl Rv64BaseAluImmAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(

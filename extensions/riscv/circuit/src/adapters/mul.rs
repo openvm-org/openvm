@@ -7,16 +7,11 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
-        },
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
 use openvm_stark_backend::{
@@ -138,20 +133,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         let cols: &Rv64MultAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
-}
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64MultAdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub rs2_ptr: u32,
-
-    pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(Clone, Copy, derive_new::new)]

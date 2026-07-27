@@ -35,8 +35,8 @@ impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
 }
 
 impl<RA, C: Chip<RA, CpuBackend<SC>>> Chip<RA, GpuBackend> for HybridChip<RA, C> {
-    fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<GpuBackend> {
-        let ctx = self.cpu_chip.generate_proving_ctx(arena);
+    fn generate_proving_ctx(&self, input: RA) -> AirProvingContext<GpuBackend> {
+        let ctx = self.cpu_chip.generate_proving_ctx(input);
         cpu_proving_ctx_to_gpu(ctx, &self.device_ctx)
     }
 }

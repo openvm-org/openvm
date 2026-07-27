@@ -205,8 +205,8 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: openvm_circuit::primitives::Chip<R, PB> });
             quote! {
                 impl #impl_generics openvm_circuit::primitives::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
-                        self.0.generate_proving_ctx(records)
+                    fn generate_proving_ctx(&self, input: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
+                        self.0.generate_proving_ctx(input)
                     }
                 }
             }.into()
@@ -229,7 +229,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let generate_proving_ctx_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as openvm_circuit::primitives::Chip<R, PB>>::generate_proving_ctx(x, records)
+                    #name::#variant_name(x) => <#field_ty as openvm_circuit::primitives::Chip<R, PB>>::generate_proving_ctx(x, input)
                 };
                 let where_predicate =
                     syn::parse_quote! { #field_ty: openvm_circuit::primitives::Chip<R, PB> };
@@ -285,7 +285,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics openvm_circuit::primitives::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
+                    fn generate_proving_ctx(&self, input: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
                         match self {
                             #(#generate_proving_ctx_arms,)*
                         }

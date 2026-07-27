@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use derive_new::new;
 use openvm_circuit::{arch::BLOCK_FE_WIDTH, utils::next_power_of_two_or_zero};
@@ -17,21 +17,13 @@ use {
     openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode},
 };
 
-use super::{AddICoreCols, AddICoreRecord};
+use super::AddICoreCols;
 use crate::{
     adapters::{
-        Rv64BaseAluImmU16AdapterCols, Rv64BaseAluWImmU16AdapterCols,
-        Rv64BaseAluWImmU16AdapterRecord, RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64BaseAluImmU16AdapterCols, Rv64BaseAluWImmU16AdapterCols, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     cuda_abi::{addi_cuda, addi_w_cuda},
 };
-
-const _: () = assert!(
-    size_of::<(
-        Rv64BaseAluWImmU16AdapterRecord,
-        AddICoreRecord<RV64_WORD_U16_LIMBS>,
-    )>() == 48
-);
 
 #[derive(new)]
 pub struct Rv64AddIChipGpu {
