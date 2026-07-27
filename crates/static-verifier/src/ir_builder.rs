@@ -58,18 +58,18 @@ use openvm_stark_sdk::{
 
 use crate::{
     chip_traits::{
-        BabyBearExt4Inst, BabyBearInst, ChipBase, DigestHashInst, GateInst, PopulateInputs,
+        BabyBearExt4Inst, BabyBearInst, ChipBase, GateInst, PopulateInputs, Poseidon2Inst,
         TranscriptInst,
     },
     field::baby_bear::{
         BabyBearExt4, BabyBearExt4Wire, BabyBearWire, ReducedBabyBearExt4Wire, ReducedBabyBearWire,
         BABYBEAR_MAX_BITS, BABY_BEAR_MODULUS_U64, RESERVED_HIGH_BITS,
     },
-    halo2_opcode_impl::{derive_opcode_metadata, UNMATERIALIZED},
     hash::{
         poseidon2::{MULTI_FIELD32_NUM_F_ELMS, MULTI_FIELD32_RATE, POSEIDON2_RATE},
         POSEIDON2_WIDTH,
     },
+    opcode_impl::{derive_opcode_metadata, UNMATERIALIZED},
     transcript::{DigestWire, NUM_OBS_PER_WORD, NUM_SAMPLES_PER_WORD},
 };
 
@@ -1224,7 +1224,7 @@ impl BabyBearExt4Inst for Halo2IRBuilder {
     }
 }
 
-impl DigestHashInst for Halo2IRBuilder {
+impl Poseidon2Inst for Halo2IRBuilder {
     /// Mirrors `hash::poseidon2::hash_babybear_slice_to_digest`.
     fn hash_babybear_slice_to_digest(
         &mut self,

@@ -27,17 +27,14 @@ mod circuit;
 pub mod codec;
 pub mod config;
 pub mod field;
-#[cfg(feature = "halo2-gpu")]
 pub mod graph_executor;
-#[cfg(feature = "halo2-gpu")]
 pub mod ir_builder;
-#[cfg(feature = "halo2-gpu")]
 pub mod opcode_impl;
 pub mod hash;
 pub mod keygen;
 pub mod prover;
 pub mod stages;
-#[cfg(all(test, feature = "halo2-gpu"))]
+#[cfg(test)]
 mod test_fixtures;
 pub mod transcript;
 mod utils;

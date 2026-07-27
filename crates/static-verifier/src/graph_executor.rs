@@ -21,7 +21,13 @@ use std::{
     sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
 };
 
-use halo2_base::halo2_proofs::{arithmetic::Field as _, halo2curves::bn256::Fr};
+#[cfg(feature = "halo2-gpu")]
+use halo2_base::halo2_proofs::cuda::utils::HALO2_GPU_CTX;
+use halo2_base::halo2_proofs::{
+    arithmetic::Field as _, halo2curves::bn256::Fr, plonk::AdviceColumns,
+};
+#[cfg(feature = "halo2-gpu")]
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
@@ -30,10 +36,6 @@ use openvm_stark_sdk::{
     },
     p3_baby_bear::BabyBear,
 };
-#[cfg(feature = "halo2-gpu")]
-use halo2_base::halo2_proofs::cuda::utils::HALO2_GPU_CTX;
-#[cfg(feature = "halo2-gpu")]
-use openvm_cuda_common::d_buffer::DeviceBuffer;
 
 use crate::{
     chip_traits::{ChipBase, PopulateInputs},
@@ -41,8 +43,8 @@ use crate::{
     field::baby_bear::{
         BabyBearExt4, BabyBearWire, ReducedBabyBearExt4Wire, ReducedBabyBearWire, BABYBEAR_MAX_BITS,
     },
-    halo2_ir_builder::{GraphCell, Halo2IRBuilder, Halo2Opcode},
-    halo2_opcode_impl::{interpret_op, UNMATERIALIZED},
+    ir_builder::{GraphCell, Halo2IRBuilder, Halo2Opcode},
+    opcode_impl::{interpret_op, UNMATERIALIZED},
     stages::full_pipeline::load_proof_wire,
 };
 
@@ -733,7 +735,11 @@ impl GraphProver {
     }
 }
 
-/// Streams graph-executor tape deltas straight into device-resident advice columns.
+/// Streams graph-executor tape deltas straight into advice columns.
+///
+/// The column storage is [`AdviceColumns<Fr>`], which resolves to
+/// `Vec<DeviceBuffer<Fr>>` under the `halo2-gpu` feature and `Vec<Vec<Fr>>`
+/// otherwise; the two flavors share the same placement math.
 ///
 /// Placement is a pure function of the tape offset, so disjoint deltas may arrive
 /// in any order. The layout mirrors `PagedWitnessContext::push_advice` (gate
@@ -742,10 +748,10 @@ impl GraphProver {
 /// `BaseCircuitBuilder::assign_lookups_in_phase` (lookup columns fill round-robin:
 /// value `i` at column `i % L`, row `i / L`).
 ///
-/// Columns are zero-filled `DeviceBuffer`s allocated on the first [`Self::append`];
-/// each contiguous delta segment is copied H2D directly into its row range, so no
-/// host-side column buffer is ever materialized.
-#[cfg(feature = "halo2-gpu")]
+/// Columns are zero-filled and allocated on the first [`Self::append`]; each
+/// contiguous delta segment is written directly into its row range (H2D on GPU,
+/// `copy_from_slice` on host), so no intermediate host buffer for the advice
+/// stream is ever materialized.
 pub struct FusedColumnBuilder {
     // ---- Config (immutable after `new`) ------------------------------------
     n: usize,
@@ -760,11 +766,10 @@ pub struct FusedColumnBuilder {
     /// Physical column indices of the range-check lookup advice columns.
     lookup_col_indices: Vec<usize>,
 
-    // ---- Device columns (lazily allocated on first `append`) ---------------
-    device_columns: Vec<DeviceBuffer<Fr>>,
+    /// Advice columns (lazily allocated on first `append`).
+    columns: AdviceColumns<Fr>,
 }
 
-#[cfg(feature = "halo2-gpu")]
 impl FusedColumnBuilder {
     pub fn new(
         n: usize,
@@ -783,27 +788,32 @@ impl FusedColumnBuilder {
             break_points,
             col_starts,
             lookup_col_indices,
-            device_columns: Vec::new(),
+            columns: AdviceColumns::<Fr>::new(),
         }
     }
 
     fn ensure_allocated(&mut self) {
-        if !self.device_columns.is_empty() {
+        if !self.columns.is_empty() {
             return;
         }
-        self.device_columns.reserve_exact(self.num_advice_columns);
+        self.columns.reserve_exact(self.num_advice_columns);
         for _ in 0..self.num_advice_columns {
-            let buf: DeviceBuffer<Fr> =
-                DeviceBuffer::<Fr>::with_capacity_on(self.n, &HALO2_GPU_CTX);
-            buf.fill_zero_on(&HALO2_GPU_CTX)
-                .expect("zero-fill advice column");
-            self.device_columns.push(buf);
+            #[cfg(feature = "halo2-gpu")]
+            {
+                let buf: DeviceBuffer<Fr> =
+                    DeviceBuffer::<Fr>::with_capacity_on(self.n, &HALO2_GPU_CTX);
+                buf.fill_zero_on(&HALO2_GPU_CTX)
+                    .expect("zero-fill advice column");
+                self.columns.push(buf);
+            }
+            #[cfg(not(feature = "halo2-gpu"))]
+            self.columns.push(vec![Fr::ZERO; self.n]);
         }
     }
 
-    /// Copies `advice_delta` (advice-tape range starting at absolute offset
+    /// Writes `advice_delta` (advice-tape range starting at absolute offset
     /// `advice_offset`) and `lookup_delta` (range-check-tape range starting at
-    /// `lookup_offset`) into the device columns. Placement is a pure function
+    /// `lookup_offset`) into the advice columns. Placement is a pure function
     /// of the offsets, so disjoint deltas may arrive in any order.
     pub fn append(
         &mut self,
@@ -814,7 +824,7 @@ impl FusedColumnBuilder {
     ) {
         self.ensure_allocated();
 
-        // --- Gate stream: contiguous H2D per (column, row-range) segment ----
+        // --- Gate stream: contiguous write per (column, row-range) segment --
         //
         // Gate column `c` covers tape offsets `[col_starts[c], col_starts[c + 1]]`
         // inclusive at both ends: the shared endpoint is the break value,
@@ -842,10 +852,13 @@ impl FusedColumnBuilder {
                 let delta_remaining = advice_delta.len() - delta_pos;
                 let take = rows_until_break.min(delta_remaining);
                 let src = &advice_delta[delta_pos..delta_pos + take];
-                self.device_columns[col]
+                #[cfg(feature = "halo2-gpu")]
+                self.columns[col]
                     .mut_slice(row..row + take)
                     .copy_from_host(src, &HALO2_GPU_CTX)
                     .expect("H2D advice gate segment");
+                #[cfg(not(feature = "halo2-gpu"))]
+                self.columns[col][row..row + take].copy_from_slice(src);
                 delta_pos += take;
                 if cur_break_point.is_some() && take == rows_until_break {
                     col += 1;
@@ -857,48 +870,60 @@ impl FusedColumnBuilder {
             }
         }
 
-        // --- Lookup stream: one gathered H2D per lookup column per call ------
+        // --- Lookup stream --------------------------------------------------
         //
-        // Value `i` lands at column `L[i % L]`, row `i / L`: a delta's values
-        // for one column are strided in delta space but row-contiguous, so
-        // gather each stride into a host buffer and issue one H2D per column.
+        // Value `i` lands at column `L[i % L]`, row `i / L`. On GPU, each
+        // column's values are strided in delta space but row-contiguous, so
+        // gather one stride and issue one H2D per column. On host, just
+        // scatter directly — no batching needed.
         let l = self.lookup_col_indices.len();
-        let k = lookup_offset;
-        let n_l = lookup_delta.len();
-        if n_l > 0 {
-            for c in 0..l {
-                let start_j = (c + l - k % l) % l;
-                if start_j >= n_l {
-                    continue;
+        #[cfg(feature = "halo2-gpu")]
+        {
+            let k = lookup_offset;
+            let n_l = lookup_delta.len();
+            if n_l > 0 {
+                for c in 0..l {
+                    let start_j = (c + l - k % l) % l;
+                    if start_j >= n_l {
+                        continue;
+                    }
+                    let n_values = (n_l - start_j).div_ceil(l);
+                    let start_row = (k + start_j) / l;
+                    let host_buf: Vec<Fr> = (0..n_values)
+                        .map(|i| lookup_delta[start_j + i * l])
+                        .collect();
+                    self.columns[self.lookup_col_indices[c]]
+                        .mut_slice(start_row..start_row + n_values)
+                        .copy_from_host(&host_buf, &HALO2_GPU_CTX)
+                        .expect("H2D lookup column gather");
                 }
-                let n_values = (n_l - start_j).div_ceil(l);
-                let start_row = (k + start_j) / l;
-                let host_buf: Vec<Fr> = (0..n_values)
-                    .map(|i| lookup_delta[start_j + i * l])
-                    .collect();
-                self.device_columns[self.lookup_col_indices[c]]
-                    .mut_slice(start_row..start_row + n_values)
-                    .copy_from_host(&host_buf, &HALO2_GPU_CTX)
-                    .expect("H2D lookup column gather");
             }
+        }
+        #[cfg(not(feature = "halo2-gpu"))]
+        for (i, v) in lookup_delta.iter().enumerate() {
+            let global = lookup_offset + i;
+            let col = self.lookup_col_indices[global % l];
+            let row = global / l;
+            self.columns[col][row] = *v;
         }
     }
 
-    /// Consumes the device columns, leaving the builder empty.
-    pub fn take_device_columns(&mut self) -> Vec<DeviceBuffer<Fr>> {
+    /// Consumes the advice columns, leaving the builder empty.
+    pub fn take_columns(&mut self) -> AdviceColumns<Fr> {
         assert!(
-            !self.device_columns.is_empty(),
-            "take_device_columns: no data was ever appended",
+            !self.columns.is_empty(),
+            "take_columns: no data was ever appended",
         );
-        std::mem::take(&mut self.device_columns)
+        std::mem::take(&mut self.columns)
     }
 
     /// Diagnostic-only: D2H each device column back into host `Vec<Fr>`s so the
     /// caller can byte-compare against the legacy `BaseCircuitBuilder` +
     /// `synthesize_witness_shplonk` path. Not used on the hot prove path.
+    #[cfg(feature = "halo2-gpu")]
     pub fn snapshot_columns_to_host(&self) -> Vec<Vec<Fr>> {
         use openvm_cuda_common::copy::MemCopyD2H;
-        self.device_columns
+        self.columns
             .iter()
             .map(|d| d.to_host_on(&HALO2_GPU_CTX).expect("D2H advice column"))
             .collect()
@@ -907,10 +932,9 @@ impl FusedColumnBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::Arc,
-        time::{Duration, Instant},
-    };
+    use std::sync::Arc;
+    #[cfg(feature = "halo2-gpu")]
+    use std::time::{Duration, Instant};
 
     use halo2_base::gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
@@ -926,15 +950,20 @@ mod tests {
             StarkEngine,
         },
     };
+    #[cfg(feature = "halo2-gpu")]
     use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
     use super::*;
     use crate::{
         backend::Halo2Backend,
         stages::{full_pipeline::load_proof_wire, proof_shape::log_heights_per_air_from_proof},
-        test_fixtures::{fixture_circuit_and_proof, FIXTURE_K},
-        Halo2Params, StaticVerifierCircuit, StaticVerifierProvingKey, StaticVerifierShape,
     };
+    #[cfg(feature = "halo2-gpu")]
+    use crate::{
+        test_fixtures::{fixture_circuit_and_proof, FIXTURE_K},
+        Halo2Params, StaticVerifierProvingKey, StaticVerifierShape,
+    };
+    use crate::StaticVerifierCircuit;
 
     const K: usize = 22;
     const LOOKUP_BITS: usize = K - 1;
@@ -1000,6 +1029,7 @@ mod tests {
 
     /// Runs the executor, streaming each delta through `builder`; returns the
     /// wall time of the combined run + fused H2D copies.
+    #[cfg(feature = "halo2-gpu")]
     fn timed_run(
         executor: &mut GraphExecutor,
         builder: &mut FusedColumnBuilder,
@@ -1018,6 +1048,7 @@ mod tests {
     /// Production-path setup with no cached artifacts: STARK-proves the shared
     /// root-shaped fixture, then runs [`StaticVerifierProvingKey::keygen`] on an
     /// in-memory SRS to get a real pinning (config params, break points, halo2 pk).
+    #[cfg(feature = "halo2-gpu")]
     fn keygen_fixture_static_verifier() -> (StaticVerifierProvingKey, Proof<RootConfig>) {
         let (circuit, proof) = fixture_circuit_and_proof();
         let shape = StaticVerifierShape {
@@ -1038,6 +1069,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "halo2-gpu")]
     #[ignore = "requires CUDA GPU; slow (fixture STARK prove + halo2 keygen)"]
     fn graph_executor_root_proof() {
         use halo2_base::{
@@ -1093,7 +1125,7 @@ mod tests {
         let mut builder = fused_builder();
         let total = timed_run(&mut executor, &mut builder, 1);
         let reference_columns = builder.snapshot_columns_to_host();
-        drop(builder.take_device_columns());
+        drop(builder.take_columns());
         println!("run + fused H2D (1 thread): {total:?}");
         let reference_advice = executor.advice().to_vec();
         let reference_lookups = executor.lookups().to_vec();
@@ -1106,7 +1138,7 @@ mod tests {
             let mut builder = fused_builder();
             let total = timed_run(&mut executor, &mut builder, num_threads);
             let columns = builder.snapshot_columns_to_host();
-            drop(builder.take_device_columns());
+            drop(builder.take_columns());
             println!("run + fused H2D ({num_threads} threads): {total:?}");
             assert_eq!(executor.advice(), &reference_advice[..]);
             assert_eq!(executor.lookups(), &reference_lookups[..]);
@@ -1124,7 +1156,7 @@ mod tests {
     /// [`StaticVerifierProvingKey::prove_wrapped`] runs before handing off to
     /// `snark_verifier_sdk`: `GraphProver::witness_gen` (parallel graph-IR
     /// evaluation) + the [`FusedColumnBuilder`] streaming per-column H2D
-    /// copies. Stops after `builder.take_device_columns()` — SNARK generation
+    /// copies. Stops after `builder.take_columns()` — SNARK generation
     /// itself is excluded.
     ///
     /// Builds the proving key and root proof from [`RootShapedFixture`] (see
@@ -1140,7 +1172,7 @@ mod tests {
     ///        graph_executor_prove_wrapped_pipeline
     /// ```
     #[test]
-    #[cfg(feature = "evm-prove")]
+    #[cfg(all(feature = "evm-prove", feature = "halo2-gpu"))]
     #[ignore = "requires CUDA GPU; slow (fixture STARK prove + halo2 keygen)"]
     fn graph_executor_prove_wrapped_pipeline() {
         let (pk, proof) = keygen_fixture_static_verifier();

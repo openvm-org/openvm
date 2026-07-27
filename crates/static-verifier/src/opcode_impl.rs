@@ -39,8 +39,8 @@ use crate::{
     field::baby_bear::{
         BabyBearExt4, BABYBEAR_MAX_BITS, BABY_BEAR_MODULUS_U64, RESERVED_HIGH_BITS,
     },
-    halo2_ir_builder::Halo2Opcode,
     hash::{poseidon2::Poseidon2Params, POSEIDON2_COMPRESS_PARAMS, POSEIDON2_PARAMS},
+    ir_builder::Halo2Opcode,
     transcript::NUM_SAMPLES_PER_WORD,
 };
 

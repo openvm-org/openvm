@@ -1,4 +1,3 @@
-#[cfg(feature = "halo2-gpu")]
 use std::sync::{Arc, Mutex, OnceLock};
 
 use halo2_base::{
@@ -12,15 +11,10 @@ use openvm_stark_sdk::{
 #[cfg(feature = "evm-prove")]
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "halo2-gpu")]
-use crate::graph_executor::GraphProver;
-
-#[cfg(feature = "halo2-gpu")]
-use openvm_cuda_common::d_buffer::DeviceBuffer;
-
 use crate::{
     circuit::StaticVerifierCircuit,
     config::StaticVerifierShape,
+    graph_executor::GraphProver,
     prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof},
 };
 
@@ -70,7 +64,6 @@ pub struct StaticVerifierProvingKey {
     /// keygen time and reused across proofs (the populate trace only depends on the
     /// static circuit shape). Decoded proving keys start empty and rebuild lazily on
     /// the first call to `prove_wrapped`.
-    #[cfg(feature = "halo2-gpu")]
     pub graph_prover: Arc<OnceLock<Mutex<GraphProver>>>,
 }
 
@@ -83,7 +76,6 @@ impl StaticVerifierProvingKey {
         representative_proof: &Proof<RootConfig>,
     ) -> Self {
         let pinning = circuit.keygen(params, &shape, representative_proof);
-        #[cfg(feature = "halo2-gpu")]
         let graph_prover = tracing::info_span!("build_graph_prover").in_scope(|| {
             Arc::new(OnceLock::from(Mutex::new(GraphProver::new(
                 &circuit,
@@ -95,7 +87,6 @@ impl StaticVerifierProvingKey {
             circuit,
             pinning,
             shape,
-            #[cfg(feature = "halo2-gpu")]
             graph_prover,
         }
     }
@@ -116,7 +107,8 @@ impl StaticVerifierProvingKey {
 
 #[cfg(feature = "evm-prove")]
 use halo2_base::{
-    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr,
+    gates::circuit::builder::BaseCircuitBuilder,
+    halo2_proofs::{halo2curves::bn256::Fr, plonk::AdviceColumns},
 };
 #[cfg(feature = "evm-prove")]
 use snark_verifier_sdk::{
@@ -151,14 +143,15 @@ impl StaticVerifierProvingKey {
     ///
     /// Witness generation runs through the [`GraphProver`] (parallel graph-IR
     /// evaluation) instead of the halo2 `BaseCircuitBuilder`; the raw advice and
-    /// range-check tapes are then laid out into physical columns and copied to device
-    /// for [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
+    /// range-check tapes are then laid out into physical columns and handed to
+    /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base) —
+    /// as device buffers under `halo2-gpu`, as host `Vec<Fr>` columns otherwise.
     ///
     /// The graph executor thread count defaults to available cores − 2; override
     /// with `GRAPH_EXE_THREADS`. Set `STATIC_VERIFIER_COMPARE_WITNESS=1` to
     /// additionally regenerate the witness through the legacy `BaseCircuitBuilder` +
-    /// `synthesize_witness_shplonk` path and assert both advice layouts match.
-    #[cfg(feature = "halo2-gpu")]
+    /// `synthesize_witness_shplonk` path and assert both advice layouts match
+    /// (`halo2-gpu` only).
     pub fn prove_wrapped(
         &self,
         params: &Halo2Params,
@@ -176,64 +169,46 @@ impl StaticVerifierProvingKey {
                     .unwrap_or(1)
             });
 
-        let (gpu_advice, instances) =
-            self.run_witness_gen_pipeline(proof, graph_prover_threads, Some(params));
+        let diagnostic_params = if cfg!(feature = "halo2-gpu") {
+            Some(params)
+        } else {
+            None
+        };
+        let (advice, instances) =
+            self.run_witness_gen_pipeline(proof, graph_prover_threads, diagnostic_params);
 
         snark_verifier_sdk::halo2::gen_snark_from_base(
             params,
             &self.pinning.pk,
-            gpu_advice,
+            advice,
             instances,
-        )
-    }
-
-    /// Produce a [`Snark`](snark_verifier_sdk::Snark) for consumption by the wrapper circuit.
-    ///
-    /// CPU witness generation through the halo2 `BaseCircuitBuilder`; enable the
-    /// `halo2-gpu` feature for the parallel graph-IR + GPU pipeline.
-    #[cfg(not(feature = "halo2-gpu"))]
-    pub fn prove_wrapped(
-        &self,
-        params: &Halo2Params,
-        proof: &Proof<RootConfig>,
-    ) -> snark_verifier_sdk::Snark {
-        let mut builder = BaseCircuitBuilder::prover(
-            self.pinning.metadata.config_params.clone(),
-            self.pinning.metadata.break_points.clone(),
-        )
-        .use_instance_columns(self.shape.instance_columns);
-
-        let _public_inputs = self.circuit.populate(&mut builder, proof);
-
-        snark_verifier_sdk::halo2::gen_snark_shplonk(
-            params,
-            &self.pinning.pk,
-            builder,
-            None::<&str>,
         )
     }
 
     /// Runs the graph-executor witness pipeline: builds (or reuses) the
     /// [`GraphProver`], streams its advice/lookup deltas through a
-    /// [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder) onto device
-    /// columns, and returns the `Vec<DeviceBuffer<Fr>>` + instance columns ready for
+    /// [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder) onto advice
+    /// columns, and returns the [`AdviceColumns<Fr>`] + instance columns ready for
     /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
+    ///
+    /// Under `halo2-gpu` the advice columns are device buffers; otherwise host
+    /// `Vec<Fr>` columns — both fit the same `AdviceColumns<Fr>` alias.
     ///
     /// Public so benchmarks (see the `graph_executor_prove_wrapped_pipeline` test)
     /// can time the witness path in isolation from SNARK generation.
     ///
     /// `diagnostic_params` is only consulted when `STATIC_VERIFIER_COMPARE_WITNESS`
-    /// is set — see [`Self::compare_witness_with_base_builder`].
-    #[cfg(feature = "halo2-gpu")]
+    /// is set — see [`Self::compare_witness_with_base_builder`] (`halo2-gpu` only;
+    /// on the CPU build the parameter is unused).
     pub fn run_witness_gen_pipeline(
         &self,
         proof: &Proof<RootConfig>,
         num_threads: usize,
         diagnostic_params: Option<&Halo2Params>,
-    ) -> (Vec<DeviceBuffer<Fr>>, Vec<Vec<Fr>>) {
+    ) -> (AdviceColumns<Fr>, Vec<Vec<Fr>>) {
         use halo2_base::{
             gates::circuit::MaybeRangeConfig,
-            halo2_proofs::{halo2curves::bn256::G1Affine, plonk::create_constraint_system},
+            halo2_proofs::plonk::{Circuit, ConstraintSystem},
         };
         use tracing::info_span;
 
@@ -253,7 +228,9 @@ impl StaticVerifierProvingKey {
         // Pre-derive the physical column layout that the fused closure will fill.
         let num_advice_columns = self.pinning.pk.get_vk().cs().num_advice_columns();
         let n = 1usize << self.pinning.metadata.config_params.k;
-        let (_, config) = create_constraint_system::<G1Affine, BaseCircuitBuilder<Fr>>(
+        let mut cs = ConstraintSystem::<Fr>::default();
+        let config = <BaseCircuitBuilder<Fr> as Circuit<Fr>>::configure_with_params(
+            &mut cs,
             self.pinning.metadata.config_params.clone(),
         );
         let MaybeRangeConfig::WithRange(range_config) = &config.base else {
@@ -295,15 +272,18 @@ impl StaticVerifierProvingKey {
         let mut instances = vec![Vec::new(); self.shape.instance_columns];
         instances[0] = pvs;
 
+        #[cfg(feature = "halo2-gpu")]
         if let Some(params) = diagnostic_params {
             if std::env::var("STATIC_VERIFIER_COMPARE_WITNESS").is_ok() {
                 let host_columns = builder.snapshot_columns_to_host();
                 self.compare_witness_with_base_builder(params, proof, &host_columns, &instances);
             }
         }
+        #[cfg(not(feature = "halo2-gpu"))]
+        let _ = diagnostic_params;
 
-        let gpu_advice = builder.take_device_columns();
-        (gpu_advice, instances)
+        let advice = builder.take_columns();
+        (advice, instances)
     }
 
     /// Diagnostic: regenerates the witness through the legacy `BaseCircuitBuilder`
