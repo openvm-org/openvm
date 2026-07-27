@@ -1641,13 +1641,11 @@ pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub user_public_values: UserPublicValuesProof<{ VM_DIGEST_WIDTH }, Val<SC>>,
 }
 
-/// Optional backend-specific continuation proving driver.
-#[cfg(feature = "cuda")]
+/// Backend-specific continuation proving driver.
 pub type ContinuationProverFn<E, VB> = Box<
     dyn FnMut(
             &mut VmInstance<E, VB>,
             Streams,
-            Option<&str>,
         ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>
         + Send,
 >;
@@ -1658,6 +1656,14 @@ pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
         &mut self,
         input: impl Into<Streams>,
     ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
+}
+
+/// Constructs the continuation proving driver for a VM builder.
+///
+/// Builders explicitly choose their proving path. The CPU SDK uses the generic interpreter and
+/// postflight trace generator, while the GPU SDK uses its preflight driver.
+pub trait ContinuationProverBuilder<E: StarkEngine>: VmBuilder<E> {
+    fn continuation_prover() -> ContinuationProverFn<E, Self>;
 }
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a

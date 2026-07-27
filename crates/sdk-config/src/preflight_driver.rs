@@ -142,17 +142,11 @@ impl PreparedPreflight {
 pub(crate) fn continuation_prover(
 ) -> ContinuationProverFn<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder> {
     let mut prepared = None;
-    Box::new(move |instance, input, program_name| {
+    Box::new(move |instance, input| {
         if prepared.is_none() {
             // Publish only complete preparation so a failed attempt remains retryable.
             prepared = Some(PreparedPreflight::new(instance)?);
         }
-        let _prove_span = info_span!(
-            "app_prove",
-            group = "app_proof",
-            program = program_name.unwrap_or("")
-        )
-        .entered();
         prove(instance, input, prepared.as_ref().unwrap())
     })
 }

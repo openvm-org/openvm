@@ -3,8 +3,8 @@ use std::{borrow::Borrow, sync::Arc};
 use eyre::Result;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, Executor,
-        MeteredExecutor, PostflightTracegen, VmBuilder, VmChipComplex, VmExecutionConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmBuilder, VmExecutionConfig,
     },
     system::memory::merkle::MerkleTree,
 };
@@ -37,7 +37,7 @@ where
 impl<E, VB> StarkProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
     Val<SC>: PrimeField32,
 {
     pub fn new(
@@ -72,7 +72,6 @@ where
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
             Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
-        VmChipComplex<SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<SC, E::PB>,
     {
         let has_deferrals = self.deferral_setup.hook_commit().is_some();
         let memory_dimensions = self.app_prover.memory_dimensions();

@@ -433,6 +433,15 @@ where
     }
 }
 
+impl<E> ContinuationProverBuilder<E> for SdkVmCpuBuilder
+where
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+{
+    fn continuation_prover() -> ContinuationProverFn<E, Self> {
+        Box::new(|instance, input| ContinuationVmProver::prove(instance, input))
+    }
+}
+
 #[cfg(feature = "cuda")]
 #[derive(Copy, Clone, Default)]
 pub struct SdkVmGpuBuilder;
@@ -441,10 +450,6 @@ pub struct SdkVmGpuBuilder;
 impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-
-    fn continuation_prover() -> Option<ContinuationProverFn<BabyBearPoseidon2GpuEngine, Self>> {
-        Some(preflight_driver::continuation_prover())
-    }
 
     fn create_chip_complex(
         &self,
@@ -496,6 +501,13 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _>::extend_prover(&DeferralProverExt, deferral, inventory)?;
         }
         Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl ContinuationProverBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
+    fn continuation_prover() -> ContinuationProverFn<BabyBearPoseidon2GpuEngine, Self> {
+        preflight_driver::continuation_prover()
     }
 }
 

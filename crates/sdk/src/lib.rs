@@ -27,9 +27,9 @@ use openvm_circuit::arch::{
 pub use openvm_circuit::{self, arch::ExecutionOutcome};
 use openvm_circuit::{
     arch::{
-        execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
-        MeteredExecutor, PostflightTracegen, VirtualMachineError, VmBuilder, VmChipComplex,
-        VmExecutionConfig, VmExecutor, U16_CELL_SIZE,
+        execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
+        InitFileGenerator, MeteredExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
+        VmExecutor, U16_CELL_SIZE,
     },
     system::memory::merkle::public_values::extract_public_values,
 };
@@ -480,9 +480,8 @@ where
 impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
+    VB: ContinuationProverBuilder<E> + Clone,
     <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
-    VmChipComplex<SC, E::PB, VB::SystemChipInventory>: PostflightTracegen<SC, E::PB>,
 {
     /// Compile `app_exe` and execute it, returning the user public values as bytes.
     pub fn compile_and_execute(
