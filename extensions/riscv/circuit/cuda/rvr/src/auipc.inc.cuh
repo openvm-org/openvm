@@ -53,7 +53,7 @@ __global__ void auipc_replay_tracegen(
     uint32_t imm = instruction.words[3];
     constexpr uint32_t REGISTER_FILE_BYTES = 32 * RV64_REGISTER_NUM_LIMBS;
     bool rd_is_canonical =
-        rd_ptr != 0 && rd_ptr < REGISTER_FILE_BYTES && rd_ptr % RV64_REGISTER_NUM_LIMBS == 0;
+        rd_ptr < REGISTER_FILE_BYTES && rd_ptr % RV64_REGISTER_NUM_LIMBS == 0;
     if (instruction.words[0] != auipc_opcode || !rd_is_canonical ||
         instruction.words[2] != 0 || imm >= (1u << 24) ||
         instruction.words[4] != register_as || instruction.words[5] != 0 ||

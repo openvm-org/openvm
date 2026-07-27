@@ -48,8 +48,8 @@ static __device__ bool replay_reg_reg_write(
     uint32_t rs2_ptr = instruction.words[3];
     if (instruction.words[0] != expected_opcode ||
         instruction.words[4] != register_address_space || instruction.words[5] != 0 ||
-        instruction.words[6] != 0 || instruction.words[7] != 0 || rd_ptr == 0 ||
-        rd_ptr >= 32 * 8 || rs1_ptr >= 32 * 8 || rs2_ptr >= 32 * 8 || (rd_ptr & 7) != 0 ||
+        instruction.words[6] != 0 || instruction.words[7] != 0 || rd_ptr >= 32 * 8 ||
+        rs1_ptr >= 32 * 8 || rs2_ptr >= 32 * 8 || (rd_ptr & 7) != 0 ||
         (rs1_ptr & 7) != 0 || (rs2_ptr & 7) != 0) {
         preflight_set_error(error, error_base);
         return false;

@@ -50,7 +50,7 @@ __global__ void rv64_shift_right_arithmetic_replay_tracegen(
     uint32_t rs2_ptr = instruction.words[3];
     if (instruction.words[0] != opcode ||
         instruction.words[4] != register_address_space ||
-        instruction.words[5] != register_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
+        instruction.words[5] != register_address_space || (rd_ptr & 1) != 0 ||
         (rs1_ptr & 1) != 0 || (rs2_ptr & 1) != 0) {
         preflight_set_error(error, 154);
         return;
