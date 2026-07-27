@@ -1793,7 +1793,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2554,7 +2554,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2915,6 +2915,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom"
 version = "0.5.3"
+source = "git+https://github.com/axiom-crypto/halo2.git?branch=main#5e4f0e524956f23b50d51b3a2f7bb07834948598"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
@@ -2935,6 +2936,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom-gpu"
 version = "1.0.0"
+source = "git+https://github.com/axiom-crypto/halo2-gpu.git?branch=main#9ebf6979dd439b3b117273aa0704262caf041b93"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2974,6 +2976,7 @@ dependencies = [
 [[package]]
 name = "halo2-base"
 version = "0.5.4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?branch=main#b90c962a5e3bcfb01d1ce06466e5de08261b5c4e"
 dependencies = [
  "getset",
  "halo2-axiom",
@@ -2994,6 +2997,7 @@ dependencies = [
 [[package]]
 name = "halo2-ecc"
 version = "0.5.4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?branch=main#b90c962a5e3bcfb01d1ce06466e5de08261b5c4e"
 dependencies = [
  "halo2-base",
  "itertools 0.11.0",
@@ -3567,7 +3571,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7025,7 +7029,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7475,6 +7479,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "snark-verifier"
 version = "0.2.6"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?branch=main#68706ddce8b0e1d11ba87813b779419db3190453"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -7495,6 +7500,7 @@ dependencies = [
 [[package]]
 name = "snark-verifier-sdk"
 version = "0.2.6"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?branch=main#68706ddce8b0e1d11ba87813b779419db3190453"
 dependencies = [
  "bincode",
  "ethereum-types",
@@ -7719,7 +7725,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8443,7 +8449,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
