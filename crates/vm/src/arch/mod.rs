@@ -41,7 +41,7 @@ pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
 pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
-pub use preflight::{PreflightHistory, PreflightMemoryLog};
+pub use preflight::{PreflightHistory, PreflightMemoryLog, PreflightOutput};
 pub use record_arena::*;
 #[cfg(feature = "rvr")]
 pub use rvr::{
