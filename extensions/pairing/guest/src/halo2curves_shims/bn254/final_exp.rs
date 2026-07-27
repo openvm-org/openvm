@@ -12,6 +12,8 @@ use openvm_ecc_guest::{
     AffinePoint,
 };
 
+#[cfg(feature = "mcl")]
+use super::mcl;
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 use crate::{
     halo2curves_shims::naf::biguint_to_naf,
@@ -81,7 +83,7 @@ impl FinalExp for Bn254 {
     // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
         #[cfg(feature = "mcl")]
-        return super::mcl::final_exp_hint(f);
+        return mcl::final_exp_hint(f);
 
         #[cfg(not(feature = "mcl"))]
         final_exp_hint_basic(f)
