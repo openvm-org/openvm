@@ -1,10 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, Postflight,
-        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
@@ -28,6 +30,8 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
+#[cfg(test)]
+use super::checked_byte_ptr_to_u16_ptr_value;
 use super::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16};
 
 /// Adapter columns for base ALU instructions with two register operands.
@@ -263,8 +267,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluRegU16AdapterFiller {
     }
 }
 
+#[cfg(test)]
 impl Rv64BaseAluRegU16AdapterFiller {
-    pub fn replay<F: PrimeField32>(
+    pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -272,17 +277,26 @@ impl Rv64BaseAluRegU16AdapterFiller {
         compute: impl FnOnce([[u16; BLOCK_FE_WIDTH]; 2]) -> [u16; BLOCK_FE_WIDTH],
     ) -> Result<([[u16; BLOCK_FE_WIDTH]; 2], [u16; BLOCK_FE_WIDTH]), PostflightError> {
         let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || instruction.e.as_canonical_u32() != RV64_REGISTER_AS
+        {
+            return Err(PostflightError::new(
+                "register-register ALU instruction has invalid address spaces",
+            ));
+        }
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
         let rs1_ptr = instruction.b.as_canonical_u32();
         let rs2_ptr = instruction.c.as_canonical_u32();
         let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rs2_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs2_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs1_ptr))?;
-        let rs2 = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs2_ptr))?;
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let rs2 = replay.read_u16(RV64_REGISTER_AS, rs2_u16_ptr)?;
         let output = compute([rs1.value, rs2.value]);
-        let write =
-            replay.write_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr), output)?;
+        let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, output)?;
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         adapter_row

@@ -1,10 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, Postflight,
-        PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
@@ -30,7 +32,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read, tracing_write};
+use super::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
+#[cfg(test)]
+use super::{checked_byte_ptr_to_u16_ptr_value, rv64_bytes_to_u16_block, rv64_u16_block_to_bytes};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -281,8 +285,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluRegAdapterFiller {
     }
 }
 
+#[cfg(test)]
 impl Rv64BaseAluRegAdapterFiller {
-    pub fn replay<F: PrimeField32>(
+    pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -296,20 +301,33 @@ impl Rv64BaseAluRegAdapterFiller {
         PostflightError,
     > {
         let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || instruction.e.as_canonical_u32() != RV64_REGISTER_AS
+        {
+            return Err(PostflightError::new(
+                "register-register ALU instruction has invalid address spaces",
+            ));
+        }
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
         let rs1_ptr = instruction.b.as_canonical_u32();
         let rs2_ptr = instruction.c.as_canonical_u32();
         let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rs2_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs2_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs1_ptr))?;
-        let rs2 = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs2_ptr))?;
-        let inputs = [unpack_register(rs1.value), unpack_register(rs2.value)];
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let rs2 = replay.read_u16(RV64_REGISTER_AS, rs2_u16_ptr)?;
+        let inputs = [
+            rv64_u16_block_to_bytes(rs1.value),
+            rv64_u16_block_to_bytes(rs2.value),
+        ];
         let output = compute(inputs);
         let write = replay.write_u16(
             RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(rd_ptr),
-            pack_register(output),
+            rd_u16_ptr,
+            rv64_bytes_to_u16_block(output),
         )?;
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
@@ -339,16 +357,4 @@ impl Rv64BaseAluRegAdapterFiller {
 
         Ok((inputs, output))
     }
-}
-
-fn pack_register(value: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
-    std::array::from_fn(|i| u16::from_le_bytes([value[2 * i], value[2 * i + 1]]))
-}
-
-fn unpack_register(value: [u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let mut bytes = [0; RV64_REGISTER_NUM_LIMBS];
-    for (i, value) in value.into_iter().enumerate() {
-        bytes[2 * i..2 * i + 2].copy_from_slice(&value.to_le_bytes());
-    }
-    bytes
 }

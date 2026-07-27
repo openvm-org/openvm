@@ -10,6 +10,8 @@ use super::{
 
 mod execution;
 mod preflight;
+#[cfg(test)]
+mod trace;
 pub use preflight::*;
 
 pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;

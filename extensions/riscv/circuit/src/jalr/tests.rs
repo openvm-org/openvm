@@ -3,7 +3,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        Arena, ExecutionBridge, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -14,7 +15,12 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{Program, PC_BITS},
+    riscv::RV64_REGISTER_AS,
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -39,7 +45,7 @@ use {
     },
 };
 
-use super::Rv64JalrCoreAir;
+use super::{trace::generate_trace_from_postflight, Rv64JalrCoreAir};
 use crate::{
     adapters::{
         rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
@@ -211,6 +217,76 @@ fn rand_jalr_test() {
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn postflight_jalr_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_harness(&mut tester);
+    let write_rd = Instruction::from_usize(
+        JALR.global_opcode(),
+        [16, 8, 4, RV64_REGISTER_AS as usize, 0, 1, 0],
+    );
+    let suppress_x0 = Instruction::from_usize(
+        JALR.global_opcode(),
+        [0, 24, 0xfffc, RV64_REGISTER_AS as usize, 0, 0, 1],
+    );
+    let filler = write_rd.clone();
+    let sentinel = suppress_x0.clone();
+    unsafe {
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [4, 0, 0, 0]);
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 12, [16, 0, 0, 0]);
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, [9, 8, 7, 6]);
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &write_rd, 0);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &suppress_x0, 8);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 3,
+            },
+            PreflightProgramEvent {
+                pc: 12,
+                timestamp: 5,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[write_rd, filler, suppress_x0, sentinel], 0);
+    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

@@ -266,6 +266,27 @@ where
 
         let (to_pc, rd_data) =
             run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
+        self.fill_core_row(
+            core_row,
+            record.rs1_val,
+            record.imm,
+            record.imm_sign,
+            to_pc,
+            rd_data,
+        );
+    }
+}
+
+impl<A> Rv64JalrFiller<A> {
+    pub(crate) fn fill_core_row<F: PrimeField32>(
+        &self,
+        core_row: &mut Rv64JalrCoreCols<F>,
+        rs1_val: u32,
+        imm: u16,
+        imm_sign: bool,
+        to_pc: u32,
+        rd_data: [u16; BLOCK_FE_WIDTH],
+    ) {
         let [to_pc_low, to_pc_high] = ptr_to_u16_limbs(to_pc);
         let to_pc_limbs = [u32::from(to_pc_low >> 1), u32::from(to_pc_high)];
         self.range_checker_chip
@@ -282,14 +303,14 @@ where
             .add_count(rd_low_u16_hi as u32, PC_BITS - U16_BITS);
 
         // Write in reverse order
-        core_row.imm_sign = F::from_bool(record.imm_sign);
+        core_row.imm_sign = F::from_bool(imm_sign);
         core_row.to_pc_limbs = to_pc_limbs.map(F::from_u32);
         core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
-        core_row.rs1_data = ptr_to_u16_limbs(record.rs1_val).map(F::from_u16);
+        core_row.rs1_data = ptr_to_u16_limbs(rs1_val).map(F::from_u16);
         core_row.rd_high = [F::from_u16(rd_low_u16_hi)];
-        core_row.imm = F::from_u16(record.imm);
+        core_row.imm = F::from_u16(imm);
     }
 }
 
@@ -301,15 +322,23 @@ pub(super) fn run_jalr(
     imm: u16,
     imm_sign: bool,
 ) -> (u32, [u16; BLOCK_FE_WIDTH]) {
+    try_run_jalr(pc, rs1, imm, imm_sign).expect("JALR target exceeds implemented PC address space")
+}
+
+pub(super) fn try_run_jalr(
+    pc: u32,
+    rs1: u32,
+    imm: u16,
+    imm_sign: bool,
+) -> Option<(u32, [u16; BLOCK_FE_WIDTH])> {
     let imm_extended = imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS));
     let to_pc = rv64_address_add_imm(rs1, imm_extended);
-    assert!(
-        to_pc <= u64::from(MAX_ALLOWED_PC),
-        "JALR target exceeds implemented PC address space"
-    );
+    if to_pc > u64::from(MAX_ALLOWED_PC) {
+        return None;
+    }
     let to_pc = to_pc as u32;
 
     let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
     let rd_data = rv64_u32_to_u16_block(rd_low_u32);
-    (to_pc, rd_data)
+    Some((to_pc, rd_data))
 }

@@ -3,12 +3,15 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, Postflight, PreflightExecutor, PreflightHistory,
+        PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{
+    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode,
+};
 use openvm_riscv_transpiler::ShiftWOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -37,6 +40,9 @@ use {
 };
 
 use super::{
+    trace::{
+        generate_logical_trace_from_postflight, generate_right_arithmetic_trace_from_postflight,
+    },
     Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChip, Rv64ShiftWLogicalExecutor,
     Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChip, Rv64ShiftWRightArithmeticExecutor,
     ShiftWLogicalCoreAir, ShiftWLogicalFiller, ShiftWRightArithmeticCoreAir,
@@ -285,6 +291,146 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
         let tester = tester.build().load(harness).finalize();
         tester.simple_test().expect("Verification failed");
     }
+}
+
+#[test]
+fn postflight_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let mut logical_harness = create_logical_harness(&tester);
+    let mut arithmetic_harness = create_right_arithmetic_harness(&tester);
+    let sllw = Instruction::from_usize(
+        SLLW.global_opcode(),
+        [
+            24,
+            8,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    let srlw = Instruction::from_usize(
+        SRLW.global_opcode(),
+        [
+            32,
+            24,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    let sraw = Instruction::from_usize(
+        SRAW.global_opcode(),
+        [
+            40,
+            32,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    let sentinel = Instruction::from_usize(
+        SLLW.global_opcode(),
+        [
+            48,
+            8,
+            16,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    );
+    unsafe {
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            4,
+            [0x1234, 0x8765, 0xffff, 0xffff],
+        );
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, [17, 0, 0, 0]);
+    }
+    tester.execute_with_pc(
+        &mut logical_harness.executor,
+        &mut logical_harness.arena,
+        &sllw,
+        0,
+    );
+    tester.execute_with_pc(
+        &mut logical_harness.executor,
+        &mut logical_harness.arena,
+        &srlw,
+        4,
+    );
+    tester.execute_with_pc(
+        &mut arithmetic_harness.executor,
+        &mut arithmetic_harness.arena,
+        &sraw,
+        8,
+    );
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 4,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 7,
+            },
+            PreflightProgramEvent {
+                pc: 12,
+                timestamp: 10,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[sllw, srlw, sraw, sentinel], 0);
+    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let logical_actual =
+        generate_logical_trace_from_postflight(&logical_harness.chip, &postflight).unwrap();
+
+    let logical_rows_used = logical_harness.arena.trace_offset / logical_harness.arena.width;
+    let mut logical_expected_values = logical_harness.arena.trace_buffer;
+    logical_expected_values
+        .truncate(logical_rows_used.next_power_of_two() * logical_harness.arena.width);
+    let mut logical_expected =
+        RowMajorMatrix::new(logical_expected_values, logical_harness.arena.width);
+    logical_harness.chip.inner.fill_trace(
+        &logical_harness.chip.mem_helper.as_borrowed(),
+        &mut logical_expected,
+        logical_rows_used,
+    );
+
+    assert_eq!(logical_actual.width(), logical_expected.width());
+    assert_eq!(logical_actual.height(), logical_expected.height());
+    assert_eq!(logical_actual.values, logical_expected.values);
+
+    let arithmetic_actual =
+        generate_right_arithmetic_trace_from_postflight(&arithmetic_harness.chip, &postflight)
+            .unwrap();
+
+    let arithmetic_rows_used =
+        arithmetic_harness.arena.trace_offset / arithmetic_harness.arena.width;
+    let mut arithmetic_expected_values = arithmetic_harness.arena.trace_buffer;
+    arithmetic_expected_values
+        .truncate(arithmetic_rows_used.next_power_of_two() * arithmetic_harness.arena.width);
+    let mut arithmetic_expected =
+        RowMajorMatrix::new(arithmetic_expected_values, arithmetic_harness.arena.width);
+    arithmetic_harness.chip.inner.fill_trace(
+        &arithmetic_harness.chip.mem_helper.as_borrowed(),
+        &mut arithmetic_expected,
+        arithmetic_rows_used,
+    );
+
+    assert_eq!(arithmetic_actual.width(), arithmetic_expected.width());
+    assert_eq!(arithmetic_actual.height(), arithmetic_expected.height());
+    assert_eq!(arithmetic_actual.values, arithmetic_expected.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

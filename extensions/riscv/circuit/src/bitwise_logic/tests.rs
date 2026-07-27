@@ -177,7 +177,7 @@ fn rand_rv64_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
 #[test]
 fn postflight_trace_matches_record_arena_trace() {
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, _) = create_harness(&tester);
+    let (mut harness, (_, bitwise)) = create_harness(&tester);
     let xor = Instruction::from_usize(
         XOR.global_opcode(),
         [
@@ -243,6 +243,7 @@ fn postflight_trace_matches_record_arena_trace() {
     let program = Program::new_without_debug_infos(&[xor, and, sentinel], 0);
     let postflight = Postflight::new(&program, &history, None).unwrap();
     let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    let actual_bitwise = bitwise.generate_trace::<F>();
 
     let rows_used = harness.arena.trace_offset / harness.arena.width;
     let mut expected_values = harness.arena.trace_buffer;
@@ -253,10 +254,12 @@ fn postflight_trace_matches_record_arena_trace() {
         &mut expected,
         rows_used,
     );
+    let expected_bitwise = bitwise.generate_trace::<F>();
 
     assert_eq!(actual.width(), expected.width());
     assert_eq!(actual.height(), expected.height());
     assert_eq!(actual.values, expected.values);
+    assert_eq!(actual_bitwise.values, expected_bitwise.values);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

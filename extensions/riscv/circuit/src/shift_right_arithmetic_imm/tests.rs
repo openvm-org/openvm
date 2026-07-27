@@ -2,9 +2,14 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-    BLOCK_FE_WIDTH,
+    Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
 };
-use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -28,9 +33,9 @@ use {
 };
 
 use super::{
-    Rv64ShiftRightArithmeticImmAir, Rv64ShiftRightArithmeticImmChip,
-    Rv64ShiftRightArithmeticImmExecutor, ShiftRightArithmeticImmCoreAir,
-    ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmFiller,
+    trace::generate_trace_from_postflight, Rv64ShiftRightArithmeticImmAir,
+    Rv64ShiftRightArithmeticImmChip, Rv64ShiftRightArithmeticImmExecutor,
+    ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmFiller,
 };
 use crate::{
     adapters::{
@@ -97,6 +102,68 @@ fn rv64_shift_right_arithmetic_immediate_boundaries() {
         .finalize()
         .simple_test()
         .expect("verification failed");
+}
+
+#[test]
+fn postflight_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let mut harness = create_harness(&tester);
+    let first = Instruction::from_usize(
+        ShiftImmOpcode::SRAI.global_opcode(),
+        [24, 8, 17, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
+    );
+    let second = Instruction::from_usize(
+        ShiftImmOpcode::SRAI.global_opcode(),
+        [32, 24, 33, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
+    );
+    let sentinel = Instruction::from_usize(
+        ShiftImmOpcode::SRAI.global_opcode(),
+        [40, 8, 1, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
+    );
+    unsafe {
+        tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+            RV64_REGISTER_AS,
+            4,
+            [0x4321, 0x8765, 0xcba9, 0xfedc],
+        );
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &first, 0);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &second, 4);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 3,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 5,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[first, second, sentinel], 0);
+    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
 }
 
 #[test]
@@ -218,10 +285,21 @@ fn test_cuda_shift_right_arithmetic_immediate_boundaries_tracegen() {
 }
 
 mod word {
-    use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
-    use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+    use openvm_circuit::arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller, BLOCK_FE_WIDTH,
+    };
+    use openvm_instructions::{
+        instruction::Instruction,
+        program::Program,
+        riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        LocalOpcode,
+    };
     use openvm_riscv_transpiler::ShiftWImmOpcode;
-    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+    use openvm_stark_backend::{
+        p3_field::PrimeCharacteristicRing,
+        p3_matrix::{dense::RowMajorMatrix, Matrix},
+    };
     use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
     #[cfg(feature = "cuda")]
     use {
@@ -243,9 +321,9 @@ mod word {
             Rv64BaseAluWImmU16AdapterFiller,
         },
         shift_right_arithmetic_imm::{
-            Rv64ShiftWRightArithmeticImmAir, Rv64ShiftWRightArithmeticImmChip,
-            Rv64ShiftWRightArithmeticImmExecutor, ShiftRightArithmeticImmCoreAir,
-            ShiftRightArithmeticImmFiller,
+            trace::generate_word_trace_from_postflight, Rv64ShiftWRightArithmeticImmAir,
+            Rv64ShiftWRightArithmeticImmChip, Rv64ShiftWRightArithmeticImmExecutor,
+            ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmFiller,
         },
         test_utils::rv64_rand_write_register_or_imm,
     };
@@ -315,6 +393,68 @@ mod word {
             .finalize()
             .simple_test()
             .expect("verification failed");
+    }
+
+    #[test]
+    fn postflight_word_trace_matches_record_arena_trace() {
+        let mut tester = VmChipTestBuilder::default();
+        let mut harness = create_harness(&tester);
+        let first = Instruction::from_usize(
+            ShiftWImmOpcode::SRAIW.global_opcode(),
+            [24, 8, 17, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
+        );
+        let second = Instruction::from_usize(
+            ShiftWImmOpcode::SRAIW.global_opcode(),
+            [32, 24, 31, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
+        );
+        let sentinel = Instruction::from_usize(
+            ShiftWImmOpcode::SRAIW.global_opcode(),
+            [40, 8, 1, RV64_REGISTER_AS as usize, RV64_IMM_AS as usize],
+        );
+        unsafe {
+            tester.memory.memory.data.write::<u16, BLOCK_FE_WIDTH>(
+                RV64_REGISTER_AS,
+                4,
+                [0x5678, 0x9234, 0xabcd, 0xef01],
+            );
+        }
+        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &first, 0);
+        tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &second, 4);
+
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 3,
+                },
+                PreflightProgramEvent {
+                    pc: 8,
+                    timestamp: 5,
+                },
+            ],
+            memory: tester.memory.memory.take_log(),
+        };
+        let program = Program::new_without_debug_infos(&[first, second, sentinel], 0);
+        let postflight = Postflight::new(&program, &history, None).unwrap();
+        let actual = generate_word_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+        let rows_used = harness.arena.trace_offset / harness.arena.width;
+        let mut expected_values = harness.arena.trace_buffer;
+        expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+        let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+        harness.chip.inner.fill_trace(
+            &harness.chip.mem_helper.as_borrowed(),
+            &mut expected,
+            rows_used,
+        );
+
+        assert_eq!(actual.width(), expected.width());
+        assert_eq!(actual.height(), expected.height());
+        assert_eq!(actual.values, expected.values);
     }
 
     // ////////////////////////////////////////////////////////////////////////////////////

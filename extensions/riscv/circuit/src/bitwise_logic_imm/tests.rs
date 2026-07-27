@@ -3,7 +3,8 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        ExecutionBridge,
+        ExecutionBridge, Postflight, PreflightHistory, PreflightProgramEvent, TraceFiller,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -11,7 +12,12 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -33,8 +39,9 @@ use {
 };
 
 use super::{
-    BitwiseLogicImmCoreAir, BitwiseLogicImmCoreCols, BitwiseLogicImmFiller, Rv64BitwiseLogicImmAir,
-    Rv64BitwiseLogicImmChip, Rv64BitwiseLogicImmExecutor,
+    trace::generate_trace_from_postflight, BitwiseLogicImmCoreAir, BitwiseLogicImmCoreCols,
+    BitwiseLogicImmFiller, Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChip,
+    Rv64BitwiseLogicImmExecutor,
 };
 use crate::{
     adapters::{
@@ -153,6 +160,106 @@ fn rv64_bitwise_immediate_boundaries() {
         .finalize()
         .simple_test()
         .expect("verification failed");
+}
+
+#[test]
+fn postflight_trace_matches_record_arena_trace() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_harness(&tester);
+    let xori = Instruction::from_usize(
+        BaseAluImmOpcode::XORI.global_opcode(),
+        [
+            24,
+            8,
+            encode_i12(-1),
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    );
+    let ori = Instruction::from_usize(
+        BaseAluImmOpcode::ORI.global_opcode(),
+        [
+            32,
+            16,
+            encode_i12(0x345),
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    );
+    let andi = Instruction::from_usize(
+        BaseAluImmOpcode::ANDI.global_opcode(),
+        [
+            40,
+            24,
+            encode_i12(0x7f),
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    );
+    let sentinel = Instruction::from_usize(
+        BaseAluImmOpcode::XORI.global_opcode(),
+        [
+            48,
+            8,
+            encode_i12(0),
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    );
+    unsafe {
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, [1, 2, 3, 4]);
+        tester
+            .memory
+            .memory
+            .data
+            .write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, [5, 6, 7, 8]);
+    }
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &xori, 0);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &ori, 4);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.arena, &andi, 8);
+
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 3,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 5,
+            },
+            PreflightProgramEvent {
+                pc: 12,
+                timestamp: 7,
+            },
+        ],
+        memory: tester.memory.memory.take_log(),
+    };
+    let program = Program::new_without_debug_infos(&[xori, ori, andi, sentinel], 0);
+    let postflight = Postflight::new(&program, &history, None).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    let rows_used = harness.arena.trace_offset / harness.arena.width;
+    let mut expected_values = harness.arena.trace_buffer;
+    expected_values.truncate(rows_used.next_power_of_two() * harness.arena.width);
+    let mut expected = RowMajorMatrix::new(expected_values, harness.arena.width);
+    harness.chip.inner.fill_trace(
+        &harness.chip.mem_helper.as_borrowed(),
+        &mut expected,
+        rows_used,
+    );
+
+    assert_eq!(actual.width(), expected.width());
+    assert_eq!(actual.height(), expected.height());
+    assert_eq!(actual.values, expected.values);
 }
 
 #[test]

@@ -1,5 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
@@ -31,6 +33,11 @@ use openvm_stark_backend::{
 };
 
 use super::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
+#[cfg(test)]
+use super::{
+    checked_byte_ptr_to_u16_ptr_value, is_canonical_i12, rv64_bytes_to_u16_block,
+    rv64_u16_block_to_bytes,
+};
 
 /// Immediate-only byte-limb adapter (single register read + register write). The immediate
 /// itself lives in the core, which passes it back as the `ImmInstruction` immediate expression.
@@ -239,5 +246,68 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluImmAdapterFiller {
         adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_u32(record.from_pc);
+    }
+}
+
+#[cfg(test)]
+impl Rv64BaseAluImmAdapterFiller {
+    pub(crate) fn replay<F: PrimeField32>(
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64BaseAluImmAdapterCols<F>,
+        compute: impl FnOnce([u8; RV64_REGISTER_NUM_LIMBS], u32) -> [u8; RV64_REGISTER_NUM_LIMBS],
+    ) -> Result<([u8; RV64_REGISTER_NUM_LIMBS], [u8; RV64_REGISTER_NUM_LIMBS]), PostflightError>
+    {
+        let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || instruction.e.as_canonical_u32() != RV64_IMM_AS
+        {
+            return Err(PostflightError::new(
+                "register-immediate ALU instruction has invalid address spaces",
+            ));
+        }
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let rs1_ptr = instruction.b.as_canonical_u32();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let immediate = instruction.c.as_canonical_u32();
+        if !is_canonical_i12(immediate) {
+            return Err(PostflightError::new(
+                "register-immediate ALU instruction has a non-canonical immediate",
+            ));
+        }
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let input = rv64_u16_block_to_bytes(rs1.value);
+        let output = compute(input, immediate);
+        let write = replay.write_u16(
+            RV64_REGISTER_AS,
+            rd_u16_ptr,
+            rv64_bytes_to_u16_block(output),
+        )?;
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        adapter_row
+            .writes_aux
+            .set_prev_data(write.previous_value.map(F::from_u16));
+        mem_helper.fill(
+            write.previous_timestamp,
+            write.timestamp,
+            adapter_row.writes_aux.as_mut(),
+        );
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.reads_aux.as_mut(),
+        );
+        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.rd_ptr = F::from_u32(rd_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((input, output))
     }
 }

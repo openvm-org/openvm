@@ -28,8 +28,8 @@ use crate::adapters::{
     U16_BITS,
 };
 
-const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
-const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
+pub(super) const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
+pub(super) const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]

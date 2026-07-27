@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(test)]
+use openvm_circuit::arch::{Postflight, PostflightError, PostflightStep};
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
@@ -31,6 +33,8 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
+#[cfg(test)]
+use crate::adapters::checked_byte_ptr_to_u16_ptr_value;
 use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16,
 };
@@ -274,5 +278,93 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_u32(record.from_pc);
+    }
+}
+
+#[cfg(test)]
+impl Rv64JalrAdapterFiller {
+    pub(crate) fn replay<F: PrimeField32>(
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64JalrAdapterCols<F>,
+        compute: impl FnOnce(
+            u32,
+            [u16; BLOCK_FE_WIDTH],
+            u16,
+            bool,
+        ) -> Result<(u32, [u16; BLOCK_FE_WIDTH]), PostflightError>,
+    ) -> Result<([u16; BLOCK_FE_WIDTH], u32, [u16; BLOCK_FE_WIDTH]), PostflightError> {
+        let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS || !instruction.e.is_zero() {
+            return Err(PostflightError::new(
+                "JALR instruction has invalid address spaces",
+            ));
+        }
+        let needs_write = match instruction.f.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "JALR instruction has a non-boolean write enable",
+                ));
+            }
+        };
+        let imm_sign = match instruction.g.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "JALR instruction has a non-boolean immediate sign",
+                ));
+            }
+        };
+        let immediate = instruction.c.as_canonical_u32();
+        let canonical_immediate = (immediate & 0x7ff) + u32::from(imm_sign) * 0xf800;
+        if immediate != canonical_immediate {
+            return Err(PostflightError::new(
+                "JALR instruction has a non-canonical immediate",
+            ));
+        }
+
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let rs1_ptr = instruction.b.as_canonical_u32();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let (to_pc, rd_data) = compute(from_pc, rs1.value, immediate as u16, imm_sign)?;
+
+        adapter_row.needs_write = F::from_bool(needs_write);
+        if needs_write {
+            let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, rd_data)?;
+            adapter_row
+                .rd_aux_cols
+                .set_prev_data(write.previous_value.map(F::from_u16));
+            mem_helper.fill(
+                write.previous_timestamp,
+                write.timestamp,
+                adapter_row.rd_aux_cols.as_mut(),
+            );
+            adapter_row.rd_ptr = F::from_u32(rd_ptr);
+        } else {
+            replay.advance_timestamp(1)?;
+            mem_helper.fill_zero(adapter_row.rd_aux_cols.as_mut());
+            adapter_row.rd_ptr = F::ZERO;
+        }
+        replay.finish(to_pc & !1)?;
+
+        mem_helper.fill(
+            rs1.previous_timestamp,
+            rs1.timestamp,
+            adapter_row.rs1_aux_cols.as_mut(),
+        );
+        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((rs1.value, to_pc, rd_data))
     }
 }
