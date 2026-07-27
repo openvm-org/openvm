@@ -4,7 +4,7 @@
 
 use std::{env, path::PathBuf};
 
-use rvr_openvm_build::build_rust_staticlib_with_link_args;
+use rvr_openvm_build::build_rust_staticlib;
 
 fn main() {
     let manifest_dir =
@@ -14,7 +14,7 @@ fn main() {
     let ffi_manifest = manifest_dir.join("ffi/Cargo.toml");
     let ffi_target_dir = out_dir.join("ffi-target");
 
-    let staticlib = build_rust_staticlib_with_link_args(
+    let lib_path = build_rust_staticlib(
         &ffi_manifest,
         &ffi_target_dir,
         "librvr_openvm_ext_pairing_ffi.a",
@@ -23,11 +23,7 @@ fn main() {
 
     println!(
         "cargo:rustc-env=RVR_PAIRING_FFI_STATICLIB={}",
-        staticlib.archive_path.display()
-    );
-    println!(
-        "cargo:rustc-env=RVR_PAIRING_FFI_NATIVE_LINK_ARGS={}",
-        staticlib.native_link_args.join(" ")
+        lib_path.display()
     );
     println!("cargo:rerun-if-changed=ffi/Cargo.toml");
     println!("cargo:rerun-if-changed=ffi/src");

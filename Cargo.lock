@@ -5207,6 +5207,7 @@ dependencies = [
  "hex-literal",
  "itertools 0.14.0",
  "lazy_static",
+ "mcl_rust",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm",
@@ -7431,11 +7432,9 @@ name = "rvr-openvm-ext-pairing-ffi"
 version = "2.0.0"
 dependencies = [
  "halo2curves-axiom 0.7.3",
- "mcl_rust",
  "openvm-ecc-guest",
  "openvm-pairing-guest",
  "openvm-platform",
- "rand 0.8.5",
  "rvr-openvm-ext-algebra-ffi-common",
  "rvr-openvm-ext-ffi-common",
 ]

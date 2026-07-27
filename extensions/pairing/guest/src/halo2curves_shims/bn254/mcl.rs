@@ -1,3 +1,5 @@
+extern crate std;
+
 use std::sync::OnceLock;
 
 use halo2curves_axiom::bn256::{Fq12, Fq2};
@@ -13,8 +15,8 @@ const FP12_BYTES: usize = FQ_BYTES * FP12_COEFFICIENTS;
 const MCL_TO_OPENVM_COEFFICIENT: [usize; FP12_COEFFICIENTS] =
     [0, 1, 4, 5, 8, 9, 2, 3, 6, 7, 10, 11];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Error {
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Error {
     Initialization,
     Exponentiation,
 }
@@ -32,7 +34,7 @@ fn initialize() -> Result<(), Error> {
     })
 }
 
-pub fn pow_naf(value: &Fq12, digits: &[i8]) -> Result<Fq12, Error> {
+fn pow_naf(value: &Fq12, digits: &[i8]) -> Result<Fq12, Error> {
     initialize()?;
     if digits.iter().any(|digit| !matches!(digit, -1..=1)) {
         return Err(Error::Exponentiation);
@@ -71,6 +73,11 @@ pub fn pow_naf(value: &Fq12, digits: &[i8]) -> Result<Fq12, Error> {
     from_mcl_bytes(&result.serialize())
 }
 
+pub(super) fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
+    super::final_exp::try_final_exp_hint_with_pow(f, pow_naf)
+        .unwrap_or_else(|error| panic!("MCL BN254 exponentiation failed: {error:?}"))
+}
+
 fn to_mcl_bytes(value: &Fq12) -> [u8; FP12_BYTES] {
     let openvm_bytes = value.to_bytes();
     let mut mcl_bytes = [0; FP12_BYTES];
@@ -97,6 +104,8 @@ fn from_mcl_bytes(mcl_bytes: &[u8]) -> Result<Fq12, Error> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use halo2curves_axiom::{
         bn256::{Fq, Fq12, Fq2, Fr, G1Affine, G2Affine},
         ff::Field,
@@ -106,18 +115,22 @@ mod tests {
         algebra::{field::FieldExtension, ExpBytes},
         AffinePoint,
     };
-    use openvm_pairing_guest::{
-        halo2curves_shims::bn254::{
-            final_exp_hint_naf_exponents, try_final_exp_hint_with_pow, Bn254, UNITY_ROOT_27,
-        },
-        pairing::{FinalExp, MultiMillerLoop},
-    };
     use rand08::{rngs::StdRng, SeedableRng};
 
-    use super::{pow_naf, Error};
+    use super::{
+        super::{
+            final_exp::{
+                final_exp_hint_basic, final_exp_hint_naf_exponents, try_final_exp_hint_with_pow,
+                UNITY_ROOT_27,
+            },
+            Bn254,
+        },
+        pow_naf, Error,
+    };
+    use crate::pairing::MultiMillerLoop;
 
     fn test_value() -> Fq12 {
-        Fq12::from_coeffs(std::array::from_fn(|i| {
+        Fq12::from_coeffs(core::array::from_fn(|i| {
             Fq2::new(Fq::from((2 * i + 1) as u64), Fq::from((2 * i + 2) as u64))
         }))
     }
@@ -125,7 +138,7 @@ mod tests {
     #[test]
     fn matches_production_exponents() {
         let mut rng = StdRng::seed_from_u64(0x4d43_4c42_4e32_3534);
-        let values = std::iter::once(test_value())
+        let values = core::iter::once(test_value())
             .chain((0..16).map(|_| Fq12::random(&mut rng)))
             .collect::<Vec<_>>();
         for value in values {
@@ -173,7 +186,7 @@ mod tests {
             AffinePoint::new(g2_scaled.x, g2_scaled.y),
         ];
         let f = Bn254::multi_miller_loop(&p, &q);
-        let expected = Bn254::final_exp_hint(&f);
+        let expected = final_exp_hint_basic(&f);
         let actual = try_final_exp_hint_with_pow(&f, pow_naf).unwrap();
         assert_eq!(actual, expected);
     }
@@ -188,7 +201,7 @@ mod tests {
         ];
         let expected_u = [Fq12::ONE, unity_root, unity_root.square()];
         for (input, expected_u) in inputs.into_iter().zip(expected_u) {
-            let expected = Bn254::final_exp_hint(&input);
+            let expected = final_exp_hint_basic(&input);
             assert_eq!(expected.1, expected_u);
             let actual = try_final_exp_hint_with_pow(&input, pow_naf).unwrap();
             assert_eq!(actual, expected);

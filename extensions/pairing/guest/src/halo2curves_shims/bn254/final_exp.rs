@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+#[cfg(any(test, not(feature = "mcl")))]
 use core::convert::Infallible;
 
 use halo2curves_axiom::{
@@ -79,19 +80,27 @@ impl FinalExp for Bn254 {
     // returns c (residueWitness) and u (cubicNonResiduePower)
     // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
-        match try_final_exp_hint_with_pow(f, |base, digits| {
-            Ok::<_, Infallible>(base.exp_naf(true, digits))
-        }) {
-            Ok(hint) => hint,
-            Err(error) => match error {},
-        }
+        #[cfg(feature = "mcl")]
+        return super::mcl::final_exp_hint(f);
+
+        #[cfg(not(feature = "mcl"))]
+        final_exp_hint_basic(f)
+    }
+}
+
+#[cfg(any(test, not(feature = "mcl")))]
+pub(super) fn final_exp_hint_basic(f: &Fq12) -> (Fq12, Fq12) {
+    match try_final_exp_hint_with_pow(f, |base, digits| {
+        Ok::<_, Infallible>(base.exp_naf(true, digits))
+    }) {
+        Ok(hint) => hint,
+        Err(error) => match error {},
     }
 }
 
 /// Runs the BN254 final-exponentiation hint with a supplied Fp12 exponentiation
 /// implementation.
-#[doc(hidden)]
-pub fn try_final_exp_hint_with_pow<E>(
+pub(super) fn try_final_exp_hint_with_pow<E>(
     f: &Fq12,
     mut pow: impl FnMut(&Fq12, &[i8]) -> Result<Fq12, E>,
 ) -> Result<(Fq12, Fq12), E> {
@@ -168,7 +177,7 @@ pub fn try_final_exp_hint_with_pow<E>(
     Ok((c, u))
 }
 
-#[doc(hidden)]
-pub fn final_exp_hint_naf_exponents() -> [&'static [i8]; 4] {
+#[cfg(all(test, feature = "mcl"))]
+pub(super) fn final_exp_hint_naf_exponents() -> [&'static [i8]; 4] {
     [&EXP1_NAF, &R_INV_NAF, &M_INV_NAF, &EXP2_NAF]
 }

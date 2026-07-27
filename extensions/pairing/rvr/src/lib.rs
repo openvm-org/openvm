@@ -131,10 +131,8 @@ impl RvrExtension for PairingExtension {
         )]
     }
 
-    fn native_link_args(&self) -> Vec<&'static str> {
-        env!("RVR_PAIRING_FFI_NATIVE_LINK_ARGS")
-            .split_ascii_whitespace()
-            .collect()
+    fn requires_cxx_linker(&self) -> bool {
+        true
     }
 
     fn uses_memory_wrappers(&self) -> bool {
