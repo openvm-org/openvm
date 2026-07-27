@@ -99,7 +99,6 @@ pub mod phantom {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -796,7 +795,6 @@ pub mod program {
 
     /// Same conversion as [`fill_frequencies`], borrowing an initialized
     /// device prefix owned by another segment object.
-    #[cfg(any(test, feature = "rvr"))]
     pub unsafe fn fill_frequencies_from_view(
         d_freqs: DeviceBufferView,
         filtered_len: usize,

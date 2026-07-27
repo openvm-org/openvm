@@ -59,6 +59,8 @@ use tracing::Level;
 use crate::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
+#[cfg(feature = "rvr")]
+use crate::arch::PreflightHistory;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 #[cfg(feature = "touchemall")]
@@ -77,8 +79,7 @@ use crate::{
             MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         to_byte_ptr_bits, ExecutionBridge, ExecutionBus, ExecutionState, Executor, MemoryConfig,
-        Postflight, PreflightHistory, Streams, VmState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
-        NUM_RV64_REGISTERS,
+        Postflight, Streams, VmState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,

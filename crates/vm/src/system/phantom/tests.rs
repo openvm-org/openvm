@@ -18,10 +18,7 @@ use rustc_hash::FxHashMap;
 use super::{generate_trace_from_postflight, NopPhantomExecutor, PhantomExecutor};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
-    arch::{
-        cuda::postflight::GpuPostflightProgram,
-        rvr::{PreflightEndpoint, PreflightEventLog},
-    },
+    arch::{cuda::postflight::GpuPostflightProgram, PreflightMemoryLog},
     system::cuda::phantom::PhantomChipGPU,
 };
 use crate::{
@@ -266,8 +263,8 @@ fn test_cuda_phantom_preflight_replay() {
         0xabcd,
     );
     let program = Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
-    let transcript = PreflightEventLog {
-        program_log: vec![
+    let history = PreflightHistory {
+        program: vec![
             PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -276,31 +273,39 @@ fn test_cuda_phantom_preflight_replay() {
                 pc: 4,
                 timestamp: 2,
             },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 3,
+            },
         ],
-        memory_log: vec![],
-        initial_write_log: vec![],
+        memory: PreflightMemoryLog::default(),
     };
-    let endpoint = PreflightEndpoint::Suspended;
     let memory_config = MemoryConfig::default();
     let d_program = GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
-    let (d_transcript, d_replay_plan) = d_program.upload_transcript(&transcript, endpoint).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_history_for_test(&program, &history)
+        .unwrap();
     let chip = PhantomChipGPU::new(device_ctx.clone());
     let _replay_ctx = chip
         .generate_proving_ctx_from_postflight(&d_program, &d_transcript, &d_replay_plan)
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
 
-    let corrupt = PreflightEventLog {
-        program_log: transcript.program_log,
-        memory_log: vec![PreflightMemoryEvent {
-            timestamp: 1,
-            address_space_and_kind: RV64_MEMORY_AS,
-            pointer: 0,
-            value: [0; 4],
-        }],
-        initial_write_log: vec![],
+    let corrupt = PreflightHistory {
+        program: history.program,
+        memory: PreflightMemoryLog {
+            accesses: vec![PreflightMemoryEvent {
+                timestamp: 1,
+                address_space_and_kind: RV64_MEMORY_AS,
+                pointer: 0,
+                value: [0; 4],
+            }],
+            ..Default::default()
+        },
     };
-    let (d_corrupt, d_corrupt_plan) = d_program.upload_transcript(&corrupt, endpoint).unwrap();
+    let (d_corrupt, d_corrupt_plan) = d_program
+        .upload_history_for_test(&program, &corrupt)
+        .unwrap();
     chip.generate_proving_ctx_from_postflight(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
     assert_eq!(d_corrupt.error_code().unwrap(), 855);

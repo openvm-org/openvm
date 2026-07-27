@@ -2,6 +2,8 @@ use std::{any::Any, sync::Arc};
 
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::rvr::cuda::PostflightOpcodeBases;
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -34,13 +36,10 @@ use openvm_riscv_transpiler::{
 };
 use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+#[cfg(any(test, feature = "test-utils"))]
 use {
     openvm_circuit::{
-        arch::{
-            rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
-            GenerationError, VirtualMachine, VmBuilder,
-        },
+        arch::{GenerationError, VirtualMachine, VmBuilder},
         system::cuda::SystemChipInventoryGPU,
     },
     openvm_stark_backend::prover::ProvingContext,

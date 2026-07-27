@@ -17,8 +17,8 @@ use openvm_circuit::arch::{
 };
 #[cfg(not(feature = "rvr"))]
 use openvm_circuit::arch::{
-    interpreter_preflight::PreflightInterpretedInstance, PreflightOutput, VmExecutionConfig,
-    BLOCK_FE_WIDTH,
+    interpreter_preflight::PreflightInterpretedInstance, AddressSpaceHostLayout, PreflightOutput,
+    VmExecutionConfig, BLOCK_FE_WIDTH,
 };
 use openvm_circuit::{
     arch::{
@@ -109,7 +109,7 @@ impl PreparedPreflight {
 
     fn segments(
         &self,
-        instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
+        _instance: &VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
         input: Streams,
     ) -> Result<Vec<Segment>, VirtualMachineError> {
         #[cfg(feature = "rvr")]
@@ -121,8 +121,8 @@ impl PreparedPreflight {
         }
         #[cfg(not(feature = "rvr"))]
         {
-            let metered_ctx = instance.vm.build_metered_ctx(instance.exe());
-            let metered = instance.vm.metered_instance(instance.exe())?;
+            let metered_ctx = _instance.vm.build_metered_ctx(_instance.exe());
+            let metered = _instance.vm.metered_instance(_instance.exe())?;
             Ok(metered.execute_metered(input, metered_ctx)?.0)
         }
     }

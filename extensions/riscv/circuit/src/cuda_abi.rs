@@ -81,7 +81,6 @@ pub mod auipc_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -178,7 +177,6 @@ pub mod hintstore_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_count(
         d_instructions: DeviceBufferView,
         pc_base: u32,
@@ -218,7 +216,6 @@ pub mod hintstore_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -327,7 +324,6 @@ pub mod jalr_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -433,7 +429,6 @@ pub mod less_than_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -551,7 +546,6 @@ pub mod load_byte_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -669,7 +663,6 @@ pub mod load_halfword_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -787,7 +780,6 @@ pub mod load_word_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -905,7 +897,6 @@ pub mod load_doubleword_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1024,7 +1015,6 @@ pub mod store_byte_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1144,7 +1134,6 @@ pub mod store_halfword_cuda {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1264,7 +1253,6 @@ pub mod store_word_cuda {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1384,7 +1372,6 @@ pub mod store_doubleword_cuda {
         ))
     }
 
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1504,7 +1491,6 @@ pub mod load_sign_extend_byte_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1622,7 +1608,6 @@ pub mod load_sign_extend_halfword_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1740,7 +1725,6 @@ pub mod load_sign_extend_word_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1863,7 +1847,6 @@ pub mod mul_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1994,7 +1977,6 @@ pub mod divrem_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2123,7 +2105,6 @@ pub mod shift_logical_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2232,7 +2213,6 @@ pub mod shift_right_arithmetic_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2337,7 +2317,6 @@ pub mod add_sub_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2447,7 +2426,6 @@ pub mod addi_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2551,7 +2529,6 @@ pub mod addi_w_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2667,7 +2644,6 @@ pub mod bitwise_logic_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2788,7 +2764,6 @@ pub mod jal_lui_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2902,7 +2877,6 @@ pub mod beq_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3022,7 +2996,6 @@ pub mod branch_lt_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3163,7 +3136,6 @@ pub mod mulh_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3285,7 +3257,6 @@ pub mod add_sub_w_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3429,7 +3400,6 @@ pub mod shift_w_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen_logical(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3500,7 +3470,6 @@ pub mod shift_w_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen_right_arithmetic(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3617,7 +3586,6 @@ pub mod mul_w_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3748,7 +3716,6 @@ pub mod divrem_w_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3877,7 +3844,6 @@ pub mod shift_logical_imm_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3991,7 +3957,6 @@ pub mod shift_w_logical_imm_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -4102,7 +4067,6 @@ pub mod shift_right_arithmetic_imm_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -4207,7 +4171,6 @@ pub mod shift_w_right_arithmetic_imm_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -4315,7 +4278,6 @@ pub mod less_than_imm_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -4438,7 +4400,6 @@ pub mod bitwise_logic_imm_cuda {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[cfg(feature = "rvr")]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,

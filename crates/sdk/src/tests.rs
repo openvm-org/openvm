@@ -5,7 +5,7 @@ use openvm::platform::memory::MEM_SIZE;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_circuit::arch::{verify_segments, VirtualMachineError};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
@@ -433,7 +433,7 @@ fn test_preflight_app_prover_reuse() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr", not(feature = "root-prover")))]
+#[cfg(all(feature = "cuda", not(feature = "root-prover")))]
 #[test]
 fn test_preflight_stark_prover() -> Result<()> {
     setup_tracing();
