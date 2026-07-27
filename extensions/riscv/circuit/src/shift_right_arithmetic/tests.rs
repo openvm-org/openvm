@@ -37,8 +37,7 @@ use super::{
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BaseAluRegU16AdapterAir,
-        Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
-        U16_BITS,
+        RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     test_utils::rv64_rand_write_register_or_imm,
     Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
@@ -68,12 +67,9 @@ fn create_harness_fields(
         Rv64BaseAluRegU16AdapterAir::new(execution_bridge, memory_bridge),
         ShiftRightArithmeticCoreAir::new(range_checker_chip.bus(), ShiftOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticExecutor::new(
-        Rv64BaseAluRegU16AdapterExecutor,
-        ShiftOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmeticExecutor::new(ShiftOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftRightArithmeticChip::<F>::new(
-        ShiftRightArithmeticFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker_chip),
+        ShiftRightArithmeticFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)

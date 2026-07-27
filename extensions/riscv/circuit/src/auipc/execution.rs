@@ -20,7 +20,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<A> Rv64AuipcExecutor<A> {
+impl Rv64AuipcExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -41,7 +41,7 @@ impl<A> Rv64AuipcExecutor<A> {
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64AuipcExecutor<A>
+impl<F> InterpreterExecutor<F> for Rv64AuipcExecutor
 where
     F: PrimeField32,
 {
@@ -83,7 +83,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor
 where
     F: PrimeField32,
 {

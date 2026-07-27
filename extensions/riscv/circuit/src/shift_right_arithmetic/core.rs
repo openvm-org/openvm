@@ -202,14 +202,12 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct ShiftRightArithmeticExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct ShiftRightArithmeticExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct ShiftRightArithmeticFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct ShiftRightArithmeticFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

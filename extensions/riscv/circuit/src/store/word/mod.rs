@@ -1,10 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
-    adapters::{
-        Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH,
-    },
+    adapters::{Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH},
     store::{
         common::StoreExecutor,
         core::{StoreCoreAir, StoreFiller},
@@ -19,8 +16,7 @@ pub type StoreWordFiller =
     StoreFiller<Rv64StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH, STORE_WORD_VALUE_CELLS>;
 
 pub type Rv64StoreWordAir = VmAirWrapper<Rv64StoreMultiByteAdapterAir, StoreWordCoreAir>;
-pub type Rv64StoreWordExecutor =
-    StoreExecutor<Rv64StoreMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>, WORD_ACCESS_WIDTH>;
+pub type Rv64StoreWordExecutor = StoreExecutor<WORD_ACCESS_WIDTH>;
 pub type Rv64StoreWordChip<F> = VmChipWrapper<F, StoreWordFiller>;
 
 #[cfg(feature = "cuda")]

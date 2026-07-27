@@ -20,7 +20,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_u32_to_u16_block,
-    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS, U16_BITS,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -153,27 +153,21 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrExecutor<A = Rv64JalrAdapterExecutor> {
-    adapter: A,
-}
+pub struct Rv64JalrExecutor;
 
 #[derive(Clone)]
-pub struct Rv64JalrFiller<A = Rv64JalrAdapterFiller> {
-    adapter: A,
+pub struct Rv64JalrFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A> Rv64JalrFiller<A> {
-    pub fn new(adapter: A, range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
+impl Rv64JalrFiller {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         assert!(range_checker_chip.range_max_bits() >= U16_BITS);
-        Self {
-            adapter,
-            range_checker_chip,
-        }
+        Self { range_checker_chip }
     }
 }
 
-impl<A> Rv64JalrFiller<A> {
+impl Rv64JalrFiller {
     pub(crate) fn fill_core_row<F: PrimeField32>(
         &self,
         core_row: &mut Rv64JalrCoreCols<F>,
@@ -211,6 +205,7 @@ impl<A> Rv64JalrFiller<A> {
 }
 
 // returns (to_pc, rd_data)
+#[cfg(test)]
 #[inline(always)]
 pub(super) fn run_jalr(
     pc: u32,

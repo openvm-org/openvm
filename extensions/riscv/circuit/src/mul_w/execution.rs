@@ -23,7 +23,7 @@ struct MulWPreCompute {
     c: u8,
 }
 
-impl<A> MulWExecutor<A> {
+impl MulWExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -47,7 +47,7 @@ impl<A> MulWExecutor<A> {
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for MulWExecutor<A>
+impl<F> InterpreterExecutor<F> for MulWExecutor
 where
     F: PrimeField32,
 {
@@ -89,7 +89,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for MulWExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for MulWExecutor
 where
     F: PrimeField32,
 {

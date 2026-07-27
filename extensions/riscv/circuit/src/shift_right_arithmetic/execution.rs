@@ -23,7 +23,7 @@ struct ShiftRightArithmeticPreCompute {
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -57,8 +57,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -98,8 +98,8 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS>
 where
     F: PrimeField32,
 {

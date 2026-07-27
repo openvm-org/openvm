@@ -44,8 +44,7 @@ use super::{trace::generate_trace_from_postflight, Rv64JalrCoreAir};
 use crate::{
     adapters::{
         rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
-        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
-        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -77,11 +76,8 @@ fn create_harness_fields(
         Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
         Rv64JalrCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
-    let chip = Rv64JalrChip::<F>::new(
-        Rv64JalrFiller::new(Rv64JalrAdapterFiller::new(), range_checker_chip),
-        memory_helper,
-    );
+    let executor = Rv64JalrExecutor::new();
+    let chip = Rv64JalrChip::<F>::new(Rv64JalrFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 

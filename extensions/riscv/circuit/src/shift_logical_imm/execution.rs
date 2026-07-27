@@ -24,9 +24,7 @@ pub(super) struct ShiftLogicalImmPreCompute {
     rs1_ptr: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftLogicalImmExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -65,8 +63,8 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for ShiftLogicalImmExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -120,8 +118,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for ShiftLogicalImmExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {

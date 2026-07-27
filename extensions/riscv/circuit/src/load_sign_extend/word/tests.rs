@@ -28,10 +28,7 @@ use super::trace::generate_trace_from_postflight;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::load_sign_extend::{test_utils::dummy_range_checker, Rv64LoadSignExtendWordChipGpu};
 use crate::{
-    adapters::{
-        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
-    },
+    adapters::{Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS},
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
         test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
@@ -77,10 +74,7 @@ fn create_word_harness(
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendWordExecutor::new(
-        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadSignExtendWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64LoadSignExtendWordChip::<F>::new(
         LoadSignExtendWordFiller::new(
             Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -238,10 +232,7 @@ fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendWordExecutor::new(
-        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadSignExtendWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64LoadSignExtendWordChip::<F>::new(
         LoadSignExtendWordFiller::new(
             Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),

@@ -13,10 +13,7 @@ use openvm_circuit_primitives::{
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode,
-};
+use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS};
 use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
     MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS,
@@ -26,7 +23,6 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
-    p3_maybe_rayon::prelude::*,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
@@ -303,7 +299,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64HintStoreExecutor {
-    pub pointer_max_bits: usize,
     pub offset: usize,
 }
 

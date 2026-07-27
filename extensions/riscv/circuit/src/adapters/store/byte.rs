@@ -213,9 +213,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
 /// Reads rs1, computes the effective memory pointer, reads rs2, and writes the containing memory
 /// block.
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64StoreByteAdapterExecutor {
-    pointer_max_bits: usize,
-}
+pub struct Rv64StoreByteAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct Rv64StoreByteAdapterFiller {

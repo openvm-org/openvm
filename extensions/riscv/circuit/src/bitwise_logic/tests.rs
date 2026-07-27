@@ -38,10 +38,7 @@ use super::{
     Rv64BitwiseLogicChip, Rv64BitwiseLogicExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterFiller,
-        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64BaseAluRegAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     bitwise_logic::BitwiseLogicCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
     BitwiseLogicFiller, Rv64BitwiseLogicAir,
@@ -66,14 +63,8 @@ fn create_harness_fields(
         Rv64BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
         BitwiseLogicCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BitwiseLogicExecutor::new(
-        Rv64BaseAluRegAdapterExecutor::new(),
-        BaseAluOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64BitwiseLogicChip::new(
-        BitwiseLogicFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_chip),
-        memory_helper,
-    );
+    let executor = Rv64BitwiseLogicExecutor::new(BaseAluOpcode::CLASS_OFFSET);
+    let chip = Rv64BitwiseLogicChip::new(BitwiseLogicFiller::new(bitwise_chip), memory_helper);
     (air, executor, chip)
 }
 

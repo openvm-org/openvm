@@ -24,7 +24,7 @@ pub(super) struct AddSubPreCompute {
     rs1_ptr: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubExecutor<A, NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -58,8 +58,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for AddSubExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for AddSubExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -105,8 +105,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for AddSubExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for AddSubExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -224,14 +224,11 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
-    use crate::{adapters::Rv64BaseAluRegU16AdapterExecutor, Rv64AddSubExecutor};
+    use crate::Rv64AddSubExecutor;
 
     #[test]
     fn add_sub_reject_immediate_operand() {
-        let executor = Rv64AddSubExecutor::new(
-            Rv64BaseAluRegU16AdapterExecutor,
-            BaseAluOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64AddSubExecutor::new(BaseAluOpcode::CLASS_OFFSET);
 
         for opcode in [BaseAluOpcode::ADD, BaseAluOpcode::SUB] {
             let instruction = Instruction::<BabyBear>::from_usize(

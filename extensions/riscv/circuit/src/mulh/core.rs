@@ -184,21 +184,18 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct MulHExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct MulHExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone)]
-pub struct MulHFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct MulHFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHFiller<A, NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHFiller<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
     ) -> Self {
@@ -217,7 +214,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHFiller<A, NUM_LIMBS,
         );
 
         Self {
-            adapter,
             bitwise_lookup_chip,
             range_tuple_chip,
         }

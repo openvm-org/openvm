@@ -34,10 +34,7 @@ use super::{
     Rv64BitwiseLogicImmExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmAdapterAir, Rv64BaseAluImmAdapterExecutor, Rv64BaseAluImmAdapterFiller,
-        RV64_BYTE_BITS,
-    },
+    adapters::{Rv64BaseAluImmAdapterAir, RV64_BYTE_BITS},
     test_utils::rv64_rand_write_register_or_imm,
 };
 
@@ -63,14 +60,9 @@ fn create_harness_fields(
         Rv64BaseAluImmAdapterAir::new(execution_bridge, memory_bridge),
         BitwiseLogicImmCoreAir::new(bitwise_chip.bus(), BaseAluImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BitwiseLogicImmExecutor::new(
-        Rv64BaseAluImmAdapterExecutor::new(),
-        BaseAluImmOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64BitwiseLogicImmChip::new(
-        BitwiseLogicImmFiller::new(Rv64BaseAluImmAdapterFiller::new(), bitwise_chip),
-        memory_helper,
-    );
+    let executor = Rv64BitwiseLogicImmExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
+    let chip =
+        Rv64BitwiseLogicImmChip::new(BitwiseLogicImmFiller::new(bitwise_chip), memory_helper);
     (air, executor, chip)
 }
 

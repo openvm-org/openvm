@@ -36,8 +36,7 @@ use super::{
 };
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64BranchAdapterAir, Rv64BranchAdapterExecutor,
-        Rv64BranchAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
+        rv64_bytes_to_u16_block, Rv64BranchAdapterAir, RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
     test_utils::rv64_marker_bytes_to_u16_marker,
@@ -63,17 +62,9 @@ fn create_harness_fields(
         Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = Rv64BranchEqualExecutor::new(
-        Rv64BranchAdapterExecutor,
-        BranchEqualOpcode::CLASS_OFFSET,
-        DEFAULT_PC_STEP,
-    );
+    let executor = Rv64BranchEqualExecutor::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
     let chip = Rv64BranchEqualChip::new(
-        BranchEqualFiller::new(
-            Rv64BranchAdapterFiller,
-            BranchEqualOpcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
-        ),
+        BranchEqualFiller::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         memory_helper,
     );
     (air, executor, chip)

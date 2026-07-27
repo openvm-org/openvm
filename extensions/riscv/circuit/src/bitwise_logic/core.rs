@@ -117,14 +117,12 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BitwiseLogicExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct BitwiseLogicExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct BitwiseLogicFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct BitwiseLogicFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 

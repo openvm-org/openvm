@@ -19,7 +19,7 @@ struct JalLuiPreCompute {
     a: u8,
 }
 
-impl<A> Rv64JalLuiExecutor<A> {
+impl Rv64JalLuiExecutor {
     /// Return (IS_JAL, ENABLED)
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -53,7 +53,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F> InterpreterExecutor<F> for Rv64JalLuiExecutor
 where
     F: PrimeField32,
 {
@@ -97,7 +97,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor
 where
     F: PrimeField32,
 {

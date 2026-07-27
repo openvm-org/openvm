@@ -45,10 +45,7 @@ use {
 
 use super::{core::run_mulh, trace::generate_trace_from_postflight};
 use crate::{
-    adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64MultAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     mulh::{MulHCoreCols, Rv64MulHChip},
     MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
 };
@@ -73,9 +70,9 @@ fn create_harness_fields(
         Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
         MulHCoreAir::new(bitwise_chip.bus(), *range_tuple_chip.bus()),
     );
-    let executor = Rv64MulHExecutor::new(Rv64MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
+    let executor = Rv64MulHExecutor::new(MulHOpcode::CLASS_OFFSET);
     let chip = Rv64MulHChip::<F>::new(
-        MulHFiller::new(Rv64MultAdapterFiller, bitwise_chip, range_tuple_chip),
+        MulHFiller::new(bitwise_chip, range_tuple_chip),
         memory_helper,
     );
     (air, executor, chip)

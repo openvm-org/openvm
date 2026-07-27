@@ -6,15 +6,13 @@ use openvm_circuit_primitives::{
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluOpcode};
+use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
-
-use crate::bitwise_logic::run_bitwise_logic;
 
 /// Core columns for bitwise operations with a signed 12-bit immediate.
 #[repr(C)]
@@ -137,28 +135,11 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BitwiseLogicImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct BitwiseLogicImmExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct BitwiseLogicImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct BitwiseLogicImmFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-}
-
-#[inline(always)]
-fn run_bitwise_logic_imm<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: BaseAluImmOpcode,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    let opcode = match opcode {
-        BaseAluImmOpcode::XORI => BaseAluOpcode::XOR,
-        BaseAluImmOpcode::ORI => BaseAluOpcode::OR,
-        BaseAluImmOpcode::ANDI => BaseAluOpcode::AND,
-        BaseAluImmOpcode::ADDI => unreachable!("bitwise core received ADDI"),
-    };
-    run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(opcode, x, y)
 }

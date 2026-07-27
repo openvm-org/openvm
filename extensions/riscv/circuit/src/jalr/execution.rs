@@ -24,7 +24,7 @@ struct JalrPreCompute {
     b: u8,
 }
 
-impl<A> Rv64JalrExecutor<A> {
+impl Rv64JalrExecutor {
     /// Return true if enabled.
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -56,7 +56,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64JalrExecutor<A>
+impl<F> InterpreterExecutor<F> for Rv64JalrExecutor
 where
     F: PrimeField32,
 {
@@ -100,7 +100,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalrExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for Rv64JalrExecutor
 where
     F: PrimeField32,
 {

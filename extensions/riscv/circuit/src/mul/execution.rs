@@ -24,7 +24,7 @@ struct MultiPreCompute {
     c: u8,
 }
 
-impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -48,8 +48,8 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV64_REGISTER_NUM_LI
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -91,8 +91,8 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {

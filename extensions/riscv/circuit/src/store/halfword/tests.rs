@@ -30,8 +30,8 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterFiller,
+        RV64_BYTE_BITS,
     },
     store::{
         common::store_write_data,
@@ -73,10 +73,7 @@ fn create_store_halfword_harness(
         ),
         StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreHalfwordExecutor::new(
-        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64StoreHalfwordChip::<F>::new(
         StoreHalfwordFiller::new(
             Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -236,10 +233,7 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
         ),
         StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreHalfwordExecutor::new(
-        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64StoreHalfwordChip::<F>::new(
         StoreHalfwordFiller::new(
             Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
