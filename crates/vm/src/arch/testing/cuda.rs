@@ -61,8 +61,6 @@ use crate::arch::cuda::postflight::{
 };
 #[cfg(feature = "rvr")]
 use crate::arch::PreflightHistory;
-#[cfg(feature = "metrics")]
-use crate::metrics::VmMetrics;
 #[cfg(feature = "touchemall")]
 use crate::primitives::utils::check_trace_validity;
 #[cfg(feature = "rvr")]
@@ -385,8 +383,6 @@ pub struct GpuChipTestBuilder {
     rng: StdRng,
     default_register: usize,
     default_pointer: usize,
-    #[cfg(feature = "metrics")]
-    metrics: VmMetrics,
 }
 
 impl Default for GpuChipTestBuilder {
@@ -431,8 +427,6 @@ impl GpuChipTestBuilder {
             rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
-            #[cfg(feature = "metrics")]
-            metrics: VmMetrics::default(),
         }
     }
 

@@ -79,9 +79,8 @@ pub trait SystemChipComplex<PB: ProverBackend> {
     /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
     /// tree formed from the roots of the sub-trees for each address space.
     ///
-    /// This function **must** return `Some` if called after
-    /// [`generate_proving_ctx`](Self::generate_proving_ctx) and may return `None` if called before
-    /// that.
+    /// This function **must** return `Some` after trace generation and may return `None` before
+    /// trace generation.
     fn memory_top_tree(&self) -> Option<&[[PB::Val; VM_DIGEST_WIDTH]]>;
 }
 

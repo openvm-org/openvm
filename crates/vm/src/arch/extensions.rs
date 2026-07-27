@@ -17,7 +17,7 @@ use std::{
 use getset::{CopyGetters, Getters};
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir},
-    ColumnsAir,
+    Chip, ColumnsAir,
 };
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
@@ -639,7 +639,7 @@ where
     /// Adds a periphery chip with its record-free CPU trace generator.
     pub fn add_postflight_periphery_chip<C, G>(&mut self, chip: C, generate: G)
     where
-        C: 'static,
+        C: Chip<(), PB> + 'static,
         G: for<'a> Fn(
                 &C,
                 &Postflight<'a, PB::Val>,
@@ -648,7 +648,8 @@ where
             + Sync
             + 'static,
     {
-        self.add_postflight_periphery_chip_with_height(chip, None, generate);
+        let constant_trace_height = chip.constant_trace_height();
+        self.add_postflight_periphery_chip_with_height(chip, constant_trace_height, generate);
     }
 
     pub fn add_postflight_periphery_chip_with_height<C, G>(

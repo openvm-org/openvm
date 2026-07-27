@@ -629,12 +629,9 @@ impl<'a> EmitContext<'a> {
     }
 
     pub(crate) fn flush_preflight_local(&mut self) {
-        match self.mode {
-            EmitMode::Preflight => {
-                self.write_line("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */");
-                self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
-            }
-            _ => {}
+        if self.mode == EmitMode::Preflight {
+            self.write_line("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */");
+            self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
         }
     }
 
@@ -892,11 +889,8 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     }
 
     fn flush_before_control_transfer(&mut self) {
-        match self.mode {
-            EmitMode::Preflight => {
-                self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
-            }
-            _ => {}
+        if self.mode == EmitMode::Preflight {
+            self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
         }
     }
 
