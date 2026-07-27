@@ -143,11 +143,11 @@ impl<F: VmField> DeferralPoseidon2Chip<F> {
     }
 }
 
-impl<RA, SC: StarkProtocolConfig> Chip<RA, CpuBackend<SC>> for DeferralPoseidon2Chip<Val<SC>>
+impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for DeferralPoseidon2Chip<Val<SC>>
 where
     Val<SC>: VmField,
 {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
         AirProvingContext::simple_no_pis(self.generate_trace())
     }
 }

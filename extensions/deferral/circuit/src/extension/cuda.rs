@@ -192,7 +192,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
-        expected_retired: u32,
+        num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
@@ -200,7 +200,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         vm.postflight(
             program,
             execution,
-            expected_retired,
+            num_insns,
             Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         )
     }

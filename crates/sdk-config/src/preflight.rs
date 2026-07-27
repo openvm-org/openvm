@@ -131,12 +131,12 @@ impl SdkVmGpuBuilder {
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
-        expected_retired: u32,
+        num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let result = vm.postflight(
             program,
             execution,
-            expected_retired,
+            num_insns,
             Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
         );
         #[cfg(feature = "metrics")]

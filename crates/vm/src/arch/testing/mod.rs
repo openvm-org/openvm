@@ -6,8 +6,6 @@ pub mod memory;
 pub mod program;
 mod utils;
 
-use std::marker::PhantomData;
-
 pub use cpu::*;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
@@ -75,7 +73,6 @@ pub struct TestChipHarness<F, E, A, C> {
     pub rows_used: TestTraceRows<F>,
     pub fill_padding: TestTracePadding<F>,
     pub balance_memory: bool,
-    phantom: PhantomData<F>,
 }
 
 pub(crate) fn execute_test_preflight<F, E>(
@@ -156,7 +153,6 @@ where
             rows_used: Box::new(|trace| trace.height()),
             fill_padding: Box::new(|_| {}),
             balance_memory: true,
-            phantom: PhantomData,
         }
     }
 

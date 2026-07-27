@@ -69,15 +69,15 @@ struct GpuMemoryAddressSpace {
 
 const _: () = assert!(size_of::<GpuMemoryAddressSpace>() == 16);
 
-const GPU_MEMORY_CELL_UNSUPPORTED: u32 = 0;
-const GPU_MEMORY_CELL_U16: u32 = 1;
-const GPU_MEMORY_CELL_FIELD32: u32 = 2;
+const MEMORY_CELL_UNSUPPORTED: u32 = 0;
+const MEMORY_CELL_U16: u32 = 1;
+const MEMORY_CELL_FIELD32: u32 = 2;
 
 fn memory_cell_kind(layout: MemoryCellType) -> u32 {
     match layout {
-        MemoryCellType::U16 => GPU_MEMORY_CELL_U16,
-        MemoryCellType::F { size: 4 } => GPU_MEMORY_CELL_FIELD32,
-        _ => GPU_MEMORY_CELL_UNSUPPORTED,
+        MemoryCellType::U16 => MEMORY_CELL_U16,
+        MemoryCellType::F { size: 4 } => MEMORY_CELL_FIELD32,
+        _ => MEMORY_CELL_UNSUPPORTED,
     }
 }
 
@@ -505,10 +505,10 @@ impl GpuPostflightProgram {
             &field_values,
             initial_memory_images,
             self.address_space_height,
-            self.cell_pointer_max_bits,
+            self.cell_pointer_max_bits(),
             self.memory_address_spaces.view(),
             &error,
-            &self.device_ctx,
+            self.device_ctx(),
         )?;
         drop(write_masks);
 
@@ -537,7 +537,6 @@ impl GpuPostflightProgram {
         Ok((transcript, plan))
     }
 
-    #[cfg(feature = "rvr")]
     pub(crate) const fn device_ctx(&self) -> &GpuDeviceCtx {
         &self.device_ctx
     }
@@ -559,12 +558,10 @@ impl GpuPostflightProgram {
         validate_initial_memory_lengths(&self.memory_config, &byte_lengths)
     }
 
-    #[cfg(feature = "rvr")]
     pub(crate) const fn timestamp_max_bits(&self) -> u32 {
         self.timestamp_max_bits
     }
 
-    #[cfg(feature = "rvr")]
     pub(crate) const fn cell_pointer_max_bits(&self) -> u32 {
         self.cell_pointer_max_bits
     }
@@ -1147,7 +1144,7 @@ impl GpuPostflightPlan {
                 transcript.program_log.view(),
                 transcript.memory_log.view(),
                 program.d_active_opcodes.view(),
-                program.timestamp_max_bits,
+                program.timestamp_max_bits(),
                 endpoint_kind,
                 resume_pc,
                 final_timestamp,

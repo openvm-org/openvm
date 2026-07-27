@@ -22,7 +22,7 @@ use rvr_openvm_ir::{
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 
 use self::instruction::{AluOp, Rv64IInstr};
-use crate::instruction::{decode_imm_cg, decode_reg, reg_operand};
+use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
 const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
@@ -423,7 +423,7 @@ fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     term(
         pc,
         Rv64IInstr::Jump {
-            link_dst: (rd != crate::instruction::ZERO).then_some(rd),
+            link_dst: (rd != ZERO).then_some(rd),
             target: pc.wrapping_add_signed(i64::from(insn.signed_c())),
         },
     )
@@ -436,7 +436,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     term(
         pc,
         Rv64IInstr::JumpIndirect {
-            link_dst: (rd != crate::instruction::ZERO).then_some(rd),
+            link_dst: (rd != ZERO).then_some(rd),
             base: decode_reg(insn.b),
             offset: decode_imm_cg(insn) as i32,
         },

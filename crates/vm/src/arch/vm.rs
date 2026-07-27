@@ -1389,7 +1389,7 @@ where
         &self,
         program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
-        expected_retired: u32,
+        num_insns: u32,
         opcodes: PostflightOpcodeBases,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let memory = MemTracker::start_and_reset_peak("postflight");
@@ -1423,7 +1423,7 @@ where
                 .collect::<Vec<_>>();
             program.postflight(
                 execution,
-                expected_retired,
+                num_insns,
                 initial_registers.view(),
                 initial_main_memory.view(),
                 &initial_memory_images,

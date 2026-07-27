@@ -16,6 +16,8 @@ use super::{
     ExecutionState, MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory,
     ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
 };
+#[cfg(any(test, feature = "test-utils"))]
+use crate::arch::{testing::memory::PostflightTestMemory, VmField};
 use crate::system::{TouchedBlock, TouchedMemory};
 
 pub(crate) const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
@@ -250,8 +252,8 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     #[cfg(any(test, feature = "test-utils"))]
     pub(crate) fn record_test_writes<M>(&self, memory: &mut M)
     where
-        F: crate::arch::VmField,
-        M: crate::arch::testing::memory::PostflightTestMemory<F>,
+        F: VmField,
+        M: PostflightTestMemory<F>,
     {
         let mut first_writes = FxHashMap::<u64, usize>::default();
         for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
