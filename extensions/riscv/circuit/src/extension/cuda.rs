@@ -34,7 +34,10 @@ use {
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::{
-        arch::{rvr::PreflightExecution, GenerationError, VirtualMachine, VmBuilder},
+        arch::{
+            rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
+            GenerationError, VirtualMachine, VmBuilder,
+        },
         system::cuda::SystemChipInventoryGPU,
     },
     openvm_stark_backend::prover::ProvingContext,
@@ -120,7 +123,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     #[cfg(any(test, feature = "test-utils"))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuPostflightProgram,
+        program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>

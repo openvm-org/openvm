@@ -901,11 +901,6 @@ pub struct GpuPostflightProgram {
     num_program_rows: usize,
     active_opcodes: Vec<u32>,
     d_active_opcodes: DeviceBuffer<u32>,
-    checkpoint_schedule_dispatch: DeviceBuffer<u32>,
-    checkpoint_schedules: DeviceBuffer<RvrCheckpointAccessSchedule>,
-    checkpoint_spans: DeviceBuffer<PostflightAccessSpan>,
-    checkpoint_static_values: DeviceBuffer<u64>,
-    checkpoint_schedule_opcodes: Vec<u32>,
     memory_address_spaces: DeviceBuffer<RvrMemoryAddressSpace>,
     /// Host layout for validating and uploading expanded interpreter logs.
     memory_config: MemoryConfig,
@@ -921,7 +916,21 @@ pub struct GpuPostflightProgram {
     identity: Arc<()>,
 }
 
-impl GpuPostflightProgram {
+/// RVR checkpoint schedules uploaded with one immutable GPU program.
+///
+/// This low-level sidecar exists only for compiled checkpoint expansion.
+/// Immutable-history trace generation consumes [`Self::program`] instead.
+#[doc(hidden)]
+pub struct CheckpointReplayProgram {
+    program: GpuPostflightProgram,
+    checkpoint_schedule_dispatch: DeviceBuffer<u32>,
+    checkpoint_schedules: DeviceBuffer<RvrCheckpointAccessSchedule>,
+    checkpoint_spans: DeviceBuffer<PostflightAccessSpan>,
+    checkpoint_static_values: DeviceBuffer<u64>,
+    checkpoint_schedule_opcodes: Vec<u32>,
+}
+
+impl CheckpointReplayProgram {
     #[cfg(any(test, feature = "test-utils"))]
     pub fn upload<F: PrimeField32>(
         program: &Program<F>,
@@ -936,12 +945,65 @@ impl GpuPostflightProgram {
         )
     }
 
+    /// Uploads one program together with the extension schedules used only by
+    /// compiled checkpoint expansion.
     #[doc(hidden)]
     pub fn upload_with_postflight_access_registry<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
         registry: &PostflightAccessRegistry,
         device_ctx: &GpuDeviceCtx,
+    ) -> Result<Self, GpuPostflightError> {
+        let program =
+            GpuPostflightProgram::upload_validated(program, memory_config, device_ctx, |instr| {
+                registry.validate_instruction(
+                    instr,
+                    memory_config.pointer_max_bits,
+                    memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells,
+                )
+            })?;
+        let checkpoint_schedule_opcodes = registry
+            .dispatch
+            .iter()
+            .enumerate()
+            .filter_map(|(opcode, &schedule)| {
+                (schedule != RVR_CHECKPOINT_NO_SCHEDULE).then_some(opcode as u32)
+            })
+            .collect();
+        Ok(Self {
+            program,
+            checkpoint_schedule_dispatch: upload(&registry.dispatch, device_ctx)?,
+            checkpoint_schedules: upload(&registry.schedules, device_ctx)?,
+            checkpoint_spans: upload(&registry.spans, device_ctx)?,
+            checkpoint_static_values: upload(&registry.static_values, device_ctx)?,
+            checkpoint_schedule_opcodes,
+        })
+    }
+
+    /// Generic immutable-program view consumed by postflight indexing and
+    /// read-only trace generation.
+    pub const fn program(&self) -> &GpuPostflightProgram {
+        &self.program
+    }
+}
+
+impl GpuPostflightProgram {
+    /// Uploads the immutable program metadata used by history-driven
+    /// postflight and trace generation.
+    #[doc(hidden)]
+    pub fn upload<F: PrimeField32>(
+        program: &Program<F>,
+        memory_config: &MemoryConfig,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Result<Self, GpuPostflightError> {
+        Self::upload_validated(program, memory_config, device_ctx, |_| Ok(()))
+    }
+
+    fn upload_validated<F: PrimeField32>(
+        program: &Program<F>,
+        memory_config: &MemoryConfig,
+        device_ctx: &GpuDeviceCtx,
+        mut validate_instruction: impl FnMut(&PostflightInstruction) -> Result<(), GpuPostflightError>,
     ) -> Result<Self, GpuPostflightError> {
         if F::ORDER_U32 != BabyBear::ORDER_U32 || size_of::<F>() != size_of::<BabyBear>() {
             return Err(GpuPostflightError::InvalidMemoryConfig(
@@ -1014,11 +1076,7 @@ impl GpuPostflightProgram {
             .collect::<Result<Vec<_>, _>>()?;
         for instruction in &instructions {
             if instruction.words[0] != u32::MAX {
-                registry.validate_instruction(
-                    instruction,
-                    memory_config.pointer_max_bits,
-                    memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells,
-                )?;
+                validate_instruction(instruction)?;
             }
         }
         let opcodes: Vec<u32> = instructions
@@ -1045,25 +1103,12 @@ impl GpuPostflightProgram {
             .collect::<Vec<_>>();
         active_opcodes.sort_unstable();
         active_opcodes.dedup();
-        let checkpoint_schedule_opcodes = registry
-            .dispatch
-            .iter()
-            .enumerate()
-            .filter_map(|(opcode, &schedule)| {
-                (schedule != RVR_CHECKPOINT_NO_SCHEDULE).then_some(opcode as u32)
-            })
-            .collect();
         Ok(Self {
             instructions: upload(&instructions, device_ctx)?,
             dense_program_rows: upload(&dense_program_rows, device_ctx)?,
             num_program_rows: next_program_row as usize,
             d_active_opcodes: upload(&active_opcodes, device_ctx)?,
             active_opcodes,
-            checkpoint_schedule_dispatch: upload(&registry.dispatch, device_ctx)?,
-            checkpoint_schedules: upload(&registry.schedules, device_ctx)?,
-            checkpoint_spans: upload(&registry.spans, device_ctx)?,
-            checkpoint_static_values: upload(&registry.static_values, device_ctx)?,
-            checkpoint_schedule_opcodes,
             memory_address_spaces: upload(&memory_address_spaces, device_ctx)?,
             memory_config: memory_config.clone(),
             address_space_height: memory_config.addr_space_height as u32,
@@ -1270,7 +1315,9 @@ impl GpuPostflightProgram {
         )?;
         Ok((transcript, plan))
     }
+}
 
+impl CheckpointReplayProgram {
     /// Expands checkpoint execution into ordinary program and memory logs.
     /// Independent chunks emit byte-masked block intents; one device-wide
     /// chronology pass resolves them against the segment-start memory image.
@@ -1285,6 +1332,7 @@ impl GpuPostflightProgram {
         initial_memory_images: &[DeviceBufferView],
         opcodes: PostflightOpcodeBases,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let program = self.program();
         if execution.retired != expected_retired {
             return Err(GpuPostflightError::InvalidTranscript(format!(
                 "preflight retired {} instructions, expected {expected_retired}",
@@ -1307,7 +1355,7 @@ impl GpuPostflightProgram {
         };
         if execution.from_state.timestamp != 1
             || execution.to_state.pc != execution.state.pc()
-            || execution.to_state.timestamp >= (1u32 << self.timestamp_max_bits)
+            || execution.to_state.timestamp >= (1u32 << program.timestamp_max_bits)
         {
             return Err(GpuPostflightError::InvalidTranscript(
                 "preflight has an invalid boundary".to_string(),
@@ -1330,17 +1378,17 @@ impl GpuPostflightProgram {
         final_anchor.regs.copy_from_slice(&final_registers[1..]);
         let mut anchors = execution.transcript.checkpoints.clone();
         anchors.push(final_anchor);
-        let anchors = upload(&anchors, &self.device_ctx)?;
-        let residuals = upload(&execution.transcript.residuals, &self.device_ctx)?;
-        let error = [0u32].to_device_on(&self.device_ctx)?;
-        let event_counts = gpu_buffer::<PostflightEventCount>(anchors.len(), &self.device_ctx);
-        event_counts.fill_zero_on(&self.device_ctx)?;
+        let anchors = upload(&anchors, &program.device_ctx)?;
+        let residuals = upload(&execution.transcript.residuals, &program.device_ctx)?;
+        let error = [0u32].to_device_on(&program.device_ctx)?;
+        let event_counts = gpu_buffer::<PostflightEventCount>(anchors.len(), &program.device_ctx);
+        event_counts.fill_zero_on(&program.device_ctx)?;
         let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS, DEFERRAL_AS];
         let count_span = tracing::info_span!("postflight_replay_count").entered();
         unsafe {
             rvr_checkpoint_replay::count(
-                self.instructions.view(),
-                self.pc_base,
+                program.instructions.view(),
+                program.pc_base,
                 initial_registers,
                 initial_memory,
                 anchors.view(),
@@ -1351,23 +1399,23 @@ impl GpuPostflightProgram {
                 self.checkpoint_static_values.view(),
                 opcodes,
                 address_spaces,
-                self.byte_pointer_max_bits,
-                self.cell_pointer_max_bits,
+                program.byte_pointer_max_bits,
+                program.cell_pointer_max_bits,
                 execution.from_state.pc,
                 execution.from_state.timestamp,
                 endpoint_kind,
                 &event_counts,
                 &error,
-                self.device_ctx.stream.as_raw(),
+                program.device_ctx.stream.as_raw(),
             )?;
         }
-        let count_error = error.to_host_on(&self.device_ctx)?[0];
+        let count_error = error.to_host_on(&program.device_ctx)?[0];
         if count_error != 0 {
             return Err(GpuPostflightError::InvalidTranscript(format!(
                 "checkpoint GPU count replay rejected execution with code {count_error}"
             )));
         }
-        let counts = event_counts.to_host_on(&self.device_ctx)?;
+        let counts = event_counts.to_host_on(&program.device_ctx)?;
         let mut total_memory = 0u32;
         let mut total_fields = 0u32;
         let mut offsets = Vec::with_capacity(counts.len());
@@ -1401,21 +1449,21 @@ impl GpuPostflightProgram {
                     "checkpoint replay program-log length overflow".to_string(),
                 )
             })?;
-        let program_log = gpu_buffer::<PreflightProgramEvent>(program_len, &self.device_ctx);
+        let program_log = gpu_buffer::<PreflightProgramEvent>(program_len, &program.device_ctx);
         let memory_log =
-            gpu_buffer::<PreflightMemoryEvent>(total_memory as usize, &self.device_ctx);
+            gpu_buffer::<PreflightMemoryEvent>(total_memory as usize, &program.device_ctx);
         let field_values =
-            gpu_buffer::<PostflightFieldBlock>(total_fields as usize, &self.device_ctx);
+            gpu_buffer::<PostflightFieldBlock>(total_fields as usize, &program.device_ctx);
         // One transient byte per event is enough to distinguish reads, full
         // writes, and partial block writes. The chronology pass consumes and
         // releases this before opcode trace generation.
-        let write_masks = gpu_buffer::<u8>(total_memory as usize, &self.device_ctx);
-        let offsets = upload(&offsets, &self.device_ctx)?;
+        let write_masks = gpu_buffer::<u8>(total_memory as usize, &program.device_ctx);
+        let offsets = upload(&offsets, &program.device_ctx)?;
         let emit_span = tracing::info_span!("postflight_replay_emit").entered();
         unsafe {
             rvr_checkpoint_replay::emit(
-                self.instructions.view(),
-                self.pc_base,
+                program.instructions.view(),
+                program.pc_base,
                 initial_registers,
                 initial_memory,
                 anchors.view(),
@@ -1427,8 +1475,8 @@ impl GpuPostflightProgram {
                 self.checkpoint_static_values.view(),
                 opcodes,
                 address_spaces,
-                self.byte_pointer_max_bits,
-                self.cell_pointer_max_bits,
+                program.byte_pointer_max_bits,
+                program.cell_pointer_max_bits,
                 execution.from_state.pc,
                 execution.from_state.timestamp,
                 endpoint_kind,
@@ -1437,10 +1485,10 @@ impl GpuPostflightProgram {
                 write_masks.view(),
                 field_values.view(),
                 &error,
-                self.device_ctx.stream.as_raw(),
+                program.device_ctx.stream.as_raw(),
             )?;
         }
-        let emit_error = error.to_host_on(&self.device_ctx)?[0];
+        let emit_error = error.to_host_on(&program.device_ctx)?[0];
         if emit_error != 0 {
             return Err(GpuPostflightError::InvalidTranscript(format!(
                 "checkpoint GPU emit replay rejected execution with code {emit_error}"
@@ -1460,11 +1508,11 @@ impl GpuPostflightProgram {
                     &write_masks,
                     &field_values,
                     initial_memory_images,
-                    self.address_space_height,
-                    self.cell_pointer_max_bits,
-                    self.memory_address_spaces.view(),
+                    program.address_space_height,
+                    program.cell_pointer_max_bits,
+                    program.memory_address_spaces.view(),
                     &error,
-                    &self.device_ctx,
+                    &program.device_ctx,
                 )
             })?;
         drop(write_masks);
@@ -1480,24 +1528,26 @@ impl GpuPostflightProgram {
             touched_blocks: memory_index.touched_blocks,
             num_touched_blocks: memory_index.num_touched_blocks,
             error,
-            device_ctx: self.device_ctx.clone(),
-            program_identity: self.identity.clone(),
+            device_ctx: program.device_ctx.clone(),
+            program_identity: program.identity.clone(),
             segment_identity: segment_identity.clone(),
         };
         let boundary = (execution.from_state, execution.to_state, exit_code);
         let plan = tracing::info_span!("postflight_program_index").in_scope(|| {
             GpuPostflightPlan::build(
-                self,
+                program,
                 &transcript,
                 execution.endpoint,
                 boundary,
-                self.identity.clone(),
+                program.identity.clone(),
                 segment_identity,
             )
         })?;
         Ok((transcript, plan))
     }
+}
 
+impl GpuPostflightProgram {
     pub fn ensure_replay_inputs(
         &self,
         transcript: &GpuPostflightTranscript,
@@ -2206,11 +2256,6 @@ mod tests {
             num_program_rows: next_program_row as usize,
             d_active_opcodes: upload(&active_opcodes, device_ctx).unwrap(),
             active_opcodes,
-            checkpoint_schedule_dispatch: DeviceBuffer::new(),
-            checkpoint_schedules: DeviceBuffer::new(),
-            checkpoint_spans: DeviceBuffer::new(),
-            checkpoint_static_values: DeviceBuffer::new(),
-            checkpoint_schedule_opcodes: Vec::new(),
             memory_address_spaces: upload(&memory_address_spaces, device_ctx).unwrap(),
             memory_config: config.clone(),
             address_space_height: config.addr_space_height as u32,

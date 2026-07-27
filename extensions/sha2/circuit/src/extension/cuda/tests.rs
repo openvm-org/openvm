@@ -275,7 +275,8 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
     let (gpu_transcript, replay_plan) =
         Sha2PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
-    let tracegen = Sha2PreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan);
+    let tracegen =
+        Sha2PreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan);
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(gpu_transcript);

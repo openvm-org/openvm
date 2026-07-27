@@ -301,7 +301,8 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         initial_write_log: transcript.initial_write_log_host().unwrap(),
     };
 
-    let tracegen = Int256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
+    let tracegen =
+        Int256PreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan);
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -338,13 +339,17 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         "fixture must reuse the destination pointer"
     );
     let (invalid_transcript, invalid_plan) = invalid_gpu_program
+        .program()
         .upload_transcript(&invalid_transcript, PreflightEndpoint::Terminated)
         .unwrap();
-    let error =
-        Int256PreflightGpuTracegen::new(&invalid_gpu_program, &invalid_transcript, &invalid_plan)
-            .generate_proving_ctx(&mut invalid_vm)
-            .err()
-            .expect("Int256 GPU replay must reject a two-byte-aligned heap pointer");
+    let error = Int256PreflightGpuTracegen::new(
+        invalid_gpu_program.program(),
+        &invalid_transcript,
+        &invalid_plan,
+    )
+    .generate_proving_ctx(&mut invalid_vm)
+    .err()
+    .expect("Int256 GPU replay must reject a two-byte-aligned heap pointer");
     assert!(error.to_string().contains("code 403"), "{error}");
 }
 
@@ -444,6 +449,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         )
         .unwrap();
         let (mut transcript, replay_plan) = gpu_program
+            .program()
             .upload_transcript(&host_transcript, execution.endpoint)
             .unwrap();
         let mut program_log = host_transcript.program_log.clone();
@@ -460,10 +466,11 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         transcript
             .replace_program_log_for_test(&program_log)
             .unwrap();
-        let error = Int256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan)
-            .generate_proving_ctx(&mut vm)
-            .err()
-            .expect("Int256 GPU replay must reject a wrapping transition");
+        let error =
+            Int256PreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan)
+                .generate_proving_ctx(&mut vm)
+                .err()
+                .expect("Int256 GPU replay must reject a wrapping transition");
         let expected_code = if corrupt_timestamp { 401 } else { 402 };
         assert!(
             error.to_string().contains(&format!("code {expected_code}")),
@@ -556,7 +563,8 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             ]
         );
 
-        let tracegen = Int256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
+        let tracegen =
+            Int256PreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan);
         let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
         drop(replay_plan);
         drop(transcript);

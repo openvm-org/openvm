@@ -1,7 +1,10 @@
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::{GpuPostflightProgram, PostflightAccessRegistry, PostflightAccessSpan},
+            cuda::{
+                CheckpointReplayProgram, GpuPostflightProgram, PostflightAccessRegistry,
+                PostflightAccessSpan,
+            },
             PreflightEndpoint, PreflightEventLog, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
@@ -193,7 +196,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         "{malformed}"
     );
 
-    let unclaimed_program = GpuPostflightProgram::upload(
+    let unclaimed_program = CheckpointReplayProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
@@ -227,7 +230,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         Keccak256PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     assert!(
-        Rv64ImPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan).is_err(),
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).is_err(),
         "the plain RV64 coordinator must not silently claim Keccak opcodes"
     );
     assert_eq!(transcript.error_code().unwrap(), 0);
@@ -262,7 +265,8 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         (1..83).collect::<Vec<_>>()
     );
 
-    let tracegen = Keccak256PreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan);
+    let tracegen =
+        Keccak256PreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan);
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -335,10 +339,13 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
     )
     .unwrap();
     assert_eq!(zero_transcript.memory_log_host().unwrap().len(), 3);
-    let zero_ctx =
-        Keccak256PreflightGpuTracegen::new(&zero_gpu_program, &zero_transcript, &zero_plan)
-            .generate_proving_ctx(&mut vm)
-            .unwrap();
+    let zero_ctx = Keccak256PreflightGpuTracegen::new(
+        zero_gpu_program.program(),
+        &zero_transcript,
+        &zero_plan,
+    )
+    .generate_proving_ctx(&mut vm)
+    .unwrap();
     drop(zero_plan);
     drop(zero_transcript);
     let zero_proof = vm.engine.prove(vm.pk(), zero_ctx).unwrap();

@@ -198,11 +198,15 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
         assert_eq!(event.is_write(), is_write);
     }
 
-    let proving_ctx =
-        DeferralPreflightGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan, 1 << 20)
-            .unwrap()
-            .generate_proving_ctx(&mut vm)
-            .unwrap();
+    let proving_ctx = DeferralPreflightGpuTracegen::new(
+        gpu_program.program(),
+        &gpu_transcript,
+        &replay_plan,
+        1 << 20,
+    )
+    .unwrap()
+    .generate_proving_ctx(&mut vm)
+    .unwrap();
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
 }
@@ -373,11 +377,15 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         1
     );
 
-    let proving_ctx =
-        DeferralPreflightGpuTracegen::new(&gpu_program, &transcript, &replay_plan, 1 << 20)
-            .unwrap()
-            .generate_proving_ctx(&mut vm)
-            .unwrap();
+    let proving_ctx = DeferralPreflightGpuTracegen::new(
+        gpu_program.program(),
+        &transcript,
+        &replay_plan,
+        1 << 20,
+    )
+    .unwrap()
+    .generate_proving_ctx(&mut vm)
+    .unwrap();
     drop(replay_plan);
     drop(transcript);
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();

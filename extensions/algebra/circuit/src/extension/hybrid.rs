@@ -3,7 +3,7 @@
 
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 #[cfg(all(feature = "rvr", test))]
-use openvm_circuit::arch::rvr::PreflightExecution;
+use openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution};
 use openvm_circuit::{
     arch::*,
     system::{
@@ -815,13 +815,13 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+    ) -> Result<CheckpointReplayProgram, GpuPostflightError> {
         Self::validate_postflight_program(program, modular)?;
         let mut registry = PostflightAccessRegistry::default();
         Self::register_postflight_access_schedules(&mut registry, modular, fp2)?;
         registry
             .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
-        GpuPostflightProgram::upload_with_postflight_access_registry(
+        CheckpointReplayProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -832,7 +832,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
     #[cfg(test)]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &GpuPostflightProgram,
+        program: &CheckpointReplayProgram,
         execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>

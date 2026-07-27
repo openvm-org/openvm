@@ -348,7 +348,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     }
 
     let tracegen = AlgebraPreflightGpuTracegen::new(
-        &gpu_program,
+        gpu_program.program(),
         &transcript,
         &replay_plan,
         &config.modular.modular,
@@ -512,7 +512,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
     }
 
     let tracegen = AlgebraPreflightGpuTracegen::new(
-        &gpu_program,
+        gpu_program.program(),
         &transcript,
         &replay_plan,
         &config.modular,
