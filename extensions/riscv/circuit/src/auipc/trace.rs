@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
@@ -27,8 +27,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    for (row_index, &step) in steps.iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let instruction = postflight.instruction(step);
         let from_pc = postflight.pc(step);
@@ -85,7 +84,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         core_row.imm_high_16 = F::from_u32(imm_high_16);
         core_row.pc_high = F::from_u16(pc_high);
         core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
-    }
+        Ok(())
+    })?;
 
     Ok(trace)
 }

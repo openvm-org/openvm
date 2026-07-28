@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError, BLOCK_FE_WIDTH},
+    arch::{fill_trace_rows, Postflight, PostflightError, BLOCK_FE_WIDTH},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
@@ -33,8 +33,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     let mut row_index = 0;
     for local_opcode in opcodes {
-        for &step in postflight.steps(local_opcode.global_opcode()) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(local_opcode.global_opcode());
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let local_opcode_u8 = local_opcode as u8;
             let mut comparison = (false, 0, false, false);
@@ -129,8 +129,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.cmp_result = F::from_bool(cmp_result);
             core_row.b = b.map(F::from_u16);
             core_row.a = a.map(F::from_u16);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
 
     Ok(trace)

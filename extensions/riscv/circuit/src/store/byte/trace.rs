@@ -1,12 +1,14 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::STOREB;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+};
 
 use super::{Rv64StoreByteChip, StoreByteCoreCols};
 use crate::adapters::Rv64StoreByteAdapterCols;
@@ -22,8 +24,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    for (row_index, &step) in steps.iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         chip.inner.replay(
             postflight,
@@ -32,10 +33,11 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             adapter_row.borrow_mut(),
             core_row.borrow_mut(),
         )?;
-    }
-    for row_index in steps.len()..height {
-        fill_padding_row(&mut trace.values[row_index * width..(row_index + 1) * width]);
-    }
+        Ok(())
+    })?;
+    trace.values[steps.len() * width..]
+        .par_chunks_exact_mut(width)
+        .for_each(fill_padding_row);
     Ok(trace)
 }
 

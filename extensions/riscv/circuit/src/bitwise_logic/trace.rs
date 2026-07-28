@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, iter::zip};
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
@@ -29,8 +29,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     let mut row_index = 0;
     for local_opcode in opcodes {
-        for &step in postflight.steps(local_opcode.global_opcode()) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(local_opcode.global_opcode());
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let ([rs1, rs2], output) = Rv64BaseAluRegAdapterFiller::replay(
                 postflight,
@@ -58,8 +58,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.c = rs2.map(F::from_u8);
             core_row.b = rs1.map(F::from_u8);
             core_row.a = output.map(F::from_u8);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
 
     Ok(trace)

@@ -16,6 +16,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
     BaseAirWithPublicValues,
 };
 
@@ -337,8 +338,7 @@ pub(crate) fn generate_trace_from_postflight<
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    for (row_index, &step) in steps.iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let (read_data, prev_data, shift) = chip.inner.adapter.replay::<F, STORE_WIDTH>(
             postflight,
@@ -356,10 +356,11 @@ pub(crate) fn generate_trace_from_postflight<
         )?;
         chip.inner
             .fill_core_row(shift, read_data, prev_data, core_row.borrow_mut());
-    }
-    for row_index in steps.len()..height {
-        fill_padding_row(&mut trace.values[row_index * width..(row_index + 1) * width]);
-    }
+        Ok(())
+    })?;
+    trace.values[steps.len() * width..]
+        .par_chunks_exact_mut(width)
+        .for_each(fill_padding_row);
     Ok(trace)
 }
 

@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, iter::zip};
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
@@ -42,8 +42,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             BaseAluImmOpcode::ANDI => BaseAluOpcode::AND,
             BaseAluImmOpcode::ADDI => unreachable!(),
         };
-        for &step in postflight.steps(local_opcode.global_opcode()) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(local_opcode.global_opcode());
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let immediate = postflight.instruction(step).c.as_canonical_u32();
             let c = imm_to_rv64_bytes(immediate);
@@ -81,8 +81,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.c_low = c_low.map(F::from_u8);
             core_row.b = b.map(F::from_u8);
             core_row.a = a.map(F::from_u8);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
 
     Ok(trace)

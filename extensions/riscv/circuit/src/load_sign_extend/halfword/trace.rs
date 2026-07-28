@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
@@ -22,11 +22,11 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    for (row_index, &step) in steps.iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, steps, |row, step| {
         chip.inner
             .replay(postflight, step, &chip.mem_helper.as_borrowed(), row)?;
-    }
+        Ok(())
+    })?;
 
     Ok(trace)
 }

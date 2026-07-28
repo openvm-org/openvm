@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{riscv::RV64_WORD_NUM_LIMBS, LocalOpcode};
@@ -36,8 +36,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     let mut row_index = 0;
     for opcode in opcodes {
-        for &step in postflight.steps(opcode.global_opcode()) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(opcode.global_opcode());
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let core_row: &mut DivRemCoreCols<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS> =
                 core_row.borrow_mut();
@@ -74,8 +74,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 result.expect("word divrem replay closure always runs"),
                 core_row,
             );
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
 
     Ok(trace)

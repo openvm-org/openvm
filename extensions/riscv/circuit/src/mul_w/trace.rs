@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
@@ -28,8 +28,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
     let adapter = Rv64MultWAdapterFiller::new(chip.inner.bitwise_lookup_chip.clone());
 
-    for (row_index, &step) in postflight.steps(opcode).iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let mut carry = None;
         let ([rs1, rs2], output) = adapter.replay(
@@ -55,7 +54,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             output,
             carry.expect("word multiplication replay called its compute closure"),
         );
-    }
+        Ok(())
+    })?;
 
     Ok(trace)
 }

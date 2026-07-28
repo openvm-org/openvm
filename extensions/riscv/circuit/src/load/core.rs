@@ -286,8 +286,7 @@ pub(crate) fn generate_trace_from_postflight<
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    for (row_index, &step) in steps.iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let (read_data, shift, _) = chip.inner.adapter.replay::<F, LOAD_WIDTH>(
             postflight,
@@ -300,7 +299,8 @@ pub(crate) fn generate_trace_from_postflight<
         )?;
         chip.inner
             .fill_core_row(shift, read_data, core_row.borrow_mut());
-    }
+        Ok(())
+    })?;
 
     Ok(trace)
 }

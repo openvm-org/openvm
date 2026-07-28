@@ -41,7 +41,9 @@ pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
 pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
-pub use postflight::{Postflight, PostflightError, PostflightReplay, PostflightStep, U16Access};
+pub use postflight::{
+    fill_trace_rows, Postflight, PostflightError, PostflightReplay, PostflightStep, U16Access,
+};
 pub use preflight::{
     PreflightFieldBlock, PreflightHistory, PreflightInitialWrite, PreflightMemoryEvent,
     PreflightMemoryLog, PreflightOutput, PreflightProgramEvent,

@@ -8,7 +8,11 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::{
+    p3_field::{Field, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+};
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::instrument;
@@ -51,6 +55,26 @@ pub struct Field32Access<F> {
     pub previous_value: [F; BLOCK_FE_WIDTH],
     pub previous_timestamp: u32,
     pub timestamp: u32,
+}
+
+/// Fills one contiguous range of trace rows from independent preflight steps.
+pub fn fill_trace_rows<F, E>(
+    trace: &mut RowMajorMatrix<F>,
+    row_start: usize,
+    steps: &[PostflightStep],
+    fill: impl Fn(&mut [F], PostflightStep) -> Result<(), E> + Sync,
+) -> Result<(), E>
+where
+    F: Send,
+    E: Send,
+{
+    let width = trace.width;
+    let start = row_start * width;
+    let end = start + steps.len() * width;
+    trace.values[start..end]
+        .par_chunks_exact_mut(width)
+        .zip(steps.par_iter().copied())
+        .try_for_each(|(row, step)| fill(row, step))
 }
 
 /// Read-only indexes derived from one serial preflight history.

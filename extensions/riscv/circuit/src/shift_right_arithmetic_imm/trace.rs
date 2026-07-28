@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError, BLOCK_FE_WIDTH},
+    arch::{fill_trace_rows, Postflight, PostflightError, BLOCK_FE_WIDTH},
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
@@ -34,7 +34,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    for (row_index, &step) in postflight.steps(opcode).iter().enumerate() {
+    fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let instruction = postflight.instruction(step);
         let shamt = instruction.c.as_canonical_u32() as usize;
         if shamt >= BLOCK_FE_WIDTH * U16_BITS {
@@ -43,7 +43,6 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             ));
         }
 
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let mut shifts = (0, 0);
         let (input, output) = Rv64BaseAluImmU16AdapterFiller::replay(
@@ -68,7 +67,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             output,
             shifts,
         );
-    }
+        Ok(())
+    })?;
 
     Ok(trace)
 }
@@ -86,7 +86,7 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
     let adapter = Rv64BaseAluWImmU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 
-    for (row_index, &step) in postflight.steps(opcode).iter().enumerate() {
+    fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let instruction = postflight.instruction(step);
         let shamt = instruction.c.as_canonical_u32() as usize;
         if shamt >= RV64_WORD_U16_LIMBS * U16_BITS {
@@ -95,7 +95,6 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
             ));
         }
 
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let mut shifts = (0, 0);
         let (input, output) = adapter.replay(
@@ -122,7 +121,8 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
             output,
             shifts,
         );
-    }
+        Ok(())
+    })?;
 
     Ok(trace)
 }

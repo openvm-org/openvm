@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
@@ -31,8 +31,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     let mut row_index = 0;
     for local_opcode in opcodes {
-        for &step in postflight.steps(local_opcode.global_opcode()) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(local_opcode.global_opcode());
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let instruction = postflight.instruction(step);
             let is_jal = local_opcode == Rv64JalLuiOpcode::JAL;
@@ -84,8 +84,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.is_jal = F::from_bool(is_jal);
             core_row.is_lui = F::from_bool(!is_jal);
             core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
 
     Ok(trace)
