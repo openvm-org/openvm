@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, ContinuationProverBuilder, Executor, MeteredExecutor, VmBuilder,
+    instructions::exe::VmExe, ContinuationProverBuilder, Executor, MeteredExecutor,
     VmExecutionConfig,
 };
 use openvm_continuations::RootSC;
@@ -26,7 +26,7 @@ use crate::{
 pub struct EvmProver<E, VB>
 where
     E: StarkEngine,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
 {
     pub stark_prover: StarkProver<E, VB>,
     pub root_prover: Arc<RootProver>,
