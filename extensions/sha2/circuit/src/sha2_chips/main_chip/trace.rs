@@ -7,7 +7,9 @@ use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
-use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+};
 
 use crate::{Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
 
@@ -21,7 +23,7 @@ where
 {
     let steps = postflight.steps(C::OPCODE.global_opcode());
     let replay_rows = steps
-        .iter()
+        .par_iter()
         .map(|&step| {
             crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
         })
@@ -57,11 +59,13 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         let mut trace =
             RowMajorMatrix::new(F::zero_vec(height * C::MAIN_CHIP_WIDTH), C::MAIN_CHIP_WIDTH);
         let mem_helper = self.mem_helper.as_borrowed();
-        for (row_index, replay) in replay_rows.iter().enumerate() {
-            let row = &mut trace.values
-                [row_index * C::MAIN_CHIP_WIDTH..(row_index + 1) * C::MAIN_CHIP_WIDTH];
-            self.fill_trace_row_from_replay(&mem_helper, row, row_index, replay);
-        }
+        trace.values[..replay_rows.len() * C::MAIN_CHIP_WIDTH]
+            .par_chunks_exact_mut(C::MAIN_CHIP_WIDTH)
+            .zip(replay_rows.par_iter())
+            .enumerate()
+            .for_each(|(row_index, (row, replay))| {
+                self.fill_trace_row_from_replay(&mem_helper, row, row_index, replay);
+            });
         trace
     }
 }

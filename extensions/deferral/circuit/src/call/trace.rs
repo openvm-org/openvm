@@ -14,7 +14,7 @@ use openvm_instructions::{
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
-use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
+use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::{accumulator_ptrs, DeferralCallChip};
@@ -278,13 +278,15 @@ pub fn generate_trace_from_postflight<F: VmField>(
     }
 
     let mem_helper = chip.mem_helper.as_borrowed();
-    for (row_idx, replay_row) in replay_rows.into_iter().enumerate() {
-        let row = &mut trace.values[row_idx * width..(row_idx + 1) * width];
-        let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let adapter_row: &mut DeferralCallAdapterCols<F> = adapter_row.borrow_mut();
-        fill_call_adapter(&chip.inner.adapter, &mem_helper, adapter_row, &replay_row);
-        fill_call_core(&chip.inner, core_row.borrow_mut(), &replay_row);
-    }
+    trace.values[..replay_rows.len() * width]
+        .par_chunks_exact_mut(width)
+        .zip(replay_rows.par_iter())
+        .for_each(|(row, replay_row)| {
+            let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let adapter_row: &mut DeferralCallAdapterCols<F> = adapter_row.borrow_mut();
+            fill_call_adapter(&chip.inner.adapter, &mem_helper, adapter_row, replay_row);
+            fill_call_core(&chip.inner, core_row.borrow_mut(), replay_row);
+        });
     Ok(trace)
 }
 

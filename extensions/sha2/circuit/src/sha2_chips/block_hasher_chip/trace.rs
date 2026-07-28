@@ -30,14 +30,12 @@ where
     C: Sha2Config,
 {
     let steps = postflight.steps(C::OPCODE.global_opcode());
-    let mut replay_rows = Vec::with_capacity(steps.len());
-    for &step in steps {
-        replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
-            postflight,
-            step,
-            chip.pointer_max_bits,
-        )?);
-    }
+    let replay_rows = steps
+        .par_iter()
+        .map(|&step| {
+            crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     chip.generate_trace_from_replays(&replay_rows)
 }
 

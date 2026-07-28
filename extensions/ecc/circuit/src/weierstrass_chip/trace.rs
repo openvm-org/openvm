@@ -21,6 +21,7 @@ use openvm_riscv_adapters::{
 };
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
 };
 
 use super::WeierstrassChip;
@@ -210,14 +211,19 @@ fn generate_trace_from_postflights<
             );
         }
         selected.sort_unstable_by_key(|&(step, _)| postflight.timestamp(step));
-        for (step, local_opcode) in selected {
-            projection.push(project_step::<F, NUM_READS, BLOCKS>(
-                postflight,
-                step,
-                local_opcode,
-                pointer_max_bits,
-            )?);
-        }
+        projection.extend(
+            selected
+                .par_iter()
+                .map(|&(step, local_opcode)| {
+                    project_step::<F, NUM_READS, BLOCKS>(
+                        postflight,
+                        step,
+                        local_opcode,
+                        pointer_max_bits,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        );
     }
 
     let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
@@ -245,37 +251,42 @@ fn generate_trace_from_postflights<
         chip.mem_helper.timestamp_max_bits(),
     );
     let mem_helper = temporary_mem_helper.as_borrowed();
-    for (input, row) in projection.iter().zip(trace.values.chunks_exact_mut(width)) {
-        let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let read_bytes = vec_heap_u16_blocks_to_bytes(input.heap_reads.iter().flatten().flatten());
-        let write_bytes = vec_heap_u16_blocks_to_bytes(input.writes.iter().flatten());
-        chip.inner
-            .fill_trace_row_from_execution_data(
+    trace.values[..projection.len() * width]
+        .par_chunks_exact_mut(width)
+        .zip(projection.par_iter())
+        .try_for_each(|(row, input)| {
+            let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let read_bytes =
+                vec_heap_u16_blocks_to_bytes(input.heap_reads.iter().flatten().flatten());
+            let write_bytes = vec_heap_u16_blocks_to_bytes(input.writes.iter().flatten());
+            chip.inner
+                .fill_trace_row_from_execution_data(
+                    temporary_range_checker.as_ref(),
+                    input.local_opcode as usize,
+                    &read_bytes,
+                    Some(&write_bytes),
+                    core_row,
+                )
+                .map_err(|error| {
+                    PostflightError::new(format!(
+                        "Weierstrass field-expression replay failed validation: {error:?}"
+                    ))
+                })?;
+            chip.inner.adapter().fill_trace_row_from_projection(
                 temporary_range_checker.as_ref(),
-                input.local_opcode as usize,
-                &read_bytes,
-                Some(&write_bytes),
-                core_row,
-            )
-            .map_err(|error| {
-                PostflightError::new(format!(
-                    "Weierstrass field-expression replay failed validation: {error:?}"
-                ))
-            })?;
-        chip.inner.adapter().fill_trace_row_from_projection(
-            temporary_range_checker.as_ref(),
-            &mem_helper,
-            adapter_row,
-            input,
-        );
-    }
+                &mem_helper,
+                adapter_row,
+                input,
+            );
+            Ok::<_, PostflightError>(())
+        })?;
     if projection.len() < height {
         let mut dummy_row = F::zero_vec(width);
         chip.inner
             .fill_dummy_core_row(&mut dummy_row[adapter_width..]);
-        for row in trace.values.chunks_exact_mut(width).skip(projection.len()) {
-            row.copy_from_slice(&dummy_row);
-        }
+        trace.values[projection.len() * width..]
+            .par_chunks_exact_mut(width)
+            .for_each(|row| row.copy_from_slice(&dummy_row));
     }
 
     if chip.inner.range_checker.count.len() != temporary_range_checker.count.len() {

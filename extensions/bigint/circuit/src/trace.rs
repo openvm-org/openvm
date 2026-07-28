@@ -5,7 +5,10 @@ use openvm_bigint_transpiler::{
     Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
 };
 use openvm_circuit::{
-    arch::{Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    arch::{
+        fill_trace_rows, Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
+    },
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
@@ -424,8 +427,8 @@ pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
-        for &step in postflight.steps(global_opcode) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(global_opcode);
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let replay = replay_alu_u16(
                 postflight,
@@ -448,8 +451,9 @@ pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
             core.a = replay.output.map(F::from_u16);
             core.b = replay.inputs[0].map(F::from_u16);
             core.c = replay.inputs[1].map(F::from_u16);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     Ok(trace)
 }
@@ -468,8 +472,8 @@ pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
-        for &step in postflight.steps(global_opcode) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(global_opcode);
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let replay = replay_alu_bytes(
                 postflight,
@@ -500,8 +504,9 @@ pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
             core.a = replay.output.map(F::from_u8);
             core.b = replay.inputs[0].map(F::from_u8);
             core.c = replay.inputs[1].map(F::from_u8);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     Ok(trace)
 }
@@ -601,8 +606,8 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
-        for &step in postflight.steps(global_opcode) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(global_opcode);
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let replay = replay_alu_u16(
                 postflight,
@@ -619,8 +624,9 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
                 },
             )?;
             fill_less_than(chip, core_row.borrow_mut(), opcode, replay.inputs);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     Ok(trace)
 }
@@ -648,8 +654,8 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
-        for &step in postflight.steps(global_opcode) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(global_opcode);
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let (inputs, cmp_result) = replay_branch(
                 postflight,
@@ -673,8 +679,9 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
             core.cmp_result = F::from_bool(cmp_result);
             core.a = a.map(F::from_u16);
             core.b = b.map(F::from_u16);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     Ok(trace)
 }
@@ -723,8 +730,8 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
-        for &step in postflight.steps(global_opcode) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(global_opcode);
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let (inputs, cmp_result) = replay_branch(
                 postflight,
@@ -777,8 +784,9 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
             core.cmp_result = F::from_bool(cmp_result);
             core.a = a.map(F::from_u16);
             core.b = b.map(F::from_u16);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     Ok(trace)
 }
@@ -848,8 +856,7 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
     let width =
         adapter_width + MultiplicationCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width();
     let mut trace = trace(postflight.steps(opcode).len(), width);
-    for (row_index, &step) in postflight.steps(opcode).iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let replay = replay_alu_bytes(
             postflight,
@@ -882,7 +889,8 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
         core.a = output.map(F::from_u8);
         core.b = replay.inputs[0].map(F::from_u8);
         core.c = replay.inputs[1].map(F::from_u8);
-    }
+        Ok(())
+    })?;
     Ok(trace)
 }
 
@@ -974,8 +982,8 @@ pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
-        for &step in postflight.steps(global_opcode) {
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+        let steps = postflight.steps(global_opcode);
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let mut shift = None;
             let replay = replay_alu_u16(
@@ -1022,8 +1030,9 @@ pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
             core.a = replay.output.map(F::from_u16);
             core.b = replay.inputs[0].map(F::from_u16);
             core.c = replay.inputs[1].map(F::from_u16);
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     Ok(trace)
 }
@@ -1060,8 +1069,7 @@ pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
     let width =
         adapter_width + ShiftRightArithmeticCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width();
     let mut trace = trace(postflight.steps(opcode).len(), width);
-    for (row_index, &step) in postflight.steps(opcode).iter().enumerate() {
-        let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+    fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let mut shift = None;
         let replay = replay_alu_u16(
@@ -1102,6 +1110,7 @@ pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
         core.a = replay.output.map(F::from_u16);
         core.b = replay.inputs[0].map(F::from_u16);
         core.c = replay.inputs[1].map(F::from_u16);
-    }
+        Ok(())
+    })?;
     Ok(trace)
 }

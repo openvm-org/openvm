@@ -7,8 +7,8 @@ use std::{
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
-        Postflight, PostflightError, PostflightStep, U16Access, VmChipWrapper, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        fill_trace_rows, Postflight, PostflightError, PostflightStep, U16Access, VmChipWrapper,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::SharedMemoryHelper,
     utils::next_power_of_two_or_zero,
@@ -279,9 +279,9 @@ pub(crate) fn generate_field_expression_trace_from_postflight<
             })?;
         row_index = rows_end;
     }
-    for row in trace.values[row_index * width..].chunks_exact_mut(width) {
-        chip.inner.fill_dummy_core_row(&mut row[adapter_width..]);
-    }
+    trace.values[row_index * width..]
+        .par_chunks_exact_mut(width)
+        .for_each(|row| chip.inner.fill_dummy_core_row(&mut row[adapter_width..]));
     merge_range_counts(
         chip.inner.range_checker.as_ref(),
         temporary_range_checker.as_ref(),
@@ -335,7 +335,8 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
         let opcode = opcode_base
             .checked_add(local_opcode)
             .ok_or_else(|| PostflightError::new("modular equality opcode overflow"))?;
-        for &step in postflight.steps(VmOpcode::from_usize(opcode)) {
+        let steps = postflight.steps(VmOpcode::from_usize(opcode));
+        fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let instruction = postflight.instruction(step);
             if instruction.a.as_canonical_u32() == 0
                 || instruction.d.as_canonical_u32() != RV64_REGISTER_AS
@@ -391,7 +392,6 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
             let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, write_value)?;
             replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
-            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let adapter_cols: &mut Rv64IsEqualModU16AdapterCols<F, 2, NUM_LANES> =
                 adapter_row.borrow_mut();
@@ -437,8 +437,9 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
                 inputs[1],
                 core_row,
             )?;
-            row_index += 1;
-        }
+            Ok(())
+        })?;
+        row_index += steps.len();
     }
     merge_range_counts(
         chip.inner.range_checker_chip.as_ref(),
