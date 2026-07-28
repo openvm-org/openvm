@@ -31,7 +31,7 @@ struct PendingWrite {
 pub struct PreflightCtx {
     history: PreflightHistory,
     timestamp: u32,
-    last_access: Vec<PagedVec<u32, PAGE_SIZE>>,
+    seen_blocks: Vec<PagedVec<bool, PAGE_SIZE>>,
     pending_writes: Vec<PendingWrite>,
     read_canonical_field_block: unsafe fn(&GuestMemory, u32, u32) -> [u32; BLOCK_FE_WIDTH],
     pub instret_left: u64,
@@ -48,16 +48,23 @@ impl PreflightCtx {
                 || size_of::<F>() == size_of::<u32>(),
             "field32 memory requires a four-byte proof field"
         );
-        let last_access = memory
+        let seen_blocks = memory
             .memory
             .config
             .iter()
             .map(|config| PagedVec::new(config.num_cells.div_ceil(BLOCK_FE_WIDTH)))
             .collect();
+        let mut history = PreflightHistory::default();
+        if let Some(program_capacity) = instret_left
+            .and_then(|instret| usize::try_from(instret).ok())
+            .and_then(|instret| instret.checked_add(1))
+        {
+            let _ = history.program.try_reserve_exact(program_capacity);
+        }
         Self {
-            history: PreflightHistory::default(),
+            history,
             timestamp: 1,
-            last_access,
+            seen_blocks,
             pending_writes: Vec::new(),
             read_canonical_field_block: read_canonical_field_block::<F>,
             instret_left: instret_left.unwrap_or(u64::MAX),
@@ -133,13 +140,13 @@ impl PreflightCtx {
     }
 
     #[inline(always)]
-    fn next_access(&mut self, address_space: u32, block_index: u32) -> (u32, u32) {
+    fn next_access(&mut self, address_space: u32, block_index: u32) -> (u32, bool) {
         let timestamp = self.timestamp;
         self.timestamp += 1;
-        let last_access = &mut self.last_access[address_space as usize];
-        let previous = last_access.get(block_index as usize);
-        last_access.set(block_index as usize, timestamp);
-        (timestamp, previous)
+        let seen = &mut self.seen_blocks[address_space as usize];
+        let was_seen = seen.get(block_index as usize);
+        seen.set(block_index as usize, true);
+        (timestamp, was_seen)
     }
 
     #[inline(always)]
@@ -179,9 +186,9 @@ impl PreflightCtx {
         }
         debug_assert!(self.pending_writes.is_empty());
         for block_index in Self::block_range(memory, address_space, byte_ptr, byte_len) {
-            let (timestamp, previous) = self.next_access(address_space, block_index);
+            let (timestamp, was_seen) = self.next_access(address_space, block_index);
             let pointer = block_index * BLOCK_FE_WIDTH as u32;
-            let initial_value = (previous == 0).then(|| {
+            let initial_value = (!was_seen).then(|| {
                 Self::block_value(
                     memory,
                     address_space,
@@ -379,7 +386,7 @@ mod tests {
 
 #[cfg(test)]
 mod canonical_field_tests {
-    use openvm_instructions::DEFERRAL_AS;
+    use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS};
     use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -411,6 +418,32 @@ mod canonical_field_tests {
         assert_eq!(
             history.memory.field_values[0].values,
             values.map(|value| value.as_canonical_u32())
+        );
+    }
+
+    #[test]
+    fn repeated_writes_seed_a_block_once() {
+        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&MemoryConfig::default()));
+        let mut ctx = PreflightCtx::new::<BabyBear>(&memory, None);
+
+        ctx.begin_write(&memory, RV64_MEMORY_AS, 0, size_of::<u16>() as u32);
+        unsafe {
+            memory.write(RV64_MEMORY_AS, 0, [1u16]);
+        }
+        ctx.finish_write(&memory);
+
+        ctx.begin_write(&memory, RV64_MEMORY_AS, 0, size_of::<u16>() as u32);
+        unsafe {
+            memory.write(RV64_MEMORY_AS, 0, [2u16]);
+        }
+        ctx.finish_write(&memory);
+
+        let history = ctx.finish(0);
+        assert_eq!(history.memory.accesses.len(), 2);
+        assert_eq!(history.memory.initial_writes.len(), 1);
+        assert_eq!(
+            history.memory.initial_writes[0].initial_value,
+            [0; BLOCK_FE_WIDTH]
         );
     }
 }
