@@ -133,9 +133,8 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         validate_final_pc: bool,
     ) -> Result<Self, PostflightError> {
         validate_memory_config(memory_config)?;
-        validate_program_timestamps(history, memory_config)?;
-        let memory_starts = memory_starts(history)?;
-        let mut opcode_counts = BTreeMap::<u32, usize>::new();
+        let memory_starts = memory_starts(history, memory_config)?;
+        let mut opcode_counts = FxHashMap::<u32, usize>::default();
         let mut dense_program_rows = Vec::with_capacity(program.instructions_and_debug_infos.len());
         let mut filtered_exec_frequencies = Vec::new();
         for instruction in &program.instructions_and_debug_infos {
@@ -162,7 +161,8 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                     "TERMINATE exit code does not match the fetched instruction",
                 ));
             }
-            *opcode_counts.entry(opcode.as_usize() as u32).or_default() += 1;
+            let opcode = opcode.as_usize() as u32;
+            *opcode_counts.entry(opcode).or_default() += 1;
             let frequency = &mut filtered_exec_frequencies[dense_program_rows[slot]];
             *frequency = frequency
                 .checked_add(1)
@@ -174,18 +174,17 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         }
 
         let mut opcode_ranges = BTreeMap::new();
+        let mut opcode_counts = opcode_counts.into_iter().collect::<Vec<_>>();
+        opcode_counts.sort_unstable_by_key(|&(opcode, _)| opcode);
         let mut cursor = 0usize;
-        for (&opcode, &count) in &opcode_counts {
+        let mut next = FxHashMap::with_capacity_and_hasher(opcode_counts.len(), Default::default());
+        for (opcode, count) in opcode_counts {
             opcode_ranges.insert(opcode, cursor..cursor + count);
+            next.insert(opcode, cursor);
             cursor += count;
         }
-        let mut next = opcode_ranges
-            .iter()
-            .map(|(&opcode, range)| (opcode, range.start))
-            .collect::<BTreeMap<_, _>>();
         let mut steps = vec![PostflightStep(0); opcodes.len()];
         for (program_index, opcode) in opcodes.into_iter().enumerate() {
-            let opcode = opcode.as_usize() as u32;
             let destination = next
                 .get_mut(&opcode)
                 .expect("opcode count was collected above");
@@ -722,15 +721,24 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
     }
 }
 
-fn memory_starts(history: &PreflightHistory) -> Result<Vec<u32>, PostflightError> {
+fn memory_starts(
+    history: &PreflightHistory,
+    config: &MemoryConfig,
+) -> Result<Vec<u32>, PostflightError> {
     if history.program.is_empty() {
         return Err(PostflightError::new(
             "program log must contain a final sentinel",
         ));
     }
+    let timestamp_limit = 1u64 << config.timestamp_max_bits;
     if history.program[0].timestamp != 1 {
         return Err(PostflightError::new(
             "segment program log must start at timestamp 1",
+        ));
+    }
+    if u64::from(history.program[0].timestamp) >= timestamp_limit {
+        return Err(PostflightError::new(
+            "program event 0 timestamp exceeds the configured domain",
         ));
     }
 
@@ -739,6 +747,12 @@ fn memory_starts(history: &PreflightHistory) -> Result<Vec<u32>, PostflightError
     let mut starts = Vec::with_capacity(history.program.len());
     for (program_index, boundary) in history.program.windows(2).enumerate() {
         let [from, to] = boundary else { unreachable!() };
+        if u64::from(to.timestamp) >= timestamp_limit {
+            return Err(PostflightError::new(format!(
+                "program event {} timestamp exceeds the configured domain",
+                program_index + 1
+            )));
+        }
         if to.timestamp < from.timestamp {
             return Err(PostflightError::new(format!(
                 "program timestamp moved backwards at step {program_index}"
@@ -894,21 +908,6 @@ fn validate_memory_config(config: &MemoryConfig) -> Result<(), PostflightError> 
             "expected {expected_address_spaces} address-space layouts, found {}",
             config.addr_spaces.len()
         )));
-    }
-    Ok(())
-}
-
-fn validate_program_timestamps(
-    history: &PreflightHistory,
-    config: &MemoryConfig,
-) -> Result<(), PostflightError> {
-    let timestamp_limit = 1u64 << config.timestamp_max_bits;
-    for (index, event) in history.program.iter().enumerate() {
-        if u64::from(event.timestamp) >= timestamp_limit {
-            return Err(PostflightError::new(format!(
-                "program event {index} timestamp exceeds the configured domain"
-            )));
-        }
     }
     Ok(())
 }
