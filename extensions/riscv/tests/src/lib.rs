@@ -5,11 +5,10 @@ mod tests {
 
     use eyre::Result;
     #[cfg(feature = "rvr")]
-    use openvm_circuit::arch::{ExecutionOutcome, VmState};
+    use openvm_circuit::arch::{execution_mode::Segment, ExecutionOutcome, VmState};
     use openvm_circuit::{
         arch::{
-            execution_mode::Segment, hasher::poseidon2::vm_poseidon2_hasher, ExecutionError,
-            VirtualMachine, VmExecutor,
+            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
         },
         system::memory::{
             merkle::{
