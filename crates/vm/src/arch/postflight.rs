@@ -11,6 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rustc_hash::FxHashMap;
 use thiserror::Error;
+use tracing::instrument;
 
 use super::{
     ExecutionState, MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory,
@@ -81,6 +82,7 @@ impl PostflightError {
 }
 
 impl<'a, F: PrimeField32> Postflight<'a, F> {
+    #[instrument(name = "postflight", skip_all)]
     pub fn new(
         program: &'a Program<F>,
         history: &'a PreflightHistory,
@@ -975,7 +977,7 @@ fn memory_index<F: PrimeField32>(
         ));
     }
 
-    let mut seed_by_block = FxHashMap::default();
+    let mut seed_by_block = FxHashMap::with_capacity_and_hasher(seeds.len(), Default::default());
     let mut field_seed_cursor = 0usize;
     for (index, seed) in seeds.iter().enumerate() {
         if seed.address_space & rvr_state::PREFLIGHT_WRITE_BIT != 0 {
@@ -1015,9 +1017,9 @@ fn memory_index<F: PrimeField32>(
         ));
     }
 
-    let mut last_event = FxHashMap::<u64, u32>::default();
+    let mut last_event = FxHashMap::<u64, (u32, bool)>::default();
+    last_event.reserve(seeds.len());
     let mut predecessors = Vec::with_capacity(memory.len());
-    let mut final_blocks = BTreeMap::<u64, (usize, bool)>::new();
     let mut previous_timestamp = None;
     let timestamp_limit = 1u64 << config.timestamp_max_bits;
     let mut field_event_cursor = 0usize;
@@ -1054,8 +1056,9 @@ fn memory_index<F: PrimeField32>(
         let event_index = u32::try_from(event_index).unwrap();
         let predecessor = match last_event.entry(key) {
             Entry::Occupied(mut previous) => {
-                let predecessor = *previous.get() + 1;
-                previous.insert(event_index);
+                let &(previous_index, dirty) = previous.get();
+                let predecessor = previous_index + 1;
+                previous.insert((event_index, dirty || event.is_write()));
                 predecessor
             }
             Entry::Vacant(vacant) => {
@@ -1070,18 +1073,11 @@ fn memory_index<F: PrimeField32>(
                 } else {
                     0
                 };
-                vacant.insert(event_index);
+                vacant.insert((event_index, event.is_write()));
                 predecessor
             }
         };
         predecessors.push(predecessor);
-        final_blocks
-            .entry(key)
-            .and_modify(|(last_event_index, dirty)| {
-                *last_event_index = event_index as usize;
-                *dirty |= event.is_write();
-            })
-            .or_insert((event_index as usize, event.is_write()));
     }
     if field_event_cursor != history.memory.field_values.len() {
         return Err(PostflightError::new(
@@ -1095,10 +1091,12 @@ fn memory_index<F: PrimeField32>(
         )));
     }
 
+    let mut final_blocks = last_event.into_iter().collect::<Vec<_>>();
+    final_blocks.sort_unstable_by_key(|&(key, _)| key);
     let touched_memory = final_blocks
-        .into_values()
-        .map(|(event_index, dirty)| {
-            let event = history.memory.accesses[event_index];
+        .into_iter()
+        .map(|(_, (event_index, dirty))| {
+            let event = history.memory.accesses[event_index as usize];
             let values = match config.addr_spaces[event.address_space() as usize].layout {
                 MemoryCellType::U16 => event.value.map(F::from_u16),
                 MemoryCellType::F { size: 4 } => decode_field_block::<F>(
