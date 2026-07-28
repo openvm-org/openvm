@@ -11,8 +11,6 @@ use crate::types::{ZkvmSecp256k1Hash, ZkvmSecp256k1Pubkey, ZkvmSecp256k1Signatur
 /// point on EC, or the signature is not a valid encoding. Otherwise returns [`ZkvmStatus::Ok`] and
 /// writes the verification result to `verified`.
 ///
-/// Note: following the upstream `k256` crate, high-s (malleable) signatures verify as `false`.
-///
 /// # Safety
 ///
 /// - `msg`, `sig`, and `pubkey` must be valid for reads of 32, 64, and 64 bytes respectively.
@@ -49,10 +47,6 @@ pub unsafe extern "C" fn zkvm_secp256k1_verify(
 /// Returns [`ZkvmStatus::Fail`] if any pointer is NULL, `recid > 3`, the signature is not a
 /// valid encoding, or no public key can be recovered. Otherwise returns [`ZkvmStatus::Ok`]
 /// and writes the uncompressed public key to `output`.
-///
-/// Note: matching the EVM precompile, high-s signatures are accepted (no malleability check).
-/// The EVM additionally restricts `v` to 27/28 (`recid` 0/1); enforcing that is the caller's
-/// responsibility.
 ///
 /// # Safety
 ///
