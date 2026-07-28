@@ -9,7 +9,7 @@ use openvm_circuit::{
         cuda::postflight::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
-        prepare_gpu_postflight, to_byte_ptr_bits, GenerationError, Postflight, PostflightTracegen,
+        prepare_gpu_postflight, to_byte_ptr_bits, GenerationError, PostflightTracegen,
         PreflightOutput, VirtualMachine, VmBuilder,
     },
     system::cuda::{
@@ -411,9 +411,9 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256Rv64GpuBuilder {
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        _host_program: &Program<BabyBear>,
         program: &Self::Prepared,
         output: &PreflightOutput,
-        _postflight: &Postflight<'_, BabyBear>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let (transcript, replay_plan) = vm
             .postflight_history(program, output)

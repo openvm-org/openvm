@@ -10,8 +10,8 @@ use openvm_circuit::{
             GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
         },
         prepare_gpu_postflight, to_byte_ptr_bits, ChipInventory, ChipInventoryError,
-        GenerationError, Postflight, PostflightTracegen, PreflightOutput, VirtualMachine,
-        VmBuilder, VmProverExtension,
+        GenerationError, PostflightTracegen, PreflightOutput, VirtualMachine, VmBuilder,
+        VmProverExtension,
     },
     system::cuda::{
         extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
@@ -80,9 +80,9 @@ macro_rules! impl_postflight_tracegen {
 
             fn generate_proving_ctx(
                 vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+                _host_program: &Program<F>,
                 program: &Self::Prepared,
                 output: &PreflightOutput,
-                _postflight: &Postflight<'_, F>,
             ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
                 let (transcript, replay_plan) = vm
                     .postflight_history(program, output)

@@ -645,9 +645,9 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBui
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        _host_program: &Program<F>,
         program: &Self::Prepared,
         output: &PreflightOutput,
-        _postflight: &Postflight<'_, F>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let (transcript, replay_plan) = vm
             .postflight_history(program, output)

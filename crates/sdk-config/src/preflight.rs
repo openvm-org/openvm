@@ -12,8 +12,7 @@ use openvm_circuit::arch::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     instructions::program::Program,
-    prepare_gpu_postflight, GenerationError, Postflight, PostflightTracegen, PreflightOutput,
-    VirtualMachine,
+    prepare_gpu_postflight, GenerationError, PostflightTracegen, PreflightOutput, VirtualMachine,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
@@ -181,9 +180,9 @@ impl PostflightTracegen<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
+        _host_program: &Program<BabyBear>,
         program: &Self::Prepared,
         output: &PreflightOutput,
-        _postflight: &Postflight<'_, BabyBear>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let (transcript, replay_plan) = vm
             .postflight_history(program, output)

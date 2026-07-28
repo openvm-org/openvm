@@ -163,9 +163,9 @@ pub trait PostflightTracegen<E: StarkEngine>: VmBuilder<E> {
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<E, Self>,
+        program: &Program<Val<E::SC>>,
         prepared: &Self::Prepared,
         output: &PreflightOutput,
-        postflight: &Postflight<'_, Val<E::SC>>,
     ) -> Result<ProvingContext<E::PB>, GenerationError>;
 }
 
@@ -175,6 +175,7 @@ where
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
     Val<SC>: VmField,
     VB: VmBuilder<E, SystemChipInventory = SystemChipInventory<SC>>,
+    <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>,
 {
     type Prepared = ();
 
@@ -187,14 +188,26 @@ where
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<E, Self>,
+        program: &Program<Val<SC>>,
         _prepared: &Self::Prepared,
-        _output: &PreflightOutput,
-        postflight: &Postflight<'_, Val<SC>>,
+        output: &PreflightOutput,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
         begin_preflight_tracegen_session(&mut vm.preflight_tracegen_poisoned)?;
+        let postflight = Postflight::new(
+            program,
+            &output.history,
+            &vm.config().as_ref().memory_config,
+            output.exit_code,
+        )
+        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        #[cfg(feature = "metrics")]
+        crate::metrics::emit_opcode_counts(
+            &output.state.metrics,
+            vm.postflight_opcode_counts(&postflight),
+        );
         let result = vm
             .chip_complex
-            .generate_proving_ctx_from_postflight(postflight)
+            .generate_proving_ctx_from_postflight(&postflight)
             .and_then(|ctx| vm.validate_proving_ctx(ctx));
         if result.is_ok() {
             vm.preflight_tracegen_poisoned = false;
@@ -1137,25 +1150,8 @@ where
         VB: PostflightTracegen<E>,
     {
         self.transport_init_memory_to_device(&state.memory);
-        let mut output = interpreter.execute_segment(state, segment)?;
-        let postflight = Postflight::new(
-            program,
-            &output.history,
-            &self.config().as_ref().memory_config,
-            output.exit_code,
-        )
-        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        #[cfg(feature = "metrics")]
-        crate::metrics::emit_opcode_counts(
-            &output.state.metrics,
-            self.postflight_opcode_counts(&postflight),
-        );
-        output
-            .state
-            .memory
-            .memory
-            .extend_touched_pages_from_touched(postflight.touched_memory());
-        let mut ctx = self.generate_proving_ctx(prepared, &output, &postflight)?;
+        let output = interpreter.execute_segment(state, segment)?;
+        let mut ctx = self.generate_proving_ctx(program, prepared, &output)?;
         modify_ctx(&mut ctx);
         let proof = self
             .engine
@@ -1202,14 +1198,14 @@ where
     #[instrument(name = "trace_gen", skip_all)]
     pub(crate) fn generate_proving_ctx(
         &mut self,
+        program: &Program<Val<E::SC>>,
         prepared: &VB::Prepared,
         output: &PreflightOutput,
-        postflight: &Postflight<'_, Val<E::SC>>,
     ) -> Result<ProvingContext<E::PB>, GenerationError>
     where
         VB: PostflightTracegen<E>,
     {
-        VB::generate_proving_ctx(self, prepared, output, postflight)
+        VB::generate_proving_ctx(self, program, prepared, output)
     }
 
     fn validate_proving_ctx(

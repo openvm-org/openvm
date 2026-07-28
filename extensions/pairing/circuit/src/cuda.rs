@@ -5,7 +5,7 @@ use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
-        prepare_gpu_postflight, AirInventory, ChipInventoryError, GenerationError, Postflight,
+        prepare_gpu_postflight, AirInventory, ChipInventoryError, GenerationError,
         PostflightTracegen, PreflightOutput, VirtualMachine, VmBuilder, VmChipComplex,
         VmProverExtension,
     },
@@ -36,9 +36,9 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        _host_program: &Program<BabyBear>,
         program: &Self::Prepared,
         output: &PreflightOutput,
-        _postflight: &Postflight<'_, BabyBear>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let (transcript, replay_plan) = vm
             .postflight_history(program, output)
