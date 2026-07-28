@@ -332,6 +332,7 @@ fn prove_inner(
     for (segment_idx, segment) in segments.into_iter().enumerate() {
         let _segment_span = info_span!("prove_segment", segment = segment_idx).entered();
         let _prove_span = info_span!("total_proof").entered();
+        #[cfg(all(feature = "metrics", not(feature = "rvr")))]
         let num_insns = segment.num_insns;
 
         // Replay resolves first reads against the immutable segment-start
