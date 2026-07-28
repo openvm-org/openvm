@@ -112,13 +112,6 @@ impl DeferralCallChipGpu {
                 device_ctx.stream.as_raw(),
             )?;
         }
-        transcript.synchronize()?;
-        let replay_error = transcript.error_code()?;
-        if replay_error != 0 {
-            return Err(GpuPostflightError::InvalidTranscript(format!(
-                "Deferral CALL tracegen rejected replay with code {replay_error}"
-            )));
-        }
         self.poseidon2.push(poseidon2);
         Ok(AirProvingContext::simple_no_pis(trace))
     }

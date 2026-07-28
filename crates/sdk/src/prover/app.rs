@@ -6,7 +6,7 @@ use openvm_circuit::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationProverBuilder, ContinuationVmProof, Executor, MeteredExecutor,
-        Streams, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmExecutionConfig,
+        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmExecutionConfig,
         VmInstance, VmVerificationError,
     },
     system::{
@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
-use tracing::info_span;
+use tracing::instrument;
 
 use crate::{
     keygen::AppVerifyingKey,
@@ -117,6 +117,11 @@ where
     }
 
     /// Generates proof for every continuation segment.
+    #[instrument(
+        name = "app_prove",
+        skip_all,
+        fields(group = "app_proof", program = self.program_name.as_deref().unwrap_or(""))
+    )]
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
@@ -126,14 +131,7 @@ where
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),
         );
-        let input: Streams = input.into();
-        let _prove_span = info_span!(
-            "app_prove",
-            group = "app_proof",
-            program = self.program_name.as_deref().unwrap_or("")
-        )
-        .entered();
-        let proof = VB::prove_continuation(&mut self.prepared, &mut self.instance, input)?;
+        let proof = VB::prove_continuation(&mut self.prepared, &mut self.instance, input.into())?;
         #[cfg(debug_assertions)]
         let _ = verify_app_proof_inner::<E>(
             &self.app_vm_vk,
