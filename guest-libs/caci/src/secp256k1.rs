@@ -7,9 +7,9 @@ use crate::types::{ZkvmSecp256k1Hash, ZkvmSecp256k1Pubkey, ZkvmSecp256k1Signatur
 
 /// Verifies an ECDSA/secp256k1 signature over a prehashed message.
 ///
-/// Returns [`ZkvmStatus::Fail`] if any pointer is NULL, the public key is not a non-identity affine point on EC,
-/// or the signature is not a valid encoding. Otherwise returns [`ZkvmStatus::Ok`] and writes the verification
-/// result to `verified`.
+/// Returns [`ZkvmStatus::Fail`] if any pointer is NULL, the public key is not a non-identity affine
+/// point on EC, or the signature is not a valid encoding. Otherwise returns [`ZkvmStatus::Ok`] and
+/// writes the verification result to `verified`.
 ///
 /// Note: following the upstream `k256` crate, high-s (malleable) signatures verify as `false`.
 ///
