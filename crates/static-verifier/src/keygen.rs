@@ -157,15 +157,9 @@ impl StaticVerifierProvingKey {
                     .unwrap_or(1)
             });
 
-        let (advice, instances) =
-            self.run_witness_gen_pipeline(proof, graph_prover_threads);
+        let (advice, instances) = self.run_witness_gen_pipeline(proof, graph_prover_threads);
 
-        snark_verifier_sdk::halo2::gen_snark_from_base(
-            params,
-            &self.pinning.pk,
-            advice,
-            instances,
-        )
+        snark_verifier_sdk::halo2::gen_snark_from_base(params, &self.pinning.pk, advice, instances)
     }
 
     /// Runs the graph-executor witness pipeline: builds (or reuses) the
@@ -173,10 +167,6 @@ impl StaticVerifierProvingKey {
     /// [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder) onto advice
     /// columns, and returns the [`AdviceColumns<Fr>`] + instance columns ready for
     /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
-    ///
-    /// `diagnostic_params` is only consulted when `STATIC_VERIFIER_COMPARE_WITNESS`
-    /// is set — see [`Self::compare_witness_with_base_builder`] (`halo2-gpu` only;
-    /// on the CPU build the parameter is unused).
     pub fn run_witness_gen_pipeline(
         &self,
         proof: &Proof<RootConfig>,

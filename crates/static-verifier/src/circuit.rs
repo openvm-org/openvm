@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     backend::Halo2Backend,
-    chip_traits::{BabyBearInst, GateInst, PopulateInputs, Poseidon2Inst, TranscriptInst},
+    chip_traits::{PopulateInputs, Poseidon2Inst, TranscriptInst},
     stages::{
         full_pipeline::{
             constrained_verify, extract_public_values, load_proof_wire, ProofWire,

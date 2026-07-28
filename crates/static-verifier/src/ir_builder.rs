@@ -22,8 +22,8 @@
 //!   without tracking any cache.
 //! - **Per-node metadata**: every emitted node gets a [`NodeMeta`] (context/range tape offsets and
 //!   lengths, constant-skip indices, operand tape offsets) derived by replaying the op on a
-//!   [`CalculateOffsetsTape`](crate::opcode_impl::CalculateOffsetsTape) seeded with the
-//!   builder's current cache state.
+//!   [`CalculateOffsetsTape`](crate::opcode_impl::CalculateOffsetsTape) seeded with the builder's
+//!   current cache state.
 //! - **Copy constraints**: `constrain_equal` assigns no advice cells, so it produces no node.
 //! - **Transcript / digest hashing**: the builder re-implements `TranscriptChip`'s sponge and
 //!   buffer bookkeeping, emitting [`Halo2Opcode::PoseidonPermute2T3`] /

@@ -28,10 +28,10 @@ pub mod codec;
 pub mod config;
 pub mod field;
 pub mod graph_executor;
-pub mod ir_builder;
-pub mod opcode_impl;
 pub mod hash;
+pub mod ir_builder;
 pub mod keygen;
+pub mod opcode_impl;
 pub mod prover;
 pub mod stages;
 #[cfg(test)]

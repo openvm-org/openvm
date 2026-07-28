@@ -956,13 +956,13 @@ mod tests {
     use super::*;
     use crate::{
         backend::Halo2Backend, stages::proof_shape::log_heights_per_air_from_proof,
+        StaticVerifierCircuit,
     };
     #[cfg(feature = "halo2-gpu")]
     use crate::{
         test_fixtures::{fixture_circuit_and_proof, FIXTURE_K},
         Halo2Params, StaticVerifierProvingKey, StaticVerifierShape,
     };
-    use crate::StaticVerifierCircuit;
 
     const K: usize = 22;
     const LOOKUP_BITS: usize = K - 1;
@@ -1180,15 +1180,14 @@ mod tests {
         // pays the remaining one-time costs (device init, first fused-column
         // allocation) so the timed loop measures only per-proof work.
         let start = Instant::now();
-        let (warmup_advice, _) = pk.run_witness_gen_pipeline(&proof, 1, None);
+        let (warmup_advice, _) = pk.run_witness_gen_pipeline(&proof, 1);
         println!("pipeline warm-up (1 thread): {:?}", start.elapsed());
         drop(warmup_advice);
 
         for num_threads in [4, 8, 12] {
             for iter in 0..3 {
                 let start = Instant::now();
-                let (gpu_advice, _instances) =
-                    pk.run_witness_gen_pipeline(&proof, num_threads, None);
+                let (gpu_advice, _instances) = pk.run_witness_gen_pipeline(&proof, num_threads);
                 println!(
                     "pipeline (threads={num_threads}, iter={iter}): {:?}",
                     start.elapsed()
