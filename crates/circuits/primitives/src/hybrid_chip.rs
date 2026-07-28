@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
     base::DeviceMatrix, hash_scheme::GpuHashScheme, prelude::SC, GenericGpuBackend, GpuBackend,
@@ -18,25 +16,23 @@ pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<Gener
 }
 
 // Wraps a CPU chip for use with GpuBackend
-pub struct HybridChip<RA, C: Chip<RA, CpuBackend<SC>>> {
+pub struct HybridChip<C: Chip<(), CpuBackend<SC>>> {
     pub cpu_chip: C,
     pub device_ctx: GpuDeviceCtx,
-    _marker: PhantomData<RA>,
 }
 
-impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
+impl<C: Chip<(), CpuBackend<SC>>> HybridChip<C> {
     pub fn new(cpu_chip: C, device_ctx: GpuDeviceCtx) -> Self {
         Self {
             cpu_chip,
             device_ctx,
-            _marker: PhantomData,
         }
     }
 }
 
-impl<RA, C: Chip<RA, CpuBackend<SC>>> Chip<RA, GpuBackend> for HybridChip<RA, C> {
-    fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<GpuBackend> {
-        let ctx = self.cpu_chip.generate_proving_ctx(arena);
+impl<C: Chip<(), CpuBackend<SC>>> Chip<(), GpuBackend> for HybridChip<C> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
+        let ctx = self.cpu_chip.generate_proving_ctx(());
         cpu_proving_ctx_to_gpu(ctx, &self.device_ctx)
     }
 }

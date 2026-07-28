@@ -131,11 +131,11 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     }
 }
 
-impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
+impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
         let width = BaseAir::<Val<SC>>::width(&self.air);
         let height = (self.trace.len() / width).next_power_of_two();
         let mut trace = self.trace.clone();

@@ -87,8 +87,8 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
     }
 }
 
-impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl<const SBOX_REGISTERS: usize> Chip<(), GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
         let Some(records) = self.records.lock().unwrap().take() else {
             self.idx.fill_zero_on(&self.device_ctx).unwrap();
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -210,8 +210,8 @@ impl Poseidon2PeripheryChipGPU {
     }
 }
 
-impl<RA> Chip<RA, GpuBackend> for Poseidon2PeripheryChipGPU {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl Chip<(), GpuBackend> for Poseidon2PeripheryChipGPU {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
         match self {
             Self::Register0(chip) => chip.generate_proving_ctx(()),
             Self::Register1(chip) => chip.generate_proving_ctx(()),

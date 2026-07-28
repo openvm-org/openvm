@@ -11,7 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::ShiftWOpcode;
+use openvm_riscv_transpiler::{ShiftOpcode, ShiftWOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{ShiftWLogicalExecutor, ShiftWRightArithmeticExecutor};
@@ -29,7 +29,7 @@ trait ShiftWExecutorKind {
     fn is_right_arithmetic(&self) -> bool;
 }
 
-impl<A> ShiftWExecutorKind for ShiftWLogicalExecutor<A> {
+impl ShiftWExecutorKind for ShiftWLogicalExecutor {
     fn offset(&self) -> usize {
         self.offset
     }
@@ -39,7 +39,7 @@ impl<A> ShiftWExecutorKind for ShiftWLogicalExecutor<A> {
     }
 }
 
-impl<A> ShiftWExecutorKind for ShiftWRightArithmeticExecutor<A> {
+impl ShiftWExecutorKind for ShiftWRightArithmeticExecutor {
     fn offset(&self) -> usize {
         self.offset
     }
@@ -89,10 +89,14 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for ShiftWLogicalExecutor<A>
+impl<F> InterpreterExecutor<F> for ShiftWLogicalExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftWOpcode::from_usize(opcode - self.offset))
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftWPreCompute>()
     }
@@ -125,10 +129,14 @@ where
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for ShiftWRightArithmeticExecutor<A>
+impl<F> InterpreterExecutor<F> for ShiftWRightArithmeticExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftWPreCompute>()
     }
@@ -161,7 +169,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for ShiftWLogicalExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for ShiftWLogicalExecutor
 where
     F: PrimeField32,
 {
@@ -198,7 +206,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for ShiftWRightArithmeticExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for ShiftWRightArithmeticExecutor
 where
     F: PrimeField32,
 {

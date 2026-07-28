@@ -11,13 +11,16 @@ fn main() {
         let builder: CudaBuilder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("cuda/include")
+            .include("cuda/rvr/include")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
+            .include("../../../crates/vm/cuda/rvr/include")
             .include("../../riscv-adapters/cuda/include")
-            .watch("cuda")
             .watch("../../../crates/circuits/primitives/cuda")
-            .watch("../../../crates/vm/cuda")
+            .watch("../../../crates/vm/cuda/rvr/include")
             .watch("../../riscv-adapters/cuda")
+            .watch("cuda/rvr")
+            .watch("cuda/src")
             .library_name("tracegen_gpu_rv64im")
             .files_from_glob("cuda/src/**/*.cu");
 

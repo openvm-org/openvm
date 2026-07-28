@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
@@ -29,21 +29,22 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterCols,
-        Rv64StoreMultiByteAdapterExecutor, Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     store::{
-        common::store_write_data, Rv64StoreWordAir, Rv64StoreWordChip, Rv64StoreWordExecutor,
-        StoreWordCoreAir, StoreWordFiller,
+        common::store_write_data, core::fill_padding_row, Rv64StoreWordAir, Rv64StoreWordChip,
+        Rv64StoreWordExecutor, StoreWordCoreAir, StoreWordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     store::Rv64StoreWordChipGpu,
-    test_utils::memory::{dummy_range_checker, store_gpu_memory_config, transfer_store_records},
+    test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
 type StoreWordHarness =
@@ -72,10 +73,7 @@ fn create_store_word_harness(
         ),
         StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreWordExecutor::new(
-        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64StoreWordChip::<F>::new(
         StoreWordFiller::new(
             Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -85,7 +83,14 @@ fn create_store_word_harness(
         tester.memory_helper(),
     );
     (
-        StoreWordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        StoreWordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        )
+        .with_padding(fill_padding_row),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -98,7 +103,7 @@ fn positive_storew_public_values_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREW,
         Some([4, 0, 0, 0, 0, 0, 0, 0]),
@@ -124,7 +129,7 @@ fn rand_store_word_test() {
         set_and_execute_store(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             STOREW,
             None,
@@ -151,7 +156,7 @@ fn negative_store_address_wraparound_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREW,
         Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
@@ -171,7 +176,7 @@ fn negative_store_address_underflow_test() {
 
     tester.execute(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::from_usize(
             STOREW.global_opcode(),
             [
@@ -180,7 +185,7 @@ fn negative_store_address_underflow_test() {
                 u16::MAX as usize,
                 RV64_REGISTER_AS as usize,
                 RV64_MEMORY_AS as usize,
-                0,
+                1,
                 1,
             ],
         ),
@@ -234,7 +239,7 @@ fn negative_split_store_deferral_as_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREW,
         None,
@@ -260,7 +265,7 @@ fn negative_split_store_deferral_as_test() {
         .expect_err("pranked store adapter trace should fail");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuStoreWordHarness = GpuTestChipHarness<
     F,
     Rv64StoreWordExecutor,
@@ -269,7 +274,7 @@ type GpuStoreWordHarness = GpuTestChipHarness<
     Rv64StoreWordChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -284,10 +289,7 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
         ),
         StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreWordExecutor::new(
-        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64StoreWordChip::<F>::new(
         StoreWordFiller::new(
             Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -304,9 +306,16 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+        .with_padding(fill_padding_row)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case::test_case(RV64_MEMORY_AS as usize)]
 #[test_case::test_case(PUBLIC_VALUES_AS as usize)]
 fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
@@ -319,7 +328,7 @@ fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
         set_and_execute_store(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             STOREW,
             None,
@@ -328,7 +337,6 @@ fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
             Some(mem_as),
         );
     }
-    transfer_store_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

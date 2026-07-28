@@ -33,35 +33,44 @@ struct AddICore {
 
     __device__ AddICore(VariableRangeChecker rc) : range_checker(rc) {}
 
-    __device__ void fill_trace_row(RowSlice row, AddICoreRecord<NUM_LIMBS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&rs1)[NUM_LIMBS],
+        uint16_t imm_low11,
+        uint16_t imm_sign
+    ) {
         uint16_t rd[NUM_LIMBS];
 
         // First limb: rs1[0] + imm_low11 + imm_sign * IMM_SIGN_EXTENSION
-        uint32_t overflow = static_cast<uint32_t>(record.rs1[0]) +
-                            static_cast<uint32_t>(record.imm_low11) +
-                            static_cast<uint32_t>(record.imm_sign) * IMM_SIGN_EXTENSION;
+        uint32_t overflow = static_cast<uint32_t>(rs1[0]) +
+                            static_cast<uint32_t>(imm_low11) +
+                            static_cast<uint32_t>(imm_sign) * IMM_SIGN_EXTENSION;
         uint32_t carry = overflow >> LIMB_BITS;
         rd[0] = static_cast<uint16_t>(overflow & LIMB_MASK);
 
         // Remaining limbs: rs1[i] + sign_limb + carry
-        uint32_t sign_limb = static_cast<uint32_t>(record.imm_sign) * LIMB_MASK;
+        uint32_t sign_limb = static_cast<uint32_t>(imm_sign) * LIMB_MASK;
 #pragma unroll
         for (size_t i = 1; i < NUM_LIMBS; i++) {
-            overflow = static_cast<uint32_t>(record.rs1[i]) + sign_limb + carry;
+            overflow = static_cast<uint32_t>(rs1[i]) + sign_limb + carry;
             carry = overflow >> LIMB_BITS;
             rd[i] = static_cast<uint16_t>(overflow & LIMB_MASK);
         }
 
-        COL_WRITE_ARRAY(row, Cols, rs1, record.rs1);
+        COL_WRITE_ARRAY(row, Cols, rs1, rs1);
         COL_WRITE_ARRAY(row, Cols, rd, rd);
-        COL_WRITE_VALUE(row, Cols, imm_low11, record.imm_low11);
-        COL_WRITE_VALUE(row, Cols, imm_sign, record.imm_sign);
+        COL_WRITE_VALUE(row, Cols, imm_low11, imm_low11);
+        COL_WRITE_VALUE(row, Cols, imm_sign, imm_sign);
         COL_WRITE_VALUE(row, Cols, is_valid, 1u);
 
-        range_checker.add_count(record.imm_low11, 11);
+        range_checker.add_count(imm_low11, 11);
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS - !RANGE_CHECK_TOP_LIMB; i++) {
             range_checker.add_count(rd[i], LIMB_BITS);
         }
+    }
+
+    __device__ void fill_trace_row(RowSlice row, AddICoreRecord<NUM_LIMBS> record) {
+        fill_trace_row(row, record.rs1, record.imm_low11, record.imm_sign);
     }
 };

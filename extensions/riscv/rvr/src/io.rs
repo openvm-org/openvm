@@ -1,10 +1,13 @@
 //! RV64 IO instruction lifting and host callbacks.
 
-use std::ffi::c_void;
+use std::{
+    ffi::c_void,
+    mem::{align_of, size_of},
+};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_BYTES, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_platform::WORD_SIZE;
@@ -19,7 +22,7 @@ use rvr_openvm_lift::{
 
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
 
-// HINT_BUFFER writes the maximum hint payload as one arbitrarily aligned range.
+// HINT_BUFFER writes the maximum hint payload as one contiguous range.
 const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(MAX_HINT_BUFFER_DWORDS * WORD_SIZE);
 
@@ -36,12 +39,16 @@ impl ExtInstr for HintStoreWInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_var(self.ptr_reg);
-        ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_page_access(
-            &ptr,
-            MemWidth::Double,
-            PageAddressSpace::MainMemory(RV64_MEMORY_AS),
-        );
+        ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, "1u"]);
+        ctx.reserve_preflight_writes("1u", "2u");
+        if ctx.is_checkpoint_preflight() {
+            ctx.reserve_replay_values("1u");
+        }
+        ctx.write_line("uint64_t hint_word;");
+        ctx.emit_call_without_page_flush("openvm_hint_read_words", &["&hint_word", "1u"]);
+        ctx.advance_timestamp(1);
+        ctx.write_aligned_mem_block(&ptr, "hint_word");
+        ctx.append_replay_value("hint_word");
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -50,6 +57,10 @@ impl ExtInstr for HintStoreWInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -75,14 +86,32 @@ impl ExtInstr for HintBufferInstr {
         ));
         ctx.emit_trap();
         ctx.write_line("}");
-        let callback_count = format!("(uint16_t)({n})");
-        ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &callback_count]);
+        let callback_count = format!("(uint32_t)({n})");
+        ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, &callback_count]);
+        ctx.reserve_preflight_writes(&callback_count, &format!("((uint32_t)({n}) * 3u - 2u)"));
+        ctx.reserve_replay_values(&callback_count);
+        ctx.write_line(&format!("uint64_t hint_words[{MAX_HINT_BUFFER_DWORDS}u];"));
+        ctx.emit_call_without_page_flush(
+            "openvm_hint_read_words",
+            &["hint_words", &callback_count],
+        );
+        ctx.write_line(&format!(
+            "for (uint32_t hint_idx = 0u; hint_idx < (uint32_t)({n}); ++hint_idx) {{"
+        ));
+        ctx.write_line("if (hint_idx != 0u) {");
+        ctx.advance_timestamp(2);
+        ctx.write_line("}");
+        ctx.write_aligned_mem_block(
+            &format!("({ptr} + (uint64_t)hint_idx * 8ull)"),
+            "hint_words[hint_idx]",
+        );
+        ctx.append_replay_value("hint_words[hint_idx]");
+        ctx.write_line("}");
         // Block entry credits one row; runtime metering adds the remaining
         // `(n - 1)` rows.
         let chip_idx = air_index_to_c(self.chip_idx);
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -91,6 +120,10 @@ impl ExtInstr for HintBufferInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -114,17 +147,28 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_var(self.src_reg);
         let ptr = ctx.read_var(self.ptr_reg);
+        let src = ctx.read_var(self.src_reg);
         let addr = match self.offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
             }
-            std::cmp::Ordering::Equal => ptr,
+            std::cmp::Ordering::Equal => ptr.clone(),
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
         let width = format!("{}u", self.width.bytes());
-        ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
+        let slots = if self.width == MemWidth::Byte {
+            "1u"
+        } else {
+            "2u"
+        };
+        // The callback emits the proof-visible public-values memory events.
+        // Reserve only their logical clock here so compact checkpoint
+        // preflight can preserve the schedule without logging those events.
+        // Full preflight still performs its exact write reservation inside the
+        // callback after materializing the crossing-access plan.
+        ctx.reserve_preflight_writes("0u", slots);
+        ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr, &width]);
         ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
     }
 
@@ -134,6 +178,10 @@ impl ExtInstr for RevealInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -231,9 +279,10 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
             *sym
         };
         let callbacks = Rv64IoHostCallbacks {
-            hint_storew: host_hint_storew,
-            hint_buffer: host_hint_buffer,
-            reveal: host_reveal,
+            hint_prepare: host_hint_prepare,
+            hint_read_words: host_hint_read_words,
+            reveal_prepare: host_reveal_prepare,
+            reveal_commit: host_reveal_commit,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
@@ -267,63 +316,145 @@ type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallb
 /// Host callback table shared with `rv64io_callbacks.c`.
 #[repr(C)]
 struct Rv64IoHostCallbacks {
-    hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
-    hint_buffer: extern "C" fn(*mut c_void, u64, u16) -> bool,
-    reveal: extern "C" fn(*mut c_void, u64, u64, u8) -> bool,
+    hint_prepare: extern "C" fn(*mut c_void, u64, u32) -> bool,
+    hint_read_words: unsafe extern "C" fn(*mut c_void, *mut u64, u32),
+    reveal_prepare: extern "C" fn(*mut c_void, u64, u64, u64, u8, *mut Rv64RevealPlan) -> bool,
+    reveal_commit: unsafe extern "C" fn(*mut c_void, *const Rv64RevealPlan),
 }
 
-/// Host callback for HINT_STORED. Pops one RV64 register-width word from the
-/// hint stream and writes it to guest memory at `dest_addr`.
-extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) -> bool {
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Rv64RevealPlan {
+    block_addr: u64,
+    previous: [u64; 2],
+    post: [u64; 2],
+    crosses: u8,
+    padding: [u8; 7],
+}
+
+const _: () = {
+    assert!(size_of::<Rv64RevealPlan>() == 48);
+    assert!(align_of::<Rv64RevealPlan>() == 8);
+};
+
+/// Validate a hint-store operation without consuming hints or mutating memory.
+extern "C" fn host_hint_prepare(ctx: *mut c_void, dest_addr: u64, num_words: u32) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    if io.hint_stream.remaining() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
+    let num_words = num_words as usize;
+    if num_words == 0
+        || num_words > MAX_HINT_BUFFER_DWORDS
+        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES)
+        || io.memory_ptr.is_null()
+    {
         return false;
     }
-    let Some(range) = checked_mem_bounds_range(dest_addr, RV64_REGISTER_BYTES) else {
+    let Some(num_bytes) = num_words.checked_mul(RV64_REGISTER_NUM_LIMBS) else {
         return false;
     };
-    let dst =
-        unsafe { std::slice::from_raw_parts_mut(io.memory_ptr.add(range.start), range.len()) };
-    io.hint_stream.copy_to_slice(dst);
-    true
+    io.hint_stream.remaining() >= num_bytes
+        && checked_mem_bounds_range(dest_addr, num_bytes as u64).is_some()
 }
 
-/// Host callback for HINT_BUFFER. Copies `num_words * RV64_REGISTER_BYTES`
-/// bytes from the hint stream to guest memory.
-extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u16) -> bool {
-    let num_bytes = u64::from(num_words) * RV64_REGISTER_BYTES;
-    let num_words = usize::from(num_words);
+/// Consume validated hint words into a host buffer.
+///
+/// # Safety
+///
+/// `words` must point to writable storage for `num_words` elements, and
+/// [`host_hint_prepare`] must have succeeded for the same word count without
+/// an intervening hint-stream mutation.
+unsafe extern "C" fn host_hint_read_words(ctx: *mut c_void, words: *mut u64, num_words: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    let nbytes = num_words * RV64_REGISTER_NUM_LIMBS;
-    if io.hint_stream.remaining() < nbytes || io.memory_ptr.is_null() {
-        return false;
+    let words = unsafe { std::slice::from_raw_parts_mut(words, num_words as usize) };
+    for word in words {
+        let mut bytes = [0; RV64_REGISTER_NUM_LIMBS];
+        io.hint_stream.copy_to_slice(&mut bytes);
+        *word = u64::from_le_bytes(bytes);
     }
-    let Some(range) = checked_mem_bounds_range(dest_addr, num_bytes) else {
-        return false;
-    };
-    let dst =
-        unsafe { std::slice::from_raw_parts_mut(io.memory_ptr.add(range.start), range.len()) };
-    io.hint_stream.copy_to_slice(dst);
-    true
 }
 
-/// Host callback for stores to `PUBLIC_VALUES_AS`.
-/// Generated C adds the trace-row cost.
-extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, addr: u64, width: u8) -> bool {
+/// Validate and materialize complete pre/post AS3 blocks without mutation.
+extern "C" fn host_reveal_prepare(
+    ctx: *mut c_void,
+    src_val: u64,
+    base_addr: u64,
+    effective_addr: u64,
+    width: u8,
+    plan: *mut Rv64RevealPlan,
+) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let width = match width {
         1 | 2 | 4 | 8 => usize::from(width),
         _ => return false,
     };
-    let Some(end) = addr.checked_add(width as u64) else {
+    if base_addr > u32::MAX as u64 || effective_addr > u32::MAX as u64 || plan.is_null() {
+        return false;
+    }
+    let Some(end) = effective_addr.checked_add(width as u64) else {
         return false;
     };
     if end > io.public_values.len() as u64 {
         return false;
     }
-    let range = addr as usize..end as usize;
-    io.public_values[range].copy_from_slice(&src_val.to_le_bytes()[..width]);
+    let block_addr = effective_addr & !7;
+    if u32::try_from(block_addr >> 1).is_err() {
+        return false;
+    }
+    let shift = (effective_addr - block_addr) as usize;
+    let crosses = shift + width > 8;
+    let block_count = 1 + usize::from(crosses);
+    let Some(block_end) = block_addr.checked_add((block_count * 8) as u64) else {
+        return false;
+    };
+    if block_end > io.public_values.len() as u64 {
+        return false;
+    }
+
+    let mut previous = [0u64; 2];
+    let mut post = [0u64; 2];
+    let block_addr = block_addr as usize;
+    for index in 0..block_count {
+        let start = block_addr + index * 8;
+        previous[index] =
+            u64::from_le_bytes(io.public_values[start..start + 8].try_into().unwrap());
+        post[index] = previous[index];
+    }
+    let mut post_bytes = [0u8; 16];
+    post_bytes[..8].copy_from_slice(&post[0].to_le_bytes());
+    if crosses {
+        post_bytes[8..].copy_from_slice(&post[1].to_le_bytes());
+    }
+    post_bytes[shift..shift + width].copy_from_slice(&src_val.to_le_bytes()[..width]);
+    post[0] = u64::from_le_bytes(post_bytes[..8].try_into().unwrap());
+    if crosses {
+        post[1] = u64::from_le_bytes(post_bytes[8..].try_into().unwrap());
+    }
+    unsafe {
+        plan.write(Rv64RevealPlan {
+            block_addr: block_addr as u64,
+            previous,
+            post,
+            crosses: u8::from(crosses),
+            padding: [0; 7],
+        });
+    }
     true
+}
+
+/// Apply a previously validated AS3 plan. Generated C logs every block first.
+///
+/// # Safety
+///
+/// `plan` must point to a plan produced by [`host_reveal_prepare`] for this IO
+/// context, with no intervening AS3 mutation.
+unsafe extern "C" fn host_reveal_commit(ctx: *mut c_void, plan: *const Rv64RevealPlan) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
+    let plan = unsafe { &*plan };
+    let block_count = 1 + usize::from(plan.crosses != 0);
+    let block_addr = plan.block_addr as usize;
+    for index in 0..block_count {
+        let start = block_addr + index * 8;
+        io.public_values[start..start + 8].copy_from_slice(&plan.post[index].to_le_bytes());
+    }
 }
 
 #[cfg(test)]
@@ -342,15 +473,24 @@ mod tests {
     #[derive(Default)]
     struct TestEmitCtx {
         lines: Vec<String>,
+        checkpoint_preflight: bool,
     }
 
     impl ExtEmitCtx for TestEmitCtx {
+        fn is_checkpoint_preflight(&self) -> bool {
+            self.checkpoint_preflight
+        }
+
         fn read_var(&mut self, var: Reg) -> String {
             format!("r{}", var.index())
         }
 
         fn peek_var(&mut self, var: Reg) -> String {
             format!("r{}", var.index())
+        }
+
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.write_line(&format!("advance_timestamp({slots});"));
         }
 
         fn write_var(&mut self, _var: Reg, _val: &str) {}
@@ -373,6 +513,22 @@ mod tests {
 
         fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
             self.write_line(&format!("write_mem({base}, {offset}, {val}, {width});"));
+        }
+
+        fn write_aligned_mem_block(&mut self, addr: &str, val: &str) {
+            self.write_line(&format!("write_aligned_mem_block({addr}, {val});"));
+        }
+
+        fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+            self.write_line(&format!("reserve_preflight_writes({writes}, {slots});"));
+        }
+
+        fn reserve_replay_values(&mut self, count: &str) {
+            self.write_line(&format!("reserve_replay_values({count});"));
+        }
+
+        fn append_replay_value(&mut self, value: &str) {
+            self.write_line(&format!("append_replay_value({value});"));
         }
 
         fn emit_call(&mut self, name: &str, args: &[&str]) {
@@ -456,8 +612,16 @@ mod tests {
         instr.emit_c(&mut ctx);
         assert_eq!(
             ctx.lines[0],
-            format!("if (unlikely(!openvm_reveal(r1, r2, {width}u))) {{")
+            format!(
+                "reserve_preflight_writes(0u, {}u);",
+                if width == 1 { 1 } else { 2 }
+            )
         );
+        assert_eq!(
+            ctx.lines[1],
+            format!("bool tmp1 = openvm_reveal(state, r1, r2, r2, {width}u);")
+        );
+        assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
     }
 
     #[test]
@@ -501,27 +665,95 @@ mod tests {
     #[test]
     fn reveal_accounts_for_the_offset_public_values_page() {
         let mut ctx = TestEmitCtx::default();
-        RevealInstr {
+        let instr = RevealInstr {
             src_reg: Reg::new(5),
             ptr_reg: Reg::new(10),
             offset: 12,
             width: MemWidth::Word,
-        }
-        .emit_c(&mut ctx);
+        };
+        instr.emit_c(&mut ctx);
 
+        assert_eq!(ctx.lines[0], "reserve_preflight_writes(0u, 2u);");
         assert_eq!(
-            ctx.lines[0],
-            "if (unlikely(!openvm_reveal(r5, (r10 + 0x0000000cull), 4u))) {"
+            ctx.lines[1],
+            "bool tmp1 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull), 4u);"
         );
+        assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
         assert_eq!(
-            ctx.lines[3],
+            ctx.lines[5],
             format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
         );
     }
 
+    #[test]
+    fn hint_storew_emits_the_three_slot_schedule() {
+        let instr = HintStoreWInstr {
+            ptr_reg: Reg::new(5),
+        };
+
+        let mut ctx = TestEmitCtx {
+            checkpoint_preflight: true,
+            ..Default::default()
+        };
+        instr.emit_c(&mut ctx);
+
+        assert_eq!(
+            ctx.lines,
+            [
+                "if (unlikely(!openvm_hint_prepare(r5, 1u))) {",
+                "trap;",
+                "}",
+                "reserve_preflight_writes(1u, 2u);",
+                "reserve_replay_values(1u);",
+                "uint64_t hint_word;",
+                "openvm_hint_read_words(&hint_word, 1u);",
+                "advance_timestamp(1);",
+                "write_aligned_mem_block(r5, hint_word);",
+                "append_replay_value(hint_word);",
+            ]
+        );
+    }
+
+    #[test]
+    fn hint_buffer_emits_validation_reservation_and_three_slots_per_word() {
+        let instr = HintBufferInstr {
+            ptr_reg: Reg::new(5),
+            num_words_reg: Reg::new(6),
+            chip_idx: None,
+        };
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+
+        let emitted = ctx.lines.join("\n");
+        assert!(emitted.contains("if (unlikely((r6 - 1ull) >= 1023ull)) {"));
+        assert!(emitted.contains("if (unlikely(!openvm_hint_prepare(r5, (uint32_t)(r6)))) {"));
+        assert!(emitted
+            .contains("reserve_preflight_writes((uint32_t)(r6), ((uint32_t)(r6) * 3u - 2u));"));
+        assert!(emitted.contains("reserve_replay_values((uint32_t)(r6));"));
+        assert!(emitted.contains("uint64_t hint_words[1023u];"));
+        assert!(emitted.contains("openvm_hint_read_words(hint_words, (uint32_t)(r6));"));
+        assert!(emitted
+            .contains("for (uint32_t hint_idx = 0u; hint_idx < (uint32_t)(r6); ++hint_idx) {"));
+        assert!(emitted.contains("if (hint_idx != 0u) {"));
+        assert!(emitted.contains("advance_timestamp(2);"));
+        assert!(emitted.contains(
+            "write_aligned_mem_block((r5 + (uint64_t)hint_idx * 8ull), hint_words[hint_idx]);"
+        ));
+        assert!(emitted.contains("append_replay_value(hint_words[hint_idx]);"));
+        assert!(!emitted.contains("trace_page_access"));
+    }
+
     #[test_case(0x1122_3344, 6, 4, &[0x44, 0x33, 0x22, 0x11]; "word")]
     #[test_case(0x1122_3344_5566_7788, 3, 2, &[0x88, 0x77]; "halfword")]
-    fn host_reveal_writes_requested_width(src_val: u64, addr: u64, width: u8, expected: &[u8]) {
+    #[test_case(0xa5, 15, 1, &[0xa5]; "last_byte")]
+    #[test_case(0x1122_3344_5566_7788, 8, 8, &[0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]; "last_dword")]
+    fn host_reveal_plans_then_commits_requested_width(
+        src_val: u64,
+        addr: u64,
+        width: u8,
+        expected: &[u8],
+    ) {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
@@ -537,15 +769,17 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
-        assert!(host_reveal(
-            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
-            src_val,
-            addr,
-            width,
+        let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
+        let mut plan = Rv64RevealPlan::default();
+        assert!(host_reveal_prepare(
+            ctx, src_val, addr, addr, width, &mut plan,
         ));
+        assert!(io.public_values.iter().all(|&byte| byte == 0));
+        unsafe { host_reveal_commit(ctx, &plan) };
 
         let start = addr as usize;
         let end = start + usize::from(width);
@@ -572,26 +806,73 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
-        assert!(!host_reveal(
+        let mut plan = Rv64RevealPlan::default();
+        assert!(!host_reveal_prepare(
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             u64::MAX,
             addr,
+            addr,
             width,
+            &mut plan,
         ));
         assert!(io.public_values.iter().all(|&byte| byte == 0));
     }
 
     #[test]
-    fn host_hint_buffer_copies_to_guest_memory() {
+    fn host_reveal_rejects_non_u32_base_or_effective_address_without_mutation() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = HintStream::default();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 16];
+        let mut public_values = vec![0u8; 16];
+        let mut deferrals = Vec::new();
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: null_mut(),
+            deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
+            deferrals: &mut deferrals,
+        };
+        let mut plan = Rv64RevealPlan::default();
+
+        assert!(!host_reveal_prepare(
+            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
+            1,
+            u64::from(u32::MAX) + 1,
+            0,
+            1,
+            &mut plan,
+        ));
+        // A positive offset from the largest valid base must not produce an
+        // effective byte address outside the AIR's u32 pointer domain.
+        assert!(!host_reveal_prepare(
+            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
+            1,
+            u64::from(u32::MAX),
+            u64::from(u32::MAX) + 1,
+            1,
+            &mut plan,
+        ));
+        assert!(io.public_values.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn host_hint_callbacks_validate_then_consume_without_touching_guest_memory() {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         hint_stream.set_hint((10u8..22).collect());
 
         let mut rng = StdRng::seed_from_u64(0);
-        let mut memory = vec![0u8; 16];
+        let mut memory = vec![0xa5; 16];
+        let original_memory = memory.clone();
         let mut public_values = vec![];
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
@@ -602,21 +883,28 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
+        let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
 
-        assert!(host_hint_buffer(
-            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
-            3,
-            1,
-        ));
+        assert!(host_hint_prepare(ctx, 0, 1));
+        assert_eq!(io.hint_stream.remaining(), 12);
+        assert_eq!(memory, original_memory);
 
-        assert_eq!(&memory[3..11], &(10u8..18).collect::<Vec<_>>());
+        let mut words = [0u64; 1];
+        unsafe { host_hint_read_words(ctx, words.as_mut_ptr(), 1) };
+
+        assert_eq!(
+            words,
+            [u64::from_le_bytes([10, 11, 12, 13, 14, 15, 16, 17])]
+        );
         assert_eq!(io.hint_stream.remaining(), 4);
+        assert_eq!(memory, original_memory);
     }
 
     #[test]
-    fn host_input_callbacks_expose_length_payload_and_padding() {
+    fn host_input_callbacks_expose_length_payload_and_padding_as_words() {
         let payload = (1u8..=9).collect::<Vec<_>>();
         let mut input_stream = VecDeque::from([payload.clone()]);
         let mut hint_stream = HintStream::default();
@@ -632,26 +920,29 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
 
-        host_hint_input(ctx);
-        host_hint_storew(ctx, 0);
-        host_hint_buffer(ctx, 8, 2);
+        assert!(host_hint_input(ctx));
+        assert!(host_hint_prepare(ctx, 0, 3));
+        let mut words = [0u64; 3];
+        unsafe { host_hint_read_words(ctx, words.as_mut_ptr(), 3) };
 
-        assert_eq!(&memory[..8], &(payload.len() as u64).to_le_bytes());
-        assert_eq!(&memory[8..17], payload);
-        assert_eq!(&memory[17..], &[0; 7]);
+        assert_eq!(words[0], payload.len() as u64);
+        assert_eq!(words[1].to_le_bytes(), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(words[2].to_le_bytes(), [9, 0, 0, 0, 0, 0, 0, 0]);
+        assert!(memory.iter().all(|&byte| byte == 0xa5));
         assert_eq!(io.hint_stream.remaining(), 0);
         assert!(io.input_stream.is_empty());
     }
 
     #[test]
-    fn host_hint_writes_reject_short_stream_without_mutation() {
+    fn host_hint_prepare_rejects_invalid_operations_without_mutation() {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
-        hint_stream.set_hint(vec![1, 2, 3, 4, 5, 6, 7]);
+        hint_stream.set_hint(vec![1, 2, 3, 4, 5, 6, 7, 8]);
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0xa5; 16];
         let original_memory = memory.clone();
@@ -665,16 +956,63 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: std::ptr::null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
 
-        assert!(!host_hint_storew(ctx, 0));
-        assert!(!host_hint_buffer(ctx, 0, 1));
-        assert_eq!(io.hint_stream.remaining(), 7);
-        let mut hint = [0; 7];
+        assert!(!host_hint_prepare(ctx, 1, 0));
+        // One full advice word is available, so this fails only on alignment.
+        assert!(!host_hint_prepare(ctx, 1, 1));
+        assert!(!host_hint_prepare(
+            ctx,
+            0,
+            (MAX_HINT_BUFFER_DWORDS + 1) as u32
+        ));
+        assert!(!host_hint_prepare(ctx, u64::MAX - 7, 1));
+        assert_eq!(io.hint_stream.remaining(), 8);
+        let mut hint = [0; 8];
         io.hint_stream.copy_to_slice(&mut hint);
-        assert_eq!(hint, [1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(hint, [1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!(memory, original_memory);
+    }
+
+    #[test]
+    fn host_hint_prepare_accepts_the_maximum_word_count() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = HintStream::default();
+        let hint = (0..MAX_HINT_BUFFER_DWORDS * RV64_REGISTER_NUM_LIMBS)
+            .map(|i| i as u8)
+            .collect::<Vec<_>>();
+        hint_stream.set_hint(hint.clone());
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 8];
+        let mut public_values = Vec::new();
+        let mut deferrals = Vec::new();
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: null_mut(),
+            deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
+            deferrals: &mut deferrals,
+        };
+        let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
+
+        assert!(host_hint_prepare(ctx, 0, MAX_HINT_BUFFER_DWORDS as u32));
+        let mut words = vec![0u64; MAX_HINT_BUFFER_DWORDS];
+        unsafe {
+            host_hint_read_words(ctx, words.as_mut_ptr(), MAX_HINT_BUFFER_DWORDS as u32);
+        }
+
+        assert_eq!(io.hint_stream.remaining(), 0);
+        assert_eq!(words[0].to_le_bytes(), hint[..8]);
+        assert_eq!(
+            words[MAX_HINT_BUFFER_DWORDS - 1].to_le_bytes(),
+            hint[hint.len() - 8..]
+        );
     }
 }

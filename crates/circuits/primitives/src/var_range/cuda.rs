@@ -44,8 +44,8 @@ impl VariableRangeCheckerChipGPU {
     }
 }
 
-impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl Chip<(), GpuBackend> for VariableRangeCheckerChipGPU {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
         assert_eq!(size_of::<F>(), size_of::<u32>());
         let cpu_count = self.cpu_chip.as_ref().map(|cpu_chip| {
             cpu_chip

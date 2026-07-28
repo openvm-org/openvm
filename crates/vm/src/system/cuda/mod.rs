@@ -3,10 +3,8 @@ use std::sync::Arc;
 use connector::VmConnectorChipGPU;
 use memory::MemoryInventoryGPU;
 use openvm_circuit::{
-    arch::{DenseRecordArena, SystemConfig},
-    system::{
-        connector::VmConnectorChip, memory::online::GuestMemory, SystemChipComplex, SystemRecords,
-    },
+    arch::SystemConfig,
+    system::{connector::VmConnectorChip, memory::online::GuestMemory, SystemChipComplex},
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
@@ -15,6 +13,10 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
+
+use crate::arch::cuda::postflight::{
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+};
 
 pub mod boundary;
 pub mod connector;
@@ -63,35 +65,30 @@ impl SystemChipInventoryGPU {
             memory_inventory,
         }
     }
-}
 
-impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU {
-    fn load_program(&mut self, cached_program_trace: CommittedTraceData<GpuBackend>) {
-        self.program.cached.replace(cached_program_trace);
-    }
-
-    fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
-        self.memory_inventory.set_initial_memory(&memory.memory);
-    }
-
-    fn generate_proving_ctx(
+    /// Generates every system AIR directly from one validated postflight segment.
+    ///
+    /// The initial memory image must already have been transported before
+    /// preflight mutates the host state.
+    pub fn generate_proving_ctx_from_postflight(
         &mut self,
-        system_records: SystemRecords<F>,
-        _record_arenas: Vec<DenseRecordArena>,
-    ) -> Vec<AirProvingContext<GpuBackend>> {
-        let SystemRecords {
-            from_state,
-            to_state,
-            exit_code,
-            filtered_exec_frequencies,
-            touched_memory,
-        } = system_records;
-
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<Vec<AirProvingContext<GpuBackend>>, GpuPostflightError> {
+        program.ensure_replay_inputs(transcript, replay_plan, &self.program.device_ctx)?;
         let program_ctx = {
             let _span = tracing::info_span!("program_trace_gen").entered();
-            self.program.generate_proving_ctx(filtered_exec_frequencies)
+            // SAFETY: replay_plan owns this same-context buffer through the
+            // entire system tracegen call. Memory tracegen below synchronizes
+            // the same stream before returning.
+            unsafe {
+                self.program
+                    .generate_proving_ctx_from_device(replay_plan.program_frequencies())
+            }
         };
 
+        let (from_state, to_state, exit_code) = replay_plan.connector_boundary();
         self.connector.cpu_chip.begin(from_state);
         self.connector.cpu_chip.end(to_state, exit_code);
         let connector_ctx = {
@@ -99,12 +96,28 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             self.connector.generate_proving_ctx(())
         };
 
-        let memory_ctxs = self.memory_inventory.generate_proving_ctxs(touched_memory);
-
-        [program_ctx, connector_ctx]
+        // SAFETY: transcript owns the validated initialized prefix and remains
+        // borrowed until this synchronous memory-inventory call returns.
+        let memory_ctxs = unsafe {
+            self.memory_inventory.generate_proving_ctxs_from_device(
+                transcript.touched_blocks(),
+                transcript.num_touched_blocks(),
+            )
+        };
+        Ok([program_ctx, connector_ctx]
             .into_iter()
             .chain(memory_ctxs)
-            .collect()
+            .collect())
+    }
+}
+
+impl SystemChipComplex<GpuBackend> for SystemChipInventoryGPU {
+    fn load_program(&mut self, cached_program_trace: CommittedTraceData<GpuBackend>) {
+        self.program.cached.replace(cached_program_trace);
+    }
+
+    fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
+        self.memory_inventory.set_initial_memory(&memory.memory);
     }
 
     fn memory_top_tree(&self) -> Option<&[[F; VM_DIGEST_WIDTH]]> {

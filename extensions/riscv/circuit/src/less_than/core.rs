@@ -1,24 +1,17 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
+    ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -162,169 +155,14 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct LessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u16; NUM_LIMBS],
-    pub c: [u16; NUM_LIMBS],
-    pub local_opcode: u8,
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct LessThanExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct LessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct LessThanFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for LessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut LessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
-        ),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", LessThanOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.b = rs1;
-        core_record.c = rs2;
-        core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
-
-        let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(
-            core_record.local_opcode == LessThanOpcode::SLT as u8,
-            &rs1,
-            &rs2,
-        );
-
-        let mut output = [0u16; NUM_LIMBS];
-        output[0] = cmp_result as u16;
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            [output].into(),
-            &mut adapter_record,
-        );
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LessThanFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // LessThanCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid LessThanCoreRecord written by the executor
-        // during trace generation
-        let record: &LessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let core_row: &mut LessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        let is_slt = record.local_opcode == LessThanOpcode::SLT as u8;
-        let (cmp_result, diff_idx, b_sign, c_sign) =
-            run_less_than::<NUM_LIMBS, LIMB_BITS>(is_slt, &record.b, &record.c);
-
-        // We range check (b_msb_f + 2^(LIMB_BITS - 1)) and
-        // (c_msb_f + 2^(LIMB_BITS - 1)) if signed, b_msb_f and c_msb_f if not
-        let (b_msb_f, b_msb_range) = if b_sign {
-            (
-                -F::from_u16(record.b[NUM_LIMBS - 1].wrapping_neg()),
-                record.b[NUM_LIMBS - 1] as u32 - (1u32 << (LIMB_BITS - 1)),
-            )
-        } else {
-            (
-                F::from_u16(record.b[NUM_LIMBS - 1]),
-                record.b[NUM_LIMBS - 1] as u32 + ((is_slt as u32) << (LIMB_BITS - 1)),
-            )
-        };
-        let (c_msb_f, c_msb_range) = if c_sign {
-            (
-                -F::from_u16(record.c[NUM_LIMBS - 1].wrapping_neg()),
-                record.c[NUM_LIMBS - 1] as u32 - (1u32 << (LIMB_BITS - 1)),
-            )
-        } else {
-            (
-                F::from_u16(record.c[NUM_LIMBS - 1]),
-                record.c[NUM_LIMBS - 1] as u32 + ((is_slt as u32) << (LIMB_BITS - 1)),
-            )
-        };
-
-        core_row.diff_val = if diff_idx == NUM_LIMBS {
-            F::ZERO
-        } else if diff_idx == (NUM_LIMBS - 1) {
-            if cmp_result {
-                c_msb_f - b_msb_f
-            } else {
-                b_msb_f - c_msb_f
-            }
-        } else if cmp_result {
-            F::from_u16((record.c[diff_idx] as u32 - record.b[diff_idx] as u32) as u16)
-        } else {
-            F::from_u16((record.b[diff_idx] as u32 - record.c[diff_idx] as u32) as u16)
-        };
-
-        self.range_checker_chip.add_count(b_msb_range, LIMB_BITS);
-        self.range_checker_chip.add_count(c_msb_range, LIMB_BITS);
-
-        core_row.diff_marker = [F::ZERO; NUM_LIMBS];
-        if diff_idx != NUM_LIMBS {
-            self.range_checker_chip
-                .add_count(core_row.diff_val.as_canonical_u32() - 1, LIMB_BITS);
-            core_row.diff_marker[diff_idx] = F::ONE;
-        }
-
-        core_row.c_msb_f = c_msb_f;
-        core_row.b_msb_f = b_msb_f;
-        core_row.opcode_sltu_flag = F::from_bool(!is_slt);
-        core_row.opcode_slt_flag = F::from_bool(is_slt);
-        core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.c = record.c.map(F::from_u16);
-        core_row.b = record.b.map(F::from_u16);
-    }
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)

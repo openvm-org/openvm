@@ -1,31 +1,21 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-    mem::size_of,
-};
+use std::{array, borrow::Borrow, mem::size_of};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        BLOCK_FE_WIDTH,
+        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction,
+        Postflight, PostflightError, PostflightStep, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteU16AuxRecord,
-        },
-        online::TracingMemory,
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
 };
@@ -36,8 +26,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, concat_rv64_u16_block, tracing_read_u16,
-    tracing_write_u16, RV64_WORD_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, concat_rv64_u16_block,
+    is_canonical_i12, RV64_WORD_U16_LIMBS, U16_BITS,
 };
 
 /// Adapter columns for RV64 word instructions with an immediate operand.
@@ -170,132 +160,76 @@ pub struct Rv64BaseAluWImmU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BaseAluWImmU16AdapterRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
-    pub rd_ptr: u32,
-    pub rs1_ptr: u32,
-    pub rs1_high: [u16; RV64_WORD_U16_LIMBS],
-    pub result_high: u16,
-    pub reads_aux: MemoryReadAuxRecord,
-    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
-}
-
-const _: () = assert!(size_of::<Rv64BaseAluWImmU16AdapterRecord>() == 40);
-
-impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWImmU16AdapterExecutor {
-    const WIDTH: usize = size_of::<Rv64BaseAluWImmU16AdapterCols<u8>>();
-    type ReadData = [[u16; RV64_WORD_U16_LIMBS]; 1];
-    type WriteData = [[u16; RV64_WORD_U16_LIMBS]; 1];
-    type RecordMut<'a> = &'a mut Rv64BaseAluWImmU16AdapterRecord;
-
-    #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64BaseAluWImmU16AdapterRecord) {
-        record.from_pc = pc;
-        record.from_timestamp = memory.timestamp;
-    }
-
-    #[inline(always)]
-    fn read(
+impl Rv64BaseAluWImmU16AdapterFiller {
+    pub(crate) fn replay<F: PrimeField32>(
         &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut &mut Rv64BaseAluWImmU16AdapterRecord,
-    ) -> Self::ReadData {
-        let &Instruction { b, d, e, .. } = instruction;
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV64_IMM_AS);
-
-        record.rs1_ptr = b.as_canonical_u32();
-        let rs1_full = tracing_read_u16::<BLOCK_FE_WIDTH>(
-            memory,
-            RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(record.rs1_ptr),
-            &mut record.reads_aux.prev_timestamp,
-        );
-        record.rs1_high = array::from_fn(|i| rs1_full[RV64_WORD_U16_LIMBS + i]);
-        [array::from_fn(|i| rs1_full[i])]
-    }
-
-    #[inline(always)]
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut &mut Rv64BaseAluWImmU16AdapterRecord,
-    ) {
-        let &Instruction { a, d, .. } = instruction;
-        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-
-        record.rd_ptr = a.as_canonical_u32();
-        let write_low = data[0];
-        record.result_high = write_low[RV64_WORD_U16_LIMBS - 1];
-        let result_sign = record.result_high >> (U16_BITS - 1);
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64BaseAluWImmU16AdapterCols<F>,
+        compute: impl FnOnce([u16; RV64_WORD_U16_LIMBS], u32) -> [u16; RV64_WORD_U16_LIMBS],
+    ) -> Result<([u16; RV64_WORD_U16_LIMBS], [u16; RV64_WORD_U16_LIMBS]), PostflightError> {
+        let instruction = postflight.instruction(step);
+        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
+            || instruction.e.as_canonical_u32() != RV64_IMM_AS
+        {
+            return Err(PostflightError::new(
+                "word register-immediate ALU instruction has invalid address spaces",
+            ));
+        }
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let rs1_ptr = instruction.b.as_canonical_u32();
+        let rd_ptr = instruction.a.as_canonical_u32();
+        let immediate = instruction.c.as_canonical_u32();
+        if !is_canonical_i12(immediate) {
+            return Err(PostflightError::new(
+                "word register-immediate ALU instruction has a non-canonical immediate",
+            ));
+        }
+        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
+        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let mut replay = postflight.replay(step);
+        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let input = array::from_fn(|i| rs1.value[i]);
+        let output = compute(input, immediate);
+        let result_high = output[RV64_WORD_U16_LIMBS - 1];
+        let result_sign = result_high >> (U16_BITS - 1);
         let sign_extend_limb = if result_sign != 0 { u16::MAX } else { 0 };
-        let write_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|i| {
+        let write_value = array::from_fn(|i| {
             if i < RV64_WORD_U16_LIMBS {
-                write_low[i]
+                output[i]
             } else {
                 sign_extend_limb
             }
         });
-        tracing_write_u16(
-            memory,
-            RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(record.rd_ptr),
-            write_data,
-            &mut record.writes_aux.prev_timestamp,
-            &mut record.writes_aux.prev_data,
+        let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, write_value)?;
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        self.range_checker_chip.add_count(
+            (result_high & ((1 << (U16_BITS - 1)) - 1)) as u32,
+            U16_BITS - 1,
         );
-    }
-}
-
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWImmU16AdapterFiller {
-    const WIDTH: usize = size_of::<Rv64BaseAluWImmU16AdapterCols<u8>>();
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        let record: &Rv64BaseAluWImmU16AdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-
-        // Copy the overlaid record before writing the wider field-element column representation.
-        let from_pc = record.from_pc;
-        let from_timestamp = record.from_timestamp;
-        let rd_ptr = record.rd_ptr;
-        let rs1_ptr = record.rs1_ptr;
-        let rs1_high = record.rs1_high;
-        let result_high = record.result_high;
-        let result_sign = result_high >> (U16_BITS - 1);
-        let reads_aux_prev_timestamp = record.reads_aux.prev_timestamp;
-        let writes_aux_prev_timestamp = record.writes_aux.prev_timestamp;
-        let writes_aux_prev_data = record.writes_aux.prev_data;
-
-        let result_low15 = (result_high & ((1 << (U16_BITS - 1)) - 1)) as u32;
-        self.range_checker_chip
-            .add_count(result_low15, U16_BITS - 1);
-
-        let adapter_row: &mut Rv64BaseAluWImmU16AdapterCols<F> = adapter_row.borrow_mut();
         adapter_row
             .writes_aux
-            .set_prev_data(writes_aux_prev_data.map(F::from_u16));
+            .set_prev_data(write.previous_value.map(F::from_u16));
         mem_helper.fill(
-            writes_aux_prev_timestamp,
-            from_timestamp + 1,
+            write.previous_timestamp,
+            write.timestamp,
             adapter_row.writes_aux.as_mut(),
         );
         mem_helper.fill(
-            reads_aux_prev_timestamp,
-            from_timestamp,
+            rs1.previous_timestamp,
+            rs1.timestamp,
             adapter_row.reads_aux.as_mut(),
         );
-
         adapter_row.result_sign = F::from_u16(result_sign);
-        adapter_row.rs1_high = rs1_high.map(F::from_u16);
+        adapter_row.rs1_high = array::from_fn(|i| F::from_u16(rs1.value[RV64_WORD_U16_LIMBS + i]));
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(rd_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
+
+        Ok((input, output))
     }
 }

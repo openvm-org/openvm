@@ -23,8 +23,8 @@ impl<const N: usize> DummyInteractionChipGPU<N> {
     }
 }
 
-impl<RA, const N: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<N> {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl<const N: usize> Chip<(), GpuBackend> for DummyInteractionChipGPU<N> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
         let height = self.data.len() / N;
         let width = N + 1;
         let device_ctx = &self.range_tuple_checker.device_ctx;

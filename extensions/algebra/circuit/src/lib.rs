@@ -7,12 +7,6 @@ use std::ops::{Deref, DerefMut};
 
 use openvm_circuit::arch::{MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
-use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
-#[cfg(feature = "cuda")]
-use {
-    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
-    openvm_riscv_adapters::Rv64VecHeapAdapterRecord,
-};
 
 // Number of limbs for different modulus sizes (bytes)
 /// Number of limbs for 256-bit (32-byte) moduli
@@ -36,6 +30,8 @@ pub const FP2_BLOCKS_32: usize = 2 * MODULAR_BLOCKS_32;
 /// Blocks for Fp2 with 48-limb base field: 2 * 6 = 12 blocks
 pub const FP2_BLOCKS_48: usize = 2 * MODULAR_BLOCKS_48;
 
+#[cfg(feature = "cuda")]
+pub mod cuda;
 pub mod fp2_chip;
 pub mod modular_chip;
 
@@ -45,35 +41,21 @@ pub use fp2::*;
 mod extension;
 pub use extension::*;
 pub mod fields;
-mod preflight;
+pub(crate) mod trace;
 
-use fields::{get_field_type, get_fp2_field_type, FieldType};
-
-// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
 #[derive(Clone)]
 pub struct FieldExprVecHeapExecutor<const BLOCKS: usize, const IS_FP2: bool> {
-    inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    pub(crate) cached_field_type: Option<FieldType>,
+    inner: FieldExpressionExecutor,
 }
 
 impl<const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
-    pub fn new(
-        inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    ) -> Self {
-        let cached_field_type = if IS_FP2 {
-            get_fp2_field_type(inner.program().prime())
-        } else {
-            get_field_type(inner.program().prime())
-        };
-        Self {
-            inner,
-            cached_field_type,
-        }
+    pub fn new(inner: FieldExpressionExecutor) -> Self {
+        Self { inner }
     }
 }
 
 impl<const BLOCKS: usize, const IS_FP2: bool> Deref for FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
-    type Target = FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>;
+    type Target = FieldExpressionExecutor;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -87,9 +69,3 @@ impl<const BLOCKS: usize, const IS_FP2: bool> DerefMut
         &mut self.inner
     }
 }
-
-#[cfg(feature = "cuda")]
-pub(crate) type AlgebraRecord<'a, const NUM_READS: usize, const BLOCKS: usize> = (
-    &'a mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS>,
-    FieldExpressionCoreRecordMut<'a>,
-);

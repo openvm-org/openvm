@@ -146,6 +146,37 @@ pub unsafe fn peek_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]
     peek_mem_u64_range_wrapper(state, base_addr, out.as_mut_ptr(), num_words);
 }
 
+/// Check that a byte range fits in guest memory.
+#[inline(always)]
+pub fn checked_guest_memory_range(base_addr: u64, len: u64) -> Option<()> {
+    let memory_size = MEM_SIZE as u64;
+    (base_addr <= memory_size && len <= memory_size - base_addr).then_some(())
+}
+
+/// Peek guest words after checking the complete range.
+///
+/// Returns `None` without reading guest memory when the range is empty,
+/// unaligned, wrapped, or out of bounds.
+///
+/// # Safety
+/// `state` must point to a valid `RvState`.
+pub unsafe fn checked_peek_mem_words(
+    state: *mut c_void,
+    base_addr: u64,
+    out: &mut [u64],
+) -> Option<()> {
+    if out.is_empty() || !base_addr.is_multiple_of(WORD_SIZE as u64) {
+        return None;
+    }
+    let len = u64::try_from(out.len())
+        .ok()?
+        .checked_mul(WORD_SIZE as u64)?;
+    checked_guest_memory_range(base_addr, len)?;
+    let num_words = memory_word_count(out.len());
+    peek_mem_u64_range_wrapper(state, base_addr, out.as_mut_ptr(), num_words);
+    Some(())
+}
+
 /// Record the pages touched by `num_words` consecutive words in `addr_space`.
 /// This is metering data only; it does not record the accessed values.
 ///

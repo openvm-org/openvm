@@ -1,16 +1,12 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS},
     LocalOpcode,
 };
@@ -23,8 +19,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_bytes_to_u32,
-    rv64_u16_block_to_bytes, rv64_u32_to_u16_block, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
+    expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_u32_to_u16_block,
     RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
@@ -157,115 +152,31 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalrCoreRecord {
-    pub imm: u16,
-    pub from_pc: u32,
-    pub rs1_val: u32,
-    pub imm_sign: bool,
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrExecutor<A = Rv64JalrAdapterExecutor> {
-    adapter: A,
-}
+pub struct Rv64JalrExecutor;
 
 #[derive(Clone)]
-pub struct Rv64JalrFiller<A = Rv64JalrAdapterFiller> {
-    adapter: A,
+pub struct Rv64JalrFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A> Rv64JalrFiller<A> {
-    pub fn new(adapter: A, range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
+impl Rv64JalrFiller {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         assert!(range_checker_chip.range_max_bits() >= U16_BITS);
-        Self {
-            adapter,
-            range_checker_chip,
-        }
+        Self { range_checker_chip }
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalrExecutor<A>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<F, ReadData = [u16; BLOCK_FE_WIDTH], WriteData = [u16; BLOCK_FE_WIDTH]>,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64JalrCoreRecord),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64JalrOpcode::from_usize(opcode - Rv64JalrOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn execute(
+impl Rv64JalrFiller {
+    pub(crate) fn fill_core_row<F: PrimeField32>(
         &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, c, g, .. } = *instruction;
-
-        debug_assert_eq!(
-            opcode.local_opcode_idx(Rv64JalrOpcode::CLASS_OFFSET),
-            JALR as usize
-        );
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let rs1_data = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record);
-        let rs1_bytes = rv64_u16_block_to_bytes(rs1_data);
-        core_record.rs1_val = rv64_bytes_to_u32(rs1_bytes);
-
-        core_record.imm = c.as_canonical_u32() as u16;
-        core_record.imm_sign = g.is_one();
-        core_record.from_pc = *state.pc;
-
-        let (to_pc, rd_data) = run_jalr(
-            core_record.from_pc,
-            core_record.rs1_val,
-            core_record.imm,
-            core_record.imm_sign,
-        );
-
-        self.adapter
-            .write(state.memory, instruction, rd_data, &mut adapter_record);
-
-        // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
-        *state.pc = to_pc & !1;
-
-        Ok(())
-    }
-}
-
-impl<F, A> TraceFiller<F> for Rv64JalrFiller<A>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64JalrCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64JalrCoreRecord written by the executor
-        // during trace generation
-        let record: &Rv64JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let core_row: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
-
-        let (to_pc, rd_data) =
-            run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
+        core_row: &mut Rv64JalrCoreCols<F>,
+        rs1_val: u32,
+        imm: u16,
+        imm_sign: bool,
+        to_pc: u32,
+        rd_data: [u16; BLOCK_FE_WIDTH],
+    ) {
         let [to_pc_low, to_pc_high] = ptr_to_u16_limbs(to_pc);
         let to_pc_limbs = [u32::from(to_pc_low >> 1), u32::from(to_pc_high)];
         self.range_checker_chip
@@ -282,18 +193,19 @@ where
             .add_count(rd_low_u16_hi as u32, PC_BITS - U16_BITS);
 
         // Write in reverse order
-        core_row.imm_sign = F::from_bool(record.imm_sign);
+        core_row.imm_sign = F::from_bool(imm_sign);
         core_row.to_pc_limbs = to_pc_limbs.map(F::from_u32);
         core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
-        core_row.rs1_data = ptr_to_u16_limbs(record.rs1_val).map(F::from_u16);
+        core_row.rs1_data = ptr_to_u16_limbs(rs1_val).map(F::from_u16);
         core_row.rd_high = [F::from_u16(rd_low_u16_hi)];
-        core_row.imm = F::from_u16(record.imm);
+        core_row.imm = F::from_u16(imm);
     }
 }
 
 // returns (to_pc, rd_data)
+#[cfg(test)]
 #[inline(always)]
 pub(super) fn run_jalr(
     pc: u32,
@@ -301,15 +213,23 @@ pub(super) fn run_jalr(
     imm: u16,
     imm_sign: bool,
 ) -> (u32, [u16; BLOCK_FE_WIDTH]) {
+    try_run_jalr(pc, rs1, imm, imm_sign).expect("JALR target exceeds implemented PC address space")
+}
+
+pub(super) fn try_run_jalr(
+    pc: u32,
+    rs1: u32,
+    imm: u16,
+    imm_sign: bool,
+) -> Option<(u32, [u16; BLOCK_FE_WIDTH])> {
     let imm_extended = imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS));
     let to_pc = rv64_address_add_imm(rs1, imm_extended);
-    assert!(
-        to_pc <= u64::from(MAX_ALLOWED_PC),
-        "JALR target exceeds implemented PC address space"
-    );
+    if to_pc > u64::from(MAX_ALLOWED_PC) {
+        return None;
+    }
     let to_pc = to_pc as u32;
 
     let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
     let rd_data = rv64_u32_to_u16_block(rd_low_u32);
-    (to_pc, rd_data)
+    Some((to_pc, rd_data))
 }

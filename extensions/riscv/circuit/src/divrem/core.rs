@@ -1,22 +1,15 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
 use num_bigint::BigUint;
 use num_integer::Integer;
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     utils::{not, select},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -353,7 +346,7 @@ where
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub(crate) enum DivRemCoreSpecialCase {
     None,
@@ -361,22 +354,22 @@ pub(crate) enum DivRemCoreSpecialCase {
     SignedOverflow,
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct DivRemCoreRecord<const NUM_LIMBS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
-    pub local_opcode: u8,
-}
+pub(crate) type DivRemResult<const NUM_LIMBS: usize> = (
+    [u32; NUM_LIMBS],
+    [u32; NUM_LIMBS],
+    bool,
+    bool,
+    bool,
+    DivRemCoreSpecialCase,
+);
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct DivRemExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct DivRemExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 pub struct DivRemFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+    pub(crate) adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
@@ -410,103 +403,18 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemFiller<A, NUM_LIMB
             range_tuple_chip,
         }
     }
-}
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for DivRemExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut DivRemCoreRecord<NUM_LIMBS>),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute(
+    pub(crate) fn fill_core_row_with_result<F: PrimeField32>(
         &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
-
-        let is_signed = core_record.local_opcode == DivRemOpcode::DIV as u8
-            || core_record.local_opcode == DivRemOpcode::REM as u8;
-        let is_div = core_record.local_opcode == DivRemOpcode::DIV as u8
-            || core_record.local_opcode == DivRemOpcode::DIVU as u8;
-
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let b = core_record.b.map(u32::from);
-        let c = core_record.c.map(u32::from);
-        let (q, r, _, _, _, _) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b, &c);
-
-        let rd = if is_div {
-            q.map(|x| x as u8)
-        } else {
-            r.map(|x| x as u8)
-        };
-
-        self.adapter
-            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for DivRemFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // DivRemCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid DivRemCoreRecord written by the executor
-        // during trace generation
-        let record: &DivRemCoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        let opcode = DivRemOpcode::from_usize(record.local_opcode as usize);
+        opcode: DivRemOpcode,
+        b: [u8; NUM_LIMBS],
+        c: [u8; NUM_LIMBS],
+        (q, r, b_sign, c_sign, q_sign, case): DivRemResult<NUM_LIMBS>,
+        core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS>,
+    ) {
         let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
-
-        let (q, r, b_sign, c_sign, q_sign, case) = run_divrem::<NUM_LIMBS, LIMB_BITS>(
-            is_signed,
-            &record.b.map(u32::from),
-            &record.c.map(u32::from),
-        );
-
-        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(
-            is_signed,
-            &record.c.map(u32::from),
-            &q,
-            &r,
-            q_sign,
-        );
+        let c_u32 = c.map(u32::from);
+        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(is_signed, &c_u32, &q, &r, q_sign);
         for i in 0..NUM_LIMBS {
             self.range_tuple_chip.add_count(&[q[i], carries[i]]);
             self.range_tuple_chip
@@ -525,24 +433,20 @@ where
             let b_sign_mask = if b_sign { 1 << (LIMB_BITS - 1) } else { 0 };
             let c_sign_mask = if c_sign { 1 << (LIMB_BITS - 1) } else { 0 };
             self.bitwise_lookup_chip.request_range(
-                (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
-                (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask) << 1,
+                (b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
+                (c[NUM_LIMBS - 1] as u32 - c_sign_mask) << 1,
             );
         }
 
         for i in 0..NUM_LIMBS - 1 {
             self.bitwise_lookup_chip
-                .request_range(record.b[i] as u32, record.c[i] as u32);
+                .request_range(b[i] as u32, c[i] as u32);
         }
-        // The unsigned path also range-checks the MSB pair.
         if !is_signed {
-            self.bitwise_lookup_chip.request_range(
-                record.b[NUM_LIMBS - 1] as u32,
-                record.c[NUM_LIMBS - 1] as u32,
-            );
+            self.bitwise_lookup_chip
+                .request_range(b[NUM_LIMBS - 1] as u32, c[NUM_LIMBS - 1] as u32);
         }
 
-        // Write in a reverse order
         core_row.opcode_remu_flag = F::from_bool(opcode == DivRemOpcode::REMU);
         core_row.opcode_rem_flag = F::from_bool(opcode == DivRemOpcode::REM);
         core_row.opcode_divu_flag = F::from_bool(opcode == DivRemOpcode::DIVU);
@@ -551,11 +455,11 @@ where
         core_row.lt_diff = F::ZERO;
         core_row.lt_marker = [F::ZERO; NUM_LIMBS];
         if case == DivRemCoreSpecialCase::None && !r_zero {
-            let idx = run_sltu_diff_idx(&record.c.map(u32::from), &r_prime, c_sign);
+            let idx = run_sltu_diff_idx(&c_u32, &r_prime, c_sign);
             let val = if c_sign {
-                r_prime[idx] - record.c[idx] as u32
+                r_prime[idx] - c[idx] as u32
             } else {
-                record.c[idx] as u32 - r_prime[idx]
+                c[idx] as u32 - r_prime[idx]
             };
             self.bitwise_lookup_chip.request_range(val - 1, 0);
             core_row.lt_diff = F::from_u32(val);
@@ -569,7 +473,7 @@ where
         let r_sum_f = r.iter().fold(F::ZERO, |acc, r| acc + F::from_u32(*r));
         core_row.r_sum_inv = r_sum_f.try_inverse().unwrap_or(F::ZERO);
 
-        let c_sum_f = F::from_u32(record.c.iter().fold(0, |acc, c| acc + *c as u32));
+        let c_sum_f = F::from_u32(c.iter().fold(0, |acc, c| acc + *c as u32));
         core_row.c_sum_inv = c_sum_f.try_inverse().unwrap_or(F::ZERO);
 
         core_row.sign_xor = F::from_bool(sign_xor);
@@ -582,8 +486,8 @@ where
 
         core_row.r = r.map(F::from_u32);
         core_row.q = q.map(F::from_u32);
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
+        core_row.c = c.map(F::from_u8);
+        core_row.b = b.map(F::from_u8);
     }
 }
 
@@ -594,14 +498,7 @@ pub(crate) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
-) -> (
-    [u32; NUM_LIMBS],
-    [u32; NUM_LIMBS],
-    bool,
-    bool,
-    bool,
-    DivRemCoreSpecialCase,
-) {
+) -> DivRemResult<NUM_LIMBS> {
     let x_sign = signed && (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
     let y_sign = signed && (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1);
     let max_limb = (1 << LIMB_BITS) - 1;

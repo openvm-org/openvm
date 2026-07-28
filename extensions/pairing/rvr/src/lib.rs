@@ -61,7 +61,8 @@ impl ExtInstr for HintFinalExpInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.peek_var(self.rs1_reg);
         let rs2 = ctx.peek_var(self.rs2_reg);
-        ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
+        ctx.emit_checked_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
+        ctx.advance_timestamp(1);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -70,6 +71,13 @@ impl ExtInstr for HintFinalExpInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        // This remains a system PHANTOM operation: the callback produces host
+        // advice, while the Phantom AIR contributes only the one clock slot
+        // emitted above and no proof-visible memory events.
+        true
     }
 }
 
@@ -142,5 +150,133 @@ impl RvrExtension for PairingExtension {
     fn max_main_memory_pages_per_instruction(&self) -> usize {
         // Pairing's guest-memory reads record zero main-memory page entries.
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rvr_openvm_ir::{MemWidth, PageAddressSpace};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct TestEmitCtx {
+        operations: Vec<String>,
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn read_var(&mut self, var: Variable) -> String {
+            self.operations.push(format!("read(r{});", var.index()));
+            format!("r{}", var.index())
+        }
+
+        fn peek_var(&mut self, var: Variable) -> String {
+            format!("r{}", var.index())
+        }
+
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.operations.push(format!("advance_timestamp({slots});"));
+        }
+
+        fn write_var(&mut self, _var: Variable, _val: &str) {
+            unreachable!()
+        }
+
+        fn write_line(&mut self, line: &str) {
+            self.operations.push(line.to_string());
+        }
+
+        fn emit_trap(&mut self) {
+            self.operations.push("trap;".to_string());
+        }
+
+        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+            unreachable!()
+        }
+
+        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
+            unreachable!()
+        }
+
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_writes(&mut self, _writes: &str, _slots: &str) {
+            unreachable!()
+        }
+
+        fn emit_call(&mut self, name: &str, args: &[&str]) {
+            self.operations
+                .push(format!("{name}({});", args.join(", ")));
+        }
+
+        fn emit_call_without_page_flush(&mut self, _name: &str, _args: &[&str]) {
+            unreachable!()
+        }
+
+        fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+            self.operations
+                .push(format!("{ret_ty} result = {name}({});", args.join(", ")));
+            "result".to_string()
+        }
+
+        fn emit_call_with_trace_result(
+            &mut self,
+            _ret_ty: &str,
+            _name: &str,
+            _args: &[&str],
+        ) -> Option<String> {
+            unreachable!()
+        }
+
+        fn trace_chip(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_chip_if_nonzero(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_page_access(
+            &mut self,
+            _addr: &str,
+            _width: MemWidth,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+
+        fn trace_page_access_u64_range(
+            &mut self,
+            _base_addr: &str,
+            _num_dwords: &str,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn hint_final_exp_peeks_operands_and_advances_one_timestamp() {
+        let instr = HintFinalExpInstr {
+            rs1_reg: Variable::new(10),
+            rs2_reg: Variable::new(11),
+            curve: KnownPairingCurve::Bn254,
+        };
+        assert!(instr.supports_preflight());
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+
+        assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
+        assert!(ctx.operations.iter().any(|op| {
+            op == "bool result = rvr_ext_pairing_hint_final_exp_bn254(state, r10, r11);"
+        }));
+        assert!(ctx.operations.iter().any(|op| op == "trap;"));
+        assert_eq!(
+            ctx.operations.last().map(String::as_str),
+            Some("advance_timestamp(1);")
+        );
     }
 }

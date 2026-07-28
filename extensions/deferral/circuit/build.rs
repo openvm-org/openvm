@@ -14,9 +14,15 @@ fn main() {
             .include("../../../crates/circuits/poseidon2-air/cuda/include")
             .include("../../../crates/vm/cuda/include")
             .include("cuda/include")
-            .watch("cuda/src")
+            .watch("cuda/src/count.cu")
+            .watch("cuda/src/poseidon2.cu")
             .library_name("tracegen_gpu_deferral")
-            .files_from_glob("cuda/src/**/*.cu");
+            .files(["cuda/src/count.cu", "cuda/src/poseidon2.cu"])
+            .flag("-I../../../crates/vm/cuda/rvr/include")
+            .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
+            .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
+            .watch("cuda/rvr")
+            .files(["cuda/rvr/call.cu", "cuda/rvr/output.cu"]);
 
         builder.emit_link_directives();
         builder.build();

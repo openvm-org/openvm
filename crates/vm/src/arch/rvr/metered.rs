@@ -1,7 +1,10 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
@@ -33,7 +36,7 @@ use crate::{
 };
 
 struct RvrMeteredInstanceInner<'a> {
-    system_config: &'a SystemConfig,
+    system_config: Cow<'a, SystemConfig>,
     initial_image: RvrInitialImage,
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     compiled: RvrCompiled,
@@ -77,8 +80,8 @@ pub struct MeteringState {
     pub check_counter: u32,
     /// Dedup cache for AS_MEMORY pages. `u32::MAX` = none. Reset on flush.
     pub last_mem_page: u32,
-    /// Explicit tail padding that keeps the Rust and C layouts the same.
-    pub padding: u32,
+    /// Replay residuals accumulated in the current segment.
+    pub num_checkpoint_residuals: u32,
 }
 
 /// Sentinel indicating no last-seen page (matches `NO_LAST_PAGE` in C).
@@ -99,7 +102,7 @@ impl Default for MeteringState {
             deferral_page_buf_len: 0,
             check_counter: 0,
             last_mem_page: NO_LAST_PAGE,
-            padding: 0,
+            num_checkpoint_residuals: 0,
         }
     }
 }
@@ -270,6 +273,7 @@ impl SegmentationState {
         pv_len: u32,
         deferral_len: u32,
         remaining_counter: u32,
+        num_checkpoint_residuals: u32,
     ) -> bool {
         let seg_check_insns = u64::from(SEGMENT_CHECK_INSNS);
         let insns_since_last_check = seg_check_insns - remaining_counter as u64;
@@ -282,6 +286,7 @@ impl SegmentationState {
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
 
+        self.ctx.segmentation_ctx.num_preflight_residuals = num_checkpoint_residuals;
         let did_segment = self
             .ctx
             .segmentation_ctx
@@ -316,6 +321,7 @@ impl SegmentationState {
         pv_len: u32,
         deferral_len: u32,
         remaining_counter: u32,
+        num_checkpoint_residuals: u32,
     ) {
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.ctx
@@ -323,6 +329,7 @@ impl SegmentationState {
             .apply_height_updates(&mut self.ctx.trace_heights);
 
         self.ctx.segmentation_ctx.instrets_until_check = remaining_counter as u64;
+        self.ctx.segmentation_ctx.num_preflight_residuals = num_checkpoint_residuals;
         self.ctx
             .segmentation_ctx
             .create_final_segment(&self.ctx.trace_heights);
@@ -351,8 +358,14 @@ pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8
     // The cleared buffer no longer contains the entry cached by last_mem_page.
     metering.last_mem_page = NO_LAST_PAGE;
 
-    let did_segment =
-        seg_state.on_periodic_check(mem_len, pv_len, deferral_len, metering.check_counter);
+    let did_segment = seg_state.on_periodic_check(
+        mem_len,
+        pv_len,
+        deferral_len,
+        metering.check_counter,
+        metering.num_checkpoint_residuals,
+    );
+    metering.num_checkpoint_residuals = seg_state.ctx.segmentation_ctx.num_preflight_residuals;
 
     // We are at the start of a block that would cross the old countdown.
     // `remaining_counter` was used to record this block start as the metering
@@ -380,7 +393,7 @@ pub unsafe extern "C" fn metered_memory_buffer_flush(state: *mut MeteringState) 
 impl RvrMeteredInstanceInner<'_> {
     fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.initial_image
-            .create_vm_state(self.system_config, inputs)
+            .create_vm_state(&self.system_config, inputs)
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to
@@ -399,19 +412,32 @@ impl RvrMeteredInstanceInner<'_> {
     }
 }
 
-impl RvrMeteredInstance<'_> {
+impl<'a> RvrMeteredInstance<'a> {
     pub(crate) fn new(
-        system_config: &SystemConfig,
+        system_config: &'a SystemConfig,
         initial_image: RvrInitialImage,
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
         compiled: RvrCompiled,
-    ) -> RvrMeteredInstance<'_> {
+    ) -> Self {
         RvrMeteredInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
+            },
+        }
+    }
+
+    /// Detaches the compiled executor from the [`VmExecutor`](crate::arch::VmExecutor)
+    /// that created it.
+    pub fn into_owned(self) -> RvrMeteredInstance<'static> {
+        RvrMeteredInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config: Cow::Owned(self.inner.system_config.into_owned()),
+                initial_image: self.inner.initial_image,
+                runtime_hooks: self.inner.runtime_hooks,
+                compiled: self.inner.compiled,
             },
         }
     }
@@ -448,7 +474,7 @@ impl RvrMeteredInstance<'_> {
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -473,16 +499,16 @@ impl RvrMeteredInstance<'_> {
     }
 }
 
-impl RvrMeteredSegmentInstance<'_> {
+impl<'a> RvrMeteredSegmentInstance<'a> {
     pub(crate) fn new(
-        system_config: &SystemConfig,
+        system_config: &'a SystemConfig,
         initial_image: RvrInitialImage,
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
         compiled: RvrCompiled,
-    ) -> RvrMeteredSegmentInstance<'_> {
+    ) -> Self {
         RvrMeteredSegmentInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
@@ -525,7 +551,7 @@ impl RvrMeteredSegmentInstance<'_> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(
@@ -566,6 +592,15 @@ mod tests {
         },
         utils::{test_cpu_engine, test_system_config},
     };
+
+    #[test]
+    fn metering_state_reuses_tail_padding_without_changing_the_abi() {
+        assert_eq!(std::mem::size_of::<MeteringState>(), 80);
+        assert_eq!(
+            std::mem::offset_of!(MeteringState, num_checkpoint_residuals),
+            76
+        );
+    }
 
     fn make_segmentation_state() -> SegmentationState {
         let system_config = test_system_config();
@@ -646,7 +681,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
+        assert!(!seg_state.on_periodic_check(1, 0, 0, 0, 0));
 
         let poseidon2_idx = seg_state.ctx.trace_heights.len() - 2;
         let poseidon_before = seg_state.ctx.trace_heights[poseidon2_idx];
@@ -655,7 +690,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
+        assert!(!seg_state.on_periodic_check(1, 0, 0, 0, 0));
 
         assert_eq!(
             seg_state.ctx.trace_heights[poseidon2_idx] - poseidon_before,
@@ -671,7 +706,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 0b11,
         };
-        buffered.on_termination(1, 0, 0, 0);
+        buffered.on_termination(1, 0, 0, 0, 0);
 
         let mut explicit = make_segmentation_state();
         explicit
@@ -722,7 +757,7 @@ mod tests {
             deferral_page_buf_len: 4,
             check_counter: 17,
             last_mem_page: 7,
-            padding: 0,
+            num_checkpoint_residuals: 0,
         };
 
         unsafe { metered_memory_buffer_flush(&mut metering) };
@@ -742,7 +777,7 @@ mod tests {
         metering.mem_page_buf_len = 1;
         metering.last_mem_page = 7;
         unsafe { metered_memory_buffer_flush(&mut metering) };
-        drained.on_termination(0, 0, 0, 0);
+        drained.on_termination(0, 0, 0, 0, 0);
 
         let mut once = make_segmentation_state();
         once.mem_page_buf[0] = PageTouch {
@@ -750,7 +785,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        once.on_termination(1, 0, 0, 0);
+        once.on_termination(1, 0, 0, 0, 0);
 
         assert_eq!(drained.ctx.trace_heights, once.ctx.trace_heights);
     }
@@ -767,12 +802,12 @@ mod tests {
         drained.mem_page_buf[0] = touch;
         drained.drain_main_memory_buffer(1);
         *drained.ctx.trace_heights.last_mut().unwrap() = 4096;
-        assert!(drained.on_periodic_check(0, 0, 0, 0));
+        assert!(drained.on_periodic_check(0, 0, 0, 0, 0));
 
         let mut buffered = make_segmentation_state();
         buffered.mem_page_buf[0] = touch;
         *buffered.ctx.trace_heights.last_mut().unwrap() = 4096;
-        assert!(buffered.on_periodic_check(1, 0, 0, 0));
+        assert!(buffered.on_periodic_check(1, 0, 0, 0, 0));
 
         assert_eq!(drained.ctx.trace_heights, buffered.ctx.trace_heights);
     }
@@ -783,7 +818,7 @@ mod tests {
         let mut seg_state = make_segmentation_state();
         seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
 
-        assert!(!seg_state.on_periodic_check(0, 0, 0, remaining));
+        assert!(!seg_state.on_periodic_check(0, 0, 0, remaining, 0));
 
         assert_eq!(
             seg_state.ctx.segmentation_ctx.instret,
@@ -813,7 +848,7 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
-            padding: 0,
+            num_checkpoint_residuals: 0,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut metering) };
@@ -845,7 +880,7 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
-            padding: 0,
+            num_checkpoint_residuals: 0,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut metering) };
@@ -856,5 +891,42 @@ mod tests {
             seg_state.ctx.segmentation_ctx.instret,
             u64::from(SEGMENT_CHECK_INSNS - remaining)
         );
+    }
+
+    #[test]
+    fn test_periodic_callback_carries_post_checkpoint_residuals_to_next_segment() {
+        let remaining = SEGMENT_CHECK_INSNS / 4;
+        let mut seg_state = make_segmentation_state();
+        seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
+        let mut metering = MeteringState {
+            trace_heights: seg_state.trace_heights_ptr(),
+            mem_page_buf: seg_state.mem_page_buf_ptr(),
+            pv_page_buf: seg_state.pv_page_buf_ptr(),
+            deferral_page_buf: seg_state.deferral_page_buf_ptr(),
+            on_check: metered_periodic_check,
+            on_memory_flush: metered_memory_buffer_flush,
+            seg_state: &mut seg_state,
+            mem_page_buf_len: 0,
+            pv_page_buf_len: 0,
+            deferral_page_buf_len: 0,
+            check_counter: remaining,
+            last_mem_page: NO_LAST_PAGE,
+            num_checkpoint_residuals: 5,
+        };
+
+        assert_eq!(unsafe { metered_periodic_check(&mut metering) }, 0);
+        assert_eq!(metering.num_checkpoint_residuals, 5);
+
+        *seg_state.ctx.trace_heights.last_mut().unwrap() = 4096;
+        metering.check_counter = remaining;
+        metering.num_checkpoint_residuals = 8;
+        assert_eq!(unsafe { metered_periodic_check(&mut metering) }, 1);
+
+        assert_eq!(
+            seg_state.ctx.segmentation_ctx.segments[0].num_preflight_residuals,
+            5
+        );
+        assert_eq!(metering.num_checkpoint_residuals, 3);
+        assert_eq!(seg_state.ctx.segmentation_ctx.num_preflight_residuals, 3);
     }
 }

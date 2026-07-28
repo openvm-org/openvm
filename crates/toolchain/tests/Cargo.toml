@@ -38,7 +38,7 @@ num-bigint.workspace = true
 [features]
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
-cuda = ["openvm-riscv-circuit/cuda"]
+cuda = ["openvm-riscv-circuit/cuda", "openvm-riscv-circuit/test-utils"]
 tco = ["openvm-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",

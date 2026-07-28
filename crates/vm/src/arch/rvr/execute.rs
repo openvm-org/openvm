@@ -20,8 +20,12 @@ use super::{
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
+    preflight::{
+        CheckpointDirtyPages, CheckpointPreflightBuffers, PreflightEndpoint, PreflightLimits,
+        PreflightTranscript,
+    },
     state::{
-        init_rvr_state, MeteredCostRvState, MeteredRvState, PureRvState,
+        init_state, CheckpointPreflightRvState, MeteredCostRvState, MeteredRvState, PureRvState,
         PureWithInstretTrackingRvState,
     },
 };
@@ -45,6 +49,8 @@ pub enum ExecuteError {
     ExtensionRegistration(#[from] ExtensionError),
     #[error("invalid metered context: {0}")]
     InvalidMeteredContext(String),
+    #[error("invalid preflight context: {0}")]
+    InvalidPreflightContext(String),
     #[error("RVR execution kind mismatch: expected {expected}, found {found:?}")]
     ExecutionKindMismatch {
         expected: &'static str,
@@ -54,7 +60,10 @@ pub enum ExecuteError {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState<'_> {
+fn build_io_state_borrowed<'a>(
+    vm_state: &'a mut VmState<GuestMemory>,
+    checkpoint_deferral_dirty_pages: Option<&'a mut [u64]>,
+) -> OpenVmIoState<'a> {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let (deferral_memory, deferral_memory_len_bytes) =
         deferral_memory_ptr(&mut vm_state.memory.memory);
@@ -67,6 +76,7 @@ fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState
         public_values: public_values_slice(&mut vm_state.memory.memory),
         deferral_memory,
         deferral_memory_len_bytes,
+        checkpoint_deferral_dirty_pages,
         deferrals: &mut streams.deferrals,
     }
 }
@@ -162,8 +172,9 @@ fn run_and_finalize<ModeState>(
     vm_state: &mut VmState<GuestMemory>,
     state: &mut RvState<ModeState>,
     allow_suspended: bool,
+    checkpoint_deferral_dirty_pages: Option<&mut [u64]>,
 ) -> Result<ExecutionStatus, ExecuteError> {
-    let mut io_state = build_io_state_borrowed(vm_state);
+    let mut io_state = build_io_state_borrowed(vm_state, checkpoint_deferral_dirty_pages);
     unsafe {
         register_openvm_io_ctx(compiled, &mut io_state)?;
         for hook in runtime_hooks {
@@ -213,11 +224,66 @@ pub(super) fn execute_pure(
     require_execution_kind(compiled, "Pure", &[RvrExecutionKind::Pure])?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
-    let mut state: PureRvState = init_rvr_state(vm_state, pc);
+    let mut state: PureRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
-    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
+    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
         .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
     Ok(())
+}
+
+/// Execute the checkpoint-and-residual preflight artifact.
+pub(super) fn execute_preflight(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    limits: PreflightLimits,
+    timestamp_max_bits: usize,
+    allow_suspended: bool,
+    reuse: Option<PreflightTranscript>,
+) -> Result<(PreflightTranscript, PreflightEndpoint, u32, u32), ExecuteError> {
+    require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
+    let pc = vm_state.pc();
+    let mut buffers = match reuse {
+        Some(transcript) => CheckpointPreflightBuffers::reuse(limits, transcript),
+        None => CheckpointPreflightBuffers::new(limits),
+    }
+    .map_err(ExecuteError::InvalidPreflightContext)?;
+    let mut dirty_pages = CheckpointDirtyPages::new(&vm_state.memory.memory)
+        .map_err(ExecuteError::InvalidPreflightContext)?;
+    let mut state: CheckpointPreflightRvState = init_state(vm_state, pc);
+    state.regs = read_rv64_registers(vm_state);
+    state.mode_state = buffers.ffi_state(&mut dirty_pages);
+
+    let execution = run_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        allow_suspended,
+        Some(dirty_pages.deferral_mut()),
+    );
+    if state.mode_state.error != 0 {
+        return Err(ExecuteError::InvalidPreflightContext(format!(
+            "generated preflight logger failed with code {}",
+            state.mode_state.error
+        )));
+    }
+    let status =
+        execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
+    let final_timestamp = state.mode_state.timestamp;
+    let endpoint = match status {
+        ExecutionStatus::Terminated => PreflightEndpoint::Terminated,
+        ExecutionStatus::Suspended => PreflightEndpoint::Suspended,
+        _ => unreachable!("run_and_finalize accepted an invalid preflight status"),
+    };
+    // SAFETY: the raw state was created from `buffers` immediately above and
+    // neither vector can reallocate during generated execution.
+    let (transcript, checked_timestamp, retired) =
+        unsafe { buffers.finish(&state.mode_state, timestamp_max_bits, &dirty_pages) }
+            .map_err(ExecuteError::InvalidPreflightContext)?;
+    dirty_pages.merge_into(&mut vm_state.memory.memory);
+    debug_assert_eq!(final_timestamp, checked_timestamp);
+    Ok((transcript, endpoint, checked_timestamp, retired))
 }
 
 /// Execute an instret-tracking pure artifact until termination.
@@ -266,7 +332,7 @@ fn execute_pure_with_instret_tracking_impl(
         &[RvrExecutionKind::PureWithInstretTracking],
     )?;
     let pc = vm_state.pc();
-    let mut state: PureWithInstretTrackingRvState = init_rvr_state(vm_state, pc);
+    let mut state: PureWithInstretTrackingRvState = init_state(vm_state, pc);
     state.regs = read_rv64_registers(vm_state);
     state.mode_state = tracking;
     let status = run_and_finalize(
@@ -275,6 +341,7 @@ fn execute_pure_with_instret_tracking_impl(
         vm_state,
         &mut state,
         allow_suspended,
+        None,
     )
     .inspect_err(|error| tracing::warn!(%error, "rvr tracked pure execution failed"))?;
     Ok(TrackedExecutionResult {
@@ -293,10 +360,10 @@ pub(super) fn execute_metered_cost(
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
+    let mut state: MeteredCostRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
 
-    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
+    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
         .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
     Ok(RvrMeteredCostResult {
         instret: state.mode_state.instret,
@@ -355,7 +422,7 @@ fn execute_metered_impl(
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut state: MeteredRvState = init_rvr_state(vm_state, pc);
+    let mut state: MeteredRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
 
     let check_counter = u32::try_from(seg_state.ctx.segmentation_ctx.instrets_until_check)
@@ -370,6 +437,8 @@ fn execute_metered_impl(
     state.mode_state.pv_page_buf = seg_state.pv_page_buf_ptr();
     state.mode_state.deferral_page_buf = seg_state.deferral_page_buf_ptr();
     state.mode_state.check_counter = check_counter;
+    state.mode_state.num_checkpoint_residuals =
+        seg_state.ctx.segmentation_ctx.num_preflight_residuals;
     state.mode_state.on_check = metered_periodic_check;
     state.mode_state.seg_state = &mut seg_state;
 
@@ -379,6 +448,7 @@ fn execute_metered_impl(
         vm_state,
         &mut state,
         allow_suspended,
+        None,
     )
     .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
 
@@ -393,12 +463,15 @@ fn execute_metered_impl(
             state.mode_state.pv_page_buf_len,
             state.mode_state.deferral_page_buf_len,
             state.mode_state.check_counter,
+            state.mode_state.num_checkpoint_residuals,
         );
     } else {
         // The segment boundary exits before executing the triggering block.
         // The periodic check already flushed page buffers and initialized the next
         // segment; carry the bumped countdown forward for resume.
         seg_state.ctx.segmentation_ctx.instrets_until_check = state.mode_state.check_counter as u64;
+        seg_state.ctx.segmentation_ctx.num_preflight_residuals =
+            state.mode_state.num_checkpoint_residuals;
     }
     Ok(if terminated {
         RvrMeteredExecutionOutcome::Terminated(seg_state)

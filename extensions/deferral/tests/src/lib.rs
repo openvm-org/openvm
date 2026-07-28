@@ -11,12 +11,29 @@ mod tests {
         },
         utils::{air_test_with_min_segments, test_system_config},
     };
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::{
+        arch::{rvr::PreflightLimits, ExecutionError, VirtualMachine, VmExecutor, VmState},
+        system::memory::online::{GuestMemory, LinearMemory, TouchedPages, PAGE_SIZE},
+        utils::test_cpu_engine,
+    };
     use openvm_deferral_circuit::{
         DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
     };
+    #[cfg(feature = "rvr")]
+    use openvm_deferral_transpiler::DeferralOpcode;
     use openvm_deferral_transpiler::DeferralTranspilerExtension;
     use openvm_instructions::{exe::VmExe, DEFERRAL_AS};
+    #[cfg(feature = "rvr")]
+    use openvm_instructions::{
+        instruction::Instruction,
+        program::Program,
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        LocalOpcode, SystemOpcode,
+    };
     use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+    #[cfg(feature = "rvr")]
+    use openvm_riscv_transpiler::Rv64JalLuiOpcode;
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
@@ -130,5 +147,193 @@ mod tests {
         };
         let config = make_config(2);
         run_test(config, "multiple", streams)
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_checkpoint_preflight_carries_deferral_state_across_segments() -> Result<()> {
+        let config = make_config(1);
+        let instructions = [
+            Instruction::<F>::from_usize(
+                DeferralOpcode::CALL.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    2 * RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+            ),
+            Instruction::<F>::from_usize(
+                DeferralOpcode::CALL.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    2 * RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let output_ptr = 128u64;
+        let input_ptr = 64u64;
+        let mut exe = VmExe::from(Program::from_instructions(&instructions));
+        for (offset, byte) in output_ptr.to_le_bytes().into_iter().enumerate() {
+            exe.init_memory.insert(
+                (
+                    RV64_REGISTER_AS,
+                    RV64_REGISTER_NUM_LIMBS as u32 + offset as u32,
+                ),
+                byte,
+            );
+        }
+        for (offset, byte) in input_ptr.to_le_bytes().into_iter().enumerate() {
+            exe.init_memory.insert(
+                (
+                    RV64_REGISTER_AS,
+                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
+                ),
+                byte,
+            );
+        }
+        for (offset, byte) in INPUT_COMMIT_0.into_iter().enumerate() {
+            exe.init_memory
+                .insert((RV64_MEMORY_AS, input_ptr as u32 + offset as u32), byte);
+        }
+        for (offset, byte) in config.deferral.def_circuit_commits[0]
+            .into_iter()
+            .enumerate()
+        {
+            exe.init_memory.insert((DEFERRAL_AS, offset as u32), byte);
+        }
+
+        let mut deferral = DeferralState::new(Vec::<DeferralResult>::new());
+        deferral.store_input(INPUT_COMMIT_0.to_vec(), INPUT_RAW_0.to_vec());
+        let streams = Streams {
+            deferrals: vec![deferral],
+            ..Default::default()
+        };
+        let executor = VmExecutor::new(config)?;
+        let checkpoint = executor.preflight_instance(&exe)?;
+        let mut initial = checkpoint.create_initial_vm_state(streams);
+        let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
+        initial.memory.memory.touched_pages[DEFERRAL_AS as usize] =
+            TouchedPages::new(deferral_bytes);
+        assert!(initial.memory.memory.touched_pages[DEFERRAL_AS as usize]
+            .touched_byte_ranges(PAGE_SIZE)
+            .is_empty());
+        let split_initial = initial.clone();
+
+        let first =
+            checkpoint.execute_from_state_for(split_initial, PreflightLimits::new(2, 13, 1))?;
+        assert!(matches!(
+            first.endpoint,
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended
+        ));
+        assert_eq!(
+            first.state.memory.memory.touched_pages[DEFERRAL_AS as usize]
+                .touched_byte_ranges(PAGE_SIZE),
+            vec![(0, PAGE_SIZE)]
+        );
+
+        let split = checkpoint.execute_from_state(first.state, PreflightLimits::new(2, 13, 1))?;
+        let unbounded = checkpoint.execute_from_state(initial, PreflightLimits::new(4, 26, 1))?;
+        assert_eq!(split.state.pc(), unbounded.state.pc());
+        assert_sparse_state_eq(&split.state, &unbounded.state);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn deferral_output_oob_sizing_read_traps_in_every_rvr_mode() -> Result<()> {
+        let config = make_config(1);
+        let instructions = [
+            Instruction::<F>::from_usize(
+                DeferralOpcode::OUTPUT.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    2 * RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let mut exe = VmExe::from(Program::from_instructions(&instructions));
+        for (offset, byte) in u64::MAX.to_le_bytes().into_iter().enumerate() {
+            exe.init_memory.insert(
+                (
+                    RV64_REGISTER_AS,
+                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
+                ),
+                byte,
+            );
+        }
+
+        let executor = VmExecutor::new(config.clone())?;
+        let pure_error = executor
+            .instance(&exe)?
+            .execute(Streams::default())
+            .err()
+            .expect("pure RVR must trap an out-of-bounds OUTPUT key");
+        assert_rvr_trap(pure_error);
+
+        let checkpoint_error = executor
+            .preflight_instance(&exe)?
+            .execute(
+                Streams::default(),
+                PreflightLimits::new(instructions.len(), 0, 1),
+            )
+            .err()
+            .expect("checkpoint RVR must trap before its OUTPUT sizing peek");
+        assert_rvr_trap(checkpoint_error);
+
+        let (vm, _) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64DeferralBuilder, config)?;
+        let metered_error = vm
+            .metered_instance(&exe)?
+            .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))
+            .err()
+            .expect("metered RVR must trap an out-of-bounds OUTPUT key");
+        assert_rvr_trap(metered_error);
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_trap(error: ExecutionError) {
+        match error {
+            ExecutionError::RvrExecution(message) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            error => panic!("expected a typed RVR trap, got {error}"),
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_sparse_state_eq(left: &VmState<GuestMemory>, right: &VmState<GuestMemory>) {
+        assert_eq!(left.memory.memory.mem.len(), right.memory.memory.mem.len());
+        for address_space in 0..left.memory.memory.mem.len() {
+            let left_memory = left.memory.memory.mem[address_space].as_slice();
+            let right_memory = right.memory.memory.mem[address_space].as_slice();
+            assert_eq!(left_memory.len(), right_memory.len());
+            let left_ranges = left.memory.memory.touched_pages[address_space]
+                .touched_byte_ranges(left_memory.len());
+            let right_ranges = right.memory.memory.touched_pages[address_space]
+                .touched_byte_ranges(right_memory.len());
+            assert_eq!(left_ranges, right_ranges, "address space {address_space}");
+            for (start, end) in left_ranges {
+                assert_eq!(
+                    &left_memory[start..end],
+                    &right_memory[start..end],
+                    "address space {address_space}, byte range {start}..{end}"
+                );
+            }
+        }
     }
 }

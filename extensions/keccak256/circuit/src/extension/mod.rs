@@ -8,18 +8,21 @@ use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
         ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
-        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
-        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{
         memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
         SystemPort,
     },
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, VmConfig};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
@@ -28,7 +31,8 @@ use openvm_riscv_circuit::{
     Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
-    interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
+    interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_keccak::KeccakExtension;
@@ -47,6 +51,8 @@ use crate::{
 mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_tests;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv64Config {
@@ -89,17 +95,13 @@ where
 {
     type VmConfig = Keccak256Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Keccak256Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -107,10 +109,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(
             &Keccak256CpuProverExt,
             &config.keccak,
             inventory,
@@ -131,7 +133,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {
     }
 }
 
-#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Keccak256Executor {
     Keccakf(KeccakfExecutor),
     Xorin(XorinVmExecutor),
@@ -217,18 +219,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
 pub struct Keccak256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, E, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
+impl<SC, E> VmProverExtension<E, Keccak256> for Keccak256CpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Keccak256,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -245,7 +246,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx(()))
+                });
                 chip
             }
         };
@@ -255,25 +258,32 @@ where
             XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), byte_ptr_max_bits),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(xorin_chip);
+        inventory.add_postflight_executor_chip(xorin_chip, |chip, postflight| {
+            crate::xorin::trace::generate_trace_from_postflight(chip, postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         inventory.next_air::<KeccakfPermAir>()?;
-        let shared_records = Arc::new(Mutex::new(Vec::new()));
-        let periphery_chip = KeccakfPermChip::new(shared_records.clone());
-        // Clone the Arc Mutex and pass to the OpChip.
-        // WARNING: the OpChip must be added _after_ the periphery chip so that its tracegen is done
-        // _first_. After OpChip tracegen, the shared_record is set to the execution records,
-        // effectively passing the records to the periphery chip.
-        inventory.add_periphery_chip(periphery_chip);
+        let shared_preimages = Arc::new(Mutex::new(Vec::new()));
+        let periphery_chip = KeccakfPermChip::new(shared_preimages.clone());
+        // Trace generators run in reverse insertion order. Register the permutation first so the
+        // operation generator publishes its preimages before they are consumed here.
+        inventory.add_postflight_periphery_chip(periphery_chip, |chip, postflight| {
+            crate::keccakf_perm::generate_trace_from_postflight(chip, postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChip::new(
             range_checker.clone(),
             byte_ptr_max_bits,
             mem_helper.clone(),
-            shared_records,
+            shared_preimages,
         );
-        inventory.add_executor_chip(op_chip);
+        inventory.add_postflight_executor_chip(op_chip, |chip, postflight| {
+            crate::keccakf_op::generate_trace_from_postflight(chip, postflight)
+                .map(AirProvingContext::simple_no_pis)
+        });
 
         Ok(())
     }

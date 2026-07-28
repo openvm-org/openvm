@@ -5,6 +5,8 @@ use openvm::platform::memory::MEM_SIZE;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{verify_segments, VirtualMachineError};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
@@ -393,6 +395,60 @@ fn test_sdk_fibonacci() -> Result<()> {
     stdin.write(&n);
 
     prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_preflight_app_prover_reuse() -> Result<()> {
+    setup_tracing();
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut prover = sdk.app_prover(exe)?;
+
+    let error = match prover.prove(StdIn::default()) {
+        Ok(_) => panic!("missing guest input must fail"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(error, VirtualMachineError::Execution(_)),
+        "unexpected preflight proof error: {error}"
+    );
+
+    let mut stdin = StdIn::default();
+    stdin.write(&1000u64);
+    let first = prover.prove(stdin.clone())?;
+    let second = prover.prove(stdin)?;
+
+    let (_, app_vk) = sdk.app_keygen();
+    verify_segments(&prover.vm().engine, &app_vk.vk, &first.per_segment)?;
+    verify_segments(&prover.vm().engine, &app_vk.vk, &second.per_segment)?;
+    assert_eq!(
+        first.user_public_values.public_values,
+        second.user_public_values.public_values
+    );
+    Ok(())
+}
+
+#[cfg(all(feature = "cuda", not(feature = "root-prover")))]
+#[test]
+fn test_preflight_stark_prover() -> Result<()> {
+    setup_tracing();
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut prover = sdk.prover(exe)?;
+    let mut stdin = StdIn::default();
+    stdin.write(&1000u64);
+    let proof = prover.prove(stdin, &[])?.0;
+    Sdk::verify_proof((*sdk.agg_vk()).clone(), prover.generate_baseline(), &proof)?;
+    Ok(())
 }
 
 #[test]

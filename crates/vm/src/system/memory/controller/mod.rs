@@ -159,10 +159,6 @@ impl<F: VmField> MemoryController<F> {
         }
     }
 
-    // @dev: Memory is complicated and allowed to break all the rules (e.g., 1 arena per chip) and
-    // there's no need for any memory chip to implement the Chip trait. We do it when convenient,
-    // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
-    // _somehow_.
     pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         &mut self,
         touched_memory: TouchedMemory<F>,
@@ -231,6 +227,10 @@ impl<F> SharedMemoryHelper<F> {
             timestamp_lt_air,
             _marker: PhantomData,
         }
+    }
+
+    pub fn timestamp_max_bits(&self) -> usize {
+        self.timestamp_lt_air.max_bits
     }
 }
 

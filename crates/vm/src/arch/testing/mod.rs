@@ -6,20 +6,33 @@ pub mod memory;
 pub mod program;
 mod utils;
 
-use std::marker::PhantomData;
-
 pub use cpu::*;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{interaction::BusIndex, p3_air::BaseAir};
-use p3_field::Field;
+use openvm_instructions::{instruction::Instruction, program::Program};
+use openvm_stark_backend::{
+    interaction::BusIndex,
+    p3_air::BaseAir,
+    p3_field::PrimeField32,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+};
 pub use utils::*;
 
-use crate::arch::{Arena, ExecutionState, MatrixRecordArena, PreflightExecutor, Streams};
+#[cfg(not(feature = "tco"))]
+use crate::arch::{execution_mode::PreflightCtx, interpreter::AlignedBuf};
+#[cfg(feature = "tco")]
+use crate::arch::{
+    execution_mode::PreflightCtx, ExecutorInventory, InterpretedInstance, SystemConfig,
+};
+use crate::{
+    arch::{
+        ExecutionCtxTrait, ExecutionState, Executor, Postflight, PostflightError, PreflightHistory,
+        PreflightOutput, Streams, VmExecState, VmField, VmState,
+    },
+    system::memory::online::GuestMemory,
+};
 
 pub const EXECUTION_BUS: BusIndex = 0;
 pub const MEMORY_BUS: BusIndex = 1;
@@ -32,48 +45,157 @@ pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
-pub type ArenaId = usize;
+#[derive(Clone)]
+pub struct TestPreflightExecution<F> {
+    pub program: Program<F>,
+    pub history: PreflightHistory,
+}
 
-pub struct TestChipHarness<F, E, A, C, RA = MatrixRecordArena<F>> {
+#[derive(Clone, Default)]
+pub struct TestPreflight<F> {
+    pub executions: Vec<TestPreflightExecution<F>>,
+}
+
+type TestTraceGenerator<F, C> =
+    Box<dyn for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>>;
+type TestBatchTraceGenerator<F, C> =
+    Box<dyn for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>>;
+type TestTracePadding<F> = Box<dyn Fn(&mut [F])>;
+type TestTraceRows<F> = Box<dyn Fn(&RowMajorMatrix<F>) -> usize>;
+
+pub struct TestChipHarness<F, E, A, C> {
     pub executor: E,
     pub air: A,
     pub chip: C,
-    pub arena: RA,
-    phantom: PhantomData<F>,
+    pub preflight: TestPreflight<F>,
+    pub generate_trace: TestTraceGenerator<F, C>,
+    pub generate_batch_trace: Option<TestBatchTraceGenerator<F, C>>,
+    pub rows_used: TestTraceRows<F>,
+    pub fill_padding: TestTracePadding<F>,
+    pub balance_memory: bool,
 }
 
-impl<F, E, A, C, RA> TestChipHarness<F, E, A, C, RA>
+pub(crate) fn execute_test_preflight<F, E>(
+    executor: &E,
+    instruction: &Instruction<F>,
+    program: &Program<F>,
+    initial_pc: u32,
+    state: VmState<GuestMemory>,
+) -> PreflightOutput
 where
-    F: Field,
-    A: BaseAir<F>,
-    RA: Arena,
+    F: VmField,
+    E: Executor<F> + Clone,
 {
-    pub fn with_capacity(executor: E, air: A, chip: C, height: usize) -> Self {
-        let width = air.width();
-        let height = next_power_of_two_or_zero(height);
-        let arena = RA::with_capacity(height, width);
+    #[cfg(not(feature = "tco"))]
+    {
+        let _ = program;
+        let pre_compute_size = executor.pre_compute_size();
+        let pre_compute_align = pre_compute_size.next_power_of_two();
+        let pre_compute = AlignedBuf::uninit(pre_compute_size, pre_compute_align);
+        let pre_compute_data =
+            unsafe { std::slice::from_raw_parts_mut(pre_compute.ptr, pre_compute_size) };
+        let handler = executor
+            .pre_compute::<PreflightCtx>(initial_pc, instruction, pre_compute_data)
+            .expect("test instruction must be statically valid");
+
+        let ctx = PreflightCtx::new::<F>(&state.memory, Some(1));
+        let mut exec_state = VmExecState::new(state, ctx);
+        assert!(!exec_state.should_suspend());
+        PreflightCtx::on_instruction_start(&mut exec_state, initial_pc);
+        unsafe { handler(pre_compute.ptr, &mut exec_state) };
+        if let Err(error) = exec_state.exit_code {
+            panic!("{error}");
+        }
+        let final_pc = exec_state.vm_state.pc();
+        let history = exec_state.ctx.finish(final_pc);
+        PreflightOutput {
+            history,
+            state: exec_state.vm_state,
+            exit_code: None,
+        }
+    }
+
+    #[cfg(feature = "tco")]
+    {
+        let exe = openvm_instructions::exe::VmExe::new(program.clone()).with_pc_start(initial_pc);
+        let system_config = SystemConfig::default_from_memory(state.memory.config.clone());
+        let mut inventory = ExecutorInventory::<E>::new(system_config);
+        inventory
+            .add_executor(executor.clone(), [instruction.opcode])
+            .expect("test executor opcode must be unique");
+        let interpreter = InterpretedInstance::new(&inventory, &exe)
+            .expect("test instruction must be statically valid");
+        interpreter
+            .execute_preflight_from_state::<F>(state, Some(1))
+            .expect("test instruction preflight must succeed")
+    }
+}
+
+impl<F, E, A, C> TestChipHarness<F, E, A, C>
+where
+    F: PrimeField32,
+    A: BaseAir<F>,
+{
+    pub fn with_capacity<G>(executor: E, air: A, chip: C, height: usize, generate_trace: G) -> Self
+    where
+        G: for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>
+            + 'static,
+    {
         Self {
             executor,
             air,
             chip,
-            arena,
-            phantom: PhantomData,
+            preflight: TestPreflight {
+                executions: Vec::with_capacity(height),
+            },
+            generate_trace: Box::new(generate_trace),
+            generate_batch_trace: None,
+            rows_used: Box::new(|trace| trace.height()),
+            fill_padding: Box::new(|_| {}),
+            balance_memory: true,
         }
+    }
+
+    pub fn with_batch_trace_generator(
+        mut self,
+        generate_trace: impl for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>
+            + 'static,
+    ) -> Self {
+        self.generate_batch_trace = Some(Box::new(generate_trace));
+        self
+    }
+
+    pub fn with_rows_used(
+        mut self,
+        rows_used: impl Fn(&RowMajorMatrix<F>) -> usize + 'static,
+    ) -> Self {
+        self.rows_used = Box::new(rows_used);
+        self
+    }
+
+    pub fn with_padding(mut self, fill_padding: impl Fn(&mut [F]) + 'static) -> Self {
+        self.fill_padding = Box::new(fill_padding);
+        self
+    }
+
+    pub fn without_memory_balance(mut self) -> Self {
+        self.balance_memory = false;
+        self
     }
 }
 
-pub trait TestBuilder<F> {
-    fn execute<E: PreflightExecutor<F, RA>, RA: Arena>(
+pub trait TestBuilder<F: PrimeField32> {
+    fn execute<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         instruction: &Instruction<F>,
     );
 
-    fn execute_with_pc<E: PreflightExecutor<F, RA>, RA: Arena>(
+    fn execute_with_pc<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
-        arena: &mut RA,
+        preflight: &mut TestPreflight<F>,
         instruction: &Instruction<F>,
         initial_pc: u32,
     );
@@ -101,6 +223,11 @@ pub trait TestBuilder<F> {
 
     fn get_default_register(&mut self, increment: usize) -> usize;
     fn get_default_pointer(&mut self, increment: usize) -> usize;
+
+    fn get_default_registers<const N: usize>(&mut self, increment: usize) -> [usize; N] {
+        let start = self.get_default_register(N * increment);
+        std::array::from_fn(|index| start + index * increment)
+    }
 
     fn write_heap_pointer_default(
         &mut self,

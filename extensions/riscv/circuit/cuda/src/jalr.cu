@@ -54,10 +54,12 @@ struct Rv64JalrCore {
 
     __device__ Rv64JalrCore(VariableRangeChecker rc) : rc(rc) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64JalrCoreRecord record) {
+    __device__ void fill_trace_row(
+        RowSlice row, uint32_t from_pc, uint32_t rs1_val, uint16_t imm, bool imm_sign
+    ) {
         uint32_t to_pc;
         uint16_t rd_data[BLOCK_FE_WIDTH];
-        run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign, to_pc, rd_data);
+        run_jalr(from_pc, rs1_val, imm, imm_sign, to_pc, rd_data);
 
         uint16_t to_pc_u16[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(to_pc_u16, to_pc);
@@ -76,9 +78,9 @@ struct Rv64JalrCore {
         rc.add_count(rd_low_u16_hi, PC_BITS - U16_BITS);
 
         uint16_t rs1_limbs[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_limbs, record.rs1_val);
+        ptr_to_u16_limbs(rs1_limbs, rs1_val);
 
-        COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm_sign, record.imm_sign);
+        COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm_sign, imm_sign);
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, to_pc_limbs, to_pc_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, to_pc_least_sig_bit, (to_pc & 1) == 1 ? 1 : 0);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, is_valid, 1);
@@ -86,7 +88,11 @@ struct Rv64JalrCore {
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rs1_data, rs1_limbs);
         uint32_t rd_limbs[RV64_PTR_U16_LIMBS - 1] = {rd_low_u16_hi};
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_high, rd_limbs);
-        COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm, record.imm);
+        COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm, imm);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, Rv64JalrCoreRecord record) {
+        fill_trace_row(row, record.from_pc, record.rs1_val, record.imm, record.imm_sign);
     }
 };
 
@@ -100,53 +106,4 @@ struct Rv64JalrRecord {
     Rv64JalrCoreRecord core;
 };
 
-__global__ void jalr_tracegen(
-    Fp *trace,
-    size_t height,
-    DeviceBufferConstView<Rv64JalrRecord> records,
-    uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits
-) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(trace + idx, height);
-
-    if (idx < records.len()) {
-        auto full = records[idx];
-
-        Rv64JalrAdapter adapter(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-        );
-        adapter.fill_trace_row(row, full.adapter);
-
-        Rv64JalrCore core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalrCols, core)), full.core);
-    } else {
-        row.fill_zero(0, sizeof(Rv64JalrCols<uint8_t>));
-    }
-}
-
-extern "C" int _jalr_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    DeviceBufferConstView<Rv64JalrRecord> d_records,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits,
-    cudaStream_t stream
-) {
-    assert(width == sizeof(Rv64JalrCols<uint8_t>));
-
-    auto [grid, block] = kernel_launch_params(height, 512);
-
-    jalr_tracegen<<<grid, block, 0, stream>>>(
-        d_trace,
-        height,
-        d_records,
-        d_range_checker,
-        range_checker_num_bins,
-        timestamp_max_bits
-    );
-    return CHECK_KERNEL();
-}
+#include "../rvr/src/jalr.inc.cuh"

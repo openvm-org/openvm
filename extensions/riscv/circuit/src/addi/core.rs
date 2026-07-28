@@ -1,27 +1,19 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
-use crate::adapters::{is_canonical_i12, U16_BITS};
+use crate::adapters::U16_BITS;
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -146,122 +138,19 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct AddICoreRecord<const NUM_LIMBS: usize> {
-    pub rs1: [u16; NUM_LIMBS],
-    pub imm_low11: u16,
-    pub imm_sign: u16,
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct AddIExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct AddIExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
     pub local_opcode: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct AddIFiller<
-    A,
     const NUM_LIMBS: usize,
     const LIMB_BITS: usize,
     const RANGE_CHECK_TOP_LIMB: bool,
 > {
-    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for AddIExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; NUM_LIMBS]; 1]>,
-            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut AddICoreRecord<NUM_LIMBS>),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        if NUM_LIMBS * LIMB_BITS == 32 {
-            format!("{:?}", BaseAluWImmOpcode::from_usize(opcode - self.offset))
-        } else {
-            format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
-        }
-    }
-
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        debug_assert_eq!(
-            instruction.opcode.local_opcode_idx(self.offset),
-            self.local_opcode
-        );
-        let c_u32 = instruction.c.as_canonical_u32();
-        debug_assert!(is_canonical_i12(c_u32));
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        [core_record.rs1] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.imm_low11 = (c_u32 & 0x7FF) as u16;
-        core_record.imm_sign = ((c_u32 >> 11) & 1) as u16;
-
-        let rd = run_addi::<NUM_LIMBS, LIMB_BITS>(
-            &core_record.rs1,
-            core_record.imm_low11,
-            core_record.imm_sign,
-        );
-
-        self.adapter
-            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
-    TraceFiller<F> for AddIFiller<A, NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record: &AddICoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut AddICoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        let rd = run_addi::<NUM_LIMBS, LIMB_BITS>(&record.rs1, record.imm_low11, record.imm_sign);
-
-        core_row.is_valid = F::ONE;
-        core_row.imm_sign = F::from_u16(record.imm_sign);
-        core_row.imm_low11 = F::from_u16(record.imm_low11);
-        self.range_checker_chip
-            .add_count(record.imm_low11 as u32, 11);
-        core_row.rs1 = record.rs1.map(F::from_u16);
-        core_row.rd = rd.map(F::from_u16);
-        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
-        for &rd_val in &rd[..range_limb_count] {
-            self.range_checker_chip.add_count(rd_val as u32, LIMB_BITS);
-        }
-    }
 }
 
 #[inline(always)]

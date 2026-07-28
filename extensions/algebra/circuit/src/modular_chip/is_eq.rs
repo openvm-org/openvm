@@ -5,13 +5,7 @@ use std::{
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
-use openvm_circuit::{
-    arch::*,
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
@@ -27,8 +21,9 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
-use openvm_riscv_circuit::adapters::{rv64_bytes_to_u16_block, rv64_bytes_to_u32};
+use openvm_riscv_circuit::adapters::{
+    rv64_bytes_to_u16_block, rv64_bytes_to_u32, validate_memory_block_byte_ptr,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -286,132 +281,57 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
-    pub is_setup: bool,
-    pub b: [u16; READ_LIMBS],
-    pub c: [u16; READ_LIMBS],
-}
-
 #[derive(derive_new::new, Clone)]
 pub struct ModularIsEqualExecutor<
-    A,
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
     const LIMB_BITS: usize,
 > {
-    adapter: A,
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
 }
 
 #[derive(derive_new::new, Clone)]
 pub struct ModularIsEqualFiller<
-    A,
+    const NUM_LANES: usize,
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
     const LIMB_BITS: usize,
 > {
-    adapter: A,
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    PreflightExecutor<F, RA> for ModularIsEqualExecutor<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; READ_LIMBS]; 2]>,
-            WriteData: From<[u16; WRITE_LIMBS]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut ModularIsEqualRecord<READ_LIMBS>,
-        ),
-    >,
+impl<
+        const NUM_LANES: usize,
+        const READ_LIMBS: usize,
+        const WRITE_LIMBS: usize,
+        const LIMB_BITS: usize,
+    > ModularIsEqualFiller<NUM_LANES, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 {
-    fn execute(
+    pub(crate) fn fill_trace_row_from_execution_data<F: PrimeField32>(
         &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode =
-            Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert!(matches!(
-            local_opcode,
-            Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
-        ));
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.is_setup = instruction.opcode.local_opcode_idx(self.offset)
-            == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize;
-
-        let mut write_data = [0u16; WRITE_LIMBS];
-        write_data[0] = (core_record.b == core_record.c) as u16;
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            write_data.into(),
-            &mut adapter_record,
-        );
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64ModularArithmeticOpcode::from_usize(opcode - self.offset)
-        )
-    }
-}
-
-impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY:
-        // - row_slice is guaranteed by the caller to have at least A::WIDTH +
-        //   ModularIsEqualCoreCols::width() elements
-        // - caller ensures core_row contains a valid record written by the executor during trace
-        //   generation
-        let record: &ModularIsEqualRecord<READ_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
+        range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+        is_setup: bool,
+        b: [u16; READ_LIMBS],
+        c: [u16; READ_LIMBS],
+        core_row: &mut [F],
+    ) -> Result<(), PostflightError> {
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
-        let (b_cmp, b_diff_idx) =
-            run_unsigned_less_than::<READ_LIMBS>(&record.b, &self.modulus_limbs);
-        let (c_cmp, c_diff_idx) =
-            run_unsigned_less_than::<READ_LIMBS>(&record.c, &self.modulus_limbs);
+        let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
 
-        if !record.is_setup {
-            assert!(b_cmp, "{:?} >= {:?}", record.b, self.modulus_limbs);
+        if !is_setup && !b_cmp {
+            return Err(PostflightError::new(
+                "modular equality left operand is not less than the modulus",
+            ));
         }
-        assert!(c_cmp, "{:?} >= {:?}", record.c, self.modulus_limbs);
+        if !c_cmp {
+            return Err(PostflightError::new(
+                "modular equality right operand is not less than the modulus",
+            ));
+        }
 
         // Writing in reverse order
         cols.c_lt_mark = if b_diff_idx == c_diff_idx {
@@ -420,15 +340,15 @@ where
             F::TWO
         };
 
-        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
-        if !record.is_setup {
-            cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
-            self.range_checker_chip.add_count(
-                (self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx] - 1) as u32,
+        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - c[c_diff_idx]);
+        if !is_setup {
+            cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - b[b_diff_idx]);
+            range_checker.add_count(
+                (self.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1) as u32,
                 LIMB_BITS,
             );
-            self.range_checker_chip.add_count(
-                (self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx] - 1) as u32,
+            range_checker.add_count(
+                (self.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1) as u32,
                 LIMB_BITS,
             );
         } else {
@@ -445,28 +365,25 @@ where
             }
         });
 
-        cols.c = record.c.map(F::from_u16);
-        cols.b = record.b.map(F::from_u16);
+        cols.c = c.map(F::from_u16);
+        cols.b = b.map(F::from_u16);
         let sub_air = IsEqArraySubAir::<READ_LIMBS>;
         sub_air.generate_subrow(
             (&cols.b, &cols.c),
             (&mut cols.eq_marker, &mut cols.cmp_result),
         );
 
-        cols.is_setup = F::from_bool(record.is_setup);
+        cols.is_setup = F::from_bool(is_setup);
         cols.is_valid = F::ONE;
+        Ok(())
     }
 }
 
 impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>
 {
-    pub fn new(
-        adapter: Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
-        offset: usize,
-        modulus_limbs: [u16; TOTAL_LIMBS],
-    ) -> Self {
-        Self(ModularIsEqualExecutor::new(adapter, offset, modulus_limbs))
+    pub fn new(offset: usize, modulus_limbs: [u16; TOTAL_LIMBS]) -> Self {
+        Self(ModularIsEqualExecutor::new(offset, modulus_limbs))
     }
 }
 
@@ -506,7 +423,7 @@ impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
         let c = c.as_canonical_u32();
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
-        if d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
+        if a == 0 || d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -545,6 +462,13 @@ impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecuto
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64ModularArithmeticOpcode::from_usize(opcode - self.0.offset)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
@@ -635,14 +559,14 @@ unsafe fn execute_e1_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = std::slice::from_raw_parts(
         pre_compute,
         size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>(),
     )
     .borrow();
 
-    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(pre_compute, exec_state);
+    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -655,7 +579,7 @@ unsafe fn execute_e2_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
         std::slice::from_raw_parts(
             pre_compute,
@@ -665,7 +589,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(&pre_compute.data, exec_state)
 }
 
 #[inline(always)]
@@ -677,11 +601,15 @@ unsafe fn execute_e12_impl<
 >(
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+    for &address in &rs_vals {
+        validate_memory_block_byte_ptr(pc, address)?;
+    }
 
     // Read memory values
     let [b, c]: [[u16; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
@@ -713,8 +641,8 @@ unsafe fn execute_e12_impl<
     // Write result to register
     exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 // Returns (cmp_result, diff_idx). If the inputs are equal, diff_idx is NUM_LIMBS.

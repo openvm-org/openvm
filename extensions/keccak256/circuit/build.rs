@@ -13,11 +13,12 @@ fn main() {
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
             .include("cuda/include")
-            .watch("cuda")
-            .watch("../../../crates/circuits/primitives/cuda")
-            .watch("../../../crates/vm/cuda")
             .library_name("tracegen_gpu_keccak256")
-            .files_from_glob("cuda/src/*.cu");
+            .flag("-I../../../crates/vm/cuda/rvr/include")
+            .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
+            .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
+            .watch("cuda/rvr")
+            .files_from_glob("cuda/rvr/*.cu");
 
         builder.emit_link_directives();
         builder.build();

@@ -6,7 +6,7 @@ use openvm_circuit::{
             TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -33,20 +33,19 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64MultWAdapterRecord, MultiplicationCoreRecord, Rv64MulWChipGpu},
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64MulWChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
-use super::{MulWCoreAir, MulWFiller, Rv64MulWChip};
+use super::{trace::generate_trace_from_postflight, MulWCoreAir, MulWFiller, Rv64MulWChip};
 use crate::{
     adapters::{
-        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
-        Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -91,14 +90,9 @@ fn create_harness_fields(
             MulWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
+    let executor = Rv64MulWExecutor::new(MulWOpcode::CLASS_OFFSET);
     let chip = Rv64MulWChip::<F>::new(
-        MulWFiller::new(
-            Rv64MultWAdapterFiller::new(bitwise_chip.clone()),
-            range_tuple_chip,
-            bitwise_chip,
-            MulWOpcode::CLASS_OFFSET,
-        ),
+        MulWFiller::new(range_tuple_chip, bitwise_chip, MulWOpcode::CLASS_OFFSET),
         memory_helper,
     );
     (air, executor, chip)
@@ -129,7 +123,13 @@ fn create_harness(
         range_tuple_chip.clone(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (
         harness,
@@ -139,10 +139,10 @@ fn create_harness(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -153,7 +153,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let (mut instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
     instruction.e = F::ZERO;
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -183,7 +183,7 @@ fn run_rv64_mulw_rand_test() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             None,
             None,
@@ -224,7 +224,7 @@ fn run_negative_mulw_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         Some(b),
         Some(c),
@@ -399,11 +399,11 @@ fn run_mulw_sign_extension_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChipGpu, Rv64MulWChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -427,9 +427,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_mul_w_tracegen() {
     let mut rng = create_seeded_rng();
@@ -446,24 +452,12 @@ fn test_cuda_rand_mul_w_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64MultWAdapterRecord,
-        &'a mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record<'_>, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new(),
-        );
 
     tester
         .build()

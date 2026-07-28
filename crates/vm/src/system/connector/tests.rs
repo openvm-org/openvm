@@ -15,7 +15,8 @@ use openvm_stark_sdk::{
 use super::VmConnectorPvs;
 use crate::{
     arch::{
-        PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmState, CONNECTOR_AIR_ID,
+        execution_mode::Segment, ExecutionError, Postflight, PostflightTracegen, Streams,
+        SystemConfig, VirtualMachine, VmState, CONNECTOR_AIR_ID,
     },
     system::{
         memory::{online::GuestMemory, AddressMap},
@@ -27,6 +28,47 @@ use crate::{
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
 type PB = CpuBackend<SC>;
+
+#[test]
+fn preflight_enforces_exact_terminal_instruction_count() {
+    let vm_config = SystemConfig::default();
+    let engine = test_cpu_engine();
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();
+    let instruction = Instruction::<F>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0);
+    let vm_exe: VmExe<F> = Program::from_instructions(&[instruction]).into();
+    let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
+    let initial_state = || {
+        let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
+        VmState::new_with_defaults(0, memory, Streams::default(), 0)
+    };
+
+    let output = interpreter
+        .execute_segment(initial_state(), &Segment::new(0, 1, 0, vec![]))
+        .unwrap();
+    assert_eq!(output.exit_code, Some(0));
+
+    let error = match interpreter.execute_segment(initial_state(), &Segment::new(0, 2, 0, vec![])) {
+        Ok(_) => panic!("early termination must not satisfy a longer segment"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        ExecutionError::RetiredInstructionCountMismatch {
+            expected: 2,
+            actual: 1
+        }
+    ));
+
+    let instruction = Instruction::<F>::from_isize(TERMINATE.global_opcode(), 0, 0, 1, 0, 0);
+    let vm_exe: VmExe<F> = Program::from_instructions(&[instruction]).into();
+    let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
+    let error = match interpreter.execute_segment(initial_state(), &Segment::new(0, 1, 0, vec![])) {
+        Ok(_) => panic!("failed guest termination must be rejected"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, ExecutionError::FailedWithExitCode(1)));
+}
 
 #[test]
 fn test_vm_connector_happy_path() {
@@ -74,22 +116,29 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
 
     let program = Program::from_instructions(&instructions);
     let vm_exe: VmExe<F> = program.into();
-    let max_trace_heights = vec![0; vk.inner.per_air.len()];
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
-    let mut interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
-    let PreflightExecutionOutput {
-        system_records,
-        record_arenas,
-        ..
-    } = vm
-        .execute_preflight(&mut interpreter, from_state, &max_trace_heights)
+    let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
+    let output = interpreter
+        .execute_preflight_from_state(from_state, None)
         .unwrap();
-    let mut ctx = vm
-        .generate_proving_ctx(system_records, record_arenas)
-        .unwrap();
+    assert_eq!(output.history.program.len(), 2);
+    assert_eq!(output.history.program[0], output.history.program[1]);
+    assert_eq!(output.history.program[0].pc, 0);
+    assert_eq!(output.history.program[0].timestamp, 1);
+    assert!(output.history.memory.accesses.is_empty());
+    assert!(output.history.memory.initial_writes.is_empty());
+    let postflight = Postflight::new(
+        &vm_exe.program,
+        &output.history,
+        &vm_config.memory_config,
+        output.exit_code,
+    )
+    .unwrap();
+    SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
+    let mut ctx = vm.generate_proving_ctx(&(), &output, &postflight).unwrap();
     let connector_air_ctx = &mut ctx
         .per_trace
         .iter_mut()

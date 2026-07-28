@@ -1,288 +1,77 @@
-#[cfg(feature = "metrics")]
-use std::collections::BTreeMap;
-use std::{iter::repeat_n, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
-#[cfg(not(feature = "parallel"))]
-use itertools::Itertools;
-use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
-use openvm_stark_backend::{
-    p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::*,
+use openvm_instructions::exe::VmExe;
+use openvm_stark_backend::p3_field::PrimeField32;
+
+use super::{
+    execution_mode::{PreflightCtx, Segment},
+    interpreter::InterpretedInstance,
+    ExecutionError, Executor, ExecutorInventory, PreflightOutput, StaticProgramError, Streams,
+    VmState,
 };
+use crate::system::memory::online::GuestMemory;
 
-use crate::{
-    arch::{
-        execution_mode::PreflightCtx, interpreter::get_pc_index, Arena, ExecutionError, ExecutorId,
-        ExecutorInventory, PreflightExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::TracingMemory,
-};
-
-/// VM preflight executor for use with trace generation.
-/// Note: This executor doesn't hold any VM state and can be used for multiple execution.
+/// Owned interpreter instance for append-only preflight execution.
+///
+/// The ordinary interpreter borrows its executor inventory because generated
+/// pre-compute data may point into executors. Proving instances own both the VM
+/// and this interpreter, so this wrapper keeps the shared inventory alive for
+/// exactly as long as the borrowed interpreter.
 pub struct PreflightInterpretedInstance<F, E> {
-    // NOTE[jpw]: we use an Arc so that VmInstance can hold both VirtualMachine and
-    // PreflightInterpretedInstance. All we really need is to borrow `executors: &'a [E]`.
-    inventory: Arc<ExecutorInventory<E>>,
-
-    /// This is a map from (pc - pc_base) / pc_step -> [PcEntry].
-    /// We will set `executor_idx` to `u32::MAX` in the [PcEntry] if the program has no instruction
-    /// at that pc.
-    // PERF[jpw/ayush]: We could map directly to the raw pointer(u64) for executor, but storing the
-    // u32 may be better for cache efficiency.
-    pc_handler: Vec<PcEntry<F>>,
-    // pc_handler, execution_frequencies will all have the same length, which equals
-    // `Program::len()`
-    execution_frequencies: Vec<u32>,
-    pc_base: u32,
-
-    pub(super) executor_idx_to_air_idx: Vec<usize>,
+    // Drop the interpreter before releasing the inventory that backs its
+    // pre-compute pointers.
+    inner: InterpretedInstance<'static, PreflightCtx>,
+    _inventory: Arc<ExecutorInventory<E>>,
+    _field: PhantomData<fn() -> F>,
 }
 
-#[repr(C)]
-#[derive(Clone)]
-pub struct PcEntry<F> {
-    // NOTE[jpw]: revisit storing only smaller `precompute` for better cache locality. Currently
-    // VmOpcode is usize so align=8 and there are 7 u32 operands so we store ExecutorId(u32) after
-    // to avoid padding. This means PcEntry has align=8 and size=40 bytes, which is too big
-    pub insn: Instruction<F>,
-    pub executor_idx: ExecutorId,
-}
-
-impl<F: Field, E> PreflightInterpretedInstance<F, E> {
-    /// Creates a new interpreter instance for preflight execution.
-    /// Rewrites the program into an internal table specialized for enum dispatch.
-    ///
-    /// ## Assumption
-    /// There are less than `u32::MAX` total AIRs.
+impl<F, E> PreflightInterpretedInstance<F, E>
+where
+    F: PrimeField32,
+    E: Executor<F> + 'static,
+{
     pub fn new(
-        program: &Program<F>,
+        exe: &VmExe<F>,
         inventory: Arc<ExecutorInventory<E>>,
-        executor_idx_to_air_idx: Vec<usize>,
     ) -> Result<Self, StaticProgramError> {
-        if inventory.executors().len() > u32::MAX as usize {
-            // This would mean we cannot use u32::MAX as an "undefined" executor index
-            return Err(StaticProgramError::TooManyExecutors);
-        }
-        let len = program.instructions_and_debug_infos.len();
-        let pc_base = program.pc_base;
-        let base_idx = get_pc_index(pc_base);
-        let mut pc_handler = Vec::with_capacity(base_idx + len);
-        pc_handler.extend(repeat_n(PcEntry::undefined(), base_idx));
-        for insn_and_debug_info in &program.instructions_and_debug_infos {
-            if let Some((insn, _)) = insn_and_debug_info {
-                let insn = insn.clone();
-                let executor_idx = if insn.opcode == SystemOpcode::TERMINATE.global_opcode() {
-                    // The execution loop will always branch to terminate before using this executor
-                    0
-                } else {
-                    *inventory.instruction_lookup.get(&insn.opcode).ok_or(
-                        StaticProgramError::ExecutorNotFound {
-                            opcode: insn.opcode,
-                        },
-                    )?
-                };
-                assert!(
-                    (executor_idx as usize) < inventory.executors.len(),
-                    "ExecutorInventory ensures executor_idx is in bounds"
-                );
-                let pc_entry = PcEntry { insn, executor_idx };
-                pc_handler.push(pc_entry);
-            } else {
-                pc_handler.push(PcEntry::undefined());
-            }
-        }
+        let inventory_ref = unsafe {
+            // SAFETY:
+            // - `inventory` is stored in the returned wrapper and therefore outlives `inner`.
+            // - `inner` is declared before `_inventory`, so it is dropped first.
+            // - moving the Arc does not move its allocation.
+            &*Arc::as_ptr(&inventory)
+        };
+        let inner = InterpretedInstance::new(inventory_ref, exe)?;
         Ok(Self {
-            inventory,
-            execution_frequencies: vec![0u32; base_idx + len],
-            pc_base,
-            pc_handler,
-            executor_idx_to_air_idx,
+            inner,
+            _inventory: inventory,
+            _field: PhantomData,
         })
     }
 
-    pub fn executors(&self) -> &[E] {
-        &self.inventory.executors
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.inner.create_initial_vm_state(inputs)
     }
 
-    pub fn filtered_execution_frequencies(&self) -> Vec<u32> {
-        let base_idx = get_pc_index(self.pc_base);
-        self.pc_handler
-            .par_iter()
-            .zip_eq(&self.execution_frequencies)
-            .skip(base_idx)
-            .filter_map(|(entry, freq)| entry.is_some().then_some(*freq))
-            .collect()
+    /// Executes exactly one metered segment from its architectural start state.
+    pub fn execute_segment(
+        &self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<PreflightOutput, ExecutionError> {
+        self.inner.execute_segment::<F>(state, segment)
     }
 
-    pub fn reset_execution_frequencies(&mut self) {
-        self.execution_frequencies.fill(0);
+    /// Low-level interpreter entry point.
+    ///
+    /// `None` runs until termination and may retain an unbounded history. Normal
+    /// proving code should use [`Self::execute_segment`] with a metered bound.
+    pub fn execute_preflight_from_state(
+        &self,
+        state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+    ) -> Result<PreflightOutput, ExecutionError> {
+        self.inner
+            .execute_preflight_from_state::<F>(state, num_insns)
     }
-}
-
-impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
-    #[cfg(feature = "metrics")]
-    pub fn opcode_counts_by_air<RA>(&self) -> BTreeMap<(usize, String), u64>
-    where
-        RA: Arena,
-        E: PreflightExecutor<F, RA>,
-    {
-        let mut counts = BTreeMap::new();
-        for (entry, &freq) in self.pc_handler.iter().zip(&self.execution_frequencies) {
-            if freq == 0
-                || !entry.is_some()
-                || entry.insn.opcode == SystemOpcode::TERMINATE.global_opcode()
-            {
-                continue;
-            }
-            let executor_idx = entry.executor_idx as usize;
-            let air_idx = unsafe {
-                // SAFETY: `entry.executor_idx` was produced by `ExecutorInventory`, and
-                // `executor_idx_to_air_idx` has one entry per executor.
-                *self.executor_idx_to_air_idx.get_unchecked(executor_idx)
-            };
-            let executor = unsafe {
-                // SAFETY: same invariant as in `execute_instruction`.
-                self.inventory.executors.get_unchecked(executor_idx)
-            };
-            let opcode = executor.get_opcode_name(entry.insn.opcode.as_usize());
-            *counts.entry((air_idx, opcode)).or_insert(0) += freq as u64;
-        }
-        counts
-    }
-
-    /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_state<RA>(
-        &mut self,
-        state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>,
-    ) -> Result<(), ExecutionError>
-    where
-        RA: Arena,
-        E: PreflightExecutor<F, RA>,
-    {
-        loop {
-            if let Ok(Some(_)) = state.exit_code {
-                // should terminate
-                break;
-            }
-            if state.ctx.instret_left == 0 {
-                // should suspend
-                break;
-            }
-
-            // Fetch, decode and execute single instruction
-            self.execute_instruction(state)?;
-            state.ctx.instret_left -= 1;
-        }
-
-        Ok(())
-    }
-
-    /// Executes a single instruction and updates VM state
-    #[inline(always)]
-    fn execute_instruction<RA>(
-        &mut self,
-        state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>,
-    ) -> Result<(), ExecutionError>
-    where
-        RA: Arena,
-        E: PreflightExecutor<F, RA>,
-    {
-        let pc = state.pc();
-        let pc_idx = get_pc_index(pc);
-        let pc_entry = self
-            .pc_handler
-            .get(pc_idx)
-            .ok_or_else(|| ExecutionError::PcOutOfBounds(pc))?;
-        // SAFETY: `execution_frequencies` has the same length as `pc_handler` so `get_pc_entry`
-        // already does the bounds check
-        unsafe {
-            *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
-        };
-        tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
-
-        if !pc_entry.is_some() {
-            return Err(ExecutionError::Unreachable(pc));
-        }
-
-        let opcode = pc_entry.insn.opcode;
-        let c = pc_entry.insn.c;
-        // Handle termination instruction
-        if opcode == SystemOpcode::TERMINATE.global_opcode() {
-            state.exit_code = Ok(Some(c.as_canonical_u32()));
-            return Ok(());
-        }
-
-        // SAFETY: non-system `executor_idx` values come from `ExecutorInventory`, which ensures
-        // that `executor_idx` is within bounds.
-        let executor = unsafe {
-            self.inventory
-                .executors
-                .get_unchecked(pc_entry.executor_idx as usize)
-        };
-
-        // Execute the instruction using the control implementation
-        tracing::trace!(
-            "opcode: {} | timestamp: {}",
-            executor.get_opcode_name(pc_entry.insn.opcode.as_usize()),
-            state.memory.timestamp()
-        );
-        let arena = unsafe {
-            // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
-            let air_idx = *self
-                .executor_idx_to_air_idx
-                .get_unchecked(pc_entry.executor_idx as usize);
-            // SAFETY: air_idx is a valid AIR index in the vkey, and always construct arenas with
-            // length equal to num_airs
-            state.ctx.arenas.get_unchecked_mut(air_idx)
-        };
-        let vm_state_mut = state.vm_state.into_mut(arena);
-        executor.execute(vm_state_mut, &pc_entry.insn)?;
-
-        #[cfg(feature = "metrics")]
-        {
-            crate::metrics::update_instruction_metrics(state, executor, pc, pc_entry);
-        }
-
-        Ok(())
-    }
-}
-
-impl<F> PcEntry<F> {
-    pub fn is_some(&self) -> bool {
-        self.executor_idx != u32::MAX
-    }
-}
-
-impl<F: Default> PcEntry<F> {
-    fn undefined() -> Self {
-        Self {
-            insn: Instruction::default(),
-            executor_idx: u32::MAX,
-        }
-    }
-}
-
-/// Macro for executing and emitting metrics for instructions/s and number of instructions executed.
-/// Does not include any tracing span.
-#[macro_export]
-macro_rules! execute_spanned {
-    ($name:literal, $executor:expr, $state:expr) => {{
-        #[cfg(feature = "metrics")]
-        let metrics = $crate::arch::execution_metrics::ExecutionMetricTimer::start_custom(
-            concat!($name, "_insns"),
-            concat!($name, "_insn_mi/s"),
-        );
-        #[cfg(feature = "metrics")]
-        let start_instret_left = $state.ctx.instret_left;
-
-        let result = $executor.execute_from_state($state);
-
-        #[cfg(feature = "metrics")]
-        {
-            let insns = start_instret_left - $state.ctx.instret_left;
-            metrics.record(insns);
-        }
-        result
-    }};
 }

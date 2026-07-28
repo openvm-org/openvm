@@ -1,20 +1,16 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
@@ -242,153 +238,14 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct ShiftLogicalCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u16; NUM_LIMBS],
-    pub c: [u16; NUM_LIMBS],
-    pub local_opcode: u8,
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct ShiftLogicalExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct ShiftLogicalExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct ShiftLogicalFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct ShiftLogicalFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for ShiftLogicalExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut ShiftLogicalCoreRecord<NUM_LIMBS, LIMB_BITS>,
-        ),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert_ne!(local_opcode, ShiftOpcode::SRA);
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let (output, _, _) = run_shift_logical::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-
-        core_record.b = rs1;
-        core_record.c = rs2;
-        core_record.local_opcode = local_opcode as u8;
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            [output].into(),
-            &mut adapter_record,
-        );
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftLogicalFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // ShiftLogicalCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid ShiftLogicalCoreRecord written by the executor
-        // during trace generation
-        let record: &ShiftLogicalCoreRecord<NUM_LIMBS, LIMB_BITS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let opcode = ShiftOpcode::from_usize(record.local_opcode as usize);
-        let is_sll = opcode == ShiftOpcode::SLL;
-        let (a, limb_shift, bit_shift) =
-            run_shift_logical::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
-
-        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
-        self.range_checker_chip.add_count(
-            ((record.c[0] as usize - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
-            LIMB_BITS - num_bits_log as usize,
-        );
-
-        // carry = the bit_shift bits of b[k] that cross into the neighbouring limb;
-        // aux = the remaining (LIMB_BITS - bit_shift) bits. Both are computed via u32 intermediates
-        // so a zero shift amount does not produce a shift-by-LIMB_BITS overflow.
-        let aux_bits = LIMB_BITS - bit_shift;
-        let mut bit_shift_carry = [F::ZERO; NUM_LIMBS];
-        let mut bit_shift_aux = [F::ZERO; NUM_LIMBS];
-        for k in 0..NUM_LIMBS {
-            let limb = record.b[k] as u32;
-            let (carry, aux) = if is_sll {
-                (limb >> aux_bits, limb & ((1u32 << aux_bits) - 1))
-            } else {
-                (limb & ((1u32 << bit_shift) - 1), limb >> bit_shift)
-            };
-            self.range_checker_chip.add_count(carry, bit_shift);
-            self.range_checker_chip.add_count(aux, aux_bits);
-            bit_shift_carry[k] = F::from_u32(carry);
-            bit_shift_aux[k] = F::from_u32(aux);
-        }
-
-        let mut limb_shift_marker = [F::ZERO; NUM_LIMBS];
-        limb_shift_marker[limb_shift] = F::ONE;
-        let mut bit_shift_marker = [F::ZERO; LIMB_BITS];
-        bit_shift_marker[bit_shift] = F::ONE;
-
-        let core_row: &mut ShiftLogicalCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        let bit_mult = F::from_u32(1 << bit_shift);
-        let carry_mult = F::from_u32(1 << aux_bits);
-        core_row.carry_multiplier_left = if is_sll { carry_mult } else { F::ZERO };
-        core_row.bit_multiplier_left = if is_sll { bit_mult } else { F::ZERO };
-
-        core_row.opcode_sll_flag = F::from_bool(is_sll);
-
-        core_row.bit_shift_aux = bit_shift_aux;
-        core_row.bit_shift_carry = bit_shift_carry;
-        core_row.limb_shift_marker = limb_shift_marker;
-        core_row.bit_shift_marker = bit_shift_marker;
-        core_row.c = record.c.map(F::from_u16);
-        core_row.b = record.b.map(F::from_u16);
-        core_row.a = a.map(F::from_u16);
-    }
 }
 
 // Returns (result, limb_shift, bit_shift)

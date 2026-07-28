@@ -22,11 +22,9 @@ pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), In
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Emit ordered PC, register, and memory hooks used to build execution records.
-    ///
-    /// Page hooks are separate because they record only addresses for metering.
-    #[allow(dead_code)]
-    ValueTrace,
+    /// Emit only block checkpoints and the residual values that execution
+    /// cannot derive while replaying a block.
+    Preflight,
     /// Memory accesses use direct helpers and do not emit memory trace events.
     #[default]
     Direct,
@@ -60,8 +58,12 @@ impl BlockAbi {
 }
 
 impl EmitMode {
-    fn traces_values(self) -> bool {
-        matches!(self, Self::ValueTrace)
+    fn preserves_logical_schedule(self) -> bool {
+        matches!(self, Self::Preflight)
+    }
+
+    fn uses_checkpoint_local(self) -> bool {
+        matches!(self, Self::Preflight)
     }
 
     fn is_metered_without_memory_pages(self) -> bool {
@@ -71,6 +73,10 @@ impl EmitMode {
                 trace_memory_pages: false
             }
         )
+    }
+
+    fn tracks_metered_checkpoint_residuals(self) -> bool {
+        matches!(self, Self::Metered { .. })
     }
 
     /// Whether this block records AS_MEMORY pages through local `TraceMemory`.
@@ -104,6 +110,11 @@ pub struct EmitContext<'a> {
     chip_widths: Option<&'a [u64]>,
     num_airs: Option<u32>,
     invalid_chip_index: Option<InvalidChipIndex>,
+    checkpoint_fixed_slots: u32,
+    checkpoint_fixed_residuals: u32,
+    checkpoint_pending_dynamic_slots: Option<String>,
+    checkpoint_dynamic_schedule: bool,
+    checkpoint_dynamic_residuals: bool,
 }
 
 impl<'a> EmitContext<'a> {
@@ -126,7 +137,44 @@ impl<'a> EmitContext<'a> {
             chip_widths,
             num_airs,
             invalid_chip_index: None,
+            checkpoint_fixed_slots: 0,
+            checkpoint_fixed_residuals: 0,
+            checkpoint_pending_dynamic_slots: None,
+            checkpoint_dynamic_schedule: false,
+            checkpoint_dynamic_residuals: false,
         }
+    }
+
+    pub(crate) fn checkpoint_preflight_budget(&self) -> (u32, u32) {
+        assert!(
+            self.checkpoint_pending_dynamic_slots.is_none()
+                && !self.checkpoint_dynamic_schedule
+                && !self.checkpoint_dynamic_residuals,
+            "unfinished checkpoint-preflight dynamic reservation"
+        );
+        (self.checkpoint_fixed_slots, self.checkpoint_fixed_residuals)
+    }
+
+    pub(crate) fn metered_checkpoint_residuals(&self) -> u32 {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            assert!(
+                !self.checkpoint_dynamic_residuals,
+                "unfinished metered dynamic residual reservation"
+            );
+            self.checkpoint_fixed_residuals
+        } else {
+            0
+        }
+    }
+
+    fn count_checkpoint_slots(&mut self, slots: u32) {
+        if !self.mode.uses_checkpoint_local() || self.checkpoint_dynamic_schedule {
+            return;
+        }
+        self.checkpoint_fixed_slots = self
+            .checkpoint_fixed_slots
+            .checked_add(slots)
+            .expect("checkpoint-preflight block timestamp-slot count overflow");
     }
 
     fn next_var(&mut self) -> String {
@@ -163,8 +211,16 @@ impl<'a> EmitContext<'a> {
         &mut self.buf
     }
 
-    pub(crate) fn traces_values(&self) -> bool {
-        self.mode.traces_values()
+    pub(crate) fn preserves_logical_schedule(&self) -> bool {
+        self.mode.preserves_logical_schedule()
+    }
+
+    /// Reserve logical memory slots that have no enabled memory event.
+    pub(crate) fn advance_timestamp(&mut self, slots: u32) {
+        if slots == 0 {
+            return;
+        }
+        self.count_checkpoint_slots(slots);
     }
 
     /// Append a line of C code (indented).
@@ -179,6 +235,7 @@ impl<'a> EmitContext<'a> {
     /// Save local metering state and tail-call the shared RVR trap.
     pub fn emit_trap(&mut self) {
         self.flush_page_locals();
+        self.flush_preflight_local();
         let args = self.tail_call_args();
         self.write_line(&format!("[[clang::musttail]] return rv_trap({args});"));
     }
@@ -228,6 +285,9 @@ impl<'a> EmitContext<'a> {
 
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
+            if matches!(kind, RegisterReadKind::MemoryAccess) {
+                self.count_checkpoint_slots(1);
+            }
             return "0ull".to_string();
         }
 
@@ -236,16 +296,14 @@ impl<'a> EmitContext<'a> {
             name.to_string()
         } else {
             let var = self.next_var();
-            self.write_line(&format!("uint64_t {var} = reg_read(state, {idx});"));
+            self.write_line(&format!(
+                "[[maybe_unused]] uint64_t {var} = reg_read(state, {idx});"
+            ));
             var
         };
 
-        if self.mode.traces_values() {
-            let trace_fn = match kind {
-                RegisterReadKind::MemoryAccess => "trace_reg_read",
-                RegisterReadKind::Peek => "trace_reg_peek",
-            };
-            self.write_line(&format!("{trace_fn}(state, {idx}, {value});"));
+        if matches!(kind, RegisterReadKind::MemoryAccess) {
+            self.count_checkpoint_slots(1);
         }
 
         value
@@ -267,20 +325,10 @@ impl<'a> EmitContext<'a> {
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
+            self.count_checkpoint_slots(1);
             return;
         }
-        if self.mode.traces_values() {
-            let tmp = self.next_var();
-            self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
-            self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
-            if self.hot_regs.contains(&idx) {
-                let name = Self::abi_name(idx);
-                self.write_line(&format!("{name} = {tmp};"));
-            } else {
-                self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
-            }
-            return;
-        }
+        self.count_checkpoint_slots(1);
         self.write_reg_direct(idx, &format!("(uint64_t)({val})"));
     }
 
@@ -306,28 +354,44 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str, &'static str) {
+    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str) {
         match (width, signed) {
-            (1, false) => ("read_mem_u8", "trace_read_mem_u8", "uint32_t"),
-            (1, true) => ("read_mem_i8", "trace_read_mem_i8", "int32_t"),
-            (2, false) => ("read_mem_u16", "trace_read_mem_u16", "uint32_t"),
-            (2, true) => ("read_mem_i16", "trace_read_mem_i16", "int32_t"),
-            (4, false) => ("read_mem_u32", "trace_read_mem_u32", "uint32_t"),
-            (4, true) => ("read_mem_i32", "trace_read_mem_i32", "int32_t"),
-            (8, _) => ("read_mem_u64", "trace_read_mem_u64", "uint64_t"),
+            (1, false) => ("read_mem_u8", "uint32_t"),
+            (1, true) => ("read_mem_i8", "int32_t"),
+            (2, false) => ("read_mem_u16", "uint32_t"),
+            (2, true) => ("read_mem_i16", "int32_t"),
+            (4, false) => ("read_mem_u32", "uint32_t"),
+            (4, true) => ("read_mem_i32", "int32_t"),
+            (8, _) => ("read_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
 
-    fn write_mem_helper(width: u8) -> (&'static str, &'static str, &'static str) {
+    fn write_mem_helper(width: u8) -> (&'static str, &'static str) {
         match width {
-            1 => ("write_mem_u8", "trace_write_mem_u8", "uint8_t"),
-            2 => ("write_mem_u16", "trace_write_mem_u16", "uint16_t"),
-            4 => ("write_mem_u32", "trace_write_mem_u32", "uint32_t"),
-            8 => ("write_mem_u64", "trace_write_mem_u64", "uint64_t"),
+            1 => ("write_mem_u8", "uint8_t"),
+            2 => ("write_mem_u16", "uint16_t"),
+            4 => ("write_mem_u32", "uint32_t"),
+            8 => ("write_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
+
+    /// Trap from the generated block before a protected scalar memory helper
+    /// can reach its process-aborting backstop. This is the same predicate as
+    /// the inlined helper check, so Clang folds the latter away; unprotected
+    /// artifacts emit no check.
+    #[cfg(not(feature = "unprotected"))]
+    fn emit_memory_bounds_trap(&mut self, addr: &str, width: u8) {
+        self.write_line(&format!(
+            "if (unlikely((uint64_t)({addr}) > OPENVM_MEM_SIZE - {width}u)) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+    }
+
+    #[cfg(feature = "unprotected")]
+    fn emit_memory_bounds_trap(&mut self, _addr: &str, _width: u8) {}
 
     /// Read guest memory. Metered hot blocks record the memory page separately.
     pub fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
@@ -337,13 +401,12 @@ impl<'a> EmitContext<'a> {
         );
         let addr = Self::addr_expr(base, offset);
         let var = self.next_var();
-        let (read_func, trace_func, var_ty) = Self::read_mem_helper(width, signed);
+        let (read_func, var_ty) = Self::read_mem_helper(width, signed);
         self.uses_raw_memory = true;
 
+        self.emit_memory_bounds_trap(&addr, width);
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
-        if self.mode.traces_values() {
-            self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
-        }
+        self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
@@ -359,22 +422,188 @@ impl<'a> EmitContext<'a> {
             "metered memory write emitted without page tracking"
         );
         let addr = Self::addr_expr(base, offset);
-        let (write_func, trace_func, cast_ty) = Self::write_mem_helper(width);
+        let (write_func, cast_ty) = Self::write_mem_helper(width);
         self.uses_raw_memory = true;
 
+        self.emit_memory_bounds_trap(&addr, width);
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
-        if self.mode.traces_values() {
-            let value = self.next_var();
-            self.write_line(&format!("{cast_ty} {value} = ({cast_ty})({val});"));
-            self.write_line(&format!("{trace_func}(state, {addr}, {value});"));
-            self.write_line(&format!("{write_func}(memory, {addr}, {value});"));
-        } else {
+        self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
+        self.write_line(&format!(
+            "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+        ));
+        if self.mode.uses_checkpoint_local() {
             self.write_line(&format!(
-                "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {width}u);"
             ));
         }
+    }
+
+    /// Emit one naturally aligned eight-byte main-memory block write.
+    pub fn write_aligned_mem_block(&mut self, addr: &str, val: &str) {
+        assert!(
+            !self.mode.is_metered_without_memory_pages(),
+            "metered memory block write emitted without page tracking"
+        );
+        self.uses_raw_memory = true;
+
+        self.emit_memory_bounds_trap(addr, 8);
+        if self.mode.traces_memory_pages() {
+            self.emit_inline_page_record(addr, 8);
+        }
+        self.count_checkpoint_slots(1);
+        self.write_line(&format!(
+            "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
+        ));
+        if self.mode.uses_checkpoint_local() {
+            self.write_line(&format!(
+                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, 8u);"
+            ));
+        }
+    }
+
+    /// Emit a fail-before-mutation capacity and timestamp-headroom check.
+    pub fn reserve_preflight_writes(&mut self, _writes: &str, slots: &str) {
+        if self.mode.uses_checkpoint_local() {
+            assert!(
+                self.checkpoint_pending_dynamic_slots.is_none()
+                    && !self.checkpoint_dynamic_schedule,
+                "nested checkpoint-preflight dynamic timestamp schedule"
+            );
+            self.write_line(&format!(
+                "if (unlikely(!checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, {slots}))) {{"
+            ));
+            self.emit_trap();
+            self.write_line("}");
+            self.checkpoint_pending_dynamic_slots = Some(slots.to_string());
+        }
+    }
+
+    pub fn reserve_replay_values(&mut self, count: &str) {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            assert!(
+                !self.checkpoint_dynamic_residuals,
+                "nested metered residual reservation"
+            );
+            self.checkpoint_dynamic_residuals = true;
+            self.emit_metered_residual_add(count);
+            return;
+        }
+        if !self.mode.uses_checkpoint_local() {
+            return;
+        }
+        assert!(
+            !self.checkpoint_dynamic_residuals,
+            "nested checkpoint-preflight residual reservation"
+        );
+        self.checkpoint_dynamic_residuals = true;
+        self.write_line(&format!(
+            "if (unlikely(!checkpoint_preflight_local_reserve_residuals(&checkpoint_preflight, {count}))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        if let Some(slots) = self.checkpoint_pending_dynamic_slots.take() {
+            self.write_line(&format!(
+                "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
+            ));
+            self.checkpoint_dynamic_schedule = true;
+        }
+    }
+
+    pub fn count_fixed_replay_values(&mut self, count: u32) {
+        if !self.mode.tracks_metered_checkpoint_residuals() {
+            return;
+        }
+        assert!(
+            !self.checkpoint_dynamic_residuals,
+            "fixed residual count during a dynamic reservation"
+        );
+        self.checkpoint_fixed_residuals = self
+            .checkpoint_fixed_residuals
+            .checked_add(count)
+            .expect("metered block residual count overflow");
+    }
+
+    pub fn count_replay_values(&mut self, count: &str) {
+        if !self.mode.tracks_metered_checkpoint_residuals() {
+            return;
+        }
+        assert!(
+            !self.checkpoint_dynamic_residuals,
+            "dynamic residual count during a materialization reservation"
+        );
+        self.emit_metered_residual_add(count);
+    }
+
+    fn emit_metered_residual_add(&mut self, count: &str) {
+        let count_var = self.next_var();
+        self.write_line(&format!("uint64_t {count_var} = (uint64_t)({count});"));
+        self.write_line(&format!(
+            "if (unlikely({count_var} > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals)) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        self.write_line(&format!(
+            "state->mode_state.num_checkpoint_residuals += (uint32_t){count_var};"
+        ));
+    }
+
+    pub fn append_replay_value(&mut self, value: &str) {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            if self.checkpoint_dynamic_residuals {
+                self.checkpoint_dynamic_residuals = false;
+            } else {
+                self.count_fixed_replay_values(1);
+            }
+            return;
+        }
+        if !self.mode.uses_checkpoint_local() {
+            return;
+        }
+        if !self.checkpoint_dynamic_residuals {
+            self.checkpoint_fixed_residuals = self
+                .checkpoint_fixed_residuals
+                .checked_add(1)
+                .expect("checkpoint-preflight block residual count overflow");
+        }
+        self.write_line(&format!(
+            "checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)({value}));"
+        ));
+        self.checkpoint_dynamic_residuals = false;
+        self.checkpoint_dynamic_schedule = false;
+    }
+
+    pub fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            assert!(
+                self.checkpoint_dynamic_residuals,
+                "metered replay range requires a residual reservation"
+            );
+            self.checkpoint_dynamic_residuals = false;
+            return;
+        }
+        if !self.mode.uses_checkpoint_local() {
+            return;
+        }
+        assert!(
+            self.checkpoint_dynamic_residuals,
+            "checkpoint replay memory range requires a residual reservation"
+        );
+        self.write_line(&format!(
+            "for (uint32_t replay_word = 0u; replay_word < {count}; ++replay_word) {{"
+        ));
+        self.append_replay_value(&format!(
+            "peek_mem_u64(state, {base} + (uint64_t)replay_word * 8ull)"
+        ));
+        self.write_line("}");
+    }
+
+    /// Count fixed opaque-call slots only for checkpoint replay. The block
+    /// entry reservation advances the logical timestamp once, before any
+    /// instruction in the block can mutate state.
+    pub fn advance_checkpoint_timestamp(&mut self, slots: u32) {
+        self.count_checkpoint_slots(slots);
     }
 
     fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
@@ -399,15 +628,26 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// Emit a PC read when value tracing is enabled.
-    pub fn trace_pc(&mut self, pc: u64) {
-        if self.mode.traces_values() {
-            self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
+    pub(crate) fn flush_preflight_local(&mut self) {
+        if self.mode == EmitMode::Preflight {
+            self.write_line("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */");
+            self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
+        }
+    }
+
+    fn consume_checkpoint_call_slots(&mut self) {
+        if let Some(slots) = self.checkpoint_pending_dynamic_slots.take() {
+            debug_assert!(self.mode.uses_checkpoint_local());
+            debug_assert!(!self.checkpoint_dynamic_schedule);
+            self.write_line(&format!(
+                "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
+            ));
         }
     }
 
     pub fn emit_call(&mut self, name: &str, args: &[&str]) {
         self.flush_page_locals();
+        self.consume_checkpoint_call_slots();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
         self.reload_page_locals();
@@ -420,6 +660,7 @@ impl<'a> EmitContext<'a> {
 
     pub fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
+        self.consume_checkpoint_call_slots();
         let tmp = self.next_var();
         let args_str = args.join(", ");
         self.write_line(&format!("{ret_ty} {tmp} = {name}({args_str});"));
@@ -433,7 +674,7 @@ impl<'a> EmitContext<'a> {
         name: &str,
         args: &[&str],
     ) -> Option<String> {
-        if matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if matches!(self.mode, EmitMode::Preflight | EmitMode::Direct) {
             self.emit_call(name, args);
             None
         } else {
@@ -445,7 +686,7 @@ impl<'a> EmitContext<'a> {
         if chip_idx == u32::MAX {
             return;
         }
-        if !matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if !matches!(self.mode, EmitMode::Preflight | EmitMode::Direct) {
             let num_airs = self
                 .num_airs
                 .expect("metered code generation requires the AIR count");
@@ -455,7 +696,7 @@ impl<'a> EmitContext<'a> {
             }
         }
         match self.mode {
-            EmitMode::ValueTrace | EmitMode::Direct => {}
+            EmitMode::Preflight | EmitMode::Direct => {}
             EmitMode::Metered { .. } => {
                 self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
             }
@@ -480,7 +721,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
-        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::Preflight | EmitMode::Direct) {
             return;
         }
         self.write_line(&format!("if (({count_expr}) != 0u) {{"));
@@ -489,10 +730,6 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
-        assert!(
-            !self.mode.traces_values(),
-            "page-only access is invalid when values are being traced"
-        );
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
@@ -516,10 +753,6 @@ impl<'a> EmitContext<'a> {
         num_dwords: &str,
         addr_space: PageAddressSpace,
     ) {
-        assert!(
-            !self.mode.traces_values(),
-            "page-only access is invalid when values are being traced"
-        );
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
@@ -558,6 +791,7 @@ impl<'a> EmitContext<'a> {
 
     pub fn sync_regs_to_state(&mut self) {
         self.flush_page_locals();
+        self.flush_preflight_local();
         let mut args = "state".to_string();
         for &idx in &self.sorted_hot_regs() {
             let name = Self::abi_name(idx);
@@ -586,12 +820,24 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
+    fn is_checkpoint_preflight(&self) -> bool {
+        self.mode.uses_checkpoint_local()
+    }
+
+    fn counts_checkpoint_residuals(&self) -> bool {
+        self.mode.uses_checkpoint_local() || self.mode.tracks_metered_checkpoint_residuals()
+    }
+
     fn read_var(&mut self, var: Variable) -> String {
         EmitContext::read_reg(self, reg_index(var))
     }
 
     fn peek_var(&mut self, var: Variable) -> String {
         EmitContext::peek_reg(self, reg_index(var))
+    }
+
+    fn advance_timestamp(&mut self, slots: u32) {
+        EmitContext::advance_timestamp(self, slots)
     }
 
     fn write_var(&mut self, var: Variable, val: &str) {
@@ -612,6 +858,44 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
         EmitContext::write_mem(self, base, offset, val, width);
+    }
+
+    fn write_aligned_mem_block(&mut self, addr: &str, val: &str) {
+        EmitContext::write_aligned_mem_block(self, addr, val);
+    }
+
+    fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+        EmitContext::reserve_preflight_writes(self, writes, slots);
+    }
+
+    fn reserve_replay_values(&mut self, count: &str) {
+        EmitContext::reserve_replay_values(self, count);
+    }
+
+    fn append_replay_value(&mut self, value: &str) {
+        EmitContext::append_replay_value(self, value);
+    }
+
+    fn count_fixed_replay_values(&mut self, count: u32) {
+        EmitContext::count_fixed_replay_values(self, count);
+    }
+
+    fn count_replay_values(&mut self, count: &str) {
+        EmitContext::count_replay_values(self, count);
+    }
+
+    fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
+        EmitContext::append_replay_memory_u64_range(self, base, count);
+    }
+
+    fn flush_before_control_transfer(&mut self) {
+        if self.mode == EmitMode::Preflight {
+            self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
+        }
+    }
+
+    fn advance_checkpoint_timestamp(&mut self, slots: u32) {
+        EmitContext::advance_checkpoint_timestamp(self, slots);
     }
 
     fn emit_call(&mut self, name: &str, args: &[&str]) {
@@ -670,7 +954,351 @@ fn reg_index(var: Variable) -> u8 {
 mod tests {
     use std::collections::HashSet;
 
+    use rvr_openvm_ir::ExtEmitCtx;
+
     use super::{BlockAbi, EmitContext, EmitMode};
+
+    fn checkpoint_ctx() -> EmitContext<'static> {
+        EmitContext::new(
+            HashSet::new(),
+            EmitMode::Preflight,
+            BlockAbi::Plain,
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn advance_timestamp_counts_checkpoint_slots() {
+        let mut checkpoint = checkpoint_ctx();
+        checkpoint.advance_timestamp(3);
+        assert!(checkpoint.buf().is_empty());
+        assert_eq!(checkpoint.checkpoint_preflight_budget(), (3, 0));
+
+        for mode in [
+            EmitMode::Direct,
+            EmitMode::Metered {
+                trace_memory_pages: false,
+            },
+            EmitMode::MeteredCost,
+        ] {
+            let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
+            let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
+                BlockAbi::Metered
+            } else {
+                BlockAbi::Plain
+            };
+            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            ctx.advance_timestamp(3);
+            assert!(ctx.buf().is_empty());
+        }
+    }
+
+    #[test]
+    fn control_transfer_flush_preserves_pure_and_metered_codegen() {
+        let mut checkpoint = checkpoint_ctx();
+        checkpoint.flush_before_control_transfer();
+        assert_eq!(
+            checkpoint.buf(),
+            "        checkpoint_preflight_local_flush(state, &checkpoint_preflight);\n"
+        );
+        assert!(!checkpoint
+            .buf()
+            .contains("CHECKPOINT_PREFLIGHT_FINISH_BLOCK"));
+
+        for mode in [
+            EmitMode::Direct,
+            EmitMode::Metered {
+                trace_memory_pages: false,
+            },
+            EmitMode::Metered {
+                trace_memory_pages: true,
+            },
+            EmitMode::MeteredCost,
+        ] {
+            let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
+            let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
+                BlockAbi::Metered
+            } else {
+                BlockAbi::Plain
+            };
+            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            ctx.flush_before_control_transfer();
+            assert!(ctx.buf().is_empty(), "mode {mode:?} changed codegen");
+        }
+    }
+
+    #[test]
+    fn opaque_call_slots_are_checkpoint_only_and_emit_no_code() {
+        let mut checkpoint = checkpoint_ctx();
+        checkpoint.advance_checkpoint_timestamp(12);
+        assert!(checkpoint.buf().is_empty());
+        assert_eq!(checkpoint.checkpoint_preflight_budget(), (12, 0));
+
+        for mode in [
+            EmitMode::Direct,
+            EmitMode::Metered {
+                trace_memory_pages: false,
+            },
+            EmitMode::MeteredCost,
+        ] {
+            let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
+            let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
+                BlockAbi::Metered
+            } else {
+                BlockAbi::Plain
+            };
+            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            ctx.advance_checkpoint_timestamp(12);
+            assert!(ctx.buf().is_empty());
+        }
+    }
+
+    #[test]
+    fn checkpoint_counts_schedule_without_access_events() {
+        let mut ctx = checkpoint_ctx();
+        assert_eq!(ctx.read_reg(0), "0ull");
+        assert_eq!(ctx.peek_reg(0), "0ull");
+        assert_eq!(ctx.read_reg(3), "_v0");
+        ctx.write_reg(0, "1ull");
+        ctx.write_reg(4, "2ull");
+        ctx.read_mem("addr", 0, 8, false);
+        ctx.write_mem("addr", 0, "3ull", 1);
+        ctx.write_aligned_mem_block("addr", "4ull");
+        ctx.advance_timestamp(3);
+
+        assert_eq!(ctx.checkpoint_preflight_budget(), (11, 0));
+        assert!(!ctx.buf().contains("preflight_local_reg"));
+        assert!(!ctx.buf().contains("trace_read"));
+        assert!(!ctx.buf().contains("trace_write"));
+        assert!(!ctx.buf().contains("trace_reg"));
+        assert_eq!(
+            ctx.buf()
+                .matches("checkpoint_preflight_local_mark_memory_write")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn checkpoint_residuals_are_untagged_and_fixed_by_default() {
+        let mut ctx = checkpoint_ctx();
+        ctx.append_replay_value("loaded");
+
+        assert_eq!(ctx.checkpoint_preflight_budget(), (0, 1));
+        assert_eq!(
+            ctx.buf(),
+            "        checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)(loaded));\n"
+        );
+    }
+
+    #[test]
+    fn metered_residuals_fold_fixed_counts_and_emit_dynamic_counts() {
+        let mut ctx = metered_memory_ctx();
+        ctx.count_fixed_replay_values(4);
+        ctx.append_replay_value("fixed");
+        ctx.reserve_replay_values("words");
+        ctx.append_replay_memory_u64_range("buffer", "words");
+        ctx.count_replay_values("late_words");
+
+        assert_eq!(ctx.metered_checkpoint_residuals(), 5);
+        assert!(ctx.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
+        assert!(ctx
+            .buf()
+            .contains("_v0 > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals"));
+        assert!(ctx.buf().contains("uint64_t _v1 = (uint64_t)(late_words);"));
+        assert!(ctx
+            .buf()
+            .contains("_v1 > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals"));
+        assert_eq!(ctx.buf().matches("return rv_trap(").count(), 2);
+    }
+
+    #[test]
+    fn checkpoint_dynamic_hint_schedule_and_residual_are_counted_once() {
+        let mut ctx = checkpoint_ctx();
+        ctx.append_replay_value("before");
+        ctx.reserve_preflight_writes("count", "slots");
+        ctx.reserve_replay_values("count");
+        ctx.advance_timestamp(2);
+        ctx.write_aligned_mem_block("addr", "hint");
+        ctx.append_replay_value("hint");
+        ctx.append_replay_value("after");
+        ctx.read_reg(3);
+
+        assert_eq!(ctx.checkpoint_preflight_budget(), (1, 2));
+        assert_eq!(
+            ctx.buf()
+                .matches("checkpoint_preflight_local_add_timestamp_unchecked")
+                .count(),
+            1
+        );
+        assert_eq!(
+            ctx.buf()
+                .matches("checkpoint_preflight_local_reserve_residuals")
+                .count(),
+            1
+        );
+        assert_eq!(
+            ctx.buf()
+                .matches("checkpoint_preflight_local_append_residual_unchecked")
+                .count(),
+            3
+        );
+        assert_eq!(
+            ctx.buf()
+                .matches("checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)(hint));")
+                .count(),
+            1
+        );
+        assert!(ctx
+            .buf()
+            .contains("checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, slots)"));
+    }
+
+    #[test]
+    fn replay_memory_range_materializes_only_in_checkpoint_and_counts_in_metered() {
+        let mut checkpoint = checkpoint_ctx();
+        checkpoint.reserve_replay_values("words");
+        checkpoint.append_replay_memory_u64_range("buffer", "words");
+
+        assert_eq!(checkpoint.checkpoint_preflight_budget(), (0, 0));
+        assert!(checkpoint
+            .buf()
+            .contains("for (uint32_t replay_word = 0u; replay_word < words; ++replay_word) {"));
+        assert!(checkpoint
+            .buf()
+            .contains("peek_mem_u64(state, buffer + (uint64_t)replay_word * 8ull)"));
+
+        let mut metered = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Metered {
+                trace_memory_pages: false,
+            },
+            BlockAbi::Metered,
+            None,
+            Some(0),
+        );
+        metered.reserve_replay_values("words");
+        metered.append_replay_memory_u64_range("buffer", "words");
+        assert!(metered.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
+        assert!(metered
+            .buf()
+            .contains("state->mode_state.num_checkpoint_residuals += (uint32_t)_v0;"));
+
+        for mode in [EmitMode::Direct, EmitMode::MeteredCost] {
+            let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
+            let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
+                BlockAbi::Metered
+            } else {
+                BlockAbi::Plain
+            };
+            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            ctx.reserve_replay_values("words");
+            ctx.append_replay_memory_u64_range("buffer", "words");
+            assert!(ctx.buf().is_empty());
+        }
+    }
+
+    #[test]
+    fn checkpoint_host_call_does_not_finish_the_block() {
+        let mut ctx = checkpoint_ctx();
+        ctx.emit_call("host_call", &["state"]);
+        assert_eq!(ctx.buf(), "        host_call(state);\n");
+
+        ctx.flush_preflight_local();
+        assert!(ctx
+            .buf()
+            .contains("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */"));
+        assert!(ctx
+            .buf()
+            .contains("checkpoint_preflight_local_flush(state, &checkpoint_preflight);"));
+    }
+
+    #[test]
+    fn checkpoint_host_call_consumes_reserved_slots_without_fixed_budget() {
+        let mut ctx = checkpoint_ctx();
+        ctx.reserve_preflight_writes("0u", "2u");
+        let result = ctx.emit_call_expr("bool", "host_call", &["state"]);
+
+        assert_eq!(result, "_v0");
+        assert_eq!(ctx.checkpoint_preflight_budget(), (0, 0));
+        let reserve = ctx
+            .buf()
+            .find("checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, 2u)")
+            .unwrap();
+        let advance = ctx
+            .buf()
+            .find("checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, 2u)")
+            .unwrap();
+        let call = ctx.buf().find("bool _v0 = host_call(state);").unwrap();
+        assert!(reserve < advance && advance < call);
+    }
+
+    #[test]
+    fn aligned_block_write_is_an_ordinary_raw_write_outside_preflight() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            Some(0),
+        );
+        ctx.write_aligned_mem_block("addr", "value");
+        ctx.reserve_preflight_writes("5u", "13u");
+
+        #[cfg(not(feature = "unprotected"))]
+        {
+            assert!(ctx
+                .buf()
+                .contains("if (unlikely((uint64_t)(addr) > OPENVM_MEM_SIZE - 8u)) {"));
+            assert!(ctx.buf().contains("return rv_trap(state);"));
+        }
+        assert!(ctx
+            .buf()
+            .contains("write_mem_u64(memory, addr, (uint64_t)(value));"));
+    }
+
+    #[test]
+    #[cfg(not(feature = "unprotected"))]
+    fn protected_scalar_memory_traps_before_the_raw_access() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            Some(0),
+        );
+        ctx.read_mem("addr", 3, 4, false);
+
+        let bounds = ctx
+            .buf()
+            .find("if (unlikely((uint64_t)(addr + 0x00000003u) > OPENVM_MEM_SIZE - 4u)) {")
+            .expect("protected bounds guard");
+        let trap = ctx
+            .buf()
+            .find("return rv_trap(state);")
+            .expect("typed trap");
+        let read = ctx
+            .buf()
+            .find("read_mem_u32(memory, addr + 0x00000003u)")
+            .expect("raw read");
+        assert!(bounds < trap && trap < read);
+    }
+
+    #[test]
+    fn metered_aligned_block_write_records_pages_once() {
+        let mut ctx = metered_memory_ctx();
+        ctx.write_aligned_mem_block("addr", "value");
+
+        assert_eq!(
+            ctx.buf()
+                .matches("trace_memory_access_span(&trace_memory, addr, 8u);")
+                .count(),
+            1
+        );
+        assert_eq!(ctx.buf().matches("write_mem_u64(").count(), 1);
+        assert!(!ctx.buf().contains("trace_page_access("));
+    }
 
     fn metered_memory_ctx() -> EmitContext<'static> {
         EmitContext::new(

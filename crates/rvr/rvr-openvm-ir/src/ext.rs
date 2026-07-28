@@ -41,14 +41,33 @@ impl PageAddressSpace {
 ///
 /// Value tracing emits ordered hooks used to build execution records. The
 /// logical memory timestamp represents the order of VM memory accesses. Each
-/// recorded read or write advances it. A peek reads the current value and
-/// preserves the current timestamp.
+/// recorded read or write advances it, and instructions may reserve disabled
+/// slots without a memory event. A peek reads the current value and preserves
+/// the current timestamp.
 pub trait ExtEmitCtx {
+    /// Whether this emitter is producing the minimal preflight transcript.
+    fn is_checkpoint_preflight(&self) -> bool {
+        false
+    }
+
+    /// Whether replay values must be counted for exact segment sizing.
+    ///
+    /// This is true during preflight and metered execution. Only preflight
+    /// materializes the values.
+    fn counts_checkpoint_residuals(&self) -> bool {
+        self.is_checkpoint_preflight()
+    }
+
     /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
 
     /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
+
+    /// Reserve logical clock slots that have no enabled memory event.
+    ///
+    /// Pure and metered emitters preserve their existing execution behavior.
+    fn advance_timestamp(&mut self, slots: u32);
 
     /// Write a variable through a VM memory access.
     fn write_var(&mut self, var: Variable, val: &str);
@@ -64,6 +83,56 @@ pub trait ExtEmitCtx {
 
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
+
+    /// Write one naturally aligned eight-byte main-memory block.
+    ///
+    /// Unlike a scalar doubleword store, this is one enabled memory event and
+    /// does not reserve a second block-access slot.
+    fn write_aligned_mem_block(&mut self, addr: &str, val: &str);
+
+    /// Ensure preflight can append `writes` memory writes and advance `slots`
+    /// logical clock slots before an instruction starts mutating state.
+    ///
+    /// Pure and metered emitters preserve their existing execution behavior.
+    fn reserve_preflight_writes(&mut self, writes: &str, slots: &str);
+
+    /// Reserve space for a runtime-sized sequence of replay values.
+    ///
+    /// Preflight uses this before consuming host advice. Metered
+    /// execution uses the same count without materializing a replay-value stream.
+    fn reserve_replay_values(&mut self, _count: &str) {}
+
+    /// Count a statically known number of replay values without materializing
+    /// them. Metered execution folds these counts into one update per block.
+    fn count_fixed_replay_values(&mut self, _count: u32) {}
+
+    /// Count a runtime-sized replay-value sequence after its producing
+    /// operation succeeds, without opening a materialization reservation.
+    fn count_replay_values(&mut self, _count: &str) {}
+
+    /// Append one architectural `u64` value to the replay-value stream.
+    ///
+    /// Values are untagged and ordered by execution. Checkpoint replay knows
+    /// which instruction consumes each value from the program itself.
+    fn append_replay_value(&mut self, _value: &str) {}
+
+    /// Append a post-write range of aligned main-memory words to checkpoint
+    /// replay values.
+    ///
+    /// This emits no loads outside preflight; metered execution only
+    /// accounts for the already-reserved range length.
+    fn append_replay_memory_u64_range(&mut self, _base: &str, _count: &str) {}
+
+    /// Commit mode-local execution metadata before emitting a control transfer.
+    ///
+    /// Instruction-owned terminators must call this after their final logged
+    /// access or replay value and before writing any branch or return.
+    fn flush_before_control_transfer(&mut self) {}
+
+    /// Account for memory-bus slots performed inside an opaque extension call.
+    ///
+    /// This is preflight-only bookkeeping.
+    fn advance_checkpoint_timestamp(&mut self, _slots: u32) {}
 
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);

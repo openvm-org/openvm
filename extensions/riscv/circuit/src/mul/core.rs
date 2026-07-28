@@ -1,19 +1,12 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -120,32 +113,20 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct MultiplicationCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct MultiplicationExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct MultiplicationExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(Clone)]
-pub struct MultiplicationFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct MultiplicationFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationFiller<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        adapter: A,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
@@ -165,7 +146,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         );
 
         Self {
-            adapter,
             offset,
             range_tuple_chip,
             bitwise_lookup_chip,
@@ -173,97 +153,30 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for MultiplicationExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
+pub(crate) fn fill_core_row_with_result<
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (
-            A::RecordMut<'buf>,
-            &'buf mut MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>,
-        ),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+>(
+    range_tuple_chip: &SharedRangeTupleCheckerChip<2>,
+    bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS>,
+    b: [u8; NUM_LIMBS],
+    c: [u8; NUM_LIMBS],
+    a: [u8; NUM_LIMBS],
+    carry: [u32; NUM_LIMBS],
+) {
+    for (a, carry) in a.iter().zip(carry.iter()) {
+        range_tuple_chip.add_count(&[*a as u32, *carry]);
+    }
+    for (b_val, c_val) in b.iter().zip(c.iter()) {
+        bitwise_lookup_chip.request_range(*b_val as u32, *c_val as u32);
     }
 
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        debug_assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-            MulOpcode::MUL
-        );
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let (a, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
-
-        core_record.b = rs1;
-        core_record.c = rs2;
-
-        self.adapter
-            .write(state.memory, instruction, [a].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // MultiplicationCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid MultiplicationCoreRecord written by the executor
-        // during trace generation
-        let record: &MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-
-        let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
-
-        for (a, carry) in a.iter().zip(carry.iter()) {
-            self.range_tuple_chip.add_count(&[*a as u32, *carry]);
-        }
-
-        for (b_val, c_val) in record.b.iter().zip(record.c.iter()) {
-            self.bitwise_lookup_chip
-                .request_range(*b_val as u32, *c_val as u32);
-        }
-
-        // write in reverse order
-        core_row.is_valid = F::ONE;
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = a.map(F::from_u8);
-    }
+    core_row.is_valid = F::ONE;
+    core_row.c = c.map(F::from_u8);
+    core_row.b = b.map(F::from_u8);
+    core_row.a = a.map(F::from_u8);
 }
 
 // returns mul, carry

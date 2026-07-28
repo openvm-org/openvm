@@ -1,9 +1,9 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
-        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
+        AdapterAirContext, Postflight, PostflightError, PostflightStep, VmAdapterInterface,
+        VmCoreAir, BLOCK_FE_WIDTH,
     },
     system::memory::MemoryAuxColsFactory,
 };
@@ -22,11 +22,10 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols,
-        Rv64StoreByteAdapterFiller, Rv64StoreByteAdapterRecord, StoreByteInstruction,
-        BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
+        shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols, Rv64StoreByteAdapterFiller,
+        StoreByteInstruction, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
-    store::common::{store_write_data, StoreByteRecord},
+    store::common::store_write_data,
 };
 
 /// Handles byte stores by replacing one byte in the previous memory block and preserving all other
@@ -173,33 +172,26 @@ impl<A> StoreByteFiller<A> {
     }
 }
 
-impl<F> TraceFiller<F> for StoreByteFiller<Rv64StoreByteAdapterFiller>
-where
-    F: PrimeField32,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // StoreByteCoreCols::width() elements.
-        let (mut adapter_row, mut core_row) = unsafe {
-            row_slice.split_at_mut_unchecked(
-                <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
-            )
-        };
-        let adapter_record: &Rv64StoreByteAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let shift = adapter_record.shift_amount();
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY: core_row contains a valid StoreByteRecord written by the executor during trace
-        // generation.
-        let record: &StoreByteRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
-        let prev_data = record.prev_data;
-        let core_row: &mut StoreByteCoreCols<F> = core_row.borrow_mut();
+impl StoreByteFiller<Rv64StoreByteAdapterFiller> {
+    pub(super) fn replay<F: PrimeField32>(
+        &self,
+        postflight: &Postflight<'_, F>,
+        step: PostflightStep,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut Rv64StoreByteAdapterCols<F>,
+        core_row: &mut StoreByteCoreCols<F>,
+    ) -> Result<(), PostflightError> {
+        let (read_data, prev_data, shift) = self.adapter.replay(
+            postflight,
+            step,
+            mem_helper,
+            adapter_row,
+            |read_data, prev_data, shift| {
+                store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
+            },
+        )?;
         let cell_shift = shift / 2;
-        let byte_idx = shift % 2;
 
-        // The cell's high byte is derived in the AIR and only range checked here.
         let read_lo_byte = u16_cell_byte(read_data[0], 0);
         self.bitwise_lookup_chip
             .request_range(read_lo_byte as u32, u16_cell_byte(read_data[0], 1) as u32);
@@ -212,25 +204,11 @@ where
         self.bitwise_lookup_chip
             .request_range(prev_cell_bytes[0] as u32, prev_cell_bytes[1] as u32);
         core_row.prev_cell_lo_byte = F::from_u16(prev_cell_bytes[0]);
-        debug_assert_eq!(
-            store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
-                [cell_shift],
-            set_u16_cell_byte(prev_data[cell_shift], byte_idx, read_lo_byte)
-        );
-
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(F::from_u16);
-        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
-        core_row.selector = (*pt).map(F::from_u32);
-    }
-
-    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
-        let (adapter_row, _) = unsafe {
-            row_slice.split_at_mut_unchecked(
-                <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
-            )
-        };
-        let adapter_row: &mut Rv64StoreByteAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_row.mem_as = F::from_u32(2);
+        let flag_point: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] =
+            self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*flag_point).map(F::from_u32);
+        Ok(())
     }
 }

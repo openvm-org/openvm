@@ -24,7 +24,7 @@ struct DivRemPreCompute {
     c: u8,
 }
 
-impl<A, const LIMB_BITS: usize> DivRemExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -60,11 +60,15 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for DivRemExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<DivRemPreCompute>()
@@ -99,8 +103,8 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for DivRemExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {

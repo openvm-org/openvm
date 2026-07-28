@@ -83,10 +83,15 @@ impl BoundaryChipGPU {
             .as_ref()
             .expect("Finalize records to get buffer")
     }
+
+    /// Releases tracegen-only inputs after their stream has synchronized.
+    pub(crate) fn release_records(&mut self) {
+        self.records = None;
+    }
 }
 
-impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl Chip<(), GpuBackend> for BoundaryChipGPU {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
         let num_records = self.num_records.unwrap();
         if num_records == 0 {
             // Boundary AIR should always be present, so return a single zero-filled

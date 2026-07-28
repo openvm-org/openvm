@@ -26,4 +26,8 @@ default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 tco = ["openvm-deferral-circuit/tco", "openvm-riscv-circuit/tco"]
 rvr = ["openvm-deferral-circuit/rvr", "openvm-riscv-circuit/rvr"]
-cuda = ["openvm-deferral-circuit/cuda", "openvm-riscv-circuit/cuda"]
+cuda = [
+    "openvm-deferral-circuit/cuda",
+    "openvm-deferral-circuit/test-utils",
+    "openvm-riscv-circuit/cuda",
+]

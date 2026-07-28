@@ -17,6 +17,10 @@ openvm-instructions = { workspace = true, optional = true }
 openvm-stark-backend = { workspace = true, optional = true }
 libloading = { workspace = true, optional = true }
 
+[dev-dependencies]
+p3-baby-bear.workspace = true
+rand.workspace = true
+
 [features]
 default = []
 rvr = [

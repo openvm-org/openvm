@@ -6,7 +6,7 @@ use openvm_circuit::{
             TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -33,21 +33,15 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64MultAdapterRecord, MultiplicationCoreRecord, Rv64MultiplicationChipGpu},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64MultiplicationChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
-use super::core::run_mul;
+use super::{core::run_mul, trace::generate_trace_from_postflight};
 use crate::{
-    adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64MultAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     mul::{MultiplicationCoreCols, Rv64MultiplicationChip},
     test_utils::rv64_rand_write_register_or_imm,
     MultiplicationCoreAir, MultiplicationFiller, Rv64MultiplicationAir, Rv64MultiplicationExecutor,
@@ -88,15 +82,9 @@ fn create_harness_fields(
             MulOpcode::CLASS_OFFSET,
         ),
     );
-    let executor =
-        Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
+    let executor = Rv64MultiplicationExecutor::new(MulOpcode::CLASS_OFFSET);
     let chip = Rv64MultiplicationChip::<F>::new(
-        MultiplicationFiller::new(
-            Rv64MultAdapterFiller,
-            range_tuple_chip,
-            bitwise_chip,
-            MulOpcode::CLASS_OFFSET,
-        ),
+        MultiplicationFiller::new(range_tuple_chip, bitwise_chip, MulOpcode::CLASS_OFFSET),
         memory_helper,
     );
     (air, executor, chip)
@@ -128,7 +116,13 @@ fn create_harness(
         bitwise_chip.clone(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (
         harness,
@@ -138,10 +132,10 @@ fn create_harness(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: MulOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -154,7 +148,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
     instruction.e = F::ZERO;
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let (a, _) = run_mul::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&b, &c);
     assert_eq!(
@@ -181,7 +175,7 @@ fn run_rv64_mul_rand_test() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             MUL,
             None,
@@ -221,7 +215,7 @@ fn run_negative_mul_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),
@@ -299,7 +293,7 @@ fn run_mul_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64MultiplicationExecutor,
@@ -308,7 +302,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64MultiplicationChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
@@ -333,9 +327,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_mul_tracegen() {
     use openvm_circuit::arch::testing::BITWISE_OP_LOOKUP_BUS;
@@ -353,25 +353,13 @@ fn test_cuda_rand_mul_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             MulOpcode::MUL,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64MultAdapterRecord,
-        &'a mut MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record<'_>, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
-        );
 
     tester
         .build()

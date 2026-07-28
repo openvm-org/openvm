@@ -9,8 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
-use openvm_riscv_transpiler::ShiftImmOpcode;
+use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::ShiftLogicalImmExecutor;
@@ -23,9 +24,7 @@ pub(super) struct ShiftLogicalImmPreCompute {
     rs1_ptr: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
-{
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftLogicalImmExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -64,11 +63,19 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for ShiftLogicalImmExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if NUM_LIMBS * LIMB_BITS == 32 {
+            format!("{:?}", ShiftWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        }
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftLogicalImmPreCompute>()
@@ -111,8 +118,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for ShiftLogicalImmExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {

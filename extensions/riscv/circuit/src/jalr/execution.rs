@@ -9,7 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
+use openvm_riscv_transpiler::Rv64JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv64JalrExecutor;
@@ -22,7 +24,7 @@ struct JalrPreCompute {
     b: u8,
 }
 
-impl<A> Rv64JalrExecutor<A> {
+impl Rv64JalrExecutor {
     /// Return true if enabled.
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -54,10 +56,17 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64JalrExecutor<A>
+impl<F> InterpreterExecutor<F> for Rv64JalrExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64JalrOpcode::from_usize(opcode - Rv64JalrOpcode::CLASS_OFFSET)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<JalrPreCompute>()
@@ -91,7 +100,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalrExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for Rv64JalrExecutor
 where
     F: PrimeField32,
 {
@@ -153,6 +162,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
 
     if ENABLED {
         exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    } else {
+        exec_state.ctx.advance_timestamp(1);
     }
 
     exec_state.set_pc(to_pc);

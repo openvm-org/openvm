@@ -81,11 +81,33 @@ impl DeferralState {
         self.output_map.insert(output_commit, output_raw);
     }
 
+    pub fn try_store_output(
+        &mut self,
+        input_commit: &InputCommit,
+        output_commit: OutputCommit,
+        output_raw: OutputRaw,
+    ) -> bool {
+        if !self.input_map.contains_key(input_commit) || self.output_map.try_reserve(1).is_err() {
+            return false;
+        }
+        self.output_map.insert(output_commit.clone(), output_raw);
+        *self.input_map.get_mut(input_commit).unwrap() = InputMapVal::Output(output_commit);
+        true
+    }
+
     pub fn get_input(&self, input_commit: &InputCommit) -> &InputMapVal {
         self.input_map.get(input_commit).unwrap()
     }
 
+    pub fn try_get_input(&self, input_commit: &InputCommit) -> Option<&InputMapVal> {
+        self.input_map.get(input_commit)
+    }
+
     pub fn get_output(&self, output_commit: &OutputCommit) -> &OutputRaw {
         self.output_map.get(output_commit).unwrap()
+    }
+
+    pub fn try_get_output(&self, output_commit: &OutputCommit) -> Option<&OutputRaw> {
+        self.output_map.get(output_commit)
     }
 }

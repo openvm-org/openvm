@@ -156,12 +156,14 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
         return false;
     }
 
-    // Setup validates that the guest-provided base-field modulus and setup
-    // inputs match the constants configured into this chip.
+    // Setup validates that the guest-provided base-field modulus matches the
+    // constant configured into this chip.
     //
     // In mod-builder, `Input(0)` means the first input slot. For setup, that
-    // slot is the modulus p read from rs1. VM evaluates inputs modulo p,
-    // so each setup coordinate writes p % p = 0.
+    // slot is the modulus p read from rs1, so the first output coordinate is
+    // p % p = 0. The second coordinate is the guest-provided second input
+    // reduced mod p — genuine guest data, which is why Fp2 setup appends its
+    // destination postimage as a residual instead of a static zero.
     let modulus = BigUint::from_bytes_le(modulus_bytes);
     let second_output = (second_input % modulus).to_bytes_le();
     let mut output_words = vec![0u64; num_words as usize];

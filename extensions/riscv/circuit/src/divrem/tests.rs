@@ -3,10 +3,10 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -35,20 +35,18 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64MultAdapterRecord, DivRemCoreRecord, Rv64DivRemChipGpu},
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64DivRemChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
-use super::core::run_divrem;
+use super::{core::run_divrem, trace::generate_trace_from_postflight};
 use crate::{
     adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS,
+        Rv64MultAdapterAir, Rv64MultAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     divrem::{
         run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv64DivRemChip,
@@ -90,7 +88,7 @@ fn create_harness_fields(
             DivRemOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
+    let executor = Rv64DivRemExecutor::new(DivRemOpcode::CLASS_OFFSET);
     let chip = Rv64DivRemChip::<F>::new(
         DivRemFiller::new(
             Rv64MultAdapterFiller,
@@ -129,7 +127,13 @@ fn create_harness(
         range_tuple_chip.clone(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, cpu_chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        cpu_chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (
         harness,
@@ -139,10 +143,10 @@ fn create_harness(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: DivRemOpcode,
     b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
@@ -157,9 +161,12 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         rng.random_range(0..(RV64_REGISTER_NUM_LIMBS - 1)),
     ));
 
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
-    let rd = gen_pointer(rng, 8);
+    let rs1 = gen_register_pointer(rng, 8);
+    let mut rs2 = gen_register_pointer(rng, 8);
+    while rs2 == rs1 {
+        rs2 = gen_register_pointer(rng, 8);
+    }
+    let rd = rng.random_range(1..32) * RV64_REGISTER_NUM_LIMBS;
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));
@@ -171,7 +178,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(is_signed, &b, &c);
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
@@ -183,17 +190,17 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
 // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
-fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: DivRemOpcode,
 ) {
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some([98, 188, 163, 127, 41, 77, 200, 67]),
@@ -202,7 +209,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some([98, 188, 163, 229, 41, 77, 200, 195]),
@@ -211,7 +218,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some([0, 0, 0, 0, 0, 0, 0, 128]),
@@ -220,7 +227,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some([0, 0, 0, 0, 0, 0, 0, 127]),
@@ -229,7 +236,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some([0, 0, 0, 0, 0, 0, 0, 0]),
@@ -238,7 +245,7 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     set_and_execute(
         tester,
         executor,
-        arena,
+        preflight,
         rng,
         opcode,
         Some([0, 0, 0, 0, 0, 0, 0, 128]),
@@ -266,7 +273,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -276,7 +283,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute_special_cases(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
     );
@@ -321,7 +328,7 @@ fn run_negative_divrem_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),
@@ -762,11 +769,11 @@ fn run_mul_unsigned_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
@@ -793,9 +800,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(DIV, 100)]
 #[test_case(DIVU, 100)]
 #[test_case(REM, 100)]
@@ -815,7 +828,7 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -825,23 +838,10 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute_special_cases(
         &mut tester,
         &mut harness.executor,
-        &mut harness.dense_arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
     );
-
-    type Record<'a> = (
-        &'a mut Rv64MultAdapterRecord,
-        &'a mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
-        );
 
     tester
         .build()

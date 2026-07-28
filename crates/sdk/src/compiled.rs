@@ -6,19 +6,24 @@ use std::{
 
 #[cfg(feature = "rvr")]
 use eyre::{Context, Result};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{PreflightEndpoint, PreflightExecution as BackendPreflightOutput};
 #[cfg(not(feature = "rvr"))]
-use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpretedInstance};
+use openvm_circuit::arch::{
+    execution_mode::{ExecutionCtx, PreflightCtx},
+    InterpretedInstance, PreflightOutput as BackendPreflightOutput,
+};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     execution_mode::{MeteredCtxConfig, SegmentationConfig},
     rvr::{
-        CompileError, RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
-        RvrTrackedExecutionOutcome,
+        CompileError, PreflightInstance as RvrPreflightInstance, RvrPureInstance,
+        RvrPureWithInstretTrackingInstance, RvrTrackedExecution, RvrTrackedExecutionOutcome,
     },
 };
 use openvm_circuit::{
     arch::{
-        execution_mode::{MeteredCostCtx, MeteredCtx},
+        execution_mode::{MeteredCostCtx, MeteredCtx, Segment},
         ExecutionError, Streams, VmState,
     },
     system::memory::online::GuestMemory,
@@ -26,16 +31,21 @@ use openvm_circuit::{
 #[cfg(feature = "rvr")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(feature = "rvr"))]
+use crate::F;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "rvr")] {
         use openvm_circuit::arch::rvr::{
             RvrMeteredCostInstance, RvrMeteredInstance,
         };
         type PureInstance<'a> = RvrPureInstance<'a>;
+        type PreflightInstance<'a> = RvrPreflightInstance<'a>;
         pub type MeteredInstance<'a> = RvrMeteredInstance<'a>;
         pub type MeteredCostInstance<'a> = RvrMeteredCostInstance<'a>;
     } else {
         type PureInstance<'a> = InterpretedInstance<'a, ExecutionCtx>;
+        type PreflightInstance<'a> = InterpretedInstance<'a, PreflightCtx>;
         pub type MeteredInstance<'a> = InterpretedInstance<'a, MeteredCtx>;
         pub type MeteredCostInstance<'a> = InterpretedInstance<'a, MeteredCostCtx>;
     }
@@ -52,6 +62,22 @@ pub struct CompiledExePure<'a> {
 #[cfg(feature = "rvr")]
 pub struct CompiledExePureWithInstretTracking<'a> {
     instance: RvrPureWithInstretTrackingInstance<'a>,
+}
+
+/// Fixed-program preflight execution.
+///
+/// Preflight is deliberately segment-bounded because its immutable replay data
+/// grows with the number of executed instructions.
+pub struct CompiledExePreflight<'a> {
+    instance: PreflightInstance<'a>,
+}
+
+/// Result of one bounded preflight execution.
+///
+/// The architectural result is independent of the selected execution backend.
+pub struct PreflightOutput {
+    state: VmState<GuestMemory>,
+    terminated: bool,
 }
 
 impl<'a> CompiledExePure<'a> {
@@ -85,6 +111,71 @@ impl<'a> CompiledExePure<'a> {
     #[cfg(feature = "rvr")]
     pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
         self.instance.save_generated_sources(dir)
+    }
+}
+
+impl<'a> CompiledExePreflight<'a> {
+    pub(crate) fn new(instance: PreflightInstance<'a>) -> Self {
+        Self { instance }
+    }
+
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.instance.create_initial_vm_state(inputs)
+    }
+
+    /// Execute exactly one metered segment from `state`.
+    pub fn execute_segment(
+        &self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<PreflightOutput, ExecutionError> {
+        #[cfg(feature = "rvr")]
+        {
+            self.instance
+                .execute_segment(state, segment)
+                .map(PreflightOutput::new)
+        }
+        #[cfg(not(feature = "rvr"))]
+        {
+            self.instance
+                .execute_segment::<F>(state, segment)
+                .map(PreflightOutput::new)
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
+        self.instance.save(dir)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
+        self.instance.save_generated_sources(dir)
+    }
+}
+
+impl PreflightOutput {
+    fn new(inner: BackendPreflightOutput) -> Self {
+        #[cfg(feature = "rvr")]
+        let terminated = inner.endpoint == PreflightEndpoint::Terminated;
+        #[cfg(not(feature = "rvr"))]
+        let terminated = inner.exit_code.is_some();
+        Self {
+            state: inner.state,
+            terminated,
+        }
+    }
+
+    pub fn state(&self) -> &VmState<GuestMemory> {
+        &self.state
+    }
+
+    pub fn into_state(self) -> VmState<GuestMemory> {
+        self.state
+    }
+
+    pub fn is_terminated(&self) -> bool {
+        self.terminated
     }
 }
 

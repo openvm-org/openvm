@@ -9,7 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::AddIExecutor;
@@ -23,7 +25,7 @@ pub(super) struct AddIPreCompute {
     rs1_ptr: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<A, NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -48,10 +50,18 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<A, NUM_LIMB
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> InterpreterExecutor<F> for AddIExecutor<A, NUM_LIMBS, U16_BITS>
+impl<F, const NUM_LIMBS: usize> InterpreterExecutor<F> for AddIExecutor<NUM_LIMBS, U16_BITS>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if NUM_LIMBS * U16_BITS == 32 {
+            format!("{:?}", BaseAluWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
+        }
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<AddIPreCompute>()
@@ -88,8 +98,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F>
-    for AddIExecutor<A, NUM_LIMBS, U16_BITS>
+impl<F, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F> for AddIExecutor<NUM_LIMBS, U16_BITS>
 where
     F: PrimeField32,
 {
@@ -188,7 +197,7 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
-    use crate::{adapters::Rv64BaseAluImmU16AdapterExecutor, Rv64AddIExecutor};
+    use crate::Rv64AddIExecutor;
 
     fn addi_instruction(c: usize) -> Instruction<BabyBear> {
         Instruction::from_usize(
@@ -206,7 +215,6 @@ mod tests {
     #[test]
     fn validates_canonical_i12_encoding() {
         let executor = Rv64AddIExecutor::new(
-            Rv64BaseAluImmU16AdapterExecutor,
             BaseAluImmOpcode::CLASS_OFFSET,
             BaseAluImmOpcode::ADDI as usize,
         );

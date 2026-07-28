@@ -24,7 +24,7 @@ struct MulHPreCompute {
     c: u8,
 }
 
-impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> MulHExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -52,11 +52,18 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for MulHExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            MulHOpcode::from_usize(opcode - MulHOpcode::CLASS_OFFSET)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<MulHPreCompute>()
@@ -91,8 +98,8 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for MulHExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {

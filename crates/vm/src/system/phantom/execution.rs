@@ -6,6 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
@@ -43,6 +44,10 @@ impl<F> InterpreterExecutor<F> for PhantomExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", SystemOpcode::PHANTOM)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<PhantomPreCompute>()
@@ -197,6 +202,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
 ) -> Result<(), ExecutionError> {
     let sub_executor = &*pre_compute.sub_executor;
     let pc = exec_state.pc();
+    let discriminant = PhantomDiscriminant(pre_compute.operands.c as u16);
+    if let Some(phantom) = SysPhantom::from_repr(discriminant.0) {
+        CTX::on_system_phantom(exec_state, pc, phantom);
+    }
     execute_impl(
         PhantomStateMut {
             pc,
@@ -207,6 +216,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
         &pre_compute.operands,
         sub_executor,
     )?;
+    exec_state.ctx.advance_timestamp(1);
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())

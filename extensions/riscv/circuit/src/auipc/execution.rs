@@ -8,6 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS,
 };
+use openvm_riscv_transpiler::Rv64AuipcOpcode::AUIPC;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{run_auipc, Rv64AuipcExecutor};
@@ -19,7 +20,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<A> Rv64AuipcExecutor<A> {
+impl Rv64AuipcExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -40,10 +41,14 @@ impl<A> Rv64AuipcExecutor<A> {
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64AuipcExecutor<A>
+impl<F> InterpreterExecutor<F> for Rv64AuipcExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{AUIPC:?}")
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<AuiPcPreCompute>()
@@ -78,7 +83,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor
 where
     F: PrimeField32,
 {

@@ -10,6 +10,8 @@ use super::context::EmitContext;
 pub struct TermCtx<'a> {
     /// Set of valid block start PCs for direct tail calls.
     pub valid_blocks: &'a HashSet<u64>,
+    /// Start PC of the block currently being emitted.
+    pub current_block: u64,
 }
 
 /// Emit C code for a terminator using tail calls between blocks.
@@ -22,17 +24,23 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
     let args = ctx.tail_call_args();
 
     match term.cfg_term(pc, next_pc) {
-        CfgTerm::FallThrough => emit_tail_call(ctx, next_pc, &args, tc.valid_blocks),
+        CfgTerm::FallThrough => emit_tail_call(ctx, next_pc, &args, tc),
         CfgTerm::Jump {
-            link_dst, target, ..
+            link_dst,
+            link_write,
+            target,
+            ..
         } => {
             if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
+            } else if link_write {
+                ctx.advance_timestamp(1);
             }
-            emit_tail_call(ctx, target, &args, tc.valid_blocks);
+            emit_tail_call(ctx, target, &args, tc);
         }
         CfgTerm::JumpIndirect {
             link_dst,
+            link_write,
             base_value,
             offset,
             target_mask,
@@ -50,11 +58,20 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                     }
                 }
                 CfgOperand::Const(value) => hex_u64(value),
+                CfgOperand::ReadConst { source, value } => {
+                    if ctx.preserves_logical_schedule() {
+                        ctx.read_var(source);
+                    }
+                    hex_u64(value)
+                }
             };
             if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
+            } else if link_write {
+                ctx.advance_timestamp(1);
             }
             let target = indirect_target_expr(ctx, &base_value, offset, target_mask);
+            ctx.flush_preflight_local();
             ctx.write_line(&format!(
                 "if (unlikely(!rv_pc_is_dispatchable({target}))) {{"
             ));
@@ -74,28 +91,20 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             known,
         } => {
             if let Some(taken) = known {
-                if ctx.traces_values() {
+                if ctx.preserves_logical_schedule() {
                     ctx.read_var(lhs);
                     ctx.read_var(rhs);
                 }
-                emit_tail_call(
-                    ctx,
-                    if taken { target } else { next_pc },
-                    &args,
-                    tc.valid_blocks,
-                );
+                emit_tail_call(ctx, if taken { target } else { next_pc }, &args, tc);
                 return;
             }
             let lhs = ctx.read_var(lhs);
             let rhs = ctx.read_var(rhs);
             let cmp = branch_cond_expr(cond, width, &lhs, &rhs);
             ctx.write_line(&format!("if ({cmp}) {{"));
-            ctx.write_line(&format!(
-                "  {}",
-                static_tail_call(target, &args, tc.valid_blocks)
-            ));
+            emit_tail_call(ctx, target, &args, tc);
             ctx.write_line("}");
-            emit_tail_call(ctx, next_pc, &args, tc.valid_blocks);
+            emit_tail_call(ctx, next_pc, &args, tc);
         }
         CfgTerm::Exit { code } => emit_exit(ctx, pc, code),
         CfgTerm::Trap { message } => emit_trap(ctx, pc, &message),
@@ -103,6 +112,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             let Terminator::Instruction { node, .. } = term else {
                 unreachable!("opaque control flow requires an instruction-owned terminator")
             };
+            ctx.flush_preflight_local();
             let branch_to = |target| static_tail_call(target, &args, tc.valid_blocks);
             node.emit_c_term(ctx, &branch_to);
         }
@@ -154,8 +164,9 @@ fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> Str
     }
 }
 
-fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, valid_blocks: &HashSet<u64>) {
-    ctx.write_line(&static_tail_call(target, args, valid_blocks));
+fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, tc: &TermCtx<'_>) {
+    ctx.flush_preflight_local();
+    ctx.write_line(&static_tail_call(target, args, tc.valid_blocks));
 }
 
 fn branch_cond_expr(cond: CfgBranchCond, width: CfgIntWidth, left: &str, right: &str) -> String {
@@ -227,11 +238,12 @@ mod tests {
     }
 
     #[test]
-    fn known_branch_reads_operands_only_for_value_tracing() {
+    fn known_branch_preserves_preflight_operand_schedule() {
         let term = Terminator::instruction(KnownBranch);
         let valid_blocks = HashSet::from([8]);
         let tc = TermCtx {
             valid_blocks: &valid_blocks,
+            current_block: 0,
         };
 
         let mut direct = EmitContext::new(
@@ -244,15 +256,16 @@ mod tests {
         emit_terminator(&mut direct, &term, 0, &tc);
         assert!(!direct.buf().contains("reg_read"));
 
-        let mut tracing = EmitContext::new(
+        let mut checkpoint = EmitContext::new(
             HashSet::new(),
-            EmitMode::ValueTrace,
+            EmitMode::Preflight,
             BlockAbi::Plain,
             None,
             None,
         );
-        emit_terminator(&mut tracing, &term, 0, &tc);
-        assert_eq!(tracing.buf().matches("trace_reg_read").count(), 2);
+        emit_terminator(&mut checkpoint, &term, 0, &tc);
+        assert!(!checkpoint.buf().contains("preflight_local_reg_read"));
+        assert_eq!(checkpoint.checkpoint_preflight_budget(), (2, 0));
     }
 
     #[test]

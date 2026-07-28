@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
 };
@@ -24,16 +24,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
-#[cfg(feature = "cuda")]
-use crate::load_sign_extend::{
-    test_utils::{dummy_range_checker, transfer_load_sign_extend_records},
-    Rv64LoadSignExtendHalfwordChipGpu,
-};
+use super::trace::generate_trace_from_postflight;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::load_sign_extend::{test_utils::dummy_range_checker, Rv64LoadSignExtendHalfwordChipGpu};
 use crate::{
-    adapters::{
-        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
-    },
+    adapters::{Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS},
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
         halfword::{
@@ -79,10 +74,7 @@ fn create_halfword_harness(
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendHalfwordExecutor::new(
-        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadSignExtendHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
             Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -93,7 +85,13 @@ fn create_halfword_harness(
         tester.memory_helper(),
     );
     (
-        HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        HalfwordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -107,7 +105,7 @@ fn rand_load_sign_extend_halfword_test() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             LOADH,
             None,
@@ -132,7 +130,7 @@ fn positive_loadh_shift6_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADH,
         Some([6, 0, 0, 0, 0, 0, 0, 0]),
@@ -157,7 +155,7 @@ fn assert_pranked_halfword_fails(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADH,
         None,
@@ -188,7 +186,7 @@ fn negative_split_signed_load_test() {
     assert_pranked_halfword_fails(|core| core.read_data[0][0] += F::ONE);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHalfwordHarness = GpuTestChipHarness<
     F,
     Rv64LoadSignExtendHalfwordExecutor,
@@ -197,7 +195,7 @@ type GpuHalfwordHarness = GpuTestChipHarness<
     Rv64LoadSignExtendHalfwordChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -216,10 +214,7 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendHalfwordExecutor::new(
-        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadSignExtendHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
             Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -237,9 +232,15 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_load_sign_extend_halfword_tracegen() {
     let mut rng = create_seeded_rng();
@@ -250,7 +251,7 @@ fn test_cuda_rand_load_sign_extend_halfword_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             LOADH,
             None,
@@ -258,7 +259,6 @@ fn test_cuda_rand_load_sign_extend_halfword_tracegen() {
             None,
         );
     }
-    transfer_load_sign_extend_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

@@ -5,9 +5,9 @@ use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
-        PreflightExecutor, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
-        VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
+        verify_segments, ContinuationProverBuilder, ContinuationVmProof, Executor, MeteredExecutor,
+        Streams, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmExecutionConfig,
+        VmInstance, VmVerificationError,
     },
     system::{
         memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
-use tracing::instrument;
+use tracing::info_span;
 
 use crate::{
     keygen::AppVerifyingKey,
@@ -32,20 +32,21 @@ use crate::{
 pub struct AppProver<E, VB>
 where
     E: StarkEngine,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
 {
     pub program_name: Option<String>,
+    prepared: VB::PreparedContinuation,
     #[getset(get = "pub")]
     instance: VmInstance<E, VB>,
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
-    app_exe_commit: OnceLock<Digest>,
+    app_exe_commit: Digest,
 }
 
 impl<E, VB> AppProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
     Val<E::SC>: PrimeField32,
 {
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
@@ -61,19 +62,26 @@ where
     ) -> Result<Self, VirtualMachineError> {
         let instance = new_local_prover(vm_builder, app_vm_pk, app_exe)?;
         let app_vm_vk = app_vm_pk.vm_pk.get_vk();
-        Ok(Self::new_from_instance(instance, app_vm_vk))
+        Self::new_from_instance(instance, app_vm_vk)
     }
 
     pub fn new_from_instance(
         instance: VmInstance<E, VB>,
         app_vm_vk: MultiStarkVerifyingKey<E::SC>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, VirtualMachineError> {
+        let app_exe_commit = compute_exe_commit_from_mem_config(
+            instance.program_commitment(),
+            instance.exe(),
+            &instance.vm.config().as_ref().memory_config,
+        );
+        let prepared = VB::prepare_continuation(&instance)?;
+        Ok(Self {
             program_name: None,
+            prepared,
             instance,
             app_vm_vk,
-            app_exe_commit: OnceLock::new(),
-        }
+            app_exe_commit,
+        })
     }
 
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
@@ -92,13 +100,7 @@ where
 
     /// Returns commitment to the executable
     pub fn app_exe_commit(&self) -> Digest {
-        *self.app_exe_commit.get_or_init(|| {
-            compute_exe_commit_from_mem_config(
-                &self.app_program_commit(),
-                self.instance.exe(),
-                &self.instance.vm.config().as_ref().memory_config,
-            )
-        })
+        self.app_exe_commit
     }
 
     pub fn memory_dimensions(&self) -> MemoryDimensions {
@@ -114,23 +116,24 @@ where
         self.instance.vm.config().as_ref().num_public_values
     }
 
-    /// Generates proof for every continuation segment
-    #[instrument(
-        name = "app_prove",
-        skip_all,
-        fields(group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
-    )]
+    /// Generates proof for every continuation segment.
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-            + MeteredExecutor<Val<E::SC>>
-            + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     {
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),
         );
-        let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
+        let input: Streams = input.into();
+        let _prove_span = info_span!(
+            "app_prove",
+            group = "app_proof",
+            program = self.program_name.as_deref().unwrap_or("")
+        )
+        .entered();
+        let proof = VB::prove_continuation(&mut self.prepared, &mut self.instance, input)?;
         #[cfg(debug_assertions)]
         let _ = verify_app_proof_inner::<E>(
             &self.app_vm_vk,

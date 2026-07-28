@@ -4,14 +4,35 @@ use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, Variable};
 
 use crate::{detect_known_field, format_c_byte_array, KnownField, ModOp};
 
+/// Algebra operands are proof-visible system-memory blocks. The v2.1 memory
+/// equipartition requires every four-u16-cell block to start on an eight-byte
+/// boundary, and the native range helpers rely on the same alignment.
+pub(crate) fn emit_word_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
+    let joined = pointers.join(" | ");
+    ctx.write_line(&format!("if (unlikely((({joined}) & 7ull) != 0ull)) {{"));
+    ctx.emit_trap();
+    ctx.write_line("}");
+}
+
 /// Base trait for zero-sized marker types that identify a field kind (modular
 /// or Fp2). Provides the C function prefix and known-field suffix lookup used
 /// by all three instruction families (arith, iseq, setup).
 pub(crate) trait FieldKind: Clone + Debug + Send + Sync + 'static {
+    /// Number of base-field elements stored in one VM value. Modular values
+    /// contain one element; Fp2 values contain two.
+    const STORAGE_FACTOR: u32 = 1;
+    /// Whether every accepted setup instruction writes an all-zero value.
+    const SETUP_OUTPUT_IS_STATIC_ZERO: bool;
+
     fn c_prefix() -> &'static str;
     /// Returns the C suffix for a known field, or `None` to fall through to the
     /// generic path.
     fn known_suffix(field: KnownField) -> Option<&'static str>;
+
+    /// Checkpoint replay is enabled explicitly per field family.
+    fn supports_preflight() -> bool {
+        false
+    }
 }
 
 /// Extension of [`FieldKind`] for the arithmetic instruction family. Adds the
@@ -137,15 +158,33 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
-        let rs1 = ctx.read_var(self.rs1_reg);
-        let rs2 = ctx.read_var(self.rs2_reg);
+        let (rd, rs1, rs2) = if K::supports_preflight() && ctx.is_checkpoint_preflight() {
+            let rs1 = ctx.read_var(self.rs1_reg);
+            let rs2 = ctx.read_var(self.rs2_reg);
+            let rd = ctx.read_var(self.rd_reg);
+            (rd, rs1, rs2)
+        } else {
+            // Preserve the established pure and metered output.
+            let rd = ctx.read_var(self.rd_reg);
+            let rs1 = ctx.read_var(self.rs1_reg);
+            let rs2 = ctx.read_var(self.rs2_reg);
+            (rd, rs1, rs2)
+        };
+        if K::supports_preflight() {
+            ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
+        }
+        emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let num_limbs = format!("{}u", self.num_limbs);
         let mod_literal = format_c_byte_array(&self.modulus);
         let name = format!("rvr_ext_{}_setup", K::c_prefix());
         ctx.write_line("{");
         ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
         ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
+        if K::supports_preflight() && !K::SETUP_OUTPUT_IS_STATIC_ZERO {
+            for word in 0..self.num_limbs * K::STORAGE_FACTOR / 8 {
+                ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
+            }
+        }
         ctx.write_line("}");
     }
 
@@ -155,6 +194,10 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        K::supports_preflight()
     }
 }
 
@@ -166,11 +209,18 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
+        if K::supports_preflight() {
+            ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 2 / 8);
+        }
+        emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
         let prefix = K::c_prefix();
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
         if let Some(suffix) = known_suffix {
             let name = format!("rvr_ext_{prefix}_iseq_{suffix}");
             let val = ctx.emit_call_expr("bool", &name, &["state", &rs1, &rs2]);
+            if K::supports_preflight() {
+                ctx.append_replay_value(&val);
+            }
             ctx.write_var(self.rd_reg, &val);
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
@@ -179,6 +229,9 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
             let name = format!("rvr_ext_{prefix}_iseq");
             let num_limbs = format!("{}u", self.num_limbs);
             let val = ctx.emit_call_expr("bool", &name, &["state", &rs1, &rs2, &num_limbs, "mod_"]);
+            if K::supports_preflight() {
+                ctx.append_replay_value(&val);
+            }
             ctx.write_var(self.rd_reg, &val);
             ctx.write_line("}");
         }
@@ -191,6 +244,10 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::WriteUnknown { dst: self.rd_reg }
     }
+
+    fn supports_preflight(&self) -> bool {
+        K::supports_preflight()
+    }
 }
 
 impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
@@ -199,9 +256,22 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
-        let rs1 = ctx.read_var(self.rs1_reg);
-        let rs2 = ctx.read_var(self.rs2_reg);
+        let (rd, rs1, rs2) = if K::supports_preflight() && ctx.is_checkpoint_preflight() {
+            let rs1 = ctx.read_var(self.rs1_reg);
+            let rs2 = ctx.read_var(self.rs2_reg);
+            let rd = ctx.read_var(self.rd_reg);
+            (rd, rs1, rs2)
+        } else {
+            // Preserve the established pure and metered output.
+            let rd = ctx.read_var(self.rd_reg);
+            let rs1 = ctx.read_var(self.rs1_reg);
+            let rs2 = ctx.read_var(self.rs2_reg);
+            (rd, rs1, rs2)
+        };
+        if K::supports_preflight() {
+            ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
+        }
+        emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let op_name = self.op.c_name();
         let prefix = K::c_prefix();
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
@@ -217,6 +287,11 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
+        if K::supports_preflight() {
+            for word in 0..self.num_limbs * K::STORAGE_FACTOR / 8 {
+                ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
+            }
+        }
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -225,5 +300,9 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        K::supports_preflight()
     }
 }

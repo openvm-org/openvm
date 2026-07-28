@@ -1,14 +1,44 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::cuda::PostflightOpcodeBases;
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution};
 use openvm_circuit::{
     arch::{
-        to_byte_ptr_bits, ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        prepare_gpu_postflight, to_byte_ptr_bits, ChipInventory, ChipInventoryError,
+        GenerationError, Postflight, PostflightTracegen, PreflightOutput, VirtualMachine,
+        VmBuilder, VmProverExtension,
     },
-    system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+    system::cuda::{
+        extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+        phantom::PhantomChipGPU,
+        poseidon2::Poseidon2PeripheryChipGPU,
+        SystemChipInventoryGPU,
+    },
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
-use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
+    var_range::VariableRangeCheckerChipGPU,
+    Chip,
+};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
+};
+use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
+use openvm_riscv_transpiler::{
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
+};
+use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
@@ -36,13 +66,482 @@ use crate::{
 
 pub struct Rv64ImGpuProverExt;
 
+macro_rules! impl_postflight_tracegen {
+    ($builder:ty) => {
+        impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for $builder {
+            type Prepared = GpuPostflightProgram;
+
+            fn prepare_postflight(
+                vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+                program: &Program<F>,
+            ) -> Result<Self::Prepared, GenerationError> {
+                prepare_gpu_postflight(vm, program)
+            }
+
+            fn generate_proving_ctx(
+                vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+                program: &Self::Prepared,
+                output: &PreflightOutput,
+                _postflight: &Postflight<'_, F>,
+            ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
+                let (transcript, replay_plan) = vm
+                    .postflight_history(program, output)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                Rv64ImPreflightGpuTracegen::new(program, &transcript, &replay_plan)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
+                    .generate_proving_ctx(vm)
+            }
+        }
+    };
+}
+
+impl_postflight_tracegen!(crate::Rv64IGpuBuilder);
+impl_postflight_tracegen!(crate::Rv64ImGpuBuilder);
+
+/// Segment-wide RV64I GPU trace generation from an immutable postflight transcript.
+///
+/// Construction rejects an executed opcode unless its trace kernel is present
+/// below (or it is the record-free system `TERMINATE`). Each supported opcode
+/// remains pending until the VM's reverse inventory walk reaches its concrete chip.
+/// This makes a missing/mismatched chip fail closed instead of silently
+/// producing a dummy trace.
+pub struct Rv64ImPreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
+    pending_opcodes: std::collections::BTreeSet<u32>,
+}
+
+impl<'a> Rv64ImPreflightGpuTracegen<'a> {
+    #[cfg(feature = "rvr")]
+    #[doc(hidden)]
+    pub fn postflight_opcode_bases() -> PostflightOpcodeBases {
+        PostflightOpcodeBases {
+            base_alu: Self::opcode(BaseAluOpcode::ADD),
+            shift: Self::opcode(ShiftOpcode::SLL),
+            less_than: Self::opcode(LessThanOpcode::SLT),
+            load_store: Self::opcode(Rv64LoadStoreOpcode::LOADD),
+            branch_equal: Self::opcode(BranchEqualOpcode::BEQ),
+            branch_less_than: Self::opcode(BranchLessThanOpcode::BLT),
+            jal_lui: Self::opcode(Rv64JalLuiOpcode::JAL),
+            jalr: Self::opcode(Rv64JalrOpcode::JALR),
+            auipc: Self::opcode(Rv64AuipcOpcode::AUIPC),
+            mul: Self::opcode(MulOpcode::MUL),
+            mulh: Self::opcode(MulHOpcode::MULH),
+            divrem: Self::opcode(DivRemOpcode::DIV),
+            base_alu_w: Self::opcode(BaseAluWOpcode::ADDW),
+            shift_w: Self::opcode(ShiftWOpcode::SLLW),
+            mul_w: Self::opcode(MulWOpcode::MULW),
+            divrem_w: Self::opcode(DivRemWOpcode::DIVW),
+            base_alu_imm: Self::opcode(BaseAluImmOpcode::ADDI),
+            shift_imm: Self::opcode(ShiftImmOpcode::SLLI),
+            less_than_imm: Self::opcode(LessThanImmOpcode::SLTI),
+            base_alu_w_imm: Self::opcode(BaseAluWImmOpcode::ADDIW),
+            shift_w_imm: Self::opcode(ShiftWImmOpcode::SLLIW),
+            hint_store: Self::opcode(Rv64HintStoreOpcode::HINT_STORED),
+            phantom: SystemOpcode::PHANTOM.global_opcode().as_usize() as u32,
+            terminate: SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
+        }
+    }
+
+    /// Checkpoint replay for RV64IM and phantom execution. Loads and stores
+    /// first become unresolved block intents; the VM chronology pass resolves
+    /// those intents before the ordinary transcript indexes and unchanged
+    /// trace generators consume them.
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+    pub fn postflight<VB>(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+        program: &CheckpointReplayProgram,
+        execution: &PreflightExecution,
+        num_insns: u32,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
+    where
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
+    {
+        vm.postflight(
+            program,
+            execution,
+            num_insns,
+            Self::postflight_opcode_bases(),
+        )
+    }
+
+    pub fn new(
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
+    ) -> Result<Self, GpuPostflightError> {
+        Self::new_after_claiming_extension_opcodes(program, transcript, replay_plan, &[])
+    }
+
+    /// Constructs the RV64 producer after a concrete outer coordinator has
+    /// claimed its extension opcodes.
+    ///
+    /// The caller remains responsible for visiting and finishing the claimed
+    /// extension producers. Every remaining executed opcode is still checked
+    /// against RV64's exact supported set here.
+    #[doc(hidden)]
+    pub fn new_after_claiming_extension_opcodes(
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
+        extension_opcodes: &[u32],
+    ) -> Result<Self, GpuPostflightError> {
+        let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
+        let extension_opcodes = extension_opcodes
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let pending_opcodes = replay_plan
+            .executed_opcodes()
+            .filter(|&opcode| opcode != terminate && !extension_opcodes.contains(&opcode))
+            .collect::<std::collections::BTreeSet<_>>();
+        if let Some(&opcode) = pending_opcodes
+            .iter()
+            .find(|&&opcode| !Self::supports_opcode(opcode))
+        {
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "RV64IM preflight GPU tracegen does not support executed opcode {opcode:#x}"
+            )));
+        }
+        Ok(Self {
+            program,
+            transcript,
+            replay_plan,
+            pending_opcodes,
+        })
+    }
+
+    /// Returns whether the standard RV64/system replay path owns `opcode`.
+    #[doc(hidden)]
+    pub fn owns_opcode(opcode: u32) -> bool {
+        opcode == SystemOpcode::TERMINATE.global_opcode().as_usize() as u32
+            || Self::supports_opcode(opcode)
+    }
+
+    fn supports_opcode(opcode: u32) -> bool {
+        [
+            BaseAluOpcode::ADD.global_opcode(),
+            BaseAluOpcode::SUB.global_opcode(),
+            BaseAluOpcode::XOR.global_opcode(),
+            BaseAluOpcode::OR.global_opcode(),
+            BaseAluOpcode::AND.global_opcode(),
+            BaseAluWOpcode::ADDW.global_opcode(),
+            BaseAluWOpcode::SUBW.global_opcode(),
+            LessThanOpcode::SLT.global_opcode(),
+            LessThanOpcode::SLTU.global_opcode(),
+            ShiftOpcode::SLL.global_opcode(),
+            ShiftOpcode::SRL.global_opcode(),
+            ShiftOpcode::SRA.global_opcode(),
+            ShiftWOpcode::SLLW.global_opcode(),
+            ShiftWOpcode::SRLW.global_opcode(),
+            ShiftWOpcode::SRAW.global_opcode(),
+            BaseAluWImmOpcode::ADDIW.global_opcode(),
+            ShiftWImmOpcode::SLLIW.global_opcode(),
+            ShiftWImmOpcode::SRLIW.global_opcode(),
+            ShiftWImmOpcode::SRAIW.global_opcode(),
+            BranchEqualOpcode::BEQ.global_opcode(),
+            BranchEqualOpcode::BNE.global_opcode(),
+            BranchLessThanOpcode::BLT.global_opcode(),
+            BranchLessThanOpcode::BLTU.global_opcode(),
+            BranchLessThanOpcode::BGE.global_opcode(),
+            BranchLessThanOpcode::BGEU.global_opcode(),
+            Rv64JalLuiOpcode::JAL.global_opcode(),
+            Rv64JalLuiOpcode::LUI.global_opcode(),
+            Rv64JalrOpcode::JALR.global_opcode(),
+            Rv64AuipcOpcode::AUIPC.global_opcode(),
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            ShiftImmOpcode::SLLI.global_opcode(),
+            ShiftImmOpcode::SRLI.global_opcode(),
+            ShiftImmOpcode::SRAI.global_opcode(),
+            LessThanImmOpcode::SLTI.global_opcode(),
+            LessThanImmOpcode::SLTIU.global_opcode(),
+            BaseAluImmOpcode::XORI.global_opcode(),
+            BaseAluImmOpcode::ORI.global_opcode(),
+            BaseAluImmOpcode::ANDI.global_opcode(),
+            Rv64LoadStoreOpcode::LOADB.global_opcode(),
+            Rv64LoadStoreOpcode::LOADBU.global_opcode(),
+            Rv64LoadStoreOpcode::LOADH.global_opcode(),
+            Rv64LoadStoreOpcode::LOADHU.global_opcode(),
+            Rv64LoadStoreOpcode::LOADW.global_opcode(),
+            Rv64LoadStoreOpcode::LOADWU.global_opcode(),
+            Rv64LoadStoreOpcode::LOADD.global_opcode(),
+            // Store replay accepts the AIR-supported main-memory and public-values spaces.
+            Rv64LoadStoreOpcode::STOREB.global_opcode(),
+            Rv64LoadStoreOpcode::STOREH.global_opcode(),
+            Rv64LoadStoreOpcode::STOREW.global_opcode(),
+            Rv64LoadStoreOpcode::STORED.global_opcode(),
+            MulOpcode::MUL.global_opcode(),
+            MulWOpcode::MULW.global_opcode(),
+            MulHOpcode::MULH.global_opcode(),
+            MulHOpcode::MULHSU.global_opcode(),
+            MulHOpcode::MULHU.global_opcode(),
+            DivRemOpcode::DIV.global_opcode(),
+            DivRemOpcode::DIVU.global_opcode(),
+            DivRemOpcode::REM.global_opcode(),
+            DivRemOpcode::REMU.global_opcode(),
+            DivRemWOpcode::DIVW.global_opcode(),
+            DivRemWOpcode::DIVUW.global_opcode(),
+            DivRemWOpcode::REMW.global_opcode(),
+            DivRemWOpcode::REMUW.global_opcode(),
+            Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+            Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
+            SystemOpcode::PHANTOM.global_opcode(),
+        ]
+        .into_iter()
+        .any(|candidate| candidate.as_usize() as u32 == opcode)
+    }
+
+    fn mark_generated(&mut self, opcodes: impl IntoIterator<Item = u32>) {
+        for opcode in opcodes {
+            self.pending_opcodes.remove(&opcode);
+        }
+    }
+
+    fn opcode(opcode: impl LocalOpcode) -> u32 {
+        opcode.global_opcode().as_usize() as u32
+    }
+
+    /// Generates one complete segment and verifies that every executed opcode
+    /// reached its concrete replay producer.
+    ///
+    /// Keep the coverage check inside this concrete coordinator: the VM owns
+    /// inventory order and lifetime fencing, while RV64IM owns its opcode-to-
+    /// producer mapping. This avoids a generic trace-generator framework and
+    /// makes skipping [`Self::finish`] impossible on the production entry path.
+    pub fn generate_proving_ctx<VB>(
+        self,
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError>
+    where
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
+    {
+        vm.generate_preflight_proving_ctx(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            self,
+            |tracegen, insertion_idx, chip| {
+                tracegen
+                    .generate_for_chip(insertion_idx, chip)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+            |tracegen| {
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
+    }
+
+    /// Generates one extension AIR in the VM inventory's normal reverse order.
+    ///
+    /// Replay producers update their shared lookup histograms. Periphery chips
+    /// are then generated from those histograms through their ordinary
+    /// record-independent path. Every other chip is known to be unexecuted by
+    /// the constructor coverage check, so it receives a dummy trace.
+    pub fn generate_for_chip(
+        &mut self,
+        _insertion_idx: usize,
+        chip: &dyn Any,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        if let Some(chip) = chip.downcast_ref::<PhantomChipGPU>() {
+            self.mark_generated([SystemOpcode::PHANTOM.global_opcode().as_usize() as u32]);
+            return chip.generate_proving_ctx_from_postflight(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            );
+        }
+
+        macro_rules! replay_chip {
+            ($chip_ty:ty, [$($opcode:expr),+ $(,)?]) => {
+                if let Some(chip) = chip.downcast_ref::<$chip_ty>() {
+                    self.mark_generated([$(
+                        Self::opcode($opcode)
+                    ),+]);
+                    return chip.generate_proving_ctx_from_postflight(
+                        self.program,
+                        self.transcript,
+                        self.replay_plan,
+                    );
+                }
+            };
+        }
+
+        replay_chip!(Rv64AddSubChipGpu, [BaseAluOpcode::ADD, BaseAluOpcode::SUB]);
+        replay_chip!(
+            Rv64BitwiseLogicChipGpu,
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND,]
+        );
+        replay_chip!(
+            Rv64AddSubWChipGpu,
+            [BaseAluWOpcode::ADDW, BaseAluWOpcode::SUBW]
+        );
+        replay_chip!(
+            Rv64LessThanChipGpu,
+            [LessThanOpcode::SLT, LessThanOpcode::SLTU]
+        );
+        replay_chip!(
+            Rv64ShiftLogicalChipGpu,
+            [ShiftOpcode::SLL, ShiftOpcode::SRL]
+        );
+        replay_chip!(Rv64ShiftRightArithmeticChipGpu, [ShiftOpcode::SRA]);
+        replay_chip!(
+            Rv64ShiftWLogicalChipGpu,
+            [ShiftWOpcode::SLLW, ShiftWOpcode::SRLW]
+        );
+        replay_chip!(Rv64ShiftWRightArithmeticChipGpu, [ShiftWOpcode::SRAW]);
+        replay_chip!(Rv64AddIWChipGpu, [BaseAluWImmOpcode::ADDIW]);
+        replay_chip!(
+            Rv64ShiftWLogicalImmChipGpu,
+            [ShiftWImmOpcode::SLLIW, ShiftWImmOpcode::SRLIW]
+        );
+        replay_chip!(
+            Rv64ShiftWRightArithmeticImmChipGpu,
+            [ShiftWImmOpcode::SRAIW]
+        );
+        replay_chip!(
+            Rv64BranchEqualChipGpu,
+            [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE]
+        );
+        replay_chip!(
+            Rv64BranchLessThanChipGpu,
+            [
+                BranchLessThanOpcode::BLT,
+                BranchLessThanOpcode::BLTU,
+                BranchLessThanOpcode::BGE,
+                BranchLessThanOpcode::BGEU,
+            ]
+        );
+        replay_chip!(
+            Rv64JalLuiChipGpu,
+            [Rv64JalLuiOpcode::JAL, Rv64JalLuiOpcode::LUI]
+        );
+        replay_chip!(Rv64JalrChipGpu, [Rv64JalrOpcode::JALR]);
+        replay_chip!(Rv64AuipcChipGpu, [Rv64AuipcOpcode::AUIPC]);
+        replay_chip!(Rv64LoadSignExtendByteChipGpu, [Rv64LoadStoreOpcode::LOADB]);
+        replay_chip!(Rv64LoadByteChipGpu, [Rv64LoadStoreOpcode::LOADBU]);
+        replay_chip!(
+            Rv64LoadSignExtendHalfwordChipGpu,
+            [Rv64LoadStoreOpcode::LOADH]
+        );
+        replay_chip!(Rv64LoadHalfwordChipGpu, [Rv64LoadStoreOpcode::LOADHU]);
+        replay_chip!(Rv64LoadSignExtendWordChipGpu, [Rv64LoadStoreOpcode::LOADW]);
+        replay_chip!(Rv64LoadWordChipGpu, [Rv64LoadStoreOpcode::LOADWU]);
+        replay_chip!(Rv64LoadDoublewordChipGpu, [Rv64LoadStoreOpcode::LOADD]);
+        replay_chip!(Rv64StoreByteChipGpu, [Rv64LoadStoreOpcode::STOREB]);
+        replay_chip!(Rv64StoreHalfwordChipGpu, [Rv64LoadStoreOpcode::STOREH]);
+        replay_chip!(Rv64StoreWordChipGpu, [Rv64LoadStoreOpcode::STOREW]);
+        replay_chip!(Rv64StoreDoublewordChipGpu, [Rv64LoadStoreOpcode::STORED]);
+        replay_chip!(
+            Rv64HintStoreChipGpu,
+            [
+                Rv64HintStoreOpcode::HINT_STORED,
+                Rv64HintStoreOpcode::HINT_BUFFER,
+            ]
+        );
+        replay_chip!(Rv64MultiplicationChipGpu, [MulOpcode::MUL]);
+        replay_chip!(Rv64MulWChipGpu, [MulWOpcode::MULW]);
+        replay_chip!(
+            Rv64MulHChipGpu,
+            [MulHOpcode::MULH, MulHOpcode::MULHSU, MulHOpcode::MULHU]
+        );
+        replay_chip!(
+            Rv64DivRemChipGpu,
+            [
+                DivRemOpcode::DIV,
+                DivRemOpcode::DIVU,
+                DivRemOpcode::REM,
+                DivRemOpcode::REMU,
+            ]
+        );
+        replay_chip!(
+            Rv64DivRemWChipGpu,
+            [
+                DivRemWOpcode::DIVW,
+                DivRemWOpcode::DIVUW,
+                DivRemWOpcode::REMW,
+                DivRemWOpcode::REMUW,
+            ]
+        );
+        replay_chip!(Rv64AddIChipGpu, [BaseAluImmOpcode::ADDI]);
+        replay_chip!(
+            Rv64ShiftLogicalImmChipGpu,
+            [ShiftImmOpcode::SLLI, ShiftImmOpcode::SRLI]
+        );
+        replay_chip!(Rv64ShiftRightArithmeticImmChipGpu, [ShiftImmOpcode::SRAI]);
+        replay_chip!(
+            Rv64LessThanImmChipGpu,
+            [LessThanImmOpcode::SLTI, LessThanImmOpcode::SLTIU]
+        );
+        replay_chip!(
+            Rv64BitwiseLogicImmChipGpu,
+            [
+                BaseAluImmOpcode::XORI,
+                BaseAluImmOpcode::ORI,
+                BaseAluImmOpcode::ANDI,
+            ]
+        );
+        if let Some(chip) = chip.downcast_ref::<Arc<VariableRangeCheckerChipGPU>>() {
+            return Ok(
+                <Arc<VariableRangeCheckerChipGPU> as Chip<(), GpuBackend>>::generate_proving_ctx(
+                    chip,
+                    (),
+                ),
+            );
+        }
+        if let Some(chip) = chip.downcast_ref::<Arc<BitwiseOperationLookupChipGPU<8>>>() {
+            return Ok(<Arc<BitwiseOperationLookupChipGPU<8>> as Chip<
+                (),
+                GpuBackend,
+            >>::generate_proving_ctx(chip, ()));
+        }
+        if let Some(chip) = chip.downcast_ref::<Arc<RangeTupleCheckerChipGPU<2>>>() {
+            return Ok(
+                <Arc<RangeTupleCheckerChipGPU<2>> as Chip<(), GpuBackend>>::generate_proving_ctx(
+                    chip,
+                    (),
+                ),
+            );
+        }
+        if let Some(chip) = chip.downcast_ref::<Arc<Poseidon2PeripheryChipGPU>>() {
+            return Ok(
+                <Arc<Poseidon2PeripheryChipGPU> as Chip<(), GpuBackend>>::generate_proving_ctx(
+                    chip,
+                    (),
+                ),
+            );
+        }
+
+        Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()))
+    }
+
+    /// Completes one segment after every extension AIR context has been made.
+    ///
+    /// The safe VM trace-generation entry point performs the synchronized
+    /// sticky-error read after every kernel has been submitted. This final
+    /// check only proves that the reverse inventory walk visited a producer for
+    /// every executed opcode.
+    #[doc(hidden)]
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
+        if !self.pending_opcodes.is_empty() {
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "RV64IM preflight GPU tracegen did not visit chips for executed opcodes {:?}",
+                self.pending_opcodes
+            )));
+        }
+        Ok(())
+    }
+}
+
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for Rv64ImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64I> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
         _: &Rv64I,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -256,11 +755,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for Rv64ImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64M> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
         extension: &Rv64M,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -343,13 +842,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
-    for Rv64ImGpuProverExt
-{
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
         _: &Rv64Io,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -364,3 +861,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod history_tests;
+#[cfg(all(test, feature = "rvr"))]
+mod tests;

@@ -3,11 +3,11 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor, VmAirWrapper, VmChipWrapper,
+        ExecutionBridge, VmAirWrapper, VmChipWrapper,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
@@ -29,20 +29,17 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64RdWriteAdapterRecord, Rv64AuipcChipGpu, Rv64AuipcCoreRecord},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64AuipcChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols,
-        Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
-        RV64_WORD_NUM_LIMBS,
+        rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, RV64_BYTE_BITS,
+        RV64_PTR_U16_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     auipc::{run_auipc, Rv64AuipcCoreCols},
     Rv64AuipcAir, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcExecutor, Rv64AuipcFiller,
@@ -63,11 +60,8 @@ fn create_harness_fields(
         Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge),
         Rv64AuipcCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor::new());
-    let chip = VmChipWrapper::<F, _>::new(
-        Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller::new(), range_checker_chip),
-        memory_helper,
-    );
+    let executor = Rv64AuipcExecutor::new();
+    let chip = VmChipWrapper::<F, _>::new(Rv64AuipcFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -91,27 +85,31 @@ fn create_harness(
         tester.range_checker(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64AuipcOpcode,
     imm: Option<u32>,
     initial_pc: Option<u32>,
-) where
-    Rv64AuipcExecutor: PreflightExecutor<F, RA>,
-{
+) {
     let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
-    let a = rng.random_range(0..32) << 3;
+    let a = rng.random_range(1..32) << 3;
 
     tester.execute_with_pc(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
         initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS))),
     );
@@ -139,7 +137,7 @@ fn rand_auipc_test() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             AUIPC,
             None,
@@ -195,7 +193,7 @@ fn run_negative_auipc_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         initial_imm,
@@ -314,7 +312,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
     tester.execute_with_pc(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::from_usize(AUIPC.global_opcode(), [rd_ptr, 0, imm, 1, 0]),
         initial_pc,
     );
@@ -477,11 +475,11 @@ fn run_auipc_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64AuipcChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -495,9 +493,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
     let gpu_chip = Rv64AuipcChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_auipc_tracegen() {
     let mut tester = GpuChipTestBuilder::default()
@@ -510,25 +514,13 @@ fn test_cuda_rand_auipc_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             AUIPC,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64RdWriteAdapterRecord,
-        &'a mut Rv64AuipcCoreRecord,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64RdWriteAdapterExecutor>::new(),
-        );
 
     tester
         .build()

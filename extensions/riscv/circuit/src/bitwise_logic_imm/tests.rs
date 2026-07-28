@@ -20,27 +20,21 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluImmAdapterRecord, BitwiseLogicImmCoreRecord,
-        Rv64BitwiseLogicImmChipGpu,
-    },
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64BitwiseLogicImmChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
 use super::{
-    BitwiseLogicImmCoreAir, BitwiseLogicImmCoreCols, BitwiseLogicImmFiller, Rv64BitwiseLogicImmAir,
-    Rv64BitwiseLogicImmChip, Rv64BitwiseLogicImmExecutor,
+    trace::generate_trace_from_postflight, BitwiseLogicImmCoreAir, BitwiseLogicImmCoreCols,
+    BitwiseLogicImmFiller, Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChip,
+    Rv64BitwiseLogicImmExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmAdapterAir, Rv64BaseAluImmAdapterExecutor, Rv64BaseAluImmAdapterFiller,
-        RV64_BYTE_BITS,
-    },
+    adapters::{Rv64BaseAluImmAdapterAir, RV64_BYTE_BITS},
     test_utils::rv64_rand_write_register_or_imm,
 };
 
@@ -66,14 +60,9 @@ fn create_harness_fields(
         Rv64BaseAluImmAdapterAir::new(execution_bridge, memory_bridge),
         BitwiseLogicImmCoreAir::new(bitwise_chip.bus(), BaseAluImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BitwiseLogicImmExecutor::new(
-        Rv64BaseAluImmAdapterExecutor::new(),
-        BaseAluImmOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64BitwiseLogicImmChip::new(
-        BitwiseLogicImmFiller::new(Rv64BaseAluImmAdapterFiller::new(), bitwise_chip),
-        memory_helper,
-    );
+    let executor = Rv64BitwiseLogicImmExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
+    let chip =
+        Rv64BitwiseLogicImmChip::new(BitwiseLogicImmFiller::new(bitwise_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -96,7 +85,7 @@ fn create_harness(
         tester.memory_helper(),
     );
     (
-        Harness::with_capacity(executor, air, cpu_chip, 64),
+        Harness::with_capacity(executor, air, cpu_chip, 64, generate_trace_from_postflight),
         (chip.air, chip),
     )
 }
@@ -137,7 +126,7 @@ fn rv64_bitwise_immediate_boundaries() {
                     opcode.global_opcode().as_usize(),
                     &mut rng,
                 );
-                tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+                tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
                 assert_eq!(
                     expected(opcode, source, imm).to_le_bytes().map(F::from_u8),
                     tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd),
@@ -168,7 +157,7 @@ fn rv64_bitwise_immediate_binding_negative() {
         BaseAluImmOpcode::XORI.global_opcode().as_usize(),
         &mut rng,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
@@ -189,7 +178,7 @@ fn rv64_bitwise_immediate_binding_negative() {
         .expect_err("altered immediate witness should fail");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64BitwiseLogicImmExecutor,
@@ -198,7 +187,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64BitwiseLogicImmChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_bitwise = Arc::new(BitwiseOperationLookupChip::new(default_bitwise_lookup_bus()));
     let (air, executor, cpu_chip) = create_harness_fields(
@@ -212,10 +201,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
     );
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64).with_trace_generators(
+        generate_trace_from_postflight,
+        |chip, program, transcript, plan| {
+            chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+        },
+    )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_bitwise_immediate_boundaries_tracegen() {
     let mut rng = create_seeded_rng();
@@ -237,25 +231,9 @@ fn test_cuda_bitwise_immediate_boundaries_tracegen() {
                 opcode.global_opcode().as_usize(),
                 &mut rng,
             );
-            tester.execute(
-                &mut harness.executor,
-                &mut harness.dense_arena,
-                &instruction,
-            );
+            tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
         }
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluImmAdapterRecord,
-        &'a mut BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluImmAdapterExecutor>::new(),
-        );
 
     tester
         .build()

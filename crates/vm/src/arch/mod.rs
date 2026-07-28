@@ -1,4 +1,6 @@
 mod config;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 /// Streams-like deferral state
 pub mod deferral;
 /// Instruction execution traits and types.
@@ -12,9 +14,8 @@ mod extensions;
 mod hint_stream;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
-/// [RecordArena] trait definitions and implementations. Currently there are two concrete
-/// implementations: [MatrixRecordArena] and [DenseRecordArena].
-mod record_arena;
+mod postflight;
+mod preflight;
 #[cfg(feature = "rvr")]
 pub mod rvr;
 /// VM state definitions
@@ -40,6 +41,10 @@ pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
 pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
-pub use record_arena::*;
+pub use postflight::{Postflight, PostflightError, PostflightReplay, PostflightStep, U16Access};
+pub use preflight::{
+    PreflightFieldBlock, PreflightHistory, PreflightInitialWrite, PreflightMemoryEvent,
+    PreflightMemoryLog, PreflightOutput, PreflightProgramEvent,
+};
 pub use state::*;
 pub use vm::*;

@@ -37,12 +37,12 @@ struct Rv64AuipcCore {
 
     __device__ Rv64AuipcCore(VariableRangeChecker range_checker) : range_checker(range_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
-        uint32_t imm_low_8 = record.imm & ((1u << RV64_BYTE_BITS) - 1u);
-        uint32_t imm_high_16 = (record.imm >> RV64_BYTE_BITS) & uint32_t(UINT16_MAX);
+    __device__ void fill_trace_row(RowSlice row, uint32_t from_pc, uint32_t imm) {
+        uint32_t imm_low_8 = imm & ((1u << RV64_BYTE_BITS) - 1u);
+        uint32_t imm_high_16 = (imm >> RV64_BYTE_BITS) & uint32_t(UINT16_MAX);
         uint16_t pc_limbs[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(pc_limbs, record.from_pc);
-        uint64_t auipc = run_auipc(record.from_pc, record.imm);
+        ptr_to_u16_limbs(pc_limbs, from_pc);
+        uint64_t auipc = run_auipc(from_pc, imm);
         uint64_t auipc_hi = auipc >> 32;
         assert(auipc_hi == 0ull || auipc_hi == 0xffffffffull);
         uint32_t auipc_lo = (uint32_t)auipc;
@@ -70,6 +70,10 @@ struct Rv64AuipcCore {
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_sign_extend, is_sign_ext);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
     }
+
+    __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
+        fill_trace_row(row, record.from_pc, record.imm);
+    }
 };
 
 template <typename T> struct Rv64AuipcCols {
@@ -82,46 +86,4 @@ struct Rv64AuipcRecord {
     Rv64AuipcCoreRecord core;
 };
 
-__global__ void auipc_tracegen(
-    Fp *trace,
-    size_t height,
-    DeviceBufferConstView<Rv64AuipcRecord> records,
-    uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits
-) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(trace + idx, height);
-    if (idx < records.len()) {
-        auto const &record = records[idx];
-
-        auto adapter = Rv64RdWriteAdapter(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-        );
-        adapter.fill_trace_row(row, record.adapter);
-
-        auto core =
-            Rv64AuipcCore(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AuipcCols, core)), record.core);
-    } else {
-        row.fill_zero(0, sizeof(Rv64AuipcCols<uint8_t>));
-    }
-}
-
-extern "C" int _auipc_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    DeviceBufferConstView<Rv64AuipcRecord> d_records,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits,
-    cudaStream_t stream
-) {
-    assert(width == sizeof(Rv64AuipcCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 512);
-    auipc_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
-    );
-    return CHECK_KERNEL();
-}
+#include "../rvr/src/auipc.inc.cuh"

@@ -3,8 +3,8 @@ use std::result::Result;
 use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{
-        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmField, VmProverExtension,
+        AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
+        VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -15,6 +15,13 @@ use openvm_riscv_circuit::{
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
+#[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
+use {
+    openvm_algebra_transpiler::Rv64ModularArithmeticOpcode,
+    openvm_instructions::{program::Program, LocalOpcode},
+    openvm_stark_backend::p3_field::PrimeField32,
+    strum::EnumCount,
+};
 
 mod modular;
 pub use modular::*;
@@ -37,6 +44,36 @@ cfg_if::cfg_if! {
             Rv64ModularWithFp2CpuBuilder as Rv64ModularWithFp2Builder,
         };
     }
+}
+
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_tests;
+
+/// Returns the first configured modular IS_EQ/SETUP_ISEQ program slot whose
+/// destination is x0.
+#[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
+pub(crate) fn modular_is_eq_x0_destination<F: PrimeField32>(
+    program: &Program<F>,
+    num_moduli: usize,
+) -> Option<usize> {
+    let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+    let opcode_count = Rv64ModularArithmeticOpcode::COUNT;
+    program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .find_map(|(slot, entry)| {
+            let (instruction, _) = entry.as_ref()?;
+            let relative = instruction.opcode.as_usize().checked_sub(opcode_base)?;
+            let local = relative % opcode_count;
+            (relative / opcode_count < num_moduli
+                && matches!(
+                    Rv64ModularArithmeticOpcode::from_usize(local),
+                    Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
+                )
+                && instruction.a.as_canonical_u32() == 0)
+                .then_some(slot)
+        })
 }
 
 pub struct AlgebraCpuProverExt;
@@ -119,17 +156,13 @@ where
 {
     type VmConfig = Rv64ModularConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Rv64ModularConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -137,14 +170,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraCpuProverExt,
-            &config.modular,
-            inventory,
-        )?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.modular, inventory)?;
         Ok(chip_complex)
     }
 }
@@ -161,17 +190,13 @@ where
 {
     type VmConfig = Rv64ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Rv64ModularWithFp2Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &Rv64ModularCpuBuilder,
             &config.modular,
@@ -179,7 +204,7 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)
     }
 }

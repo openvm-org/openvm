@@ -1,0 +1,64 @@
+use std::borrow::BorrowMut;
+
+use openvm_circuit::{
+    arch::{Postflight, PostflightError},
+    utils::next_power_of_two_or_zero,
+};
+use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::{BaseAluOpcode, BaseAluWOpcode};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+
+use super::Rv64AddSubWChip;
+use crate::{
+    adapters::{
+        Rv64BaseAluWRegU16AdapterCols, Rv64BaseAluWRegU16AdapterFiller, RV64_WORD_U16_LIMBS,
+        U16_BITS,
+    },
+    add_sub::{run_add_sub, AddSubCoreCols},
+};
+
+/// Generates the RV64 ADDW/SUBW trace directly from immutable preflight history.
+pub fn generate_trace_from_postflight<F: PrimeField32>(
+    chip: &Rv64AddSubWChip<F>,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    let addw = BaseAluWOpcode::ADDW.global_opcode();
+    let subw = BaseAluWOpcode::SUBW.global_opcode();
+    let rows_used = postflight.steps(addw).len() + postflight.steps(subw).len();
+    let adapter_width = Rv64BaseAluWRegU16AdapterCols::<F>::width();
+    let width = adapter_width + AddSubCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+    let height = next_power_of_two_or_zero(rows_used);
+    let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+    let adapter = Rv64BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
+
+    let mut row_index = 0;
+    for (opcode, local_opcode) in [(addw, BaseAluOpcode::ADD), (subw, BaseAluOpcode::SUB)] {
+        for &step in postflight.steps(opcode) {
+            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+            let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let ([rs1, rs2], output) = adapter.replay(
+                postflight,
+                step,
+                &chip.mem_helper.as_borrowed(),
+                adapter_row.borrow_mut(),
+                |[rs1, rs2]| run_add_sub::<RV64_WORD_U16_LIMBS, U16_BITS>(local_opcode, &rs1, &rs2),
+            )?;
+
+            let core_row: &mut AddSubCoreCols<F, RV64_WORD_U16_LIMBS, U16_BITS> =
+                core_row.borrow_mut();
+            core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
+            core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+            for &value in &output[..RV64_WORD_U16_LIMBS - 1] {
+                chip.inner
+                    .range_checker_chip
+                    .add_count(value as u32, U16_BITS);
+            }
+            core_row.c = rs2.map(F::from_u16);
+            core_row.b = rs1.map(F::from_u16);
+            core_row.a = output.map(F::from_u16);
+            row_index += 1;
+        }
+    }
+
+    Ok(trace)
+}
