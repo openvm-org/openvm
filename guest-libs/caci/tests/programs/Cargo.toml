@@ -14,6 +14,7 @@ openvm-caci = { path = "../../" }
 openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros/" }
 openvm-k256 = { path = "../../../k256", package = "k256" }
+openvm-p256 = { path = "../../../p256", package = "p256" }
 
 hex-literal = { version = "0.4.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = [

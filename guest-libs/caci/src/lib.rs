@@ -22,3 +22,8 @@ pub use sha256::zkvm_sha256;
 mod secp256k1;
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use secp256k1::{zkvm_secp256k1_ecrecover, zkvm_secp256k1_verify};
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+mod secp256r1;
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+pub use secp256r1::zkvm_secp256r1_verify;

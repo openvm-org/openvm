@@ -30,6 +30,7 @@ caci:
   - "extensions/sha2/**"
   - "guest-libs/k256/**"
   - "guest-libs/keccak256/**"
+  - "guest-libs/p256/**"
   - "guest-libs/sha2/**"
   - "guest-libs/caci/**"
 sha2:

@@ -4582,6 +4582,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "p256 0.13.2",
  "sha2 0.10.9",
  "tiny-keccak",
 ]
