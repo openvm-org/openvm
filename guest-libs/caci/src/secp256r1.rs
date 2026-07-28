@@ -6,8 +6,8 @@ use crate::types::{ZkvmSecp256r1Hash, ZkvmSecp256r1Pubkey, ZkvmSecp256r1Signatur
 
 /// Verifies an ECDSA/secp256r1 (P-256) signature over a prehashed message.
 ///
-/// Returns [`ZkvmStatus::Fail`] if any pointer is NULL, the public key is not non-identity point on EC,
-/// or the signature is not a valid encoding. Otherwise returns [`ZkvmStatus::Ok`]
+/// Returns [`ZkvmStatus::Fail`] if any pointer is NULL, the public key is not non-identity point on
+/// EC, or the signature is not a valid encoding. Otherwise returns [`ZkvmStatus::Ok`]
 /// and writes the verification result to `verified`.
 ///
 /// # Safety
