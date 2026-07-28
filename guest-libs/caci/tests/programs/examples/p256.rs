@@ -14,7 +14,7 @@ use openvm_caci::types::{
 #[allow(unused)]
 use openvm_p256::P256Point;
 
-openvm::init!("openvm_init_secp256r1.rs");
+openvm::init!("openvm_init_p256.rs");
 
 openvm::entry!(main);
 
@@ -81,7 +81,10 @@ pub fn main() {
     // s = 0 and s = n are not valid signature scalars.
     let mut zero_s = SIG;
     zero_s[32..].fill(0);
-    assert!(matches!(verify_c(&PREHASH, &zero_s, &PK).0, ZkvmStatus::Fail));
+    assert!(matches!(
+        verify_c(&PREHASH, &zero_s, &PK).0,
+        ZkvmStatus::Fail
+    ));
     let mut order_s = SIG;
     order_s[32..].copy_from_slice(&ORDER);
     assert!(matches!(

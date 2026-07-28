@@ -27,11 +27,8 @@ mod tests {
 
     fn test_zkvm_secp256r1_base(prove: bool) -> Result<()> {
         let config = test_config();
-        let elf = build_example_program_at_path(
-            get_programs_dir!("tests/programs"),
-            "secp256r1",
-            &config,
-        )?;
+        let elf =
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "p256", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
