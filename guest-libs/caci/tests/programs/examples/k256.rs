@@ -150,8 +150,14 @@ pub fn main() {
     assert_eq!(recovered, PK0);
 
     // recid > 3 is invalid; recid 2/3 (x-reduced) fails here because r + n overflows the field.
-    assert!(matches!(ecrecover_c(&PREHASH, &SIG0, 4).0, ZkvmStatus::Fail));
-    assert!(matches!(ecrecover_c(&PREHASH, &SIG0, 2).0, ZkvmStatus::Fail));
+    assert!(matches!(
+        ecrecover_c(&PREHASH, &SIG0, 4).0,
+        ZkvmStatus::Fail
+    ));
+    assert!(matches!(
+        ecrecover_c(&PREHASH, &SIG0, 2).0,
+        ZkvmStatus::Fail
+    ));
 
     // r = 0 is not a valid signature scalar.
     let mut zero_r = SIG0;
