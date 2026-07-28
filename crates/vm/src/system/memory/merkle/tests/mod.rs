@@ -949,7 +949,9 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
     let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
-    let output = vm.execute_preflight(&interpreter, from_state).unwrap();
+    let output = interpreter
+        .execute_preflight_from_state(from_state, None)
+        .unwrap();
     let postflight = Postflight::new(
         &vm_exe.program,
         &output.history,

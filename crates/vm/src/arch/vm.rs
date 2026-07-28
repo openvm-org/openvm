@@ -11,6 +11,8 @@
 use std::any::Any;
 #[cfg(feature = "metrics")]
 use std::collections::BTreeMap;
+#[cfg(feature = "rvr")]
+use std::path::Path;
 use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
@@ -431,12 +433,39 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<PreflightInstance<'_>, StaticProgramError> {
+        self.preflight_instance_with_debug_map(exe, None)
+    }
+
+    pub fn preflight_instance_with_debug_map(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<PreflightInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_preflight", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled =
-            compile_preflight(exe, extensions.lifters(), None).map_err(map_rvr_compile_error)?;
+        let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(PreflightInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
+    /// Load a previously saved preflight artifact.
+    pub fn load_preflight_instance(
+        &self,
+        lib_path: &Path,
+        exe: &VmExe<F>,
+    ) -> Result<PreflightInstance<'_>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+        compiled
+            .require_execution_kind(&[RvrExecutionKind::Preflight])
+            .map_err(map_rvr_compile_error)?;
         Ok(PreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
@@ -448,7 +477,7 @@ where
     /// Load a previously saved unlimited-pure artifact.
     pub fn load_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<F>,
     ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(None);
@@ -467,7 +496,7 @@ where
     /// Load a previously saved pure artifact with instret tracking.
     pub fn load_instret_tracking_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<F>,
     ) -> Result<RvrPureWithInstretTrackingInstance<'_>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(None);
@@ -631,7 +660,7 @@ where
     /// `executor_idx_to_air_idx`.
     pub fn load_metered_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
@@ -656,7 +685,7 @@ where
     /// `executor_idx_to_air_idx`.
     pub fn load_metered_segment_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
@@ -681,7 +710,7 @@ where
     /// `executor_idx_to_air_idx`, and `widths`.
     pub fn load_metered_cost_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
@@ -981,7 +1010,7 @@ where
     #[cfg(feature = "rvr")]
     pub fn load_metered_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
     where
@@ -996,7 +1025,7 @@ where
     #[cfg(feature = "rvr")]
     pub fn load_metered_segment_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError>
     where
@@ -1063,7 +1092,7 @@ where
     #[cfg(feature = "rvr")]
     pub fn load_metered_cost_instance(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
     where
@@ -1081,6 +1110,7 @@ where
             .load_metered_cost_instance(lib_path, exe, &executor_idx_to_air_idx, &widths)
     }
 
+    /// Builds the interpreter preflight instance for `exe`.
     pub fn preflight_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -1092,67 +1122,13 @@ where
         PreflightInterpretedInstance::new(exe, self.executor.inventory.clone())
     }
 
-    /// Runs append-only preflight execution until termination using the interpreter.
-    #[instrument(name = "execute_preflight", skip_all)]
-    pub fn execute_preflight(
-        &self,
-        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
-        state: VmState<GuestMemory>,
-    ) -> Result<PreflightOutput, ExecutionError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
-    {
-        interpreter.execute_preflight_from_state(state, None)
-    }
-
-    /// Preflight execution for exactly `num_insns` instructions from the given state.
-    ///
-    /// Returns an error if execution terminates before the requested boundary.
-    #[instrument(name = "execute_preflight", skip_all)]
-    pub fn execute_preflight_for(
-        &self,
-        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
-        state: VmState<GuestMemory>,
-        num_insns: u64,
-    ) -> Result<PreflightOutput, ExecutionError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
-    {
-        interpreter.execute_preflight_from_state(state, Some(num_insns))
-    }
-
-    /// Proves exactly `num_insns` instructions from `state`.
-    ///
-    /// The final memory is returned only when this segment terminates successfully.
-    pub fn prove_segment(
-        &mut self,
-        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
-        program: &Program<Val<E::SC>>,
-        state: VmState<GuestMemory>,
-        num_insns: u64,
-    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
-    where
-        Val<E::SC>: VmField,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
-        VB: PostflightTracegen<E>,
-    {
-        let prepared = VB::prepare_postflight(self, program)?;
-        let (proof, output) =
-            self.prove_segment_inner(interpreter, program, &prepared, state, num_insns, |_| {})?;
-        let final_memory =
-            (output.exit_code == Some(ExitCode::Success as u32)).then_some(output.state.memory);
-        Ok((proof, final_memory))
-    }
-
     fn prove_segment_inner(
         &mut self,
         interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
         program: &Program<Val<E::SC>>,
         prepared: &VB::Prepared,
         state: VmState<GuestMemory>,
-        num_insns: u64,
+        segment: &Segment,
         modify_ctx: impl FnOnce(&mut ProvingContext<E::PB>),
     ) -> Result<(Proof<E::SC>, PreflightOutput), VirtualMachineError>
     where
@@ -1161,7 +1137,7 @@ where
         VB: PostflightTracegen<E>,
     {
         self.transport_init_memory_to_device(&state.memory);
-        let mut output = self.execute_preflight_for(interpreter, state, num_insns)?;
+        let mut output = interpreter.execute_segment(state, segment)?;
         let postflight = Postflight::new(
             program,
             &output.history,
@@ -1740,15 +1716,6 @@ pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub user_public_values: UserPublicValuesProof<{ VM_DIGEST_WIDTH }, Val<SC>>,
 }
 
-/// Backend-specific continuation proving driver.
-pub type ContinuationProverFn<E, VB> = Box<
-    dyn FnMut(
-            &mut VmInstance<E, VB>,
-            Streams,
-        ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>
-        + Send,
->;
-
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
 pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
@@ -1759,10 +1726,48 @@ pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
 
 /// Constructs the continuation proving driver for a VM builder.
 ///
-/// Builders explicitly choose their proving path. The CPU SDK uses the generic interpreter and
-/// postflight trace generator, while the GPU SDK uses its preflight driver.
+/// Builders explicitly choose their proving path. A prepared continuation is tied to the exact
+/// fixed-program [`VmInstance`] passed to [`Self::prepare_continuation`]. Implementations must not
+/// reuse it with another instance.
 pub trait ContinuationProverBuilder<E: StarkEngine>: VmBuilder<E> {
-    fn continuation_prover() -> ContinuationProverFn<E, Self>;
+    type PreparedContinuation;
+
+    fn prepare_continuation(
+        instance: &VmInstance<E, Self>,
+    ) -> Result<Self::PreparedContinuation, VirtualMachineError>;
+
+    fn prove_continuation(
+        prepared: &mut Self::PreparedContinuation,
+        instance: &mut VmInstance<E, Self>,
+        input: Streams,
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>;
+}
+
+impl<SC, E, VB> ContinuationProverBuilder<E> for VB
+where
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
+    Val<SC>: VmField,
+    VB: VmBuilder<E, SystemChipInventory = SystemChipInventory<SC>>,
+    <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+        Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
+{
+    type PreparedContinuation = (PreflightInterpreter<Val<SC>, VB::VmConfig>, ());
+
+    fn prepare_continuation(
+        instance: &VmInstance<E, Self>,
+    ) -> Result<Self::PreparedContinuation, VirtualMachineError> {
+        let preflight = instance.vm.preflight_interpreter(instance.exe())?;
+        Ok((preflight, ()))
+    }
+
+    fn prove_continuation(
+        (preflight, prepared): &mut Self::PreparedContinuation,
+        instance: &mut VmInstance<E, Self>,
+        input: Streams,
+    ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
+        instance.prove_continuations(preflight, prepared, input, |_, _| {})
+    }
 }
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
@@ -1777,7 +1782,6 @@ where
     VB: VmBuilder<E>,
 {
     pub vm: VirtualMachine<E, VB>,
-    pub interpreter: Option<PreflightInterpreter<Val<E::SC>, VB::VmConfig>>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -1801,7 +1805,6 @@ where
         let state = vm.create_initial_state(&exe, vec![]);
         Ok(Self {
             vm,
-            interpreter: None,
             program_commitment,
             exe,
             state: Some(state),
@@ -1821,14 +1824,75 @@ where
     }
 }
 
+/// Fixed-program prover for independently scheduled segments using immutable preflight history.
+///
+/// The prover owns the VM used to prepare its interpreter, so compiled program
+/// data cannot be paired with another executable or proving key.
+pub struct SegmentProver<E, VB>
+where
+    E: StarkEngine,
+    VB: VmBuilder<E> + PostflightTracegen<E>,
+    Val<E::SC>: PrimeField32,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
+{
+    preflight: PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
+    prepared: VB::Prepared,
+    exe: Arc<VmExe<Val<E::SC>>>,
+    instance: VmInstance<E, VB>,
+}
+
+impl<E, VB> SegmentProver<E, VB>
+where
+    E: StarkEngine,
+    VB: VmBuilder<E> + PostflightTracegen<E>,
+    Val<E::SC>: VmField,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
+{
+    pub fn new(instance: VmInstance<E, VB>) -> Result<Self, VirtualMachineError> {
+        let preflight = instance.vm.preflight_interpreter(instance.exe())?;
+        let exe = Arc::clone(instance.exe());
+        let prepared = VB::prepare_postflight(&instance.vm, &exe.program)?;
+        Ok(Self {
+            preflight,
+            prepared,
+            exe,
+            instance,
+        })
+    }
+
+    /// Proves one segment from an arbitrary segment-start state.
+    ///
+    /// Final memory is returned only when the segment terminates successfully.
+    pub fn prove(
+        &mut self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError> {
+        let (proof, output) = self.instance.vm.prove_segment_inner(
+            &self.preflight,
+            &self.exe.program,
+            &self.prepared,
+            state,
+            segment,
+            |_| {},
+        )?;
+        let final_memory =
+            (output.exit_code == Some(ExitCode::Success as u32)).then_some(output.state.memory);
+        Ok((proof, final_memory))
+    }
+
+    pub fn vm(&self) -> &VirtualMachine<E, VB> {
+        &self.instance.vm
+    }
+}
+
 impl<E, VB> ContinuationVmProver<E::SC> for VmInstance<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: VmField,
-    VB: VmBuilder<E>,
+    VB: VmBuilder<E> + PostflightTracegen<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
-    VB: PostflightTracegen<E>,
 {
     /// First performs metered execution to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -1837,7 +1901,9 @@ where
         &mut self,
         input: impl Into<Streams>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
-        self.prove_continuations(input, |_, _| {})
+        let preflight = self.vm.preflight_interpreter(&self.exe)?;
+        let prepared = VB::prepare_postflight(&self.vm, &self.exe.program)?;
+        self.prove_continuations(&preflight, &prepared, input.into(), |_, _| {})
     }
 }
 
@@ -1855,41 +1921,29 @@ where
     /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
     pub(crate) fn prove_continuations(
         &mut self,
-        input: impl Into<Streams>,
+        preflight: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
+        prepared: &VB::Prepared,
+        input: Streams,
         mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
-        let input = input.into();
         self.reset_state(input.clone());
-        if self.interpreter.is_none() {
-            self.interpreter = Some(self.vm.preflight_interpreter(&self.exe)?);
-        }
-        let interpreter = self
-            .interpreter
-            .as_ref()
-            .expect("preflight interpreter was initialized above");
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
         let metered_instance = vm.metered_instance(&self.exe)?;
         let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
-        let prepared = VB::prepare_postflight(vm, &self.exe.program)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
             let _segment_span = info_span!("prove_segment", segment = seg_idx).entered();
             // We need a separate span so the metric label includes "segment" from _segment_span
             let _prove_span = info_span!("total_proof").entered();
-            let Segment {
-                num_insns,
-                trace_heights: _,
-                ..
-            } = segment;
             let from_state = Option::take(&mut state).unwrap();
             let (proof, output) = vm.prove_segment_inner(
-                interpreter,
+                preflight,
                 &self.exe.program,
-                &prepared,
+                prepared,
                 from_state,
-                num_insns,
+                &segment,
                 |ctx| modify_ctx(seg_idx, ctx),
             )?;
             proofs.push(proof);

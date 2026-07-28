@@ -46,9 +46,5 @@ pub use preflight::{
     PreflightFieldBlock, PreflightHistory, PreflightInitialWrite, PreflightMemoryEvent,
     PreflightMemoryLog, PreflightOutput, PreflightProgramEvent,
 };
-#[cfg(feature = "rvr")]
-pub use rvr::{
-    PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
-};
 pub use state::*;
 pub use vm::*;

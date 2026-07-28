@@ -11,7 +11,10 @@
 //! host writes that must be copied before the next segment. Proof-visible reads
 //! and their predecessor timestamps are reconstructed later by GPU chronology.
 
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -21,10 +24,13 @@ use rvr_openvm_lift::RvrRuntimeExtension;
 use rvr_state::{CheckpointPreflightState, RvrCheckpoint, CHECKPOINT_DIRTY_PAGE_BYTES};
 
 use super::{
-    bridge::map_rvr_execute_error, execute::execute_preflight, RvrCompiled, RvrInitialImage,
+    bridge::map_rvr_execute_error, compile::CompileError, execute::execute_preflight, RvrCompiled,
+    RvrInitialImage,
 };
 use crate::{
-    arch::{ExecutionError, ExecutionState, Streams, SystemConfig, VmState},
+    arch::{
+        execution_mode::Segment, ExecutionError, ExecutionState, Streams, SystemConfig, VmState,
+    },
     system::memory::{
         online::{GuestMemory, LinearMemory, PAGE_SIZE},
         AddressMap,
@@ -32,6 +38,7 @@ use crate::{
 };
 
 const _: () = assert!(CHECKPOINT_DIRTY_PAGE_BYTES == PAGE_SIZE);
+const DEFAULT_CHECKPOINT_INTERVAL: usize = 512;
 
 /// Why preflight stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -434,6 +441,21 @@ impl<'a> PreflightInstance<'a> {
             .create_vm_state(&self.inner.system_config, inputs)
     }
 
+    /// Persist the compiled shared library into `dir`.
+    ///
+    /// Loading requires the same VM executable and execution configuration.
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
+        let suffix = self.inner.compiled.execution_kind().artifact_suffix();
+        let dest_lib = self.inner.compiled.lib_file_name_with_suffix(suffix)?;
+        self.inner.compiled.save_artifact(&dir.join(dest_lib))
+    }
+
+    /// Persist generated C sources for inspection.
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
+        self.inner.compiled.save_generated_sources(dir)
+    }
+
+    /// Low-level execution with caller-supplied transcript capacities.
     pub fn execute(
         &self,
         inputs: impl Into<Streams>,
@@ -442,6 +464,7 @@ impl<'a> PreflightInstance<'a> {
         self.execute_from_state(self.create_initial_vm_state(inputs), limits)
     }
 
+    /// Low-level execution with caller-supplied transcript capacities.
     pub fn execute_from_state(
         &self,
         state: VmState<GuestMemory>,
@@ -470,30 +493,32 @@ impl<'a> PreflightInstance<'a> {
         self.execute_from_state_inner(state, limits, true, None)
     }
 
-    /// Executes one metered segment and rejects an early endpoint.
+    /// Executes one metered segment from an arbitrary segment-start state.
     ///
-    /// Unlike [`Self::execute_from_state_for`], this requires the execution to
-    /// retire exactly `limits.max_instructions`. Continuation proving uses this
-    /// entry point so a metered boundary cannot silently accept a shorter
-    /// execution.
+    /// Both the instruction and residual counts must match the metered segment.
     pub fn execute_segment(
         &self,
         state: VmState<GuestMemory>,
-        limits: PreflightLimits,
+        segment: &Segment,
     ) -> Result<PreflightExecution, ExecutionError> {
-        require_segment_boundary(self.execute_from_state_for(state, limits)?, limits)
+        let limits = limits_for_segment(segment)?;
+        require_segment_boundary(
+            self.execute_from_state_inner(state, limits, true, None)?,
+            segment,
+        )
     }
 
     /// Allocation-reusing variant of [`Self::execute_segment`].
     pub fn execute_segment_reusing(
         &self,
         state: VmState<GuestMemory>,
-        limits: PreflightLimits,
+        segment: &Segment,
         reuse: PreflightTranscript,
     ) -> Result<PreflightExecution, ExecutionError> {
+        let limits = limits_for_segment(segment)?;
         require_segment_boundary(
             self.execute_from_state_inner(state, limits, true, Some(reuse))?,
-            limits,
+            segment,
         )
     }
 
@@ -531,18 +556,34 @@ impl<'a> PreflightInstance<'a> {
     }
 }
 
+fn limits_for_segment(segment: &Segment) -> Result<PreflightLimits, ExecutionError> {
+    let max_instructions = usize::try_from(segment.num_insns).map_err(|_| {
+        ExecutionError::RvrExecution("preflight instruction limit exceeds usize".to_string())
+    })?;
+    Ok(PreflightLimits::new(
+        max_instructions,
+        segment.num_preflight_residuals as usize,
+        DEFAULT_CHECKPOINT_INTERVAL,
+    ))
+}
+
 fn require_segment_boundary(
     execution: PreflightExecution,
-    limits: PreflightLimits,
+    segment: &Segment,
 ) -> Result<PreflightExecution, ExecutionError> {
-    let num_insns = u32::try_from(limits.max_instructions).map_err(|_| {
-        ExecutionError::RvrExecution("preflight instruction limit exceeds u32".to_string())
-    })?;
-    let instret = execution.retired;
-    if instret != num_insns {
+    let instret = u64::from(execution.retired);
+    if instret != segment.num_insns {
         return Err(ExecutionError::RetiredInstructionCountMismatch {
-            expected: u64::from(num_insns),
-            actual: u64::from(instret),
+            expected: segment.num_insns,
+            actual: instret,
+        });
+    }
+    let residuals = execution.transcript.residuals.len() as u64;
+    let expected_residuals = u64::from(segment.num_preflight_residuals);
+    if residuals != expected_residuals {
+        return Err(ExecutionError::PreflightResidualCountMismatch {
+            expected: expected_residuals,
+            actual: residuals,
         });
     }
     Ok(execution)
@@ -603,6 +644,39 @@ mod tests {
         ffi.timestamp = 4;
         let error = unsafe { buffers.finish(&ffi, 2, &dirty) }.unwrap_err();
         assert!(error.contains("outside the configured 2-bit domain"));
+    }
+
+    #[test]
+    fn segment_limits_use_metered_counts() {
+        let segment = Segment::new(9, 17, 5, vec![]);
+        assert_eq!(
+            limits_for_segment(&segment).unwrap(),
+            PreflightLimits::new(17, 5, DEFAULT_CHECKPOINT_INTERVAL)
+        );
+    }
+
+    #[test]
+    fn segment_boundary_rejects_residual_count_mismatch() {
+        let config = SystemConfig::default();
+        let state = VmState::initial(&config, &Default::default(), 0, Streams::default());
+        let execution = PreflightExecution {
+            state,
+            transcript: PreflightTranscript {
+                checkpoints: vec![],
+                residuals: vec![1],
+            },
+            endpoint: PreflightEndpoint::Suspended,
+            from_state: ExecutionState::new(0u32, 1u32),
+            to_state: ExecutionState::new(0u32, 1u32),
+            retired: 2,
+        };
+        let segment = Segment::new(0, 2, 2, vec![]);
+        match require_segment_boundary(execution, &segment) {
+            Err(ExecutionError::PreflightResidualCountMismatch { expected, actual }) => {
+                assert_eq!((expected, actual), (2, 1));
+            }
+            _ => panic!("unexpected segment validation result"),
+        }
     }
 
     #[test]

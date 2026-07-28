@@ -55,7 +55,9 @@ fn interpreter_history_proves_system_and_rv64_traces() {
     let interpreter = vm.preflight_interpreter(&exe).unwrap();
     let state = vm.create_initial_state(&exe, Vec::<Vec<u8>>::new());
     vm.transport_init_memory_to_device(&state.memory);
-    let output = vm.execute_preflight(&interpreter, state).unwrap();
+    let output = interpreter
+        .execute_preflight_from_state(state, None)
+        .unwrap();
 
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =

@@ -8,7 +8,8 @@ mod tests {
     use openvm_circuit::arch::{ExecutionOutcome, VmState};
     use openvm_circuit::{
         arch::{
-            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
+            execution_mode::Segment, hasher::poseidon2::vm_poseidon2_hasher, ExecutionError,
+            VirtualMachine, VmExecutor,
         },
         system::memory::{
             merkle::{
@@ -245,7 +246,7 @@ mod tests {
         assert_eq!(output.exit_code, Some(0));
 
         let owned = vm.preflight_interpreter(&exe)?;
-        let owned_output = vm.execute_preflight(&owned, initial)?;
+        let owned_output = owned.execute_preflight_from_state(initial, None)?;
 
         assert_eq!(output.history.program, owned_output.history.program);
         assert_eq!(
@@ -496,7 +497,7 @@ mod tests {
 
         let exact_error = match preflight.execute_segment(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            openvm_circuit::arch::rvr::PreflightLimits::new(5, 0, 2),
+            &Segment::new(0, 5, 0, vec![]),
         ) {
             Ok(_) => panic!("an early termination must not satisfy a metered segment boundary"),
             Err(error) => error,

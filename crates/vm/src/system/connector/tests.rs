@@ -15,8 +15,8 @@ use openvm_stark_sdk::{
 use super::VmConnectorPvs;
 use crate::{
     arch::{
-        ExecutionError, Postflight, PostflightTracegen, Streams, SystemConfig, VirtualMachine,
-        VmState, CONNECTOR_AIR_ID,
+        execution_mode::Segment, ExecutionError, Postflight, PostflightTracegen, Streams,
+        SystemConfig, VirtualMachine, VmState, CONNECTOR_AIR_ID,
     },
     system::{
         memory::{online::GuestMemory, AddressMap},
@@ -43,12 +43,12 @@ fn preflight_enforces_exact_terminal_instruction_count() {
         VmState::new_with_defaults(0, memory, Streams::default(), 0)
     };
 
-    let output = vm
-        .execute_preflight_for(&interpreter, initial_state(), 1)
+    let output = interpreter
+        .execute_segment(initial_state(), &Segment::new(0, 1, 0, vec![]))
         .unwrap();
     assert_eq!(output.exit_code, Some(0));
 
-    let error = match vm.execute_preflight_for(&interpreter, initial_state(), 2) {
+    let error = match interpreter.execute_segment(initial_state(), &Segment::new(0, 2, 0, vec![])) {
         Ok(_) => panic!("early termination must not satisfy a longer segment"),
         Err(error) => error,
     };
@@ -59,6 +59,15 @@ fn preflight_enforces_exact_terminal_instruction_count() {
             actual: 1
         }
     ));
+
+    let instruction = Instruction::<F>::from_isize(TERMINATE.global_opcode(), 0, 0, 1, 0, 0);
+    let vm_exe: VmExe<F> = Program::from_instructions(&[instruction]).into();
+    let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
+    let error = match interpreter.execute_segment(initial_state(), &Segment::new(0, 1, 0, vec![])) {
+        Ok(_) => panic!("failed guest termination must be rejected"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, ExecutionError::FailedWithExitCode(1)));
 }
 
 #[test]
@@ -112,7 +121,9 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
     let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
-    let output = vm.execute_preflight(&interpreter, from_state).unwrap();
+    let output = interpreter
+        .execute_preflight_from_state(from_state, None)
+        .unwrap();
     assert_eq!(output.history.program.len(), 2);
     assert_eq!(output.history.program[0], output.history.program[1]);
     assert_eq!(output.history.program[0].pc, 0);

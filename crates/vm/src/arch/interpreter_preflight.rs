@@ -4,8 +4,10 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
-    execution_mode::PreflightCtx, interpreter::InterpretedInstance, ExecutionError, Executor,
-    ExecutorInventory, PreflightOutput, StaticProgramError, VmState,
+    execution_mode::{PreflightCtx, Segment},
+    interpreter::InterpretedInstance,
+    ExecutionError, Executor, ExecutorInventory, PreflightOutput, StaticProgramError, Streams,
+    VmState,
 };
 use crate::system::memory::online::GuestMemory;
 
@@ -47,6 +49,23 @@ where
         })
     }
 
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.inner.create_initial_vm_state(inputs)
+    }
+
+    /// Executes exactly one metered segment from its architectural start state.
+    pub fn execute_segment(
+        &self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<PreflightOutput, ExecutionError> {
+        self.inner.execute_segment::<F>(state, segment)
+    }
+
+    /// Low-level interpreter entry point.
+    ///
+    /// `None` runs until termination and may retain an unbounded history. Normal
+    /// proving code should use [`Self::execute_segment`] with a metered bound.
     pub fn execute_preflight_from_state(
         &self,
         state: VmState<GuestMemory>,

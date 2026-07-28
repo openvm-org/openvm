@@ -2,7 +2,7 @@ pub use rvr_state::{
     PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
 };
 
-use super::VmState;
+use super::{AddressSpaceHostLayout, VmState, BLOCK_FE_WIDTH};
 use crate::system::memory::online::GuestMemory;
 
 /// Append-only memory history produced during serial preflight execution.
@@ -36,4 +36,26 @@ pub struct PreflightOutput {
     pub history: PreflightHistory,
     pub state: VmState<GuestMemory>,
     pub exit_code: Option<u32>,
+}
+
+impl PreflightOutput {
+    /// Preserve sparse-transfer bookkeeping when interpreter writes bypass the
+    /// normal online-memory access path.
+    pub(crate) fn mark_written_pages(&mut self) {
+        let memory = &mut self.state.memory.memory;
+        for write in self
+            .history
+            .memory
+            .accesses
+            .iter()
+            .filter(|event| event.is_write())
+        {
+            let address_space = write.address_space() as usize;
+            let cell_size = memory.config[address_space].layout.size();
+            memory.touched_pages[address_space].mark_byte_range(
+                write.pointer as usize * cell_size,
+                BLOCK_FE_WIDTH * cell_size,
+            );
+        }
+    }
 }

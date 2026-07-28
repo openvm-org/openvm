@@ -251,13 +251,14 @@ For execution with multiple segments (continuations), the trace generation proce
    pub struct Segment {
        pub instret_start: u64,
        pub num_insns: u64,
+       pub num_preflight_residuals: u32,
        pub trace_heights: Vec<u32>,
    }
    ```
 
 2. **Segment Trace Generation**: For each segment:
    - Recover the starting VM state at the beginning of the segment via pure execution from the program start (only necessary in a distributed setup)
-   - Run preflight execution for the segment using `execute_preflight()` with the predetermined trace heights
+   - Run preflight execution from the segment's starting state using the exact metered `Segment` bound
    - Derive postflight chronology and opcode indexes from the generic execution history
    - Generate the system and extension traces by replaying the indexed history
    - Pass final state as initial state to next segment (only necessary in a local setup when proving is done on a single machine)

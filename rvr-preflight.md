@@ -110,8 +110,23 @@ later prove(input)
 Preparation and proof execution have separate metric scopes. A warm proof does
 not compile generated C or upload the program again. `AppProver` retains the
 compiled metered and preflight execution instances and the immutable GPU
-program; there is no second public prover type, execution mode, artifact
-framework, or proof-record store.
+program. `SegmentProver` exposes the same prepared pipeline for independently
+scheduled segments and owns the fixed-program VM it was prepared from, so its
+compiled executor and uploaded program cannot be paired with another VM.
+
+Execution-only callers use the same compile-once shape as pure and metered
+execution:
+
+```text
+compile                 -> execute
+compile_metered         -> execute_metered
+compile_preflight       -> execute_preflight(state, segment)
+```
+
+Preflight deliberately requires a metered segment. It does not offer an
+unbounded convenience or overwrite old history: both would allow retained
+replay data to grow without a useful safety bound, while overwriting would make
+trace generation incomplete.
 
 App proving-key generation has not moved between CPU and GPU. As on
 `develop-v2.1.0`, `AppProvingKey::keygen` uses the CPU engine to construct

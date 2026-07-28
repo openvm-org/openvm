@@ -2,6 +2,11 @@ use std::{any::Any, collections::BTreeMap};
 
 use openvm_algebra_circuit::AlgebraPreflightGpuTracegen;
 use openvm_bigint_circuit::Int256PreflightGpuTracegen;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{
+    cuda::{CheckpointReplayProgram, PostflightAccessRegistry},
+    PreflightExecution,
+};
 use openvm_circuit::arch::{
     cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
@@ -9,11 +14,6 @@ use openvm_circuit::arch::{
     instructions::program::Program,
     prepare_gpu_postflight, GenerationError, Postflight, PostflightTracegen, PreflightOutput,
     VirtualMachine,
-};
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::{
-    rvr::cuda::{CheckpointReplayProgram, PostflightAccessRegistry},
-    PreflightExecution,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
@@ -448,7 +448,8 @@ impl OpcodeOwnership {
 mod tests {
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::{
-        MemoryConfig, PreflightEndpoint, PreflightLimits, SystemConfig, VmExecutor,
+        rvr::{PreflightEndpoint, PreflightLimits},
+        MemoryConfig, SystemConfig, VmExecutor,
     };
     #[cfg(feature = "rvr")]
     use openvm_instructions::{

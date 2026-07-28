@@ -14,9 +14,9 @@ use crate::arch::VmState;
 use crate::system::memory::online::{GuestMemory, LinearMemory};
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
-        ExitCode, MeteredExecutor, Postflight, PostflightTracegen, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig, VmField,
+        debug_proving_ctx, verify_segments, vm::VirtualMachine, Executor, ExitCode,
+        MeteredExecutor, Postflight, PostflightTracegen, Streams, VmBuilder, VmCircuitConfig,
+        VmConfig, VmExecutionConfig, VmField,
     },
     system::memory::MemoryImage,
 };
@@ -320,14 +320,9 @@ where
     let mut proofs = Vec::new();
     let mut exit_code = None;
     for (seg_idx, segment) in segments.iter().enumerate() {
-        let Segment {
-            num_insns,
-            trace_heights,
-            ..
-        } = segment.clone();
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
-        let mut output = vm.execute_preflight_for(&preflight_interpreter, from_state, num_insns)?;
+        let mut output = preflight_interpreter.execute_segment(from_state, segment)?;
         let postflight = Postflight::new(
             &exe.program,
             &output.history,
@@ -343,7 +338,7 @@ where
         let ctx = vm.generate_proving_ctx(&prepared_tracegen, &output, &postflight)?;
         state = Some(output.state);
 
-        validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx);
+        validate_metered_estimates(&vm, &segment.trace_heights, &ctx, seg_idx);
 
         if debug {
             debug_proving_ctx(&vm, &ctx);

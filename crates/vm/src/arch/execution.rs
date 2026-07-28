@@ -93,6 +93,8 @@ pub enum ExecutionError {
     InstretOverflow { instret: u64, num_insns: u64 },
     #[error("preflight retired {actual} instructions, expected exactly {expected}")]
     RetiredInstructionCountMismatch { expected: u64, actual: u64 },
+    #[error("preflight emitted {actual} residuals, expected exactly {expected}")]
+    PreflightResidualCountMismatch { expected: u64, actual: u64 },
     #[error("inventory error: {0}")]
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]

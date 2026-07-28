@@ -378,6 +378,22 @@ impl InterpretedInstance<'_, ExecutionCtx> {
 }
 
 impl InterpretedInstance<'_, PreflightCtx> {
+    /// Executes exactly one metered segment from its architectural start state.
+    pub fn execute_segment<F: PrimeField32>(
+        &self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<PreflightOutput, ExecutionError> {
+        let mut output = self.execute_preflight_from_state::<F>(state, Some(segment.num_insns))?;
+        if let Some(exit_code) = output.exit_code {
+            if exit_code != ExitCode::Success as u32 {
+                return Err(ExecutionError::FailedWithExitCode(exit_code));
+            }
+        }
+        output.mark_written_pages();
+        Ok(output)
+    }
+
     /// Execute with ordinary interpreter semantics while recording the minimal
     /// append-only history needed by postflight.
     pub fn execute_preflight_from_state<F: PrimeField32>(
