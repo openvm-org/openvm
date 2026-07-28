@@ -4565,7 +4565,11 @@ name = "openvm-caci"
 version = "2.0.0"
 dependencies = [
  "eyre",
+ "k256 0.13.4",
+ "openvm-algebra-transpiler",
  "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-keccak256",
  "openvm-keccak256-circuit",

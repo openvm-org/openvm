@@ -8,8 +8,14 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
+openvm-algebra-moduli-macros = { path = "../../../../extensions/algebra/moduli-macros/" }
 openvm-caci = { path = "../../" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
+openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros/" }
+openvm-k256 = { path = "../../../k256", package = "k256" }
 
+hex-literal = { version = "0.4.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",

@@ -23,8 +23,12 @@ cuda:
 caci:
   - *shared
   - "crates/sdk/**"
+  - "extensions/algebra/**"
+  - "extensions/ecc/**"
   - "extensions/keccak256/**"
+  - "extensions/riscv-adapters/**"
   - "extensions/sha2/**"
+  - "guest-libs/k256/**"
   - "guest-libs/keccak256/**"
   - "guest-libs/sha2/**"
   - "guest-libs/caci/**"
