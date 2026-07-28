@@ -1,17 +1,10 @@
 //! Standalone tape-replay implementations of [`Halo2Opcode`]s.
 //!
-//! Every op is executed by [`run_op`] against a [`ReplayTape`]:
-//! [`CalculateOffsetsTape`] records values plus output offsets and yields an
-//! [`OpcodeMeta`] (tape lengths + output offset table + constant-skip indices);
-//! it carries a constant cache to simulate the chips' caching behavior, so it is
-//! only used at IR-build time and in tests. [`WitnessTape`] streams the witness
-//! values into caller-provided buffers at runtime; it holds **no** cache — the
-//! build-time [`OpcodeMeta::constant_skip_inds`] tells it exactly which
-//! `load_constant` calls materialize a cell, so replay is stateless and
-//! parallelizable across nodes.
-//! Gate/range/BabyBear primitives are provided methods on [`ReplayTape`], generic
-//! over the tape's cell type; ops that may reduce take [`BbWire`]s (value + bit
-//! bound) and pure gate ops take plain `Fr` values.
+//! [`run_op`] drives a [`ReplayTape`]: [`CalculateOffsetsTape`] (build-time)
+//! records values + offsets and yields [`OpcodeMeta`]; [`WitnessTape`]
+//! (runtime) streams values into caller buffers. Runtime replay is stateless —
+//! `constant_skip_inds` precomputed at build time lists which `load_constant`
+//! calls materialize a cell, so nodes replay in parallel.
 
 use std::{cmp::Ordering, collections::HashMap};
 
@@ -40,7 +33,7 @@ use crate::{
         BabyBearExt4, BABYBEAR_MAX_BITS, BABY_BEAR_MODULUS_U64, RESERVED_HIGH_BITS,
     },
     hash::{poseidon2::Poseidon2Params, POSEIDON2_COMPRESS_PARAMS, POSEIDON2_PARAMS},
-    ir_builder::Halo2Opcode,
+    tracegen::ir_builder::Halo2Opcode,
     transcript::NUM_SAMPLES_PER_WORD,
 };
 
@@ -94,11 +87,8 @@ impl TapeCell for OffsetCell {
     }
 }
 
-/// Constant cache mirroring `BabyBearChip`'s dedup: the first load of a
-/// constant pushes a cell, repeats reuse it. Only ZERO/ONE/W occur, so a fixed
-/// array with linear scan suffices.
-/// Replay target for opcode execution. Required methods define how cells land on
-/// the tapes; the provided methods implement the exact halo2 cell layouts.
+/// Replay target for opcode execution. Required methods define how cells land
+/// on the tapes; provided methods implement the exact halo2 cell layouts.
 pub(crate) trait ReplayTape {
     type TapeCell: TapeCell;
 
@@ -107,9 +97,8 @@ pub(crate) trait ReplayTape {
     fn lookup_bits(&self) -> usize;
     /// A cell whose value flows in from outside the op's tape window.
     fn external(&self, value: Fr) -> Self::TapeCell;
-    /// A constant loaded through the chips' constant caches: pushes a cell only
-    /// when the constant is not already materialized. [`CalculateOffsetsTape`]
-    /// decides via its cache; [`WitnessTape`] via precomputed skip indices.
+    /// Constant load: writes a cell iff not already cached — decided by the
+    /// impl's cache ([`CalculateOffsetsTape`]) or skip indices ([`WitnessTape`]).
     fn load_constant(&mut self, value: Fr) -> Self::TapeCell;
     /// Records a logical output of the op, in output-index order.
     fn output(&mut self, _cell: Self::TapeCell) {}
@@ -611,13 +600,9 @@ fn ext_value<C: TapeCell>(wires: &[BbWire<C>; 4]) -> BabyBearExt4 {
     BabyBearExt4::from_basis_coefficients_fn(|i| to_baby_bear(&wires[i].cell.value()))
 }
 
-/// Records the full tapes plus per-output offsets; use this tape to derive
-/// [`OpcodeMeta`] (offsets, ctx len, lookups len, constant-skip indices).
-///
-/// The constant cache simulates the chips' caching behavior: `warm` constants
-/// (already materialized by an earlier node) are pre-seeded as
-/// [`UNMATERIALIZED`] cells, so loading them assigns no advice cell. Build-time
-/// metadata derivation and tests only; the runtime path is [`WitnessTape`].
+/// Records tapes + per-output offsets to derive [`OpcodeMeta`]. `warm`
+/// constants (already materialized by an earlier node) seed the cache as
+/// [`UNMATERIALIZED`] cells so loading them writes nothing. Build-time only.
 pub(crate) struct CalculateOffsetsTape {
     pub advice: Vec<Fr>,
     pub lookups: Vec<Fr>,
@@ -697,14 +682,11 @@ impl ReplayTape for CalculateOffsetsTape {
 }
 
 /// Streams witness values into caller-provided buffers via raw pointer bumps.
+/// Stateless: `write_const_inds` (the node's
+/// [`OpcodeMeta::constant_skip_inds`]) lists which `load_constant` calls write.
 ///
-/// Holds no constant cache: `write_const_inds` (the node's
-/// [`OpcodeMeta::constant_skip_inds`]) lists exactly which `load_constant` calls
-/// write a cell, so replay carries no cross-node state and nodes can run in
-/// parallel. An empty slice means no `load_constant` call writes.
-///
-/// Safety: the buffers passed to [`WitnessTape::new`] must be at least
-/// [`OpcodeMeta::ctx_len`] / [`OpcodeMeta::lookups_len`] long for the op replayed.
+/// Safety: buffers passed to [`WitnessTape::new`] must be at least
+/// [`OpcodeMeta::ctx_len`] / [`OpcodeMeta::lookups_len`] long.
 pub(crate) struct WitnessTape {
     advice: *mut Fr,
     lookups: *mut Fr,
@@ -1101,23 +1083,21 @@ pub(crate) fn run_op<T: ReplayTape>(t: &mut T, opcode: &Halo2Opcode, args: &[Fr]
 
 /// Shape of one opcode's tape footprint for a given constant-cache state.
 pub(crate) struct OpcodeMeta {
-    /// Relative context-tape offset of each logical output, in output-index order
-    /// ([`UNMATERIALIZED`] for constants that hit the cache).
+    /// Relative offset of each logical output ([`UNMATERIALIZED`] on cache hit).
     pub output_offsets: Vec<usize>,
-    /// Number of context-tape (advice) slots the op appends.
+    /// Context-tape (advice) slots appended by the op.
     pub ctx_len: usize,
-    /// Number of range-tape (lookup) slots the op appends.
+    /// Range-tape (lookup) slots appended by the op.
     pub lookups_len: usize,
-    /// Indices of the `load_constant` calls that write a cell (cache misses),
-    /// in call order; feed to [`WitnessTape::new`] at replay time.
+    /// `load_constant` call indices that write a cell (cache misses), in call
+    /// order; feeds [`WitnessTape::new`] at replay time.
     pub constant_skip_inds: Vec<u32>,
 }
 
-/// Derives [`OpcodeMeta`] by replaying the op on a [`CalculateOffsetsTape`] whose
-/// constant cache is pre-seeded with `warm` (the constants already materialized
-/// by earlier nodes). The tape shape depends only on the operand bit bounds,
-/// constant argument values, `lookup_bits`, and the warm set — never on runtime
-/// cell values.
+/// Derives [`OpcodeMeta`] by replaying the op on a [`CalculateOffsetsTape`]
+/// seeded with `warm` (constants already materialized by earlier nodes). The
+/// tape shape is a pure function of operand bit bounds, constant argument
+/// values, `lookup_bits`, and the warm set.
 pub(crate) fn derive_opcode_metadata<'a>(
     opcode: &Halo2Opcode,
     args: &[Fr],
@@ -1135,10 +1115,9 @@ pub(crate) fn derive_opcode_metadata<'a>(
     }
 }
 
-/// Replays the op at runtime, writing the advice stream into `ctx` and the lookup
-/// stream into `lookups`. Both buffers must be at least as long as the
-/// corresponding [`OpcodeMeta`] lengths, and `write_const_inds` must be the
-/// node's [`OpcodeMeta::constant_skip_inds`].
+/// Runtime replay: writes advice into `ctx` and lookups into `lookups`.
+/// Buffers must be [`OpcodeMeta::ctx_len`]/[`OpcodeMeta::lookups_len`] long;
+/// `write_const_inds` must be the node's [`OpcodeMeta::constant_skip_inds`].
 pub(crate) fn interpret_op(
     opcode: &Halo2Opcode,
     args: &[Fr],

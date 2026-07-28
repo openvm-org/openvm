@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     circuit::StaticVerifierCircuit,
     config::StaticVerifierShape,
-    graph_executor::GraphProver,
     prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof},
+    tracegen::graph_executor::GraphProver,
 };
 
 impl StaticVerifierCircuit {
@@ -164,7 +164,7 @@ impl StaticVerifierProvingKey {
 
     /// Runs the graph-executor witness pipeline: builds (or reuses) the
     /// [`GraphProver`], streams its advice/lookup deltas through a
-    /// [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder) onto advice
+    /// [`FusedColumnBuilder`](crate::tracegen::graph_executor::FusedColumnBuilder) onto advice
     /// columns, and returns the [`AdviceColumns<Fr>`] + instance columns ready for
     /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
     pub fn run_witness_gen_pipeline(
@@ -178,7 +178,7 @@ impl StaticVerifierProvingKey {
         };
         use tracing::info_span;
 
-        use crate::graph_executor::FusedColumnBuilder;
+        use crate::tracegen::graph_executor::FusedColumnBuilder;
 
         let graph_prover = self.graph_prover.get_or_init(|| {
             info_span!("build_graph_prover_lazy").in_scope(|| {

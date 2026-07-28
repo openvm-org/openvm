@@ -27,15 +27,13 @@ mod circuit;
 pub mod codec;
 pub mod config;
 pub mod field;
-pub mod graph_executor;
 pub mod hash;
-pub mod ir_builder;
 pub mod keygen;
-pub mod opcode_impl;
 pub mod prover;
 pub mod stages;
 #[cfg(test)]
 mod test_fixtures;
+pub mod tracegen;
 pub mod transcript;
 mod utils;
 #[cfg(feature = "evm-prove")]

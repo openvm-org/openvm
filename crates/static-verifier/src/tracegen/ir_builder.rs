@@ -1,42 +1,27 @@
 //! Graph-IR generation backend for the [`chip_traits`](crate::chip_traits) traits.
 //!
 //! [`Halo2IRBuilder`] implements the same chip traits as
-//! [`Halo2Backend`](crate::backend::Halo2Backend), but instead of assigning halo2
-//! advice cells it records a dataflow graph of [`Halo2GraphNode`]s. Each node corresponds
-//! to a statically-sized slice of the halo2 witness tape (advice cells) and range-check
-//! tape, so executing the nodes **in tape order** reproduces the exact witness stream the
-//! halo2 backend produces. To guarantee this, the builder mirrors the concrete chips'
-//! host-side bookkeeping exactly:
+//! [`Halo2Backend`](crate::backend::Halo2Backend) but records a dataflow graph
+//! of [`Halo2GraphNode`]s instead of assigning halo2 cells. Each node writes a
+//! statically-sized slice of the advice + range tapes; executing them in tape
+//! order reproduces the halo2 backend's stream byte-for-byte.
 //!
-//! - **Lazy reduction**: `max_bits` tracking follows `BabyBearChip` verbatim. Where a chip reduces
-//!   an operand *before* its gate cells (add/sub/mul/mul_add), the builder emits an explicit
-//!   [`Halo2Opcode::BBReduce`] node first. Where reduces are interleaved inside an op (`div`, ext
-//!   `mul`/`div`), the op stays atomic and the executor re-derives the reduce decisions from the
-//!   operand bit bounds stored in each [`GraphCell`].
-//! - **Constant caching**: the builder keeps a `zero_cell` (mirroring `Context::load_zero`) and a
-//!   BabyBear constant cache (mirroring `BabyBearChip::const_cache`), so cached constant loads
-//!   insert no node/tape cells. Atomic ops that internally load cacheable constants (`BBDiv` loads
-//!   ONE, `ExtMul` loads W, `ExtDiv` loads ONE/ZERO/W) expose those cells as extra node outputs;
-//!   whether each constant materializes is decided **at build time** and recorded per node in
-//!   [`NodeMeta::constant_skip_inds`], so executors replay nodes statelessly (and in parallel)
-//!   without tracking any cache.
-//! - **Per-node metadata**: every emitted node gets a [`NodeMeta`] (context/range tape offsets and
-//!   lengths, constant-skip indices, operand tape offsets) derived by replaying the op on a
-//!   [`CalculateOffsetsTape`](crate::opcode_impl::CalculateOffsetsTape) seeded with the builder's
-//!   current cache state.
-//! - **Copy constraints**: `constrain_equal` assigns no advice cells, so it produces no node.
-//! - **Transcript / digest hashing**: the builder re-implements `TranscriptChip`'s sponge and
-//!   buffer bookkeeping, emitting [`Halo2Opcode::PoseidonPermute2T3`] /
-//!   [`Halo2Opcode::InnerProduct`] (base-2^31 packing) / [`Halo2Opcode::DecomposeBn254ToBabyBear`]
-//!   / [`Halo2Opcode::RangeDiv`] nodes.
+//! To keep replay stateless (parallel-safe), the builder mirrors chip
+//! bookkeeping exactly:
+//! - `max_bits` tracking + explicit [`Halo2Opcode::BBReduce`] nodes for pre-op reduces; atomic ops
+//!   (`div`, ext `mul`/`div`) re-derive interleaved reduce decisions from operand bit bounds at
+//!   replay.
+//! - Constant caching (`zero_cell` + BabyBear const cache) matches `Context::load_zero` /
+//!   `BabyBearChip::const_cache`. Atomic ops expose internally-loaded constants (`BBDiv`→ONE,
+//!   `ExtMul`→W, `ExtDiv`→ONE/ZERO/W) as extra outputs; whether each materializes is decided at
+//!   build time and recorded in [`NodeMeta::constant_skip_inds`].
+//! - Transcript sponge/buffer state mirrors `TranscriptChip`.
 //!
-//! Constants that halo2 assigns as *fixed-column* `QuantumCell::Constant`s (select branch
-//! values, inner-product coefficients, the value of a `Const` witness cell) are not node
-//! outputs; they appear as [`GraphCell::Const`] operands and write no advice cells.
+//! Fixed-column `QuantumCell::Constant`s (select branches, IP coefficients,
+//! `Const` witness values) are [`GraphCell::Const`] operands, not nodes.
 //!
-//! A few opcodes beyond the core arithmetic set are required to cover the full populate
-//! pipeline: witness loading (`LoadWitness`), inner products (`InnerProduct`), and the
-//! transcript hint decompositions (`DecomposeBn254ToBabyBear`, `RangeDiv`).
+//! Non-arithmetic opcodes cover the rest of the populate pipeline:
+//! `LoadWitness`, `InnerProduct`, `DecomposeBn254ToBabyBear`, `RangeDiv`.
 
 use core::{array, iter};
 use std::collections::HashMap;
@@ -69,7 +54,7 @@ use crate::{
         poseidon2::{MULTI_FIELD32_NUM_F_ELMS, MULTI_FIELD32_RATE, POSEIDON2_RATE},
         POSEIDON2_WIDTH,
     },
-    opcode_impl::{derive_opcode_metadata, UNMATERIALIZED},
+    tracegen::opcode_impl::{derive_opcode_metadata, UNMATERIALIZED},
     transcript::{DigestWire, NUM_OBS_PER_WORD, NUM_SAMPLES_PER_WORD},
 };
 
@@ -83,17 +68,14 @@ const RAW_MAX_BITS: usize = Fr::NUM_BITS as usize;
 
 const _: () = assert!(POSEIDON2_WIDTH == 3);
 
-/// An IR operand/result: either a value produced by a node, or a fixed-column constant.
+/// IR operand/result: a node-produced value or a fixed-column constant.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum GraphCell {
-    /// `(node id, absolute context-tape offset the cell is written at, bits bound)`.
-    ///
-    /// The bits bound is the `max_bits` invariant of [`BabyBearWire`]: the (signed) value
-    /// is guaranteed `< 2^bits`. Executors use operand bit bounds to replay the chips'
+    /// `(node id, absolute advice offset, bits bound)`. The bits bound is the
+    /// [`BabyBearWire`] `max_bits` invariant; executors read it to re-derive
     /// internal reduce decisions inside atomic ops.
     Cell(NodeId, usize, u16),
-    /// A constant operand assigned as a halo2 fixed-column `QuantumCell::Constant`;
-    /// writes no advice cells.
+    /// Fixed-column `QuantumCell::Constant`; writes no advice cells.
     Const(Fr),
 }
 
@@ -106,63 +88,57 @@ impl GraphCell {
     }
 }
 
-/// IR opcodes. Each op writes a statically-known slice of the witness tape and of the
-/// range-check tape when executed.
+/// IR opcodes. Each op writes a statically-known slice of the advice + range
+/// tapes when executed.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Halo2Opcode {
     // -- gate ops --
-    /// One constant advice cell (`ctx.load_constant` / `ctx.load_zero`); the single
-    /// operand is the [`GraphCell::Const`] holding the value.
+    /// One constant advice cell; single [`GraphCell::Const`] operand.
     Const,
-    /// `if cond { a } else { b }` on raw cells; operands `[a, b, cond]` (`a`/`b` may be
-    /// [`GraphCell::Const`], covering `select_const`).
+    /// `if cond { a } else { b }`; operands `[a, b, cond]` (`a`/`b` may be const).
     Select,
-    /// Little-endian bit decomposition of the operand into `n` bit cells.
+    /// Little-endian bit decomposition into `n` bit cells.
     Num2Bits(u16),
     // -- babybear ops --
-    /// Barrett-style signed reduction of the operand to `[0, p)`; the operand's bit bound
-    /// determines the quotient range-check width.
+    /// Barrett-style signed reduction to `[0, p)`. Operand bit bound drives the
+    /// quotient range-check width.
     BBReduce,
     BBAdd,
     BBNeg,
     BBSub,
     BBMul,
     BBMulAdd,
-    /// Atomic BabyBear division `a / b` mirroring `BabyBearChip::div` (inverse hint,
-    /// non-zero check, `a = b*c` check, internal reduces). Output 0 is the quotient;
-    /// output 1 is the internally loaded ONE constant cell (materialized only when ONE was
-    /// not already cached).
+    /// Atomic `BabyBearChip::div`. Outputs: 0=quotient, 1=internally-loaded
+    /// ONE cell (materialized only on cache miss).
     BBDiv,
-    /// Asserts the operand is `0 mod p` (exact-quotient hint + range check).
+    /// Asserts operand `≡ 0 (mod p)`.
     BBAssertZero,
     // -- extension ops --
-    /// Atomic `BabyBearExt4Chip::mul`; operands `[a0..a3, b0..b3]`. Outputs 0-3 are the
-    /// product coefficients; output 4 is the internally loaded W constant cell
-    /// (materialized only when W was not already cached).
+    /// Atomic `BabyBearExt4Chip::mul`; operands `[a0..a3, b0..b3]`. Outputs:
+    /// 0-3=product coefficients, 4=internally-loaded W cell (cache miss only).
     ExtMul,
-    /// Atomic `BabyBearExt4Chip::div`; operands `[a0..a3, b0..b3]`. Outputs 0-3 are the
-    /// quotient coefficients; outputs 4-6 are the internally loaded ONE/ZERO/W constant
-    /// cells (each materialized only when not already cached).
+    /// Atomic `BabyBearExt4Chip::div`; operands `[a0..a3, b0..b3]`. Outputs:
+    /// 0-3=quotient coefficients, 4-6=internally-loaded ONE/ZERO/W cells
+    /// (each cache miss only).
     ExtDiv,
     // -- poseidon ops --
-    /// Width-2 Poseidon2 permutation (digest compression).
+    /// Width-2 Poseidon2 (digest compression).
     PoseidonPermute2T2,
-    /// Width-3 Poseidon2 permutation (transcript sponge, digest hashing).
+    /// Width-3 Poseidon2 (transcript sponge, digest hashing).
     PoseidonPermute2T3,
-    // -- ops beyond the core set, required to cover the full populate pipeline --
-    /// One proof-input advice cell; the value comes from the builder's input stream.
+    // -- populate-pipeline ops --
+    /// One proof-input advice cell.
     LoadWitness,
-    /// One proof-input advice cell constrained to `[0, p)` (`check_less_than_safe`).
+    /// Proof-input cell constrained to `[0, p)` (`check_less_than_safe`).
     CheckLessThanSafe,
-    /// Inner product of `n` `(value, coefficient)` operand pairs, interleaved
-    /// `[v0, c0, v1, c1, ..]`; coefficients are [`GraphCell::Const`] in practice
-    /// (`inner_product_const` and base-2^31 transcript/digest packing).
+    /// Inner product of `n` `(value, coefficient)` pairs, interleaved as
+    /// `[v0, c0, v1, c1, ..]`; coefficients are [`GraphCell::Const`] in practice.
     InnerProduct(u16),
-    /// Base-BabyBear hint decomposition of one squeezed Bn254 word into
-    /// [`NUM_SAMPLES_PER_WORD`] digit cells (plus internal top-quotient hint and
-    /// boundary checks), mirroring `decompose_bn254_to_base_baby_bear_digits`.
+    /// Base-BabyBear decomposition of one Bn254 word into
+    /// [`NUM_SAMPLES_PER_WORD`] digit cells + boundary checks. Mirrors
+    /// `decompose_bn254_to_base_baby_bear_digits`.
     DecomposeBn254ToBabyBear,
-    /// `rem` of `range.div_mod(operand, 2^n)`, mirroring `TranscriptChip::sample_bits`.
+    /// `rem` of `range.div_mod(operand, 2^n)` (`TranscriptChip::sample_bits`).
     RangeDiv(u16),
 }
 
@@ -241,30 +217,24 @@ pub struct Halo2GraphNode {
     pub id: NodeId,
 }
 
-/// Per-node replay metadata deduced at build time, indexed by [`NodeId`]
-/// (see [`Halo2IRBuilder::node_meta`]).
-///
-/// Together with the operand values this is everything an executor needs to
-/// replay a node in isolation: no constant cache is consulted at runtime, so
-/// nodes can be interpreted in parallel.
+/// Per-node replay metadata deduced at build time; together with operand
+/// values it is everything an executor needs to replay a node in isolation
+/// (no runtime cache), enabling parallel replay.
 #[derive(Clone, Debug)]
 pub struct NodeMeta {
-    /// Number of context-tape (advice) slots the node writes.
+    /// Advice slots written by the node.
     pub ctx_len: usize,
-    /// Absolute context-tape offset the node begins writing at.
+    /// Absolute advice-tape offset the node begins writing at.
     pub ctx_offset: usize,
-    /// Number of range-tape (lookup) slots the node writes.
+    /// Range slots written by the node.
     pub lookups_len: usize,
     /// Absolute range-tape offset the node begins writing at.
     pub lookup_offset: usize,
-    /// Indices of the node's `load_constant` calls that write a cell, in call
-    /// order (e.g. `[1, 3]` when the second and fourth of five calls missed the
-    /// cache); calls not listed hit a cache and must not write. Drives
-    /// `WitnessTape` at replay time.
+    /// Indices of the node's `load_constant` calls that write a cell (cache
+    /// misses), in call order. Drives `WitnessTape` at replay.
     pub constant_skip_inds: Vec<u32>,
-    /// Absolute context-tape offset of each operand (`UNMATERIALIZED` for
-    /// [`GraphCell::Const`] operands, whose values live in the node's operand
-    /// list, not the context tape).
+    /// Absolute advice offset of each operand (`UNMATERIALIZED` for
+    /// [`GraphCell::Const`] operands).
     pub arg_offsets: Vec<usize>,
 }
 
@@ -280,28 +250,27 @@ struct IrTranscript {
 
 /// Backend that records the circuit-population trace as a graph IR.
 pub struct Halo2IRBuilder {
-    /// Node tape, in exact witness-tape order.
+    /// Nodes, in tape-emission order.
     pub nodes: Vec<Halo2GraphNode>,
-    /// Replay metadata of node `i`, in node-tape order.
+    /// Replay metadata per node, indexed by [`NodeId`].
     pub node_meta: Vec<NodeMeta>,
-    /// Proof-input witness stream, one entry per `LoadWitness` node, in
-    /// node-tape order.
+    /// Proof-input witnesses, one per `LoadWitness` node, in emission order.
     pub input_values: Vec<Fr>,
-    /// Range-check lookup bits of the target halo2 circuit (drives limb
-    /// decompositions, so it is part of the tape shape).
+    /// Range-check lookup bits (drives limb decompositions).
     lookup_bits: usize,
-    /// Context-tape (advice) write cursor; the next node's `ctx_offset`.
+    /// Next node's `ctx_offset` (advice write cursor).
     ctx_offset: usize,
-    /// Range-tape (lookup) write cursor; the next node's `lookup_offset`.
+    /// Next node's `lookup_offset` (range write cursor).
     lookup_offset: usize,
-    /// `levels[i]` = dataflow depth of node `i` (0 for source nodes).
+    /// Dataflow depth per node; 0 for source nodes.
     levels: Vec<u32>,
-    /// Mirrors `Context::zero_cell` caching in `Context::load_zero`.
+    /// Mirrors `Context::zero_cell`.
     zero_cell: Option<GraphCell>,
     /// Mirrors `BabyBearChip::const_cache` (keyed by canonical u64).
     bb_const_cache: HashMap<Fr, BabyBearWire<GraphCell>>,
-    /// mirror of bb constant cache to make sure the circuits are identical
-    /// with BasecircuitBuilder/TranscriptChip semantics
+    /// Separate cache mirroring `TranscriptChip`'s own baby-bear constant
+    /// dedup, which is distinct from `BabyBearChip::const_cache`. Preserving
+    /// this split is required to keep the verifying key unchanged.
     transcript_bb_constant_cache: HashMap<Fr, BabyBearWire<GraphCell>>,
     transcript: Option<IrTranscript>,
 }
@@ -467,10 +436,9 @@ impl Halo2IRBuilder {
         zero
     }
 
-    /// Records the cache effect of a BabyBear constant loaded *inside* an atomic node
-    /// (`BBDiv`/`ExtMul`/`ExtDiv`), whose cell sits at absolute context-tape `offset`
-    /// when it materializes. Mirrors `BabyBearChip::load_constant` cache/zero-cell
-    /// behavior.
+    /// Registers a BabyBear constant loaded *inside* an atomic node
+    /// (`BBDiv`/`ExtMul`/`ExtDiv`) at absolute advice `offset`. Mirrors
+    /// `BabyBearChip::load_constant` cache/zero-cell behavior.
     fn note_internal_bb_const(&mut self, id: NodeId, offset: usize, value: BabyBear) {
         let key_u64 = value.as_canonical_u64();
         let key = Fr::from(key_u64);

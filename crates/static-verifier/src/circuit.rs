@@ -207,9 +207,9 @@ impl StaticVerifierCircuit {
         proof_wire
     }
 
-    /// Backend-generic full populate: STARK verification constraints, the symbolic-DAG
-    /// onion-commit pin, and public-value extraction. Returns the public value wires;
-    /// generic over the circuit builder
+    /// Backend-generic full populate: STARK verification constraints, the
+    /// symbolic-DAG onion-commit pin, and public-value extraction. Returns
+    /// the public value wires.
     pub fn populate_pvs<B: TranscriptInst + Poseidon2Inst + PopulateInputs>(
         &self,
         b: &mut B,
