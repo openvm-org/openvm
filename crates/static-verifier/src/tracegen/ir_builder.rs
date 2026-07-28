@@ -135,7 +135,7 @@ pub enum Halo2Opcode {
     /// `[v0, c0, v1, c1, ..]`; coefficients are [`GraphCell::Const`] in practice.
     InnerProduct(u16),
     /// Base-BabyBear decomposition of one Bn254 word into
-    /// [`NUM_SAMPLES_PER_WORD`] digit cells + boundary checks. Mirrors
+    /// `NUM_SAMPLES_PER_WORD` digit cells + boundary checks. Mirrors
     /// `decompose_bn254_to_base_baby_bear_digits`.
     DecomposeBn254ToBabyBear,
     /// `rem` of `range.div_mod(operand, 2^n)` (`TranscriptChip::sample_bits`).

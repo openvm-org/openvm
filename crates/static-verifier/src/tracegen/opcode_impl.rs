@@ -1,3 +1,4 @@
+#![allow(rustdoc::private_intra_doc_links)]
 //! Standalone tape-replay implementations of [`Halo2Opcode`]s.
 //!
 //! [`run_op`] drives a [`ReplayTape`]: [`CalculateOffsetsTape`] (build-time)

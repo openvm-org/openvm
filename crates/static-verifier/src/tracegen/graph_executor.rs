@@ -1,3 +1,4 @@
+#![allow(rustdoc::private_intra_doc_links)]
 //! Parallel executor for the graph IR recorded by [`Halo2IRBuilder`].
 //!
 //! Lowering flattens each graph node — using its
@@ -316,7 +317,7 @@ impl GraphExecutor {
     /// done flags, execute, and Release-store their own flag. Flags are
     /// stamped with `phase` (not zeroed between runs).
     ///
-    /// Meanwhile the calling thread walks [`Self::release_order`] and streams
+    /// Meanwhile the calling thread walks `Self::release_order` and streams
     /// newly-materialized tape ranges through `on_delta(advice_offset,
     /// advice_delta, lookup_offset, lookup_delta)`. A bounded spin per writer
     /// defers slow writers to a retry pass so one hang doesn't dam the prefix.
