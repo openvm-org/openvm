@@ -3,10 +3,7 @@ use std::slice;
 use openvm_circuit::arch::{Postflight, PostflightError};
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::LocalOpcode;
-use openvm_sha2_air::{
-    be_limbs_into_word, le_limbs_into_word, Sha2BlockHasherFillerHelper, Sha2RoundColsRef,
-    Sha2RoundColsRefMut,
-};
+use openvm_sha2_air::{Sha2BlockHasherFillerHelper, Sha2RoundColsRef, Sha2RoundColsRefMut};
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
@@ -106,12 +103,12 @@ where
             .map(|input| {
                 (0..C::HASH_WORDS)
                     .map(|i| {
-                        le_limbs_into_word::<C>(
-                            &input.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
-                                .iter()
-                                .map(|x| *x as u32)
-                                .collect::<Vec<_>>(),
-                        )
+                        input.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
+                            .iter()
+                            .rev()
+                            .fold(C::Word::from(0), |word, &byte| {
+                                (word << 8) | u32::from(byte).into()
+                            })
                     })
                     .collect::<Vec<_>>()
             })
@@ -306,12 +303,11 @@ impl<F, C: Sha2BlockHasherVmConfig> Sha2BlockHasherChip<F, C> {
 
         let input_words = (0..C::BLOCK_WORDS)
             .map(|i| {
-                be_limbs_into_word::<C>(
-                    &input[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
-                        .iter()
-                        .map(|x| *x as u32)
-                        .collect::<Vec<_>>(),
-                )
+                input[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
+                    .iter()
+                    .fold(C::Word::from(0), |word, &byte| {
+                        (word << 8) | u32::from(byte).into()
+                    })
             })
             .collect::<Vec<_>>();
 

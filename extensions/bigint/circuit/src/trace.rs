@@ -32,10 +32,10 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{
-    mult::u256_mul, Rv64AddSub256Chip, Rv64BitwiseLogic256Chip, Rv64BranchEqual256Chip,
-    Rv64BranchLessThan256Chip, Rv64LessThan256Chip, Rv64Multiplication256Chip,
-    Rv64ShiftLogical256Chip, Rv64ShiftRightArithmetic256Chip, INT256_NUM_MEMORY_BLOCKS,
-    INT256_NUM_U16_LIMBS, INT256_NUM_U8_LIMBS, NUM_READS, RV64_BYTE_BITS,
+    Rv64AddSub256Chip, Rv64BitwiseLogic256Chip, Rv64BranchEqual256Chip, Rv64BranchLessThan256Chip,
+    Rv64LessThan256Chip, Rv64Multiplication256Chip, Rv64ShiftLogical256Chip,
+    Rv64ShiftRightArithmetic256Chip, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U16_LIMBS,
+    INT256_NUM_U8_LIMBS, NUM_READS, RV64_BYTE_BITS,
 };
 
 type AluU16Cols<F> =
@@ -531,9 +531,9 @@ fn fill_less_than<F: PrimeField32>(
     core: &mut LessThanCoreCols<F, INT256_NUM_U16_LIMBS, U16_BITS>,
     opcode: LessThanOpcode,
     [b, c]: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
+    (cmp_result, diff_idx, b_sign, c_sign): (bool, usize, bool, bool),
 ) {
     let signed = opcode == LessThanOpcode::SLT;
-    let (cmp_result, diff_idx, b_sign, c_sign) = less_than(signed, &b, &c);
     let (b_msb_f, b_msb_range) = if b_sign {
         (
             -F::from_u16(b[INT256_NUM_U16_LIMBS - 1].wrapping_neg()),
@@ -609,6 +609,7 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let mut comparison = None;
             let replay = replay_alu_u16(
                 postflight,
                 step,
@@ -617,13 +618,20 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
                 &chip.inner.range_checker_chip,
                 adapter_row.borrow_mut(),
                 |inputs| {
+                    let result = less_than(opcode == LessThanOpcode::SLT, &inputs[0], &inputs[1]);
+                    comparison = Some(result);
                     let mut output = [0u16; INT256_NUM_U16_LIMBS];
-                    output[0] =
-                        less_than(opcode == LessThanOpcode::SLT, &inputs[0], &inputs[1]).0 as u16;
+                    output[0] = result.0 as u16;
                     output
                 },
             )?;
-            fill_less_than(chip, core_row.borrow_mut(), opcode, replay.inputs);
+            fill_less_than(
+                chip,
+                core_row.borrow_mut(),
+                opcode,
+                replay.inputs,
+                comparison.expect("less-than replay called its compute closure"),
+            );
             Ok(())
         })?;
         row_index += steps.len();
@@ -631,11 +639,16 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
     Ok(trace)
 }
 
-fn branch_eq(opcode: BranchEqualOpcode, [a, b]: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS]) -> bool {
-    match opcode {
-        BranchEqualOpcode::BEQ => a == b,
-        BranchEqualOpcode::BNE => a != b,
-    }
+fn branch_eq(
+    opcode: BranchEqualOpcode,
+    [a, b]: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
+) -> (bool, Option<usize>) {
+    let diff_index = (0..INT256_NUM_U16_LIMBS).find(|&i| a[i] != b[i]);
+    let taken = match opcode {
+        BranchEqualOpcode::BEQ => diff_index.is_none(),
+        BranchEqualOpcode::BNE => diff_index.is_some(),
+    };
+    (taken, diff_index)
 }
 
 pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
@@ -657,6 +670,7 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let mut comparison = None;
             let (inputs, cmp_result) = replay_branch(
                 postflight,
                 step,
@@ -664,12 +678,17 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
                 &chip.mem_helper.as_borrowed(),
                 range_checker,
                 adapter_row.borrow_mut(),
-                |inputs| branch_eq(opcode, inputs),
+                |inputs| {
+                    let result = branch_eq(opcode, inputs);
+                    comparison = Some(result);
+                    result.0
+                },
             )?;
             let [a, b] = inputs;
             let core: &mut BranchEqualCoreCols<F, INT256_NUM_U16_LIMBS> = core_row.borrow_mut();
             core.diff_inv_marker = [F::ZERO; INT256_NUM_U16_LIMBS];
-            if let Some(index) = (0..INT256_NUM_U16_LIMBS).find(|&i| a[i] != b[i]) {
+            let (_, diff_index) = comparison.expect("branch replay called its comparison closure");
+            if let Some(index) = diff_index {
                 core.diff_inv_marker[index] =
                     (F::from_u16(a[index]) - F::from_u16(b[index])).inverse();
             }
@@ -733,6 +752,7 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let mut comparison = None;
             let (inputs, cmp_result) = replay_branch(
                 postflight,
                 step,
@@ -740,10 +760,15 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
                 &chip.mem_helper.as_borrowed(),
                 &chip.inner.range_checker_chip,
                 adapter_row.borrow_mut(),
-                |[a, b]| branch_compare(opcode, &a, &b).0,
+                |[a, b]| {
+                    let result = branch_compare(opcode, &a, &b);
+                    comparison = Some(result);
+                    result.0
+                },
             )?;
             let [a, b] = inputs;
-            let (_, diff_idx, a_sign, b_sign) = branch_compare(opcode, &a, &b);
+            let (_, diff_idx, a_sign, b_sign) =
+                comparison.expect("branch replay called its comparison closure");
             let signed = matches!(
                 opcode,
                 BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE
@@ -858,6 +883,7 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
     let mut trace = trace(postflight.steps(opcode).len(), width);
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+        let mut multiplication = None;
         let replay = replay_alu_bytes(
             postflight,
             step,
@@ -865,14 +891,14 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
             &chip.mem_helper.as_borrowed(),
             range_checker,
             adapter_row.borrow_mut(),
-            |[b, c]| u256_mul(b, c),
+            |[b, c]| {
+                let result = mul_with_carry(&b, &c);
+                multiplication = Some(result);
+                result.0
+            },
         )?;
-        let (output, carry) = mul_with_carry(&replay.inputs[0], &replay.inputs[1]);
-        if output != replay.output {
-            return Err(invalid(
-                "int256 multiplication replay produced inconsistent output",
-            ));
-        }
+        let (output, carry) =
+            multiplication.expect("multiplication replay called its compute closure");
         for (&a, &carry) in output.iter().zip(&carry) {
             chip.inner
                 .range_tuple_chip

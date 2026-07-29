@@ -279,9 +279,14 @@ pub(crate) fn generate_field_expression_trace_from_postflight<
             })?;
         row_index = rows_end;
     }
-    trace.values[row_index * width..]
-        .par_chunks_exact_mut(width)
-        .for_each(|row| chip.inner.fill_dummy_core_row(&mut row[adapter_width..]));
+    if row_index < height {
+        let mut dummy_row = F::zero_vec(width);
+        chip.inner
+            .fill_dummy_core_row(&mut dummy_row[adapter_width..]);
+        trace.values[row_index * width..]
+            .par_chunks_exact_mut(width)
+            .for_each(|row| row.copy_from_slice(&dummy_row));
+    }
     merge_range_counts(
         chip.inner.range_checker.as_ref(),
         temporary_range_checker.as_ref(),

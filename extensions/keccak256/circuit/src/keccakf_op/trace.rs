@@ -46,6 +46,7 @@ struct KeccakfTraceInput {
     rd_prev_timestamp: u32,
     buffer_prev_timestamps: [u32; KECCAK_WIDTH_MEM_OPS],
     preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
+    postimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
 }
 
 #[derive(Clone)]
@@ -68,8 +69,6 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
             .for_each(|(row, input)| {
                 row.fill(F::ZERO);
 
-                let postimage_buffer_bytes = keccakf_postimage_bytes(&input.preimage_buffer_bytes);
-
                 let local: &mut KeccakfOpCols<F> = row.borrow_mut();
 
                 local.pc = F::from_u32(input.pc);
@@ -89,7 +88,7 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
                 for (dst, bytes) in local
                     .postimage
                     .iter_mut()
-                    .zip(postimage_buffer_bytes.chunks_exact(2))
+                    .zip(input.postimage_buffer_bytes.chunks_exact(2))
                 {
                     *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
                 }
@@ -227,5 +226,6 @@ fn replay_input<F: PrimeField32>(
         rd_prev_timestamp: rd.previous_timestamp,
         buffer_prev_timestamps,
         preimage_buffer_bytes,
+        postimage_buffer_bytes: postimage,
     })
 }

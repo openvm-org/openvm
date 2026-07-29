@@ -40,12 +40,19 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [HINT_STORED, HINT_BUFFER];
     let mut rows_used = 0usize;
+    let mut replay_inputs = Vec::with_capacity(
+        opcodes
+            .iter()
+            .map(|opcode| postflight.steps(opcode.global_opcode()).len())
+            .sum(),
+    );
     for opcode in opcodes {
         for &step in postflight.steps(opcode.global_opcode()) {
-            let (_, input) = replay_header(postflight, step, chip.inner.pointer_max_bits)?;
+            let replay_input = replay_header(postflight, step, chip.inner.pointer_max_bits)?;
             rows_used = rows_used
-                .checked_add(input.num_words as usize)
+                .checked_add(replay_input.1.num_words as usize)
                 .ok_or_else(|| PostflightError::new("hint-store trace height overflow"))?;
+            replay_inputs.push(replay_input);
         }
     }
 
@@ -55,35 +62,32 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let mem_helper = chip.mem_helper.as_borrowed();
     let mut row_index = 0usize;
 
-    for opcode in opcodes {
-        for &step in postflight.steps(opcode.global_opcode()) {
-            let (mut replay, input) = replay_header(postflight, step, chip.inner.pointer_max_bits)?;
-            chip.inner.range_checker_chip.add_count(
-                ptr_bound_from_ptr(input.mem_ptr, chip.inner.pointer_max_bits),
-                U16_BITS,
-            );
-            chip.inner
-                .range_checker_chip
-                .add_count(input.num_words << REM_WORDS_SHIFT, U16_BITS);
+    for (mut replay, input) in replay_inputs {
+        chip.inner.range_checker_chip.add_count(
+            ptr_bound_from_ptr(input.mem_ptr, chip.inner.pointer_max_bits),
+            U16_BITS,
+        );
+        chip.inner
+            .range_checker_chip
+            .add_count(input.num_words << REM_WORDS_SHIFT, U16_BITS);
 
-            for local_index in 0..input.num_words {
-                if local_index != 0 {
-                    replay.advance_timestamp(2)?;
-                }
-                let byte_ptr = input
-                    .mem_ptr
-                    .checked_add(local_index * RV64_REGISTER_NUM_LIMBS as u32)
-                    .ok_or_else(|| PostflightError::new("hint-store memory pointer overflow"))?;
-                let write = replay
-                    .write_observed_u16(RV64_MEMORY_AS, byte_ptr_to_u16_ptr_value(byte_ptr))?;
-
-                let row = &mut trace.values[row_index * width..(row_index + 1) * width];
-                let cols: &mut Rv64HintStoreCols<F> = row.borrow_mut();
-                fill_row(&mem_helper, cols, &input, local_index, byte_ptr, write);
-                row_index += 1;
+        for local_index in 0..input.num_words {
+            if local_index != 0 {
+                replay.advance_timestamp(2)?;
             }
-            replay.finish(input.from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+            let byte_ptr = input
+                .mem_ptr
+                .checked_add(local_index * RV64_REGISTER_NUM_LIMBS as u32)
+                .ok_or_else(|| PostflightError::new("hint-store memory pointer overflow"))?;
+            let write =
+                replay.write_observed_u16(RV64_MEMORY_AS, byte_ptr_to_u16_ptr_value(byte_ptr))?;
+
+            let row = &mut trace.values[row_index * width..(row_index + 1) * width];
+            let cols: &mut Rv64HintStoreCols<F> = row.borrow_mut();
+            fill_row(&mem_helper, cols, &input, local_index, byte_ptr, write);
+            row_index += 1;
         }
+        replay.finish(input.from_pc.wrapping_add(DEFAULT_PC_STEP))?;
     }
 
     Ok(trace)
