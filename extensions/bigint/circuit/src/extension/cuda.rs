@@ -29,7 +29,9 @@ use openvm_stark_sdk::{
 };
 #[cfg(feature = "rvr")]
 use {
-    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+    openvm_circuit::arch::rvr::cuda::{
+        PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+    },
     openvm_instructions::riscv::RV64_MEMORY_AS,
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
@@ -91,13 +93,20 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
             PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
             PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 2, 4),
         ];
+        let alu_schedule = PostflightAccessSchedule {
+            register_operands: &[2, 3, 1],
+            zero_operand_mask: (1 << 6) | (1 << 7),
+            register_as_operand: 4,
+            memory_as_operand: 5,
+            spans: &alu_spans,
+        };
         for opcode in Self::opcodes(Rv64BaseAlu256Opcode::iter())
             .into_iter()
             .chain(Self::opcodes(Rv64Shift256Opcode::iter()))
             .chain(Self::opcodes(Rv64LessThan256Opcode::iter()))
             .chain(Self::opcodes(Rv64Mul256Opcode::iter()))
         {
-            registry.register(opcode, &[2, 3, 1], (1 << 6) | (1 << 7), 4, 5, &alu_spans)?;
+            registry.register(opcode, alu_schedule)?;
         }
         let branch_spans = [
             PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
@@ -109,11 +118,13 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         {
             registry.register_branch_residual(
                 opcode,
-                &[1, 2],
-                (1 << 6) | (1 << 7),
-                4,
-                5,
-                &branch_spans,
+                PostflightAccessSchedule {
+                    register_operands: &[1, 2],
+                    zero_operand_mask: (1 << 6) | (1 << 7),
+                    register_as_operand: 4,
+                    memory_as_operand: 5,
+                    spans: &branch_spans,
+                },
                 3,
             )?;
         }
@@ -275,14 +286,14 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             (self, rv64),
-            |(tracegen, rv64), insertion_idx, chip| {
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(insertion_idx, chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },

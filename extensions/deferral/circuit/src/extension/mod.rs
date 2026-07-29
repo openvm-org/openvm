@@ -208,16 +208,12 @@ where
         inventory.add_postflight_periphery_chip_with_height(
             count_chip.clone(),
             Some(next_power_of_two_or_zero(extension.fns.len())),
-            |chip, postflight| {
-                chip.generate_trace_from_postflight(postflight)
-                    .map(AirProvingContext::simple_no_pis)
-            },
+            |chip, _| Ok(chip.generate_proving_ctx()),
         );
 
         inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
-        inventory.add_postflight_periphery_chip(poseidon2_chip.clone(), |chip, postflight| {
-            chip.generate_trace_from_postflight(postflight)
-                .map(AirProvingContext::simple_no_pis)
+        inventory.add_postflight_periphery_chip(poseidon2_chip.clone(), |chip, _| {
+            Ok(chip.generate_proving_ctx())
         });
 
         inventory.next_air::<DeferralCallAir>()?;

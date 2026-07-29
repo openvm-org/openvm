@@ -293,8 +293,6 @@ impl ExecutionCtxTrait for PreflightCtx {
 
         #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
         exec_state.vm_state.metrics.update_backtrace(pc);
-        #[cfg(feature = "perf-metrics")]
-        exec_state.vm_state.metrics.update_current_fn(pc);
     }
 
     #[inline(always)]
@@ -322,20 +320,6 @@ impl ExecutionCtxTrait for PreflightCtx {
                     }
                 }
             }
-            #[cfg(feature = "perf-metrics")]
-            SysPhantom::CtStart => {
-                let metrics = &mut _exec_state.vm_state.metrics;
-                if let Some(info) = metrics.debug_infos.get(_pc) {
-                    metrics.cycle_tracker.start(info.dsl_instruction.clone());
-                }
-            }
-            #[cfg(feature = "perf-metrics")]
-            SysPhantom::CtEnd => {
-                let metrics = &mut _exec_state.vm_state.metrics;
-                if let Some(info) = metrics.debug_infos.get(_pc) {
-                    metrics.cycle_tracker.end(info.dsl_instruction.clone());
-                }
-            }
             _ => {}
         }
     }
@@ -358,45 +342,12 @@ mod tests {
     use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS};
     use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    #[cfg(feature = "perf-metrics")]
-    use {
-        crate::arch::{create_memory_image, ExecutionCtxTrait, SystemConfig, VmExecState, VmState},
-        openvm_instructions::{
-            instruction::{DebugInfo, Instruction},
-            program::Program,
-            LocalOpcode, SysPhantom, SystemOpcode,
-        },
-    };
 
     use super::PreflightCtx;
     use crate::{
         arch::{MemoryConfig, BLOCK_FE_WIDTH},
         system::memory::online::{AddressMap, GuestMemory},
     };
-
-    #[cfg(feature = "perf-metrics")]
-    #[test]
-    fn cycle_tracker_phantoms_update_preflight_metrics() {
-        let instruction =
-            Instruction::<BabyBear>::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0; 5]);
-        let debug_info = DebugInfo::new("CT-test".to_string(), None);
-        let program =
-            Program::from_instructions_and_debug_infos(&[instruction], &[Some(debug_info)]);
-        let config = SystemConfig::default();
-        let memory = create_memory_image(&config.memory_config, &Default::default());
-        let mut state = VmState::new_with_defaults(0, memory, Vec::new(), 0);
-        state.metrics.debug_infos = program.debug_infos();
-        let ctx = PreflightCtx::new::<BabyBear>(&state.memory, None);
-        let mut state = VmExecState::new(state, ctx);
-
-        PreflightCtx::on_system_phantom(&mut state, 0, SysPhantom::CtStart);
-        assert_eq!(
-            state.metrics.cycle_tracker.top().map(String::as_str),
-            Some("test")
-        );
-        PreflightCtx::on_system_phantom(&mut state, 0, SysPhantom::CtEnd);
-        assert_eq!(state.metrics.cycle_tracker.top(), None);
-    }
 
     #[test]
     fn field_history_uses_canonical_words() {

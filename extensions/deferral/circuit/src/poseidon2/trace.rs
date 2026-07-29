@@ -5,7 +5,7 @@ use std::{
 };
 
 use dashmap::DashMap;
-use openvm_circuit::arch::{Postflight, PostflightError, VmField};
+use openvm_circuit::arch::VmField;
 use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
 use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, POSEIDON2_WIDTH};
@@ -82,15 +82,6 @@ impl<F: VmField> DeferralPoseidon2Chip<F> {
     ) -> [F; DIGEST_SIZE] {
         let offset = if is_compress { 0 } else { DIGEST_SIZE };
         from_fn(|i| output[i + offset])
-    }
-
-    /// Generates the permutation trace accumulated by Deferral CALL and
-    /// OUTPUT replay. Host callbacks are never invoked here.
-    pub fn generate_trace_from_postflight(
-        &self,
-        _postflight: &Postflight<'_, F>,
-    ) -> Result<RowMajorMatrix<F>, PostflightError> {
-        Ok(self.generate_trace())
     }
 
     fn generate_trace(&self) -> RowMajorMatrix<F> {

@@ -34,6 +34,8 @@ use openvm_instructions::{
 };
 #[cfg(feature = "metrics")]
 use openvm_instructions::{LocalOpcode, SystemOpcode};
+#[cfg(feature = "perf-metrics")]
+use openvm_instructions::{PhantomDiscriminant, SysPhantom};
 #[cfg(feature = "cuda")]
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
@@ -81,6 +83,8 @@ use super::rvr::{
 use super::ExecutionState;
 #[cfg(feature = "metrics")]
 use super::InterpreterExecutor;
+#[cfg(feature = "perf-metrics")]
+use super::PreflightProgramEvent;
 use super::{
     execution_mode::{
         ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, Segment, SegmentationLimits,
@@ -113,6 +117,9 @@ use crate::{
         SystemChipComplex, SystemChipInventory, SystemWithFixedTraceHeights,
     },
 };
+
+#[cfg(all(feature = "rvr", feature = "test-utils"))]
+mod testing;
 
 /// Canonical field bound for VM execution/circuit code.
 pub const BABYBEAR_S_BOX_DEGREE: u64 = 7;
@@ -345,19 +352,6 @@ where
     /// Creates an interpreter instance specialized for append-only preflight.
     #[cfg(not(feature = "rvr"))]
     pub fn preflight_instance(
-        &self,
-        exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError> {
-        #[cfg(feature = "metrics")]
-        let _compilation_span =
-            tracing::info_span!("compile_preflight", backend = "interpreter").entered();
-        InterpretedInstance::new(&self.inventory, exe)
-    }
-
-    /// Builds the interpreter preflight backend for differential tests.
-    #[cfg(all(feature = "rvr", feature = "test-utils"))]
-    #[doc(hidden)]
-    pub fn test_preflight_interpreter_instance(
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError> {
@@ -1157,7 +1151,6 @@ where
         prepared: &VB::Prepared,
         state: VmState<GuestMemory>,
         segment: &Segment,
-        modify_ctx: impl FnOnce(&mut ProvingContext<E::PB>),
     ) -> Result<(Proof<E::SC>, PreflightOutput), VirtualMachineError>
     where
         Val<E::SC>: VmField,
@@ -1165,9 +1158,14 @@ where
         VB: PostflightTracegen<E>,
     {
         self.transport_init_memory_to_device(&state.memory);
-        let output = interpreter.execute_segment(state, segment)?;
-        let mut ctx = self.generate_proving_ctx(program, prepared, &output)?;
-        modify_ctx(&mut ctx);
+        let mut output = interpreter.execute_segment(state, segment)?;
+        let ctx = self.generate_proving_ctx(program, prepared, &output)?;
+        #[cfg(feature = "perf-metrics")]
+        self.emit_guest_instruction_metrics(
+            program,
+            &output.history.program,
+            &mut output.state.metrics,
+        )?;
         let proof = self
             .engine
             .prove(self.pk(), ctx)
@@ -1362,6 +1360,103 @@ where
             .collect()
     }
 
+    #[cfg(feature = "perf-metrics")]
+    fn emit_guest_instruction_metrics(
+        &self,
+        program: &Program<Val<E::SC>>,
+        program_log: &[PreflightProgramEvent],
+        metrics: &mut crate::metrics::VmMetrics,
+    ) -> Result<(), GenerationError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        for pair in program_log.windows(2) {
+            let [current, next] = pair else {
+                unreachable!("windows(2) always returns two elements")
+            };
+            let Some(program_offset) = current.pc.checked_sub(program.pc_base) else {
+                return Err(GenerationError::ExtensionTracegen(format!(
+                    "guest metric PC {:#x} precedes program base {:#x}",
+                    current.pc, program.pc_base
+                )));
+            };
+            if !program_offset.is_multiple_of(openvm_instructions::program::DEFAULT_PC_STEP) {
+                return Err(GenerationError::ExtensionTracegen(format!(
+                    "guest metric PC {:#x} is not instruction-aligned",
+                    current.pc
+                )));
+            }
+            let program_index =
+                program_offset as usize / openvm_instructions::program::DEFAULT_PC_STEP as usize;
+            let Some((instruction, _)) = program.get_instruction_and_debug_info(program_index)
+            else {
+                return Err(GenerationError::ExtensionTracegen(format!(
+                    "guest metric PC {:#x} does not resolve to an instruction",
+                    current.pc
+                )));
+            };
+            if instruction.opcode == SystemOpcode::TERMINATE.global_opcode() {
+                continue;
+            }
+
+            let executor_idx = *self
+                .executor
+                .inventory
+                .instruction_lookup
+                .get(&instruction.opcode)
+                .ok_or_else(|| {
+                    GenerationError::ExtensionTracegen(format!(
+                        "guest metric opcode {} has no executor",
+                        instruction.opcode.as_usize()
+                    ))
+                })?;
+            let executor = self
+                .executor
+                .inventory
+                .executors
+                .get(executor_idx as usize)
+                .ok_or_else(|| {
+                    GenerationError::ExtensionTracegen(format!(
+                        "guest metric executor index {executor_idx} is out of bounds"
+                    ))
+                })?;
+            let debug_info = metrics.debug_infos.get(current.pc);
+
+            let system_phantom = if instruction.opcode == SystemOpcode::PHANTOM.global_opcode() {
+                let phantom = PhantomDiscriminant(instruction.c.as_canonical_u32() as u16);
+                SysPhantom::from_repr(phantom.0)
+            } else {
+                None
+            };
+
+            metrics.record_replayed_instruction(
+                executor.get_opcode_name(instruction.opcode.as_usize()),
+                debug_info.as_ref().map(|info| info.dsl_instruction.clone()),
+                system_phantom,
+                next.pc,
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(all(feature = "cuda", feature = "perf-metrics"))]
+    pub fn emit_gpu_guest_instruction_metrics(
+        &self,
+        program: &Program<Val<E::SC>>,
+        transcript: &GpuPostflightTranscript,
+        metrics: &mut crate::metrics::VmMetrics,
+    ) -> Result<(), GenerationError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        let program_log = transcript
+            .copy_program_log()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        self.emit_guest_instruction_metrics(program, &program_log, metrics)
+    }
+
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
     pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx
     where
@@ -1475,7 +1570,6 @@ where
     /// already-uploaded immutable memory image into the read-only replay data
     /// consumed by system and instruction trace generation.
     #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     #[instrument(name = "postflight", skip_all)]
     pub fn postflight(
         &self,
@@ -1616,7 +1710,6 @@ where
         producer: P,
         mut generate_extension: impl FnMut(
             &mut P,
-            usize,
             &dyn Any,
         )
             -> Result<AirProvingContext<GpuBackend>, GenerationError>,
@@ -1634,7 +1727,7 @@ where
                 program,
                 transcript,
                 replay_plan,
-                |insertion_idx, chip| generate_extension(&mut producer, insertion_idx, chip),
+                |chip| generate_extension(&mut producer, chip),
             );
 
             // Every system and extension kernel above uses raw views borrowed from
@@ -1769,7 +1862,7 @@ where
         instance: &mut VmInstance<E, Self>,
         input: Streams,
     ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
-        instance.prove_continuations(preflight, prepared, input, |_, _| {})
+        instance.prove_continuations(preflight, prepared, input)
     }
 }
 
@@ -1877,7 +1970,6 @@ where
             &self.prepared,
             state,
             segment,
-            |_| {},
         )?;
         let final_memory =
             (output.exit_code == Some(ExitCode::Success as u32)).then_some(output.state.memory);
@@ -1906,7 +1998,7 @@ where
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let preflight = self.vm.preflight_interpreter(&self.exe)?;
         let prepared = VB::prepare_postflight(&self.vm, &self.exe.program)?;
-        self.prove_continuations(&preflight, &prepared, input.into(), |_, _| {})
+        self.prove_continuations(&preflight, &prepared, input.into())
     }
 }
 
@@ -1919,15 +2011,11 @@ where
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     VB: PostflightTracegen<E>,
 {
-    /// For internal use to resize trace matrices before proving.
-    ///
-    /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
     pub(crate) fn prove_continuations(
         &mut self,
         preflight: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
         prepared: &VB::Prepared,
         input: Streams,
-        mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         self.reset_state(input.clone());
         let vm = &mut self.vm;
@@ -1947,7 +2035,6 @@ where
                 prepared,
                 from_state,
                 &segment,
-                |ctx| modify_ctx(seg_idx, ctx),
             )?;
             proofs.push(proof);
             state = Some(output.state);

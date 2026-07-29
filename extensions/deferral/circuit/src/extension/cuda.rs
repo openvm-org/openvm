@@ -34,7 +34,7 @@ use openvm_stark_sdk::{
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::{
-        rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+        rvr::cuda::{PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan},
         MEMORY_BLOCK_BYTES,
     },
     openvm_instructions::riscv::RV64_MEMORY_AS,
@@ -138,34 +138,38 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     ) -> Result<(), GpuPostflightError> {
         registry.register(
             DeferralOpcode::CALL.global_opcode().as_usize() as u32,
-            // CALL first reads the output and input heap pointers from rd/rs.
-            &[1, 2],
-            (1 << 6) | (1 << 7),
-            4,
-            5,
-            &[
-                PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
-                PostflightAccessSpan::read_deferral_input_accumulator(3),
-                PostflightAccessSpan::read_deferral_output_accumulator(3),
-                PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
-                PostflightAccessSpan::write_deferral_input_accumulator(3),
-                PostflightAccessSpan::write_deferral_output_accumulator(3),
-            ],
+            PostflightAccessSchedule {
+                // CALL first reads the output and input heap pointers from rd/rs.
+                register_operands: &[1, 2],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &[
+                    PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+                    PostflightAccessSpan::read_deferral_input_accumulator(3),
+                    PostflightAccessSpan::read_deferral_output_accumulator(3),
+                    PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
+                    PostflightAccessSpan::write_deferral_input_accumulator(3),
+                    PostflightAccessSpan::write_deferral_output_accumulator(3),
+                ],
+            },
         )?;
         registry.register(
             DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
-            &[1, 2],
-            (1 << 6) | (1 << 7),
-            4,
-            5,
-            &[
-                PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
-                PostflightAccessSpan::write_count_from_residual_from_residuals(
-                    RV64_MEMORY_AS,
-                    0,
-                    u32::MAX / MEMORY_BLOCK_BYTES as u32,
-                ),
-            ],
+            PostflightAccessSchedule {
+                register_operands: &[1, 2],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &[
+                    PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
+                    PostflightAccessSpan::write_count_from_residual_from_residuals(
+                        RV64_MEMORY_AS,
+                        0,
+                        u32::MAX / MEMORY_BLOCK_BYTES as u32,
+                    ),
+                ],
+            },
         )
     }
 
@@ -302,14 +306,14 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             (self, rv64),
-            |(tracegen, rv64), insertion_idx, chip| {
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(insertion_idx, chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },

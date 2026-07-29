@@ -2,7 +2,10 @@ use openvm_circuit::{
     arch::{
         cuda::postflight::GpuPostflightProgram,
         rvr::{
-            cuda::{CheckpointReplayProgram, PostflightAccessRegistry, PostflightAccessSpan},
+            cuda::{
+                CheckpointReplayProgram, PostflightAccessRegistry, PostflightAccessSchedule,
+                PostflightAccessSpan,
+            },
             PreflightLimits,
         },
         PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
@@ -36,16 +39,27 @@ fn reg(index: usize) -> usize {
 fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     let opcode = KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32;
     let span = PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 25);
+    let schedule = PostflightAccessSchedule {
+        register_operands: &[1],
+        zero_operand_mask: 0,
+        register_as_operand: 4,
+        memory_as_operand: 5,
+        spans: &[span],
+    };
     let mut registry = PostflightAccessRegistry::default();
-    registry.register(opcode, &[1], 0, 4, 5, &[span]).unwrap();
-    let duplicate = registry
-        .register(opcode, &[1], 0, 4, 5, &[span])
-        .unwrap_err();
+    registry.register(opcode, schedule).unwrap();
+    let duplicate = registry.register(opcode, schedule).unwrap_err();
     assert!(duplicate.to_string().contains("duplicate"), "{duplicate}");
 
     let invalid_span = PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 1);
     let invalid = PostflightAccessRegistry::default()
-        .register(opcode, &[1], 0, 4, 5, &[invalid_span])
+        .register(
+            opcode,
+            PostflightAccessSchedule {
+                spans: &[invalid_span],
+                ..schedule
+            },
+        )
         .unwrap_err();
     assert!(
         invalid.to_string().contains("invalid access span"),
@@ -53,14 +67,20 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     );
 
     let invalid_mask = PostflightAccessRegistry::default()
-        .register(opcode, &[1], 1, 4, 5, &[span])
+        .register(
+            opcode,
+            PostflightAccessSchedule {
+                zero_operand_mask: 1,
+                ..schedule
+            },
+        )
         .unwrap_err();
     assert!(
         invalid_mask.to_string().contains("invalid operand layout"),
         "{invalid_mask}"
     );
     let oversized = PostflightAccessRegistry::default()
-        .register(u32::MAX, &[1], 0, 4, 5, &[span])
+        .register(u32::MAX, schedule)
         .unwrap_err();
     assert!(
         oversized.to_string().contains("dense checkpoint dispatch"),
@@ -69,9 +89,7 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
 
     let native_opcode = BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32;
     let mut collision = PostflightAccessRegistry::default();
-    collision
-        .register(native_opcode, &[1], 0, 4, 5, &[span])
-        .unwrap();
+    collision.register(native_opcode, schedule).unwrap();
     let collision = collision
         .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())
         .unwrap_err();

@@ -44,9 +44,26 @@ type AluByteCols<F> =
     Rv64VecHeapAdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
 type BranchCols<F> = Rv64VecHeapBranchU16AdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
 
-struct AluReplay<T, const NUM_LIMBS: usize> {
+struct AluComputation<T, const NUM_LIMBS: usize, M> {
+    output: [T; NUM_LIMBS],
+    metadata: M,
+}
+
+struct AluReplay<T, const NUM_LIMBS: usize, M> {
     inputs: [[T; NUM_LIMBS]; NUM_READS],
     output: [T; NUM_LIMBS],
+    metadata: M,
+}
+
+struct BranchDecision<M> {
+    taken: bool,
+    metadata: M,
+}
+
+struct BranchReplay<M> {
+    inputs: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
+    taken: bool,
+    metadata: M,
 }
 
 fn invalid(message: impl Into<String>) -> PostflightError {
@@ -141,15 +158,17 @@ fn split_byte_blocks(
     array::from_fn(|i| array::from_fn(|j| bytes[i * MEMORY_BLOCK_BYTES + j]))
 }
 
-fn replay_alu_u16<F: PrimeField32>(
+fn replay_alu_u16<F: PrimeField32, M>(
     postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
     range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     adapter_row: &mut AluU16Cols<F>,
-    compute: impl FnOnce([[u16; INT256_NUM_U16_LIMBS]; NUM_READS]) -> [u16; INT256_NUM_U16_LIMBS],
-) -> Result<AluReplay<u16, INT256_NUM_U16_LIMBS>, PostflightError> {
+    compute: impl FnOnce(
+        [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
+    ) -> AluComputation<u16, INT256_NUM_U16_LIMBS, M>,
+) -> Result<AluReplay<u16, INT256_NUM_U16_LIMBS, M>, PostflightError> {
     let instruction = postflight.instruction(step);
     validate_alu_instruction(instruction)?;
     let rs_ptrs = [
@@ -181,7 +200,8 @@ fn replay_alu_u16<F: PrimeField32>(
         }
     }
     let inputs = reads.map(flatten_u16_blocks);
-    let output = compute(inputs);
+    let computation = compute(inputs);
+    let output = computation.output;
     let output_blocks = split_u16_blocks(output);
     let mut write_accesses = Vec::with_capacity(INT256_NUM_MEMORY_BLOCKS);
     for (j, block) in output_blocks.into_iter().enumerate() {
@@ -220,18 +240,24 @@ fn replay_alu_u16<F: PrimeField32>(
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
     adapter_row.from_state.pc = F::from_u32(from_pc);
 
-    Ok(AluReplay { inputs, output })
+    Ok(AluReplay {
+        inputs,
+        output,
+        metadata: computation.metadata,
+    })
 }
 
-fn replay_alu_bytes<F: PrimeField32>(
+fn replay_alu_bytes<F: PrimeField32, M>(
     postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
     range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     adapter_row: &mut AluByteCols<F>,
-    compute: impl FnOnce([[u8; INT256_NUM_U8_LIMBS]; NUM_READS]) -> [u8; INT256_NUM_U8_LIMBS],
-) -> Result<AluReplay<u8, INT256_NUM_U8_LIMBS>, PostflightError> {
+    compute: impl FnOnce(
+        [[u8; INT256_NUM_U8_LIMBS]; NUM_READS],
+    ) -> AluComputation<u8, INT256_NUM_U8_LIMBS, M>,
+) -> Result<AluReplay<u8, INT256_NUM_U8_LIMBS, M>, PostflightError> {
     let instruction = postflight.instruction(step);
     validate_alu_instruction(instruction)?;
     let rs_ptrs = [
@@ -263,7 +289,8 @@ fn replay_alu_bytes<F: PrimeField32>(
         }
     }
     let inputs = reads.map(flatten_byte_blocks);
-    let output = compute(inputs);
+    let computation = compute(inputs);
+    let output = computation.output;
     let output_blocks = split_byte_blocks(output);
     let mut write_accesses = Vec::with_capacity(INT256_NUM_MEMORY_BLOCKS);
     for (j, block) in output_blocks.into_iter().enumerate() {
@@ -306,18 +333,22 @@ fn replay_alu_bytes<F: PrimeField32>(
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
     adapter_row.from_state.pc = F::from_u32(from_pc);
 
-    Ok(AluReplay { inputs, output })
+    Ok(AluReplay {
+        inputs,
+        output,
+        metadata: computation.metadata,
+    })
 }
 
-fn replay_branch<F: PrimeField32>(
+fn replay_branch<F: PrimeField32, M>(
     postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
     range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     adapter_row: &mut BranchCols<F>,
-    branch: impl FnOnce([[u16; INT256_NUM_U16_LIMBS]; NUM_READS]) -> bool,
-) -> Result<([[u16; INT256_NUM_U16_LIMBS]; NUM_READS], bool), PostflightError> {
+    branch: impl FnOnce([[u16; INT256_NUM_U16_LIMBS]; NUM_READS]) -> BranchDecision<M>,
+) -> Result<BranchReplay<M>, PostflightError> {
     let instruction = postflight.instruction(step);
     validate_alu_instruction(instruction)?;
     let rs_ptrs = [
@@ -346,7 +377,8 @@ fn replay_branch<F: PrimeField32>(
         }
     }
     let inputs = reads.map(flatten_u16_blocks);
-    let taken = branch(inputs);
+    let decision = branch(inputs);
+    let taken = decision.taken;
     let next_pc = if taken {
         (F::from_u32(from_pc) + instruction.c).as_canonical_u32()
     } else {
@@ -372,7 +404,11 @@ fn replay_branch<F: PrimeField32>(
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
     adapter_row.from_state.pc = F::from_u32(from_pc);
-    Ok((inputs, taken))
+    Ok(BranchReplay {
+        inputs,
+        taken,
+        metadata: decision.metadata,
+    })
 }
 
 fn opcodes_rows<F: PrimeField32>(postflight: &Postflight<'_, F>, opcodes: &[VmOpcode]) -> usize {
@@ -437,7 +473,10 @@ pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
                 &chip.mem_helper.as_borrowed(),
                 &chip.inner.range_checker_chip,
                 adapter_row.borrow_mut(),
-                |inputs| add_sub(opcode, inputs),
+                |inputs| AluComputation {
+                    output: add_sub(opcode, inputs),
+                    metadata: (),
+                },
             )?;
             let core: &mut AddSubCoreCols<F, INT256_NUM_U16_LIMBS, U16_BITS> =
                 core_row.borrow_mut();
@@ -482,13 +521,14 @@ pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
                 &chip.mem_helper.as_borrowed(),
                 range_checker,
                 adapter_row.borrow_mut(),
-                |[b, c]| {
-                    array::from_fn(|i| match opcode {
+                |[b, c]| AluComputation {
+                    output: array::from_fn(|i| match opcode {
                         BaseAluOpcode::XOR => b[i] ^ c[i],
                         BaseAluOpcode::OR => b[i] | c[i],
                         BaseAluOpcode::AND => b[i] & c[i],
                         _ => unreachable!(),
-                    })
+                    }),
+                    metadata: (),
                 },
             )?;
             let core: &mut BitwiseLogicCoreCols<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS> =
@@ -511,19 +551,37 @@ pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
     Ok(trace)
 }
 
+#[derive(Clone, Copy)]
+struct LimbComparison {
+    result: bool,
+    diff_idx: usize,
+    lhs_sign: bool,
+    rhs_sign: bool,
+}
+
 fn less_than(
     signed: bool,
     b: &[u16; INT256_NUM_U16_LIMBS],
     c: &[u16; INT256_NUM_U16_LIMBS],
-) -> (bool, usize, bool, bool) {
+) -> LimbComparison {
     let b_sign = signed && b[INT256_NUM_U16_LIMBS - 1] >> (U16_BITS - 1) == 1;
     let c_sign = signed && c[INT256_NUM_U16_LIMBS - 1] >> (U16_BITS - 1) == 1;
     for i in (0..INT256_NUM_U16_LIMBS).rev() {
         if b[i] != c[i] {
-            return ((b[i] < c[i]) ^ b_sign ^ c_sign, i, b_sign, c_sign);
+            return LimbComparison {
+                result: (b[i] < c[i]) ^ b_sign ^ c_sign,
+                diff_idx: i,
+                lhs_sign: b_sign,
+                rhs_sign: c_sign,
+            };
         }
     }
-    (false, INT256_NUM_U16_LIMBS, b_sign, c_sign)
+    LimbComparison {
+        result: false,
+        diff_idx: INT256_NUM_U16_LIMBS,
+        lhs_sign: b_sign,
+        rhs_sign: c_sign,
+    }
 }
 
 fn fill_less_than<F: PrimeField32>(
@@ -531,8 +589,14 @@ fn fill_less_than<F: PrimeField32>(
     core: &mut LessThanCoreCols<F, INT256_NUM_U16_LIMBS, U16_BITS>,
     opcode: LessThanOpcode,
     [b, c]: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
-    (cmp_result, diff_idx, b_sign, c_sign): (bool, usize, bool, bool),
+    comparison: LimbComparison,
 ) {
+    let LimbComparison {
+        result: cmp_result,
+        diff_idx,
+        lhs_sign: b_sign,
+        rhs_sign: c_sign,
+    } = comparison;
     let signed = opcode == LessThanOpcode::SLT;
     let (b_msb_f, b_msb_range) = if b_sign {
         (
@@ -609,7 +673,6 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let mut comparison = None;
             let replay = replay_alu_u16(
                 postflight,
                 step,
@@ -618,11 +681,14 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
                 &chip.inner.range_checker_chip,
                 adapter_row.borrow_mut(),
                 |inputs| {
-                    let result = less_than(opcode == LessThanOpcode::SLT, &inputs[0], &inputs[1]);
-                    comparison = Some(result);
+                    let comparison =
+                        less_than(opcode == LessThanOpcode::SLT, &inputs[0], &inputs[1]);
                     let mut output = [0u16; INT256_NUM_U16_LIMBS];
-                    output[0] = result.0 as u16;
-                    output
+                    output[0] = comparison.result as u16;
+                    AluComputation {
+                        output,
+                        metadata: comparison,
+                    }
                 },
             )?;
             fill_less_than(
@@ -630,7 +696,7 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
                 core_row.borrow_mut(),
                 opcode,
                 replay.inputs,
-                comparison.expect("less-than replay called its compute closure"),
+                replay.metadata,
             );
             Ok(())
         })?;
@@ -642,13 +708,16 @@ pub(crate) fn generate_less_than_trace<F: PrimeField32>(
 fn branch_eq(
     opcode: BranchEqualOpcode,
     [a, b]: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
-) -> (bool, Option<usize>) {
+) -> BranchDecision<Option<usize>> {
     let diff_index = (0..INT256_NUM_U16_LIMBS).find(|&i| a[i] != b[i]);
     let taken = match opcode {
         BranchEqualOpcode::BEQ => diff_index.is_none(),
         BranchEqualOpcode::BNE => diff_index.is_some(),
     };
-    (taken, diff_index)
+    BranchDecision {
+        taken,
+        metadata: diff_index,
+    }
 }
 
 pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
@@ -670,32 +739,26 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let mut comparison = None;
-            let (inputs, cmp_result) = replay_branch(
+            let replay = replay_branch(
                 postflight,
                 step,
                 pointer_max_bits,
                 &chip.mem_helper.as_borrowed(),
                 range_checker,
                 adapter_row.borrow_mut(),
-                |inputs| {
-                    let result = branch_eq(opcode, inputs);
-                    comparison = Some(result);
-                    result.0
-                },
+                |inputs| branch_eq(opcode, inputs),
             )?;
-            let [a, b] = inputs;
+            let [a, b] = replay.inputs;
             let core: &mut BranchEqualCoreCols<F, INT256_NUM_U16_LIMBS> = core_row.borrow_mut();
             core.diff_inv_marker = [F::ZERO; INT256_NUM_U16_LIMBS];
-            let (_, diff_index) = comparison.expect("branch replay called its comparison closure");
-            if let Some(index) = diff_index {
+            if let Some(index) = replay.metadata {
                 core.diff_inv_marker[index] =
                     (F::from_u16(a[index]) - F::from_u16(b[index])).inverse();
             }
             core.opcode_beq_flag = F::from_bool(opcode == BranchEqualOpcode::BEQ);
             core.opcode_bne_flag = F::from_bool(opcode == BranchEqualOpcode::BNE);
             core.imm = postflight.instruction(step).c;
-            core.cmp_result = F::from_bool(cmp_result);
+            core.cmp_result = F::from_bool(replay.taken);
             core.a = a.map(F::from_u16);
             core.b = b.map(F::from_u16);
             Ok(())
@@ -709,7 +772,7 @@ fn branch_compare(
     opcode: BranchLessThanOpcode,
     a: &[u16; INT256_NUM_U16_LIMBS],
     b: &[u16; INT256_NUM_U16_LIMBS],
-) -> (bool, usize, bool, bool) {
+) -> LimbComparison {
     let signed = matches!(
         opcode,
         BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE
@@ -722,10 +785,20 @@ fn branch_compare(
     let b_sign = signed && b[INT256_NUM_U16_LIMBS - 1] >> (U16_BITS - 1) == 1;
     for i in (0..INT256_NUM_U16_LIMBS).rev() {
         if a[i] != b[i] {
-            return ((a[i] < b[i]) ^ a_sign ^ b_sign ^ ge, i, a_sign, b_sign);
+            return LimbComparison {
+                result: (a[i] < b[i]) ^ a_sign ^ b_sign ^ ge,
+                diff_idx: i,
+                lhs_sign: a_sign,
+                rhs_sign: b_sign,
+            };
         }
     }
-    (ge, INT256_NUM_U16_LIMBS, a_sign, b_sign)
+    LimbComparison {
+        result: ge,
+        diff_idx: INT256_NUM_U16_LIMBS,
+        lhs_sign: a_sign,
+        rhs_sign: b_sign,
+    }
 }
 
 pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
@@ -752,8 +825,7 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let mut comparison = None;
-            let (inputs, cmp_result) = replay_branch(
+            let replay = replay_branch(
                 postflight,
                 step,
                 pointer_max_bits,
@@ -761,14 +833,20 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
                 &chip.inner.range_checker_chip,
                 adapter_row.borrow_mut(),
                 |[a, b]| {
-                    let result = branch_compare(opcode, &a, &b);
-                    comparison = Some(result);
-                    result.0
+                    let comparison = branch_compare(opcode, &a, &b);
+                    BranchDecision {
+                        taken: comparison.result,
+                        metadata: comparison,
+                    }
                 },
             )?;
-            let [a, b] = inputs;
-            let (_, diff_idx, a_sign, b_sign) =
-                comparison.expect("branch replay called its comparison closure");
+            let [a, b] = replay.inputs;
+            let LimbComparison {
+                diff_idx,
+                lhs_sign: a_sign,
+                rhs_sign: b_sign,
+                ..
+            } = replay.metadata;
             let signed = matches!(
                 opcode,
                 BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE
@@ -777,7 +855,7 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
                 opcode,
                 BranchLessThanOpcode::BGE | BranchLessThanOpcode::BGEU
             );
-            let cmp_lt = cmp_result ^ ge;
+            let cmp_lt = replay.taken ^ ge;
             let (a_msb_f, a_msb_range) =
                 signed_msb::<F>(a[INT256_NUM_U16_LIMBS - 1], signed, a_sign);
             let (b_msb_f, b_msb_range) =
@@ -806,7 +884,7 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
             core.opcode_bge_flag = F::from_bool(opcode == BranchLessThanOpcode::BGE);
             core.opcode_bgeu_flag = F::from_bool(opcode == BranchLessThanOpcode::BGEU);
             core.imm = postflight.instruction(step).c;
-            core.cmp_result = F::from_bool(cmp_result);
+            core.cmp_result = F::from_bool(replay.taken);
             core.a = a.map(F::from_u16);
             core.b = b.map(F::from_u16);
             Ok(())
@@ -853,10 +931,12 @@ fn comparison_diff<F: PrimeField32>(
     }
 }
 
-fn mul_with_carry(
-    x: &[u8; INT256_NUM_U8_LIMBS],
-    y: &[u8; INT256_NUM_U8_LIMBS],
-) -> ([u8; INT256_NUM_U8_LIMBS], [u32; INT256_NUM_U8_LIMBS]) {
+struct Multiplication {
+    output: [u8; INT256_NUM_U8_LIMBS],
+    carry: [u32; INT256_NUM_U8_LIMBS],
+}
+
+fn mul_with_carry(x: &[u8; INT256_NUM_U8_LIMBS], y: &[u8; INT256_NUM_U8_LIMBS]) -> Multiplication {
     let mut result = [0u8; INT256_NUM_U8_LIMBS];
     let mut carry = [0u32; INT256_NUM_U8_LIMBS];
     for i in 0..INT256_NUM_U8_LIMBS {
@@ -867,7 +947,10 @@ fn mul_with_carry(
         carry[i] = value >> RV64_BYTE_BITS;
         result[i] = value as u8;
     }
-    (result, carry)
+    Multiplication {
+        output: result,
+        carry,
+    }
 }
 
 pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
@@ -883,7 +966,6 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
     let mut trace = trace(postflight.steps(opcode).len(), width);
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let mut multiplication = None;
         let replay = replay_alu_bytes(
             postflight,
             step,
@@ -892,14 +974,14 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
             range_checker,
             adapter_row.borrow_mut(),
             |[b, c]| {
-                let result = mul_with_carry(&b, &c);
-                multiplication = Some(result);
-                result.0
+                let multiplication = mul_with_carry(&b, &c);
+                AluComputation {
+                    output: multiplication.output,
+                    metadata: multiplication.carry,
+                }
             },
         )?;
-        let (output, carry) =
-            multiplication.expect("multiplication replay called its compute closure");
-        for (&a, &carry) in output.iter().zip(&carry) {
+        for (&a, &carry) in replay.output.iter().zip(&replay.metadata) {
             chip.inner
                 .range_tuple_chip
                 .add_count(&[u32::from(a), carry]);
@@ -912,7 +994,7 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
         let core: &mut MultiplicationCoreCols<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS> =
             core_row.borrow_mut();
         core.is_valid = F::ONE;
-        core.a = output.map(F::from_u8);
+        core.a = replay.output.map(F::from_u8);
         core.b = replay.inputs[0].map(F::from_u8);
         core.c = replay.inputs[1].map(F::from_u8);
         Ok(())
@@ -920,17 +1002,34 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
     Ok(trace)
 }
 
-fn shift_amount(c: &[u16; INT256_NUM_U16_LIMBS]) -> (usize, usize) {
+#[derive(Clone, Copy)]
+struct ShiftAmount {
+    limb: usize,
+    bit: usize,
+}
+
+fn shift_amount(c: &[u16; INT256_NUM_U16_LIMBS]) -> ShiftAmount {
     let shift = usize::from(c[0]) % (INT256_NUM_U16_LIMBS * U16_BITS);
-    (shift / U16_BITS, shift % U16_BITS)
+    ShiftAmount {
+        limb: shift / U16_BITS,
+        bit: shift % U16_BITS,
+    }
+}
+
+struct ShiftResult {
+    output: [u16; INT256_NUM_U16_LIMBS],
+    amount: ShiftAmount,
 }
 
 fn shift_logical(
     opcode: ShiftOpcode,
     b: &[u16; INT256_NUM_U16_LIMBS],
     c: &[u16; INT256_NUM_U16_LIMBS],
-) -> ([u16; INT256_NUM_U16_LIMBS], usize, usize) {
-    let (limb_shift, bit_shift) = shift_amount(c);
+) -> ShiftResult {
+    let ShiftAmount {
+        limb: limb_shift,
+        bit: bit_shift,
+    } = shift_amount(c);
     let mut output = [0u16; INT256_NUM_U16_LIMBS];
     match opcode {
         ShiftOpcode::SLL => {
@@ -953,7 +1052,13 @@ fn shift_logical(
         }
         _ => unreachable!("logical shift generator received non-logical opcode"),
     }
-    (output, limb_shift, bit_shift)
+    ShiftResult {
+        output,
+        amount: ShiftAmount {
+            limb: limb_shift,
+            bit: bit_shift,
+        },
+    }
 }
 
 fn fill_shift_decomposition<F: PrimeField32>(
@@ -1011,7 +1116,6 @@ pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
         let steps = postflight.steps(global_opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let mut shift = None;
             let replay = replay_alu_u16(
                 postflight,
                 step,
@@ -1020,13 +1124,17 @@ pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
                 &chip.inner.range_checker_chip,
                 adapter_row.borrow_mut(),
                 |[b, c]| {
-                    let result = shift_logical(opcode, &b, &c);
-                    shift = Some((result.1, result.2));
-                    result.0
+                    let shift = shift_logical(opcode, &b, &c);
+                    AluComputation {
+                        output: shift.output,
+                        metadata: shift.amount,
+                    }
                 },
             )?;
-            let (limb_shift, bit_shift) =
-                shift.expect("logical-shift replay called its compute closure");
+            let ShiftAmount {
+                limb: limb_shift,
+                bit: bit_shift,
+            } = replay.metadata;
             let (carry, aux, limb_marker, bit_marker) = fill_shift_decomposition(
                 &chip.inner.range_checker_chip,
                 &replay.inputs[0],
@@ -1066,9 +1174,12 @@ pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
 fn shift_arithmetic(
     b: &[u16; INT256_NUM_U16_LIMBS],
     c: &[u16; INT256_NUM_U16_LIMBS],
-) -> ([u16; INT256_NUM_U16_LIMBS], usize, usize) {
+) -> ShiftResult {
     let fill = u16::MAX * (b[INT256_NUM_U16_LIMBS - 1] >> (U16_BITS - 1));
-    let (limb_shift, bit_shift) = shift_amount(c);
+    let ShiftAmount {
+        limb: limb_shift,
+        bit: bit_shift,
+    } = shift_amount(c);
     let mut output = [fill; INT256_NUM_U16_LIMBS];
     for i in 0..INT256_NUM_U16_LIMBS - limb_shift {
         let mut value = u32::from(b[i + limb_shift]) >> bit_shift;
@@ -1082,7 +1193,13 @@ fn shift_arithmetic(
         }
         output[i] = value as u16;
     }
-    (output, limb_shift, bit_shift)
+    ShiftResult {
+        output,
+        amount: ShiftAmount {
+            limb: limb_shift,
+            bit: bit_shift,
+        },
+    }
 }
 
 pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
@@ -1097,7 +1214,6 @@ pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
     let mut trace = trace(postflight.steps(opcode).len(), width);
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let mut shift = None;
         let replay = replay_alu_u16(
             postflight,
             step,
@@ -1106,13 +1222,17 @@ pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
             &chip.inner.range_checker_chip,
             adapter_row.borrow_mut(),
             |[b, c]| {
-                let result = shift_arithmetic(&b, &c);
-                shift = Some((result.1, result.2));
-                result.0
+                let shift = shift_arithmetic(&b, &c);
+                AluComputation {
+                    output: shift.output,
+                    metadata: shift.amount,
+                }
             },
         )?;
-        let (limb_shift, bit_shift) =
-            shift.expect("arithmetic-shift replay called its compute closure");
+        let ShiftAmount {
+            limb: limb_shift,
+            bit: bit_shift,
+        } = replay.metadata;
         let (carry, aux, limb_marker, bit_marker) = fill_shift_decomposition(
             &chip.inner.range_checker_chip,
             &replay.inputs[0],

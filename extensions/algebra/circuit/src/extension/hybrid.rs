@@ -37,7 +37,9 @@ use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
-    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+    openvm_circuit::arch::rvr::cuda::{
+        PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+    },
     openvm_stark_backend::p3_field::PrimeField32,
 };
 
@@ -633,50 +635,46 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                     blocks as u32,
                 ),
             ];
+            let write_schedule = PostflightAccessSchedule {
+                register_operands: &[2, 3, 1],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &write_spans,
+            };
             for local in [
                 Rv64ModularArithmeticOpcode::ADD,
                 Rv64ModularArithmeticOpcode::SUB,
                 Rv64ModularArithmeticOpcode::MUL,
                 Rv64ModularArithmeticOpcode::DIV,
             ] {
-                registry.register(
-                    opcode(local)?,
-                    &[2, 3, 1],
-                    (1 << 6) | (1 << 7),
-                    4,
-                    5,
-                    &write_spans,
-                )?;
+                registry.register(opcode(local)?, write_schedule)?;
             }
+            let zero_write_schedule = PostflightAccessSchedule {
+                spans: &zero_write_spans,
+                ..write_schedule
+            };
             for local in [
                 Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
                 Rv64ModularArithmeticOpcode::SETUP_MULDIV,
             ] {
-                registry.register(
-                    opcode(local)?,
-                    &[2, 3, 1],
-                    (1 << 6) | (1 << 7),
-                    4,
-                    5,
-                    &zero_write_spans,
-                )?;
+                registry.register(opcode(local)?, zero_write_schedule)?;
             }
+            let read_schedule = PostflightAccessSchedule {
+                register_operands: &[2, 3],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &read_spans,
+            };
             registry.register_with_residual_register_write(
                 opcode(Rv64ModularArithmeticOpcode::IS_EQ)?,
-                &[2, 3],
-                (1 << 6) | (1 << 7),
-                4,
-                5,
-                &read_spans,
+                read_schedule,
                 1,
             )?;
             registry.register_with_zero_register_write(
                 opcode(Rv64ModularArithmeticOpcode::SETUP_ISEQ)?,
-                &[2, 3],
-                (1 << 6) | (1 << 7),
-                4,
-                5,
-                &read_spans,
+                read_schedule,
                 1,
             )?;
         }
@@ -728,6 +726,13 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                         blocks as u32,
                     ),
                 ];
+                let schedule = PostflightAccessSchedule {
+                    register_operands: &[2, 3, 1],
+                    zero_operand_mask: (1 << 6) | (1 << 7),
+                    register_as_operand: 4,
+                    memory_as_operand: 5,
+                    spans: &spans,
+                };
                 for local in [
                     Fp2Opcode::ADD,
                     Fp2Opcode::SUB,
@@ -736,14 +741,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                     Fp2Opcode::DIV,
                     Fp2Opcode::SETUP_MULDIV,
                 ] {
-                    registry.register(
-                        opcode(local)?,
-                        &[2, 3, 1],
-                        (1 << 6) | (1 << 7),
-                        4,
-                        5,
-                        &spans,
-                    )?;
+                    registry.register(opcode(local)?, schedule)?;
                 }
             }
         }
@@ -977,14 +975,14 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             (self, rv64),
-            |(tracegen, rv64), insertion_idx, chip| {
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(insertion_idx, chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },

@@ -20,7 +20,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::RV64_REGISTER_NUM_LIMBS;
+use super::{ReplayComputation, ReplayResult, RV64_REGISTER_NUM_LIMBS};
 use crate::adapters::{
     byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, rv64_bytes_to_u16_block,
     rv64_u16_block_to_bytes,
@@ -142,19 +142,15 @@ pub struct Rv64MultAdapterExecutor;
 pub struct Rv64MultAdapterFiller;
 
 impl Rv64MultAdapterFiller {
-    pub(crate) fn replay<F: PrimeField32>(
+    pub(crate) fn replay<F: PrimeField32, M>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut Rv64MultAdapterCols<F>,
-        compute: impl FnOnce([[u8; RV64_REGISTER_NUM_LIMBS]; 2]) -> [u8; RV64_REGISTER_NUM_LIMBS],
-    ) -> Result<
-        (
+        compute: impl FnOnce(
             [[u8; RV64_REGISTER_NUM_LIMBS]; 2],
-            [u8; RV64_REGISTER_NUM_LIMBS],
-        ),
-        PostflightError,
-    > {
+        ) -> ReplayComputation<RV64_REGISTER_NUM_LIMBS, M>,
+    ) -> Result<ReplayResult<RV64_REGISTER_NUM_LIMBS, M>, PostflightError> {
         let instruction = postflight.instruction(step);
         if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
             || instruction.e.as_canonical_u32() != 0
@@ -178,7 +174,8 @@ impl Rv64MultAdapterFiller {
             rv64_u16_block_to_bytes(rs1.value),
             rv64_u16_block_to_bytes(rs2.value),
         ];
-        let output = compute(inputs);
+        let computation = compute(inputs);
+        let output = computation.output;
         let write = replay.write_u16(
             RV64_REGISTER_AS,
             rd_u16_ptr,
@@ -210,6 +207,10 @@ impl Rv64MultAdapterFiller {
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
 
-        Ok((inputs, output))
+        Ok(ReplayResult {
+            inputs,
+            output,
+            metadata: computation.metadata,
+        })
     }
 }

@@ -301,14 +301,13 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             self,
-            |tracegen, insertion_idx, chip| tracegen.generate_for_chip(insertion_idx, chip),
+            SdkPreflightGpuTracegen::generate_for_chip,
             SdkPreflightGpuTracegen::finish,
         )
     }
 
     fn generate_for_chip(
         &mut self,
-        insertion_idx: usize,
         chip: &dyn Any,
     ) -> Result<AirProvingContext<GpuBackend>, GenerationError> {
         if let Some(tracegen) = &mut self.deferral {
@@ -341,9 +340,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
                 return Ok(ctx);
             }
         }
-        self.rv64
-            .generate_for_chip(insertion_idx, chip)
-            .map_err(extension_error)
+        self.rv64.generate_for_chip(chip).map_err(extension_error)
     }
 
     fn finish(self) -> Result<(), GenerationError> {

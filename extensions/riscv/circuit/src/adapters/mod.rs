@@ -58,6 +58,17 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
+pub(crate) struct ReplayComputation<const NUM_LIMBS: usize, M> {
+    pub output: [u8; NUM_LIMBS],
+    pub metadata: M,
+}
+
+pub(crate) struct ReplayResult<const NUM_LIMBS: usize, M> {
+    pub inputs: [[u8; NUM_LIMBS]; 2],
+    pub output: [u8; NUM_LIMBS],
+    pub metadata: M,
+}
+
 /// Validate a guest byte pointer used as the start of a memory-bus block.
 ///
 /// OpenVM memory is an equipartition into [`BLOCK_FE_WIDTH`]-cell blocks. In

@@ -124,7 +124,6 @@ const RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS: u32 = 2;
 /// The finite source tags distinguish ordinary RV64 heap blocks from Deferral
 /// accumulator blocks. This is intentionally not a general address-expression
 /// language: each supported source has one canonical interpretation in replay.
-#[doc(hidden)]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PostflightAccessSpan {
@@ -331,7 +330,6 @@ struct RvrCheckpointInstructionLayout {
 /// This is an internal composition seam, not a stable extension API. The
 /// supported sources remain a finite POD set: residuals, zero, program-owned
 /// constants, and Deferral's field accumulator blocks.
-#[doc(hidden)]
 #[derive(Clone, Debug, Default)]
 pub struct PostflightAccessRegistry {
     dispatch: Vec<u32>,
@@ -341,11 +339,35 @@ pub struct PostflightAccessRegistry {
     static_values: Vec<u64>,
 }
 
+/// Borrowed semantic description of one extension instruction's replay
+/// accesses. Registration validates the operand roles and converts this into
+/// the compact CUDA schedule stored with the program.
+#[derive(Clone, Copy, Debug)]
+pub struct PostflightAccessSchedule<'a> {
+    pub register_operands: &'a [u8],
+    pub zero_operand_mask: u32,
+    pub register_as_operand: u8,
+    pub memory_as_operand: u8,
+    pub spans: &'a [PostflightAccessSpan],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PostflightEffect {
+    Next,
+    BranchResidual { operand: u8 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PostflightRegisterWrite {
+    None,
+    Zero { operand: u8 },
+    Residual { operand: u8 },
+}
+
 impl PostflightAccessRegistry {
     /// Adds one fixed sequence of eight-byte write values to the program-owned
     /// replay data and returns the span that consumes it. This is used for
     /// setup instructions whose postimage depends only on VM configuration.
-    #[doc(hidden)]
     pub fn write_fixed_from_static(
         &mut self,
         address_space: u32,
@@ -382,128 +404,95 @@ impl PostflightAccessRegistry {
         })
     }
 
-    #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     pub fn register(
         &mut self,
         opcode: u32,
-        register_operands: &[u8],
-        zero_operand_mask: u32,
-        register_as_operand: u8,
-        memory_as_operand: u8,
-        spans: &[PostflightAccessSpan],
+        schedule: PostflightAccessSchedule<'_>,
     ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
-            register_operands,
-            zero_operand_mask,
-            register_as_operand,
-            memory_as_operand,
-            spans,
-            RVR_CHECKPOINT_EFFECT_NEXT,
-            0,
-            RVR_CHECKPOINT_REGISTER_WRITE_NONE,
-            0,
+            schedule,
+            PostflightEffect::Next,
+            PostflightRegisterWrite::None,
         )
     }
 
     /// Registers a schedule whose final clock slot writes zero to a register.
     /// An x0 destination reserves the slot but emits no memory event.
-    #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     pub fn register_with_zero_register_write(
         &mut self,
         opcode: u32,
-        register_operands: &[u8],
-        zero_operand_mask: u32,
-        register_as_operand: u8,
-        memory_as_operand: u8,
-        spans: &[PostflightAccessSpan],
+        schedule: PostflightAccessSchedule<'_>,
         write_operand: u8,
     ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
-            register_operands,
-            zero_operand_mask,
-            register_as_operand,
-            memory_as_operand,
-            spans,
-            RVR_CHECKPOINT_EFFECT_NEXT,
-            0,
-            RVR_CHECKPOINT_REGISTER_WRITE_ZERO,
-            write_operand,
+            schedule,
+            PostflightEffect::Next,
+            PostflightRegisterWrite::Zero {
+                operand: write_operand,
+            },
         )
     }
 
     /// Registers a schedule whose final clock slot writes one residual to a
     /// register. An x0 destination consumes the residual and slot but emits no
     /// memory event.
-    #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     pub fn register_with_residual_register_write(
         &mut self,
         opcode: u32,
-        register_operands: &[u8],
-        zero_operand_mask: u32,
-        register_as_operand: u8,
-        memory_as_operand: u8,
-        spans: &[PostflightAccessSpan],
+        schedule: PostflightAccessSchedule<'_>,
         write_operand: u8,
     ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
-            register_operands,
-            zero_operand_mask,
-            register_as_operand,
-            memory_as_operand,
-            spans,
-            RVR_CHECKPOINT_EFFECT_NEXT,
-            0,
-            RVR_CHECKPOINT_REGISTER_WRITE_RESIDUAL,
-            write_operand,
+            schedule,
+            PostflightEffect::Next,
+            PostflightRegisterWrite::Residual {
+                operand: write_operand,
+            },
         )
     }
 
-    #[doc(hidden)]
-    #[allow(clippy::too_many_arguments)]
     pub fn register_branch_residual(
         &mut self,
         opcode: u32,
-        register_operands: &[u8],
-        zero_operand_mask: u32,
-        register_as_operand: u8,
-        memory_as_operand: u8,
-        spans: &[PostflightAccessSpan],
+        schedule: PostflightAccessSchedule<'_>,
         branch_operand: u8,
     ) -> Result<(), GpuPostflightError> {
         self.register_with_effect(
             opcode,
+            schedule,
+            PostflightEffect::BranchResidual {
+                operand: branch_operand,
+            },
+            PostflightRegisterWrite::None,
+        )
+    }
+
+    fn register_with_effect(
+        &mut self,
+        opcode: u32,
+        schedule: PostflightAccessSchedule<'_>,
+        effect: PostflightEffect,
+        register_write: PostflightRegisterWrite,
+    ) -> Result<(), GpuPostflightError> {
+        let PostflightAccessSchedule {
             register_operands,
             zero_operand_mask,
             register_as_operand,
             memory_as_operand,
             spans,
-            RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL,
-            branch_operand,
-            RVR_CHECKPOINT_REGISTER_WRITE_NONE,
-            0,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn register_with_effect(
-        &mut self,
-        opcode: u32,
-        register_operands: &[u8],
-        zero_operand_mask: u32,
-        register_as_operand: u8,
-        memory_as_operand: u8,
-        spans: &[PostflightAccessSpan],
-        effect: u8,
-        effect_operand: u8,
-        register_write_source: u8,
-        register_write_operand: u8,
-    ) -> Result<(), GpuPostflightError> {
+        } = schedule;
+        let effect_operand = match effect {
+            PostflightEffect::Next => 0,
+            PostflightEffect::BranchResidual { operand } => operand,
+        };
+        let register_write_operand = match register_write {
+            PostflightRegisterWrite::None => 0,
+            PostflightRegisterWrite::Zero { operand }
+            | PostflightRegisterWrite::Residual { operand } => operand,
+        };
         if register_operands.len() > 3
             || register_operands
                 .iter()
@@ -520,26 +509,13 @@ impl PostflightAccessRegistry {
                 .iter()
                 .chain([register_as_operand, memory_as_operand].iter())
                 .any(|&word| zero_operand_mask & (1 << word) != 0)
-            || (effect == RVR_CHECKPOINT_EFFECT_NEXT && effect_operand != 0)
-            || (effect == RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL
+            || (matches!(effect, PostflightEffect::BranchResidual { .. })
                 && (!(1..8).contains(&effect_operand)
                     || register_operands.contains(&effect_operand)
                     || effect_operand == register_as_operand
                     || effect_operand == memory_as_operand
                     || zero_operand_mask & (1 << effect_operand) != 0))
-            || !matches!(
-                effect,
-                RVR_CHECKPOINT_EFFECT_NEXT | RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL
-            )
-            || !matches!(
-                register_write_source,
-                RVR_CHECKPOINT_REGISTER_WRITE_NONE
-                    | RVR_CHECKPOINT_REGISTER_WRITE_ZERO
-                    | RVR_CHECKPOINT_REGISTER_WRITE_RESIDUAL
-            )
-            || (register_write_source == RVR_CHECKPOINT_REGISTER_WRITE_NONE
-                && register_write_operand != 0)
-            || (register_write_source != RVR_CHECKPOINT_REGISTER_WRITE_NONE
+            || (!matches!(register_write, PostflightRegisterWrite::None)
                 && (!(1..8).contains(&register_write_operand)
                     || register_write_operand == register_as_operand
                     || register_write_operand == memory_as_operand
@@ -654,6 +630,21 @@ impl PostflightAccessRegistry {
         let mut operand_words = [0u8; 3];
         operand_words[..register_operands.len()].copy_from_slice(register_operands);
         self.spans.extend_from_slice(spans);
+        let (effect, effect_operand) = match effect {
+            PostflightEffect::Next => (RVR_CHECKPOINT_EFFECT_NEXT, 0),
+            PostflightEffect::BranchResidual { operand } => {
+                (RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL, operand)
+            }
+        };
+        let (register_write_source, register_write_operand) = match register_write {
+            PostflightRegisterWrite::None => (RVR_CHECKPOINT_REGISTER_WRITE_NONE, 0),
+            PostflightRegisterWrite::Zero { operand } => {
+                (RVR_CHECKPOINT_REGISTER_WRITE_ZERO, operand)
+            }
+            PostflightRegisterWrite::Residual { operand } => {
+                (RVR_CHECKPOINT_REGISTER_WRITE_RESIDUAL, operand)
+            }
+        };
         self.schedules.push(RvrCheckpointAccessSchedule {
             first_span,
             num_spans,
@@ -674,7 +665,6 @@ impl PostflightAccessRegistry {
         Ok(())
     }
 
-    #[doc(hidden)]
     pub fn validate_no_native_collisions(
         &self,
         opcodes: PostflightOpcodeBases,
@@ -810,7 +800,6 @@ impl CheckpointReplayProgram {
 
     /// Uploads one program together with the extension schedules used only by
     /// compiled checkpoint expansion.
-    #[doc(hidden)]
     pub fn upload_with_postflight_access_registry<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
@@ -1041,17 +1030,15 @@ impl CheckpointReplayProgram {
             execution.to_state,
             matches!(execution.endpoint, PreflightEndpoint::Terminated).then_some(0),
         );
-        tracing::info_span!("postflight_index_history").in_scope(|| {
-            program.index_device_history(
-                program_log,
-                memory_log,
-                field_values,
-                write_masks,
-                error,
-                initial_memory_images,
-                boundary,
-            )
-        })
+        program.index_device_history(
+            program_log,
+            memory_log,
+            field_values,
+            write_masks,
+            error,
+            initial_memory_images,
+            boundary,
+        )
     }
 }
 

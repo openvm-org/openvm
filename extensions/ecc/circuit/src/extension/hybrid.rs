@@ -36,7 +36,9 @@ use strum::EnumCount;
 #[cfg(feature = "rvr")]
 use {
     crate::CurveConfig,
-    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+    openvm_circuit::arch::rvr::cuda::{
+        PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+    },
 };
 #[cfg(all(feature = "rvr", test))]
 use {
@@ -246,18 +248,18 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                     blocks as u32,
                 ),
             ];
+            let add_schedule = PostflightAccessSchedule {
+                register_operands: &[2, 3, 1],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &add_spans,
+            };
             for local in [
                 Rv64WeierstrassOpcode::EC_ADD_NE,
                 Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
             ] {
-                registry.register(
-                    opcode(local)?,
-                    &[2, 3, 1],
-                    (1 << 6) | (1 << 7),
-                    4,
-                    5,
-                    &add_spans,
-                )?;
+                registry.register(opcode(local)?, add_schedule)?;
             }
             let double_spans = [
                 PostflightAccessSpan::read_fixed(
@@ -271,14 +273,14 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                     blocks as u32,
                 ),
             ];
-            registry.register(
-                opcode(Rv64WeierstrassOpcode::EC_DOUBLE)?,
-                &[2, 1],
-                (1 << 3) | (1 << 6) | (1 << 7),
-                4,
-                5,
-                &double_spans,
-            )?;
+            let double_schedule = PostflightAccessSchedule {
+                register_operands: &[2, 1],
+                zero_operand_mask: (1 << 3) | (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &double_spans,
+            };
+            registry.register(opcode(Rv64WeierstrassOpcode::EC_DOUBLE)?, double_schedule)?;
             let setup_words = ec_double_setup_words(
                 curve,
                 blocks * openvm_circuit::arch::MEMORY_BLOCK_BYTES / 2,
@@ -297,11 +299,10 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             ];
             registry.register(
                 opcode(Rv64WeierstrassOpcode::SETUP_EC_DOUBLE)?,
-                &[2, 1],
-                (1 << 3) | (1 << 6) | (1 << 7),
-                4,
-                5,
-                &setup_double_spans,
+                PostflightAccessSchedule {
+                    spans: &setup_double_spans,
+                    ..double_schedule
+                },
             )?;
         }
         Ok(())
@@ -469,7 +470,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             (self, algebra, rv64),
-            |(tracegen, algebra, rv64), insertion_idx, chip| {
+            |(tracegen, algebra, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
@@ -481,7 +482,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(insertion_idx, chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },

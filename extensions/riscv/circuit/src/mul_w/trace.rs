@@ -10,7 +10,10 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::Rv64MulWChip;
 use crate::{
-    adapters::{Rv64MultWAdapterCols, Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS},
+    adapters::{
+        ReplayComputation, Rv64MultWAdapterCols, Rv64MultWAdapterFiller, RV64_BYTE_BITS,
+        RV64_WORD_NUM_LIMBS,
+    },
     mul::{fill_core_row_with_result, run_mul, MultiplicationCoreCols},
 };
 
@@ -30,8 +33,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let mut carry = None;
-        let ([rs1, rs2], output) = adapter.replay(
+        let replay = adapter.replay(
             postflight,
             step,
             &chip.mem_helper.as_borrowed(),
@@ -39,10 +41,13 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             |[rs1, rs2]| {
                 let (output, computed_carry) =
                     run_mul::<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>(&rs1, &rs2);
-                carry = Some(computed_carry);
-                output
+                ReplayComputation {
+                    output,
+                    metadata: computed_carry,
+                }
             },
         )?;
+        let [rs1, rs2] = replay.inputs;
         let core_row: &mut MultiplicationCoreCols<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS> =
             core_row.borrow_mut();
         fill_core_row_with_result(
@@ -51,8 +56,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row,
             rs1,
             rs2,
-            output,
-            carry.expect("word multiplication replay called its compute closure"),
+            replay.output,
+            replay.metadata,
         );
         Ok(())
     })?;

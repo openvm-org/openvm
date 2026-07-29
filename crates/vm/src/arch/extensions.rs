@@ -872,7 +872,6 @@ where
         transcript: &GpuPostflightTranscript,
         replay_plan: &GpuPostflightPlan,
         mut generate_extension: impl FnMut(
-            usize,
             &dyn Any,
         )
             -> Result<AirProvingContext<GpuBackend>, GenerationError>,
@@ -905,19 +904,17 @@ where
             {
                 let _air_span =
                     info_span!("single_trace_gen", air = air_names[insertion_idx]).entered();
-                exec_ctxs[chain_pos] = Some(
-                    generate_extension(insertion_idx, chip.as_any()).map_err(
-                        |error| match error {
-                            GenerationError::ExtensionTracegen(message) => {
-                                GenerationError::ExtensionTracegen(format!(
-                                    "AIR `{}`: {message}",
-                                    air_names[insertion_idx]
-                                ))
-                            }
-                            error => error,
-                        },
-                    )?,
-                );
+                exec_ctxs[chain_pos] = Some(generate_extension(chip.as_any()).map_err(
+                    |error| match error {
+                        GenerationError::ExtensionTracegen(message) => {
+                            GenerationError::ExtensionTracegen(format!(
+                                "AIR `{}`: {message}",
+                                air_names[insertion_idx]
+                            ))
+                        }
+                        error => error,
+                    },
+                )?);
             }
         }
         let ctx_without_empties = sys_ctxs

@@ -9,7 +9,9 @@ use openvm_riscv_transpiler::DivRemOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{run_divrem, DivRemCoreCols, Rv64DivRemChip};
-use crate::adapters::{Rv64MultAdapterCols, Rv64MultAdapterFiller, RV64_BYTE_BITS};
+use crate::adapters::{
+    ReplayComputation, Rv64MultAdapterCols, Rv64MultAdapterFiller, RV64_BYTE_BITS,
+};
 
 /// Generates the RV64 DIV/DIVU/REM/REMU trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
@@ -41,8 +43,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 core_row.borrow_mut();
             let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
             let is_div = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::DIVU;
-            let mut result = None;
-            let ([b, c], _) = Rv64MultAdapterFiller::replay(
+            let replay = Rv64MultAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
@@ -55,17 +56,15 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                     );
                     let output =
                         (if is_div { computed.0 } else { computed.1 }).map(|value| value as u8);
-                    result = Some(computed);
-                    output
+                    ReplayComputation {
+                        output,
+                        metadata: computed,
+                    }
                 },
             )?;
-            chip.inner.fill_core_row_with_result(
-                opcode,
-                b,
-                c,
-                result.expect("divrem replay closure always runs"),
-                core_row,
-            );
+            let [b, c] = replay.inputs;
+            chip.inner
+                .fill_core_row_with_result(opcode, b, c, replay.metadata, core_row);
             Ok(())
         })?;
         row_index += steps.len();

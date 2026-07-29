@@ -4,7 +4,9 @@ use std::{
 };
 
 #[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan};
+use openvm_circuit::arch::rvr::cuda::{
+    PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -78,47 +80,51 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     ) -> Result<(), GpuPostflightError> {
         registry.register(
             KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
-            &[1],
-            (1 << 2) | (1 << 3) | (1 << 6) | (1 << 7),
-            4,
-            5,
-            &[PostflightAccessSpan::write_fixed_from_residuals(
-                openvm_instructions::riscv::RV64_MEMORY_AS,
-                0,
-                25,
-            )],
+            PostflightAccessSchedule {
+                register_operands: &[1],
+                zero_operand_mask: (1 << 2) | (1 << 3) | (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &[PostflightAccessSpan::write_fixed_from_residuals(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    0,
+                    25,
+                )],
+            },
         )?;
         let count_shift = 3;
         let max_words = 17;
         registry.register(
             XorinOpcode::XORIN.global_opcode().as_usize() as u32,
-            &[1, 2, 3],
-            (1 << 6) | (1 << 7),
-            4,
-            5,
-            &[
-                PostflightAccessSpan::read_count_from_register(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
-                    0,
-                    2,
-                    count_shift,
-                    max_words,
-                ),
-                PostflightAccessSpan::read_count_from_register(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
-                    1,
-                    2,
-                    count_shift,
-                    max_words,
-                ),
-                PostflightAccessSpan::write_count_from_register_from_residuals(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
-                    0,
-                    2,
-                    count_shift,
-                    max_words,
-                ),
-            ],
+            PostflightAccessSchedule {
+                register_operands: &[1, 2, 3],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &[
+                    PostflightAccessSpan::read_count_from_register(
+                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        0,
+                        2,
+                        count_shift,
+                        max_words,
+                    ),
+                    PostflightAccessSpan::read_count_from_register(
+                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        1,
+                        2,
+                        count_shift,
+                        max_words,
+                    ),
+                    PostflightAccessSpan::write_count_from_register_from_residuals(
+                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        0,
+                        2,
+                        count_shift,
+                        max_words,
+                    ),
+                ],
+            },
         )?;
         Ok(())
     }
@@ -258,14 +264,14 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             (self, rv64),
-            |(tracegen, rv64), insertion_idx, chip| {
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(insertion_idx, chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },

@@ -321,9 +321,9 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             self,
-            |tracegen, insertion_idx, chip| {
+            |tracegen, chip| {
                 tracegen
-                    .generate_for_chip(insertion_idx, chip)
+                    .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
             },
             |tracegen| {
@@ -342,7 +342,6 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// the constructor coverage check, so it receives a dummy trace.
     pub fn generate_for_chip(
         &mut self,
-        _insertion_idx: usize,
         chip: &dyn Any,
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         if let Some(chip) = chip.downcast_ref::<PhantomChipGPU>() {

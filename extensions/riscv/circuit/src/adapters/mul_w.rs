@@ -28,7 +28,8 @@ use openvm_stark_backend::{
 
 use super::{
     byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, pack_high_u16, pack_rv64_u16_block,
-    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, RV64_PTR_U16_LIMBS,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, ReplayComputation, ReplayResult,
+    RV64_PTR_U16_LIMBS,
 };
 
 #[repr(C)]
@@ -179,14 +180,16 @@ pub struct Rv64MultWAdapterFiller {
 }
 
 impl Rv64MultWAdapterFiller {
-    pub(crate) fn replay<F: PrimeField32>(
+    pub(crate) fn replay<F: PrimeField32, M>(
         &self,
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut Rv64MultWAdapterCols<F>,
-        compute: impl FnOnce([[u8; RV64_WORD_NUM_LIMBS]; 2]) -> [u8; RV64_WORD_NUM_LIMBS],
-    ) -> Result<([[u8; RV64_WORD_NUM_LIMBS]; 2], [u8; RV64_WORD_NUM_LIMBS]), PostflightError> {
+        compute: impl FnOnce(
+            [[u8; RV64_WORD_NUM_LIMBS]; 2],
+        ) -> ReplayComputation<RV64_WORD_NUM_LIMBS, M>,
+    ) -> Result<ReplayResult<RV64_WORD_NUM_LIMBS, M>, PostflightError> {
         let instruction = postflight.instruction(step);
         if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
             || instruction.e.as_canonical_u32() != 0
@@ -212,7 +215,8 @@ impl Rv64MultWAdapterFiller {
             rs1_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
             rs2_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
         ];
-        let output = compute(inputs);
+        let computation = compute(inputs);
+        let output = computation.output;
         let result_word_msl = output[RV64_WORD_NUM_LIMBS - 1];
         let result_sign = result_word_msl >> (RV64_BYTE_BITS - 1);
         let sign_extend_limb = u8::MAX * result_sign;
@@ -256,6 +260,10 @@ impl Rv64MultWAdapterFiller {
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
 
-        Ok((inputs, output))
+        Ok(ReplayResult {
+            inputs,
+            output,
+            metadata: computation.metadata,
+        })
     }
 }

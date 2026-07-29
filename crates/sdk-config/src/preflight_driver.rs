@@ -6,9 +6,6 @@
 //! generation. With `rvr`, only the preflight-history producer changes: the
 //! compiled executor emits checkpoints which are expanded on the GPU.
 
-#[cfg(feature = "metrics")]
-use std::time::{Duration, Instant};
-
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
@@ -184,6 +181,8 @@ impl PreparedSegment {
         segment: &Segment,
     ) -> Result<(Proof<SC>, Option<GuestMemory>), VirtualMachineError> {
         let _prove_span = info_span!("total_proof").entered();
+        #[cfg(feature = "perf-metrics")]
+        let exe = instance.exe().clone();
 
         // Replay resolves first reads against the immutable segment-start
         // image, so upload it before preflight mutates host memory.
@@ -191,11 +190,20 @@ impl PreparedSegment {
 
         #[cfg(feature = "rvr")]
         let (state, exit_code, gpu_transcript, replay_plan) = {
-            let execution = self.execute_segment(state, segment, None)?;
+            let mut execution = self.execute_segment(state, segment, None)?;
             let exit_code = matches!(&execution.endpoint, PreflightEndpoint::Terminated)
                 .then_some(ExitCode::Success as u32);
             let (gpu_transcript, replay_plan) =
                 self.postflight(&instance.vm, &execution, segment)?;
+            #[cfg(feature = "perf-metrics")]
+            instance
+                .vm
+                .emit_gpu_guest_instruction_metrics(
+                    &exe.program,
+                    &gpu_transcript,
+                    &mut execution.state.metrics,
+                )
+                .map_err(VirtualMachineError::from)?;
             (execution.state, exit_code, gpu_transcript, replay_plan)
         };
 
@@ -203,6 +211,15 @@ impl PreparedSegment {
         let (state, exit_code, gpu_transcript, replay_plan) = {
             let mut output = self.execute_segment(state, segment)?;
             let (gpu_transcript, replay_plan) = self.postflight(&instance.vm, &mut output)?;
+            #[cfg(feature = "perf-metrics")]
+            instance
+                .vm
+                .emit_gpu_guest_instruction_metrics(
+                    &exe.program,
+                    &gpu_transcript,
+                    &mut output.state.metrics,
+                )
+                .map_err(VirtualMachineError::from)?;
             (output.state, output.exit_code, gpu_transcript, replay_plan)
         };
 
@@ -297,6 +314,8 @@ fn prove_inner(
     input: Streams,
     prepared: &PreparedContinuation,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
+    #[cfg(feature = "perf-metrics")]
+    let exe = instance.exe().clone();
     #[cfg(feature = "rvr")]
     let segments = prepared
         .metered
@@ -316,47 +335,20 @@ fn prove_inner(
         .ok_or_else(|| generation_error("VM instance has no execution state"))?;
     #[cfg(feature = "rvr")]
     let mut reuse = None;
-    #[cfg(feature = "metrics")]
-    let mut preflight_time = Duration::ZERO;
-    #[cfg(feature = "metrics")]
-    let mut preflight_retired = 0u64;
-    #[cfg(all(feature = "metrics", feature = "rvr"))]
-    let mut preflight_retired_by_segment = Vec::with_capacity(num_segments);
-    #[cfg(all(feature = "metrics", feature = "rvr"))]
-    let mut interval_count = 0u64;
-    #[cfg(all(feature = "metrics", feature = "rvr"))]
-    let mut residual_count = 0u64;
-    #[cfg(all(feature = "metrics", feature = "rvr"))]
-    let mut transcript_bytes = 0u64;
 
     for (segment_idx, segment) in segments.into_iter().enumerate() {
         let _segment_span = info_span!("prove_segment", segment = segment_idx).entered();
         let _prove_span = info_span!("total_proof").entered();
-        #[cfg(all(feature = "metrics", not(feature = "rvr")))]
-        let num_insns = segment.num_insns;
 
         // Replay resolves first reads against the immutable segment-start
         // image, so upload it before preflight mutates host memory.
         instance.vm.transport_init_memory_to_device(&state.memory);
-        #[cfg(feature = "metrics")]
-        let preflight_started = Instant::now();
 
         #[cfg(feature = "rvr")]
         let (next_state, gpu_transcript, replay_plan) = {
-            let execution = prepared
+            let mut execution = prepared
                 .segment
                 .execute_segment(state, &segment, reuse.take())?;
-            #[cfg(feature = "metrics")]
-            {
-                preflight_time += preflight_started.elapsed();
-                preflight_retired += u64::from(execution.retired);
-                preflight_retired_by_segment.push(u64::from(execution.retired));
-                interval_count += execution.transcript.checkpoints.len() as u64;
-                residual_count += execution.transcript.residuals.len() as u64;
-                transcript_bytes +=
-                    std::mem::size_of_val(execution.transcript.checkpoints.as_slice()) as u64
-                        + std::mem::size_of_val(execution.transcript.residuals.as_slice()) as u64;
-            }
             validate_endpoint(
                 matches!(&execution.endpoint, PreflightEndpoint::Terminated),
                 segment_idx + 1 == num_segments,
@@ -365,6 +357,15 @@ fn prove_inner(
                 prepared
                     .segment
                     .postflight(&instance.vm, &execution, &segment)?;
+            #[cfg(feature = "perf-metrics")]
+            instance
+                .vm
+                .emit_gpu_guest_instruction_metrics(
+                    &exe.program,
+                    &gpu_transcript,
+                    &mut execution.state.metrics,
+                )
+                .map_err(VirtualMachineError::from)?;
             let PreflightExecution {
                 state: next_state,
                 mut transcript,
@@ -379,14 +380,18 @@ fn prove_inner(
         #[cfg(not(feature = "rvr"))]
         let (next_state, gpu_transcript, replay_plan) = {
             let mut output = prepared.segment.execute_segment(state, &segment)?;
-            #[cfg(feature = "metrics")]
-            {
-                preflight_time += preflight_started.elapsed();
-                preflight_retired += num_insns;
-            }
             validate_endpoint(output.exit_code.is_some(), segment_idx + 1 == num_segments)?;
             let (gpu_transcript, replay_plan) =
                 prepared.segment.postflight(&instance.vm, &mut output)?;
+            #[cfg(feature = "perf-metrics")]
+            instance
+                .vm
+                .emit_gpu_guest_instruction_metrics(
+                    &exe.program,
+                    &gpu_transcript,
+                    &mut output.state.metrics,
+                )
+                .map_err(VirtualMachineError::from)?;
             (output.state, gpu_transcript, replay_plan)
         };
 
@@ -422,23 +427,6 @@ fn prove_inner(
         final_memory_top_tree,
     );
     *instance.state_mut() = Some(state);
-
-    #[cfg(feature = "metrics")]
-    {
-        let elapsed_micros = preflight_time.as_secs_f64().max(1e-9) * 1_000_000.0;
-        #[cfg(feature = "rvr")]
-        {
-            for (segment, retired) in preflight_retired_by_segment.into_iter().enumerate() {
-                metrics::counter!("execute_preflight_insns", "segment" => segment.to_string())
-                    .absolute(retired);
-            }
-            metrics::counter!("execute_preflight_intervals").absolute(interval_count);
-            metrics::counter!("execute_preflight_residuals").absolute(residual_count);
-            metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);
-        }
-        metrics::gauge!("execute_preflight_insn_mi/s")
-            .set(preflight_retired as f64 / elapsed_micros);
-    }
 
     Ok(ContinuationVmProof {
         per_segment: proofs,

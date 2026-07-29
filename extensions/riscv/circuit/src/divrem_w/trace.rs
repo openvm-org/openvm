@@ -10,7 +10,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::Rv64DivRemWChip;
 use crate::{
-    adapters::{Rv64MultWAdapterCols, RV64_BYTE_BITS},
+    adapters::{ReplayComputation, Rv64MultWAdapterCols, RV64_BYTE_BITS},
     divrem::{run_divrem, DivRemCoreCols},
 };
 
@@ -49,8 +49,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 DivRemWOpcode::REMW => DivRemOpcode::REM,
                 DivRemWOpcode::REMUW => DivRemOpcode::REMU,
             };
-            let mut result = None;
-            let ([b, c], _) = chip.inner.adapter.replay(
+            let replay = chip.inner.adapter.replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
@@ -63,17 +62,15 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                     );
                     let output =
                         (if is_div { computed.0 } else { computed.1 }).map(|value| value as u8);
-                    result = Some(computed);
-                    output
+                    ReplayComputation {
+                        output,
+                        metadata: computed,
+                    }
                 },
             )?;
-            chip.inner.fill_core_row_with_result(
-                core_opcode,
-                b,
-                c,
-                result.expect("word divrem replay closure always runs"),
-                core_row,
-            );
+            let [b, c] = replay.inputs;
+            chip.inner
+                .fill_core_row_with_result(core_opcode, b, c, replay.metadata, core_row);
             Ok(())
         })?;
         row_index += steps.len();

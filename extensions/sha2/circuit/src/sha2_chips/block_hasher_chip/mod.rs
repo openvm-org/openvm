@@ -4,8 +4,6 @@ mod columns;
 mod config;
 mod trace;
 
-use std::marker::PhantomData;
-
 pub use air::*;
 pub use columns::*;
 pub use config::*;
@@ -28,7 +26,6 @@ pub struct Sha2BlockHasherChip<F, C: Sha2BlockHasherSubairConfig> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
-    _phantom: PhantomData<C>,
 }
 
 impl<F, C: Sha2BlockHasherSubairConfig> Sha2BlockHasherChip<F, C> {
@@ -44,7 +41,6 @@ impl<F, C: Sha2BlockHasherSubairConfig> Sha2BlockHasherChip<F, C> {
             range_checker_chip,
             pointer_max_bits,
             mem_helper,
-            _phantom: PhantomData,
         }
     }
 }

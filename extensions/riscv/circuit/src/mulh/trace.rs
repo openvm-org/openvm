@@ -13,7 +13,8 @@ use super::{
     MulHCoreCols, Rv64MulHChip,
 };
 use crate::adapters::{
-    Rv64MultAdapterCols, Rv64MultAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
+    ReplayComputation, Rv64MultAdapterCols, Rv64MultAdapterFiller, RV64_BYTE_BITS,
+    RV64_REGISTER_NUM_LIMBS,
 };
 
 /// Generates the RV64 multiply-high trace directly from immutable preflight history.
@@ -36,8 +37,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let mut result = None;
-            let ([b, c], _) = Rv64MultAdapterFiller::replay(
+            let replay = Rv64MultAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
@@ -49,11 +49,13 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                         &c.map(u32::from),
                     );
                     let output = computed.0.map(|limb| limb as u8);
-                    result = Some(computed);
-                    output
+                    ReplayComputation {
+                        output,
+                        metadata: computed,
+                    }
                 },
             )?;
-            let result = result.expect("multiply-high replay closure always runs");
+            let [b, c] = replay.inputs;
             let core_row: &mut MulHCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
                 core_row.borrow_mut();
             fill_core_row_with_result(
@@ -63,7 +65,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 opcode,
                 b,
                 c,
-                result,
+                replay.metadata,
             );
             Ok(())
         })?;

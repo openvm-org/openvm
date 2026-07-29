@@ -27,7 +27,9 @@ use openvm_stark_sdk::{
 };
 #[cfg(feature = "rvr")]
 use {
-    openvm_circuit::arch::rvr::cuda::{PostflightAccessRegistry, PostflightAccessSpan},
+    openvm_circuit::arch::rvr::cuda::{
+        PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+    },
     openvm_instructions::riscv::RV64_MEMORY_AS,
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
@@ -84,19 +86,21 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
         ] {
             registry.register(
                 opcode.global_opcode().as_usize() as u32,
-                &[1, 2, 3],
-                (1 << 6) | (1 << 7),
-                4,
-                5,
-                &[
-                    PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 2, input_blocks),
-                    PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, state_blocks),
-                    PostflightAccessSpan::write_fixed_from_residuals(
-                        RV64_MEMORY_AS,
-                        0,
-                        state_blocks,
-                    ),
-                ],
+                PostflightAccessSchedule {
+                    register_operands: &[1, 2, 3],
+                    zero_operand_mask: (1 << 6) | (1 << 7),
+                    register_as_operand: 4,
+                    memory_as_operand: 5,
+                    spans: &[
+                        PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 2, input_blocks),
+                        PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, state_blocks),
+                        PostflightAccessSpan::write_fixed_from_residuals(
+                            RV64_MEMORY_AS,
+                            0,
+                            state_blocks,
+                        ),
+                    ],
+                },
             )?;
         }
         Ok(())
@@ -250,14 +254,14 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
             self.transcript,
             self.replay_plan,
             (self, rv64),
-            |(tracegen, rv64), insertion_idx, chip| {
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(insertion_idx, chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },

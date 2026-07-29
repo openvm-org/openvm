@@ -27,6 +27,8 @@ use super::{
     bridge::map_rvr_execute_error, compile::CompileError, execute::execute_preflight, RvrCompiled,
     RvrInitialImage,
 };
+#[cfg(feature = "metrics")]
+use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
     arch::{
         execution_mode::Segment, ExecutionError, ExecutionState, Streams, SystemConfig, VmState,
@@ -530,8 +532,10 @@ impl<'a> PreflightInstance<'a> {
         reuse: Option<PreflightTranscript>,
     ) -> Result<PreflightExecution, ExecutionError> {
         let from_state = ExecutionState::new(state.pc(), 1u32);
+        #[cfg(feature = "metrics")]
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Preflight);
         let (transcript, endpoint, final_timestamp, retired) =
-            tracing::info_span!("execute_preflight", backend = "compiled")
+            tracing::info_span!("execute_preflight")
                 .in_scope(|| {
                     execute_preflight(
                         &self.inner.compiled,
@@ -544,6 +548,17 @@ impl<'a> PreflightInstance<'a> {
                     )
                 })
                 .map_err(map_rvr_execute_error)?;
+        #[cfg(feature = "metrics")]
+        {
+            metrics.record(u64::from(retired));
+            metrics::counter!("execute_preflight_intervals")
+                .absolute(transcript.checkpoints.len() as u64);
+            metrics::counter!("execute_preflight_residuals")
+                .absolute(transcript.residuals.len() as u64);
+            let transcript_bytes = std::mem::size_of_val(transcript.checkpoints.as_slice()) as u64
+                + std::mem::size_of_val(transcript.residuals.as_slice()) as u64;
+            metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);
+        }
         let to_state = ExecutionState::new(state.pc(), final_timestamp);
         Ok(PreflightExecution {
             state,

@@ -21,9 +21,10 @@ use super::{
     ExecutionState, MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory,
     ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
 };
-#[cfg(any(test, feature = "test-utils"))]
-use crate::arch::{testing::memory::PostflightTestMemory, VmField};
 use crate::system::{TouchedBlock, TouchedMemory};
+
+#[cfg(any(test, feature = "test-utils"))]
+mod testing;
 
 pub(crate) const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const PREDECESSOR_INDEX_MASK: u32 = !PREDECESSOR_SEED_BIT;
@@ -179,16 +180,6 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         )
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
-    pub fn new_for_test(
-        program: &'a Program<F>,
-        history: &'a PreflightHistory,
-        memory_config: &MemoryConfig,
-    ) -> Result<Self, PostflightError> {
-        let program_index = PostflightProgramIndex::new(program)?;
-        Self::new_inner(program, &program_index, history, memory_config, None, false)
-    }
-
     #[instrument(name = "postflight", skip_all)]
     fn new_inner(
         program: &'a Program<F>,
@@ -277,124 +268,6 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             memory_predecessors,
             touched_memory,
         })
-    }
-
-    #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn balance_test_memory(
-        &self,
-        chip: &mut crate::arch::testing::memory::air::MemoryDummyChip<F>,
-    ) {
-        for event_index in 0..self.history.memory.accesses.len() {
-            let event = self.history.memory.accesses[event_index];
-            let previous_timestamp = self.previous_timestamp(event_index);
-            match self.memory_config.addr_spaces[event.address_space() as usize].layout {
-                MemoryCellType::U16 => {
-                    let value = event.value.map(F::from_u16);
-                    let previous = self.previous_u16(event_index).map(F::from_u16);
-                    chip.send(
-                        event.address_space(),
-                        event.pointer,
-                        &previous,
-                        previous_timestamp,
-                    );
-                    chip.receive(
-                        event.address_space(),
-                        event.pointer,
-                        &value,
-                        event.timestamp,
-                    );
-                }
-                MemoryCellType::F { size: 4 } => {
-                    let value = self.field_value(event_index);
-                    let previous = self.previous_field32(event_index);
-                    chip.send(
-                        event.address_space(),
-                        event.pointer,
-                        &previous,
-                        previous_timestamp,
-                    );
-                    chip.receive(
-                        event.address_space(),
-                        event.pointer,
-                        &value,
-                        event.timestamp,
-                    );
-                }
-                _ => unreachable!("postflight validates every accessed memory layout"),
-            }
-        }
-    }
-
-    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda"))]
-    pub(crate) fn memory_predecessors_for_test(&self) -> &[u32] {
-        &self.memory_predecessors
-    }
-
-    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda"))]
-    pub(crate) fn replay_steps_for_test(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
-        self.steps.iter().map(|step| {
-            let program_index = step.0;
-            (program_index, self.memory_starts[program_index as usize])
-        })
-    }
-
-    #[cfg(all(any(test, feature = "test-utils"), feature = "cuda"))]
-    pub(crate) fn opcode_ranges_for_test(&self) -> &BTreeMap<u32, Range<usize>> {
-        &self.opcode_ranges
-    }
-
-    #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn record_test_writes<M>(&self, memory: &mut M)
-    where
-        F: VmField,
-        M: PostflightTestMemory<F>,
-    {
-        let mut first_writes = FxHashMap::<u64, usize>::default();
-        for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
-            if event.is_write() {
-                first_writes
-                    .entry(memory_key(event.address_space(), event.pointer))
-                    .or_insert(event_index);
-            }
-        }
-
-        for event_index in first_writes.into_values() {
-            let event = self.history.memory.accesses[event_index];
-            match self.memory_config.addr_spaces[event.address_space() as usize].layout {
-                MemoryCellType::U16 => unsafe {
-                    memory.tracing_memory().data.write::<u16, BLOCK_FE_WIDTH>(
-                        event.address_space(),
-                        event.pointer,
-                        self.previous_u16(event_index),
-                    );
-                },
-                MemoryCellType::F { size: 4 } => unsafe {
-                    memory.tracing_memory().data.write::<F, BLOCK_FE_WIDTH>(
-                        event.address_space(),
-                        event.pointer,
-                        self.previous_field32(event_index),
-                    );
-                },
-                _ => unreachable!("postflight validates every accessed memory layout"),
-            }
-        }
-
-        for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
-            if !event.is_write() {
-                continue;
-            }
-            let value = match self.memory_config.addr_spaces[event.address_space() as usize].layout
-            {
-                MemoryCellType::U16 => event.value.map(F::from_u16),
-                MemoryCellType::F { size: 4 } => self.field_value(event_index),
-                _ => unreachable!("postflight validates every accessed memory layout"),
-            };
-            memory.write_block(
-                event.address_space() as usize,
-                event.pointer as usize,
-                value,
-            );
-        }
     }
 
     pub fn steps(&self, opcode: VmOpcode) -> &[PostflightStep] {

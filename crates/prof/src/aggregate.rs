@@ -158,7 +158,7 @@ impl GroupedMetrics {
             .by_group
             .iter()
             .map(|(group_name, metrics)| {
-                let group_summaries: HashMap<MetricName, Stats> = metrics
+                let mut group_summaries: HashMap<MetricName, Stats> = metrics
                     .iter()
                     .map(|(metric_name, metrics)| {
                         let mut summary = Stats::new();
@@ -175,6 +175,19 @@ impl GroupedMetrics {
                         (metric_name.clone(), summary)
                     })
                     .collect();
+
+                let preflight_rate = group_summaries
+                    .get(EXECUTE_PREFLIGHT_INSNS_LABEL)
+                    .zip(group_summaries.get(EXECUTE_PREFLIGHT_TIME_LABEL))
+                    .and_then(|(insns, time)| {
+                        (time.sum.val > 0.0).then_some(insns.sum.val / time.sum.val / 1000.0)
+                    });
+                if let (Some(rate), Some(summary)) = (
+                    preflight_rate,
+                    group_summaries.get_mut(EXECUTE_PREFLIGHT_INSN_MI_S_LABEL),
+                ) {
+                    summary.avg.val = rate;
+                }
 
                 if !group_name.contains("keygen") {
                     Self::validate_instruction_counts(&group_summaries);
@@ -883,18 +896,13 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     COMPILE_METERED_SEGMENT_TIME_LABEL,
     COMPILE_METERED_COST_TIME_LABEL,
     COMPILE_PREFLIGHT_TIME_LABEL,
-    PREPARE_PREFLIGHT_TIME_LABEL,
-    UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
-    APP_PROVE_TIME_LABEL,
     EXECUTE_PURE_TIME_LABEL,
     EXECUTE_PURE_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSNS_LABEL,
     EXECUTE_METERED_COST_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
-    EXECUTE_PREFLIGHT_INTERVALS_LABEL,
-    EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
-    EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
+    SET_INITIAL_MEMORY_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
@@ -905,7 +913,6 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
-    SET_INITIAL_MEMORY_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,
     MERKLE_FIN_TIME_LABEL,
@@ -1062,23 +1069,99 @@ mod tests {
     }
 
     #[test]
-    fn report_includes_preflight_pipeline_breakdown() {
-        for metric in [
+    fn preflight_throughput_uses_total_instructions_and_time() {
+        let metrics = HashMap::from([
+            (
+                EXECUTE_PREFLIGHT_INSNS_LABEL.to_string(),
+                vec![
+                    (1_000_000.0, labels(Some(0))),
+                    (1_000_000.0, labels(Some(1))),
+                ],
+            ),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![(1.0, labels(Some(0))), (9.0, labels(Some(1)))],
+            ),
+            (
+                EXECUTE_PREFLIGHT_INSN_MI_S_LABEL.to_string(),
+                vec![
+                    (1_000.0, labels(Some(0))),
+                    (1_000_000.0 / 9_000.0, labels(Some(1))),
+                ],
+            ),
+        ]);
+
+        let aggregate = grouped(metrics).aggregate(1);
+        let throughput = &aggregate.by_group["app"][EXECUTE_PREFLIGHT_INSN_MI_S_LABEL];
+
+        assert_close(throughput.avg.val, 200.0);
+        assert_close(throughput.max.val, 1_000.0);
+        assert_close(throughput.min.val, 1_000_000.0 / 9_000.0);
+    }
+
+    #[test]
+    fn report_orders_frontend_phases_without_overlapping_wrappers() {
+        let one = |segment| vec![(1.0, labels(segment))];
+        let metrics = HashMap::from([
+            (PROOF_TIME_LABEL.to_string(), one(Some(0))),
+            (COMPILE_PREFLIGHT_TIME_LABEL.to_string(), one(None)),
+            (PREPARE_PREFLIGHT_TIME_LABEL.to_string(), one(None)),
+            (UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL.to_string(), one(None)),
+            (APP_PROVE_TIME_LABEL.to_string(), one(None)),
+            (EXECUTE_METERED_TIME_LABEL.to_string(), one(None)),
+            (SET_INITIAL_MEMORY_TIME_LABEL.to_string(), one(Some(0))),
+            (EXECUTE_PREFLIGHT_TIME_LABEL.to_string(), one(Some(0))),
+            (EXECUTE_PREFLIGHT_INTERVALS_LABEL.to_string(), one(None)),
+            (EXECUTE_PREFLIGHT_RESIDUALS_LABEL.to_string(), one(None)),
+            (
+                EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL.to_string(),
+                one(None),
+            ),
+            (POSTFLIGHT_TIME_LABEL.to_string(), one(Some(0))),
+            (
+                POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL.to_string(),
+                one(Some(0)),
+            ),
+            (TRACE_GEN_TIME_LABEL.to_string(), one(Some(0))),
+            (PROVE_EXCL_TRACE_TIME_LABEL.to_string(), one(Some(0))),
+        ]);
+        let aggregate = grouped(metrics).aggregate(1);
+        let mut markdown = Vec::new();
+
+        aggregate
+            .write_markdown(&mut markdown, AGGREGATED_METRIC_NAMES, 1)
+            .unwrap();
+        let markdown = String::from_utf8(markdown).unwrap();
+
+        let ordered = [
             COMPILE_PREFLIGHT_TIME_LABEL,
+            EXECUTE_METERED_TIME_LABEL,
+            SET_INITIAL_MEMORY_TIME_LABEL,
+            EXECUTE_PREFLIGHT_TIME_LABEL,
+            POSTFLIGHT_TIME_LABEL,
+            POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL,
+            TRACE_GEN_TIME_LABEL,
+            PROVE_EXCL_TRACE_TIME_LABEL,
+        ];
+        let mut previous = 0;
+        for metric in ordered {
+            let position = markdown
+                .find(metric)
+                .unwrap_or_else(|| panic!("{metric} is missing from the report"));
+            assert!(position >= previous, "{metric} is out of pipeline order");
+            previous = position;
+        }
+        for metric in [
             PREPARE_PREFLIGHT_TIME_LABEL,
             UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
+            APP_PROVE_TIME_LABEL,
             EXECUTE_PREFLIGHT_INTERVALS_LABEL,
             EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
             EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
-            POSTFLIGHT_TIME_LABEL,
-            POSTFLIGHT_REPLAY_COUNT_TIME_LABEL,
-            POSTFLIGHT_REPLAY_EMIT_TIME_LABEL,
-            POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL,
-            POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL,
         ] {
             assert!(
-                AGGREGATED_METRIC_NAMES.contains(&metric),
-                "{metric} is missing from the benchmark report"
+                !markdown.contains(metric),
+                "{metric} should remain raw data instead of a summary row"
             );
         }
     }

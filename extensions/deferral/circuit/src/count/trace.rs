@@ -3,10 +3,7 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-use openvm_circuit::{
-    arch::{Postflight, PostflightError, VmField},
-    utils::next_power_of_two_or_zero,
-};
+use openvm_circuit::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
@@ -34,17 +31,6 @@ impl DeferralCircuitCountChip {
         assert!(idx < self.count.len());
         let val_atomic = &self.count[idx];
         val_atomic.fetch_add(1, Ordering::Relaxed);
-    }
-
-    /// Generates the count trace accumulated by Deferral CALL and OUTPUT
-    /// replay. The preflight history parameter makes the dependency explicit
-    /// at registration sites; counts themselves are emitted by those primary
-    /// trace generators.
-    pub fn generate_trace_from_postflight<F: VmField>(
-        &self,
-        _postflight: &Postflight<'_, F>,
-    ) -> Result<RowMajorMatrix<F>, PostflightError> {
-        Ok(self.generate_trace())
     }
 
     fn generate_trace<F: PrimeCharacteristicRing + Send + Sync>(&self) -> RowMajorMatrix<F> {

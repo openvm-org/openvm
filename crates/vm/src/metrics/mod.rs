@@ -3,6 +3,8 @@ use std::{collections::BTreeMap, mem};
 use backtrace::Backtrace;
 use cycle_tracker::CycleTracker;
 use metrics::counter;
+#[cfg(feature = "perf-metrics")]
+use openvm_instructions::SysPhantom;
 use openvm_instructions::{
     exe::{FnBound, FnBounds},
     program::ProgramDebugInfo,
@@ -10,6 +12,8 @@ use openvm_instructions::{
 use openvm_stark_backend::prover::{DeviceMultiStarkProvingKey, ProverBackend};
 
 pub mod cycle_tracker;
+#[cfg(all(test, feature = "perf-metrics"))]
+mod tests;
 
 #[derive(Clone, Debug, Default)]
 pub struct VmMetrics {
@@ -80,6 +84,38 @@ impl VmMetrics {
     }
 
     #[cfg(feature = "perf-metrics")]
+    pub(crate) fn record_instruction(&mut self, opcode_name: String, dsl_instr: Option<String>) {
+        let key = (dsl_instr, opcode_name);
+        self.cycle_tracker.increment_opcode(&key);
+        *self.counts.entry(key).or_insert(0) += 1;
+    }
+
+    #[cfg(feature = "perf-metrics")]
+    pub(crate) fn record_replayed_instruction(
+        &mut self,
+        opcode_name: String,
+        dsl_instr: Option<String>,
+        system_phantom: Option<SysPhantom>,
+        next_pc: u32,
+    ) {
+        match system_phantom {
+            Some(SysPhantom::CtStart) => {
+                if let Some(name) = &dsl_instr {
+                    self.cycle_tracker.start(name.clone());
+                }
+            }
+            Some(SysPhantom::CtEnd) => {
+                if let Some(name) = &dsl_instr {
+                    self.cycle_tracker.end(name.clone());
+                }
+            }
+            _ => {}
+        }
+        self.record_instruction(opcode_name, dsl_instr);
+        self.update_current_fn(next_pc);
+    }
+
+    #[cfg(feature = "perf-metrics")]
     pub fn update_trace_cells(
         &mut self,
         now_trace_cells: Vec<usize>,
@@ -87,8 +123,7 @@ impl VmMetrics {
         dsl_instr: Option<String>,
     ) {
         let key = (dsl_instr, opcode_name.clone());
-        self.cycle_tracker.increment_opcode(&key);
-        *self.counts.entry(key.clone()).or_insert(0) += 1;
+        self.record_instruction(opcode_name, key.0.clone());
 
         for (air_name, now_value, prev_value) in
             itertools::izip!(&self.air_names, &now_trace_cells, &self.current_trace_cells)
