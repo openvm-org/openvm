@@ -145,7 +145,7 @@ impl ExtInstr for Int256AluInstr {
         // The FFI performs eight aligned heap reads followed by four aligned
         // heap writes. Checkpoint replay reconstructs those events from the
         // postimage; pure and metered modes emit neither reservation nor peek.
-        ctx.reserve_preflight_writes("4u", "12u");
+        ctx.reserve_preflight_timestamp_slots("12u");
         let checkpoint = ctx.is_checkpoint_preflight();
         if checkpoint {
             ctx.reserve_replay_values("4u");
@@ -617,9 +617,9 @@ mod tests {
             unreachable!()
         }
 
-        fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+        fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
             if self.records_checkpoint() {
-                self.lines.push(format!("reserve({writes}, {slots})"));
+                self.lines.push(format!("reserve({slots})"));
             }
         }
 
@@ -748,7 +748,7 @@ mod tests {
                 "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
                 "trap",
                 "}",
-                "reserve(4u, 12u)",
+                "reserve(12u)",
                 "reserve_replay(4u)",
                 "rvr_ext_int256_add(state, r1, r2, r3)",
                 "append_range(r1, 4u)",

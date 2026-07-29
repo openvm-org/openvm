@@ -436,14 +436,6 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
         self.access_field32(address_space, pointer, true, Some(expected_value))
     }
 
-    pub fn write_observed_field32(
-        &mut self,
-        address_space: u32,
-        pointer: u32,
-    ) -> Result<Field32Access<F>, PostflightError> {
-        self.access_field32(address_space, pointer, true, None)
-    }
-
     /// Resolves an untimed peek from the memory version immediately after the
     /// already-consumed timed-event prefix. Peeks append nothing and do not
     /// advance the logical timestamp. A proof-visible peek must be anchored by
@@ -474,39 +466,6 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
             .position(|event| event.address_space() == address_space && event.pointer == pointer)
         {
             return Ok(self.postflight.previous_u16(self.memory_cursor + offset));
-        }
-        Err(PostflightError::new(format!(
-            "instruction at PC {:#x} peeked AS={} pointer={} without a timed event",
-            self.postflight.pc(self.step),
-            address_space,
-            pointer
-        )))
-    }
-
-    pub fn peek_field32(
-        &self,
-        address_space: u32,
-        pointer: u32,
-    ) -> Result<[F; BLOCK_FE_WIDTH], PostflightError> {
-        self.validate_access_layout(address_space, MemoryCellType::field32())?;
-        let program_index = self.step.0 as usize;
-        let memory_start = self.postflight.memory_starts[program_index] as usize;
-        let memory_end = self.postflight.memory_starts[program_index + 1] as usize;
-        if let Some(offset) = self.postflight.history.memory.accesses
-            [memory_start..self.memory_cursor]
-            .iter()
-            .rposition(|event| event.address_space() == address_space && event.pointer == pointer)
-        {
-            return Ok(self.postflight.field_value(memory_start + offset));
-        }
-        if let Some(offset) = self.postflight.history.memory.accesses
-            [self.memory_cursor..memory_end]
-            .iter()
-            .position(|event| event.address_space() == address_space && event.pointer == pointer)
-        {
-            return Ok(self
-                .postflight
-                .previous_field32(self.memory_cursor + offset));
         }
         Err(PostflightError::new(format!(
             "instruction at PC {:#x} peeked AS={} pointer={} without a timed event",

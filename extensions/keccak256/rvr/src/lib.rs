@@ -49,7 +49,7 @@ impl ExtInstr for KeccakfInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let buf = ctx.read_var(self.buffer_ptr_reg);
-        ctx.reserve_preflight_writes("25u", "25u");
+        ctx.reserve_preflight_timestamp_slots("25u");
         let checkpoint = ctx.is_checkpoint_preflight();
         if checkpoint {
             ctx.reserve_replay_values("25u");
@@ -97,7 +97,7 @@ impl ExtInstr for XorinInstr {
         let input = ctx.read_var(self.input_ptr_reg);
         let len = ctx.read_var(self.len_reg);
         let words = format!("((uint32_t)(({len} + 7ull) / 8ull))");
-        ctx.reserve_preflight_writes(&words, &format!("{words} * 3u"));
+        ctx.reserve_preflight_timestamp_slots(&format!("{words} * 3u"));
         let checkpoint = ctx.is_checkpoint_preflight();
         if checkpoint {
             ctx.reserve_replay_values(&words);
@@ -286,9 +286,9 @@ mod tests {
             unreachable!()
         }
 
-        fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+        fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
             if self.record_checkpoint {
-                self.lines.push(format!("reserve({writes}, {slots})"));
+                self.lines.push(format!("reserve({slots})"));
             }
         }
 
@@ -370,7 +370,7 @@ mod tests {
             ctx.lines,
             [
                 "read(r5)",
-                "reserve(25u, 25u)",
+                "reserve(25u)",
                 "reserve_replay(25u)",
                 "rvr_ext_keccakf(state, r5)",
                 "append_range(r5, 25u)",
@@ -391,7 +391,7 @@ mod tests {
         instruction.emit_c(&mut ctx);
         let words = "((uint32_t)((r7 + 7ull) / 8ull))";
         assert_eq!(ctx.lines[0..3], ["read(r5)", "read(r6)", "read(r7)"]);
-        assert_eq!(ctx.lines[3], format!("reserve({words}, {words} * 3u)"));
+        assert_eq!(ctx.lines[3], format!("reserve({words} * 3u)"));
         assert_eq!(ctx.lines[4], format!("reserve_replay({words})"));
         assert_eq!(ctx.lines[5], "bool tmp0 = rvr_ext_xorin(state, r5, r6, r7)");
         assert_eq!(ctx.lines[6], "if (unlikely(!tmp0)) {");

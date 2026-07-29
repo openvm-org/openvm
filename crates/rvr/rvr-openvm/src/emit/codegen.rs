@@ -10,8 +10,6 @@ use super::context::EmitContext;
 pub struct TermCtx<'a> {
     /// Set of valid block start PCs for direct tail calls.
     pub valid_blocks: &'a HashSet<u64>,
-    /// Start PC of the block currently being emitted.
-    pub current_block: u64,
 }
 
 /// Emit C code for a terminator using tail calls between blocks.
@@ -243,7 +241,6 @@ mod tests {
         let valid_blocks = HashSet::from([8]);
         let tc = TermCtx {
             valid_blocks: &valid_blocks,
-            current_block: 0,
         };
 
         let mut direct = EmitContext::new(

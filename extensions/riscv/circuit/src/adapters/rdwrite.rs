@@ -179,14 +179,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64RdWriteAdapterExecutor;
-
-#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64RdWriteAdapterFiller;
-
-/// This adapter doesn't read anything, and **maybe** writes to \[a:8\]_d, where d == 1
-#[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64CondRdWriteAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64CondRdWriteAdapterFiller;

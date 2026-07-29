@@ -171,9 +171,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
     }
 }
 
-#[derive(Clone, derive_new::new)]
-pub struct Rv64MultWAdapterExecutor;
-
 #[derive(derive_new::new)]
 pub struct Rv64MultWAdapterFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,

@@ -89,12 +89,9 @@ __global__ void add_sub_w_replay_tracegen(
     uint16_t rs1_value[BLOCK_FE_WIDTH];
     uint16_t rs2_value[BLOCK_FE_WIDTH];
     uint16_t logged_result[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(rs1.value, rs1_value) ||
-        !replay_u16_block(rs2.value, rs2_value) ||
-        !replay_u16_block(write.value, logged_result)) {
-        preflight_set_error(error, ADD_SUB_W_REPLAY_ERROR_BASE + 6);
-        return;
-    }
+    replay_u16_block(rs1.value, rs1_value);
+    replay_u16_block(rs2.value, rs2_value);
+    replay_u16_block(write.value, logged_result);
     uint16_t b[RV64_WORD_U16_LIMBS] = {rs1_value[0], rs1_value[1]};
     uint16_t c[RV64_WORD_U16_LIMBS] = {rs2_value[0], rs2_value[1]};
     uint16_t expected_word[RV64_WORD_U16_LIMBS];

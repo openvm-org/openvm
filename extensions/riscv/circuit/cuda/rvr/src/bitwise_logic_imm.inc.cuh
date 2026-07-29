@@ -103,11 +103,8 @@ __global__ void bitwise_logic_imm_replay_tracegen(
 
     uint16_t source_cells[BLOCK_FE_WIDTH];
     uint16_t logged_result_cells[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(read.value, source_cells) ||
-        !replay_u16_block(write.value, logged_result_cells)) {
-        preflight_set_error(error, 97);
-        return;
-    }
+    replay_u16_block(read.value, source_cells);
+    replay_u16_block(write.value, logged_result_cells);
     uint8_t source[RV64_REGISTER_NUM_LIMBS];
     uint8_t logged_result[RV64_REGISTER_NUM_LIMBS];
 #pragma unroll

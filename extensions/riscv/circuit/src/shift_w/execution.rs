@@ -11,7 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::{ShiftOpcode, ShiftWOpcode};
+use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{ShiftWLogicalExecutor, ShiftWRightArithmeticExecutor};
@@ -134,7 +134,7 @@ where
     F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
+        format!("{:?}", ShiftWOpcode::from_usize(opcode - self.offset))
     }
 
     fn pre_compute_size(&self) -> usize {

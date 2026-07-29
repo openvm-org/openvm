@@ -51,10 +51,8 @@ __global__ void auipc_replay_tracegen(
     auto const &instruction = *transition.instruction;
     uint32_t rd_ptr = instruction.words[1];
     uint32_t imm = instruction.words[3];
-    constexpr uint32_t REGISTER_FILE_BYTES = 32 * RV64_REGISTER_NUM_LIMBS;
-    bool rd_is_canonical =
-        rd_ptr != 0 && rd_ptr < REGISTER_FILE_BYTES && rd_ptr % RV64_REGISTER_NUM_LIMBS == 0;
-    if (instruction.words[0] != auipc_opcode || !rd_is_canonical ||
+    if (instruction.words[0] != auipc_opcode || rd_ptr == 0 ||
+        !replay_canonical_register_pointer(rd_ptr) ||
         instruction.words[2] != 0 || imm >= (1u << 24) ||
         instruction.words[4] != register_as || instruction.words[5] != 0 ||
         instruction.words[6] != 0 || instruction.words[7] != 0) {
@@ -77,10 +75,7 @@ __global__ void auipc_replay_tracegen(
     }
 
     uint16_t logged_data[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(write.value, logged_data)) {
-        preflight_set_error(error, 196);
-        return;
-    }
+    replay_u16_block(write.value, logged_data);
     uint64_t expected_result = run_auipc(from.pc, imm);
     uint64_t expected_high = expected_result >> 32;
     if (expected_high != 0 && expected_high != UINT32_MAX) {

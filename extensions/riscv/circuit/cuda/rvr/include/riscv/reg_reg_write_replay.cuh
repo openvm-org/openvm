@@ -79,11 +79,9 @@ static __device__ bool replay_reg_reg_write(
     uint16_t rs1_u16[BLOCK_FE_WIDTH];
     uint16_t rs2_u16[BLOCK_FE_WIDTH];
     uint16_t result_u16[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(rs1.value, rs1_u16) || !replay_u16_block(rs2.value, rs2_u16) ||
-        !replay_u16_block(write.value, result_u16)) {
-        preflight_set_error(error, error_base + 3);
-        return false;
-    }
+    replay_u16_block(rs1.value, rs1_u16);
+    replay_u16_block(rs2.value, rs2_u16);
+    replay_u16_block(write.value, result_u16);
 
     ReplayPreviousValue rs1_previous;
     ReplayPreviousValue rs2_previous;

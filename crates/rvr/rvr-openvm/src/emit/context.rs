@@ -464,7 +464,7 @@ impl<'a> EmitContext<'a> {
     }
 
     /// Emit a fail-before-mutation capacity and timestamp-headroom check.
-    pub fn reserve_preflight_writes(&mut self, _writes: &str, slots: &str) {
+    pub fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
         if self.mode.uses_checkpoint_local() {
             assert!(
                 self.checkpoint_pending_dynamic_slots.is_none()
@@ -864,8 +864,8 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::write_aligned_mem_block(self, addr, val);
     }
 
-    fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
-        EmitContext::reserve_preflight_writes(self, writes, slots);
+    fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
+        EmitContext::reserve_preflight_timestamp_slots(self, slots);
     }
 
     fn reserve_replay_values(&mut self, count: &str) {
@@ -1117,7 +1117,7 @@ mod tests {
     fn checkpoint_dynamic_hint_schedule_and_residual_are_counted_once() {
         let mut ctx = checkpoint_ctx();
         ctx.append_replay_value("before");
-        ctx.reserve_preflight_writes("count", "slots");
+        ctx.reserve_preflight_timestamp_slots("slots");
         ctx.reserve_replay_values("count");
         ctx.advance_timestamp(2);
         ctx.write_aligned_mem_block("addr", "hint");
@@ -1217,7 +1217,7 @@ mod tests {
     #[test]
     fn checkpoint_host_call_consumes_reserved_slots_without_fixed_budget() {
         let mut ctx = checkpoint_ctx();
-        ctx.reserve_preflight_writes("0u", "2u");
+        ctx.reserve_preflight_timestamp_slots("2u");
         let result = ctx.emit_call_expr("bool", "host_call", &["state"]);
 
         assert_eq!(result, "_v0");
@@ -1244,7 +1244,7 @@ mod tests {
             Some(0),
         );
         ctx.write_aligned_mem_block("addr", "value");
-        ctx.reserve_preflight_writes("5u", "13u");
+        ctx.reserve_preflight_timestamp_slots("13u");
 
         #[cfg(not(feature = "unprotected"))]
         {

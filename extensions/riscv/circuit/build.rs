@@ -19,6 +19,7 @@ fn main() {
             .watch("../../../crates/circuits/primitives/cuda")
             .watch("../../../crates/vm/cuda/rvr/include")
             .watch("../../riscv-adapters/cuda")
+            .watch("cuda/include")
             .watch("cuda/rvr")
             .watch("cuda/src")
             .library_name("tracegen_gpu_rv64im")

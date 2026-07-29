@@ -49,14 +49,10 @@ __global__ void jalr_replay_tracegen(
     uint32_t imm = instruction.words[3];
     uint32_t needs_write = instruction.words[6];
     uint32_t imm_sign = instruction.words[7];
-    constexpr uint32_t REGISTER_FILE_BYTES = 32 * RV64_REGISTER_NUM_LIMBS;
-    bool rd_is_canonical =
-        rd_ptr < REGISTER_FILE_BYTES && rd_ptr % RV64_REGISTER_NUM_LIMBS == 0;
-    bool rs1_is_canonical =
-        rs1_ptr < REGISTER_FILE_BYTES && rs1_ptr % RV64_REGISTER_NUM_LIMBS == 0;
     if (instruction.words[0] != jalr_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != 0 || imm > UINT16_MAX || needs_write > 1 || imm_sign > 1 ||
-        needs_write != (rd_ptr != 0) || !rd_is_canonical || !rs1_is_canonical) {
+        needs_write != (rd_ptr != 0) || !replay_canonical_register_pointer(rd_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr)) {
         preflight_set_error(error, 204);
         return;
     }
@@ -92,7 +88,8 @@ __global__ void jalr_replay_tracegen(
     }
 
     uint16_t rs1[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(read.value, rs1) || rs1[2] != 0 || rs1[3] != 0) {
+    replay_u16_block(read.value, rs1);
+    if (rs1[2] != 0 || rs1[3] != 0) {
         preflight_set_error(error, 206);
         return;
     }
@@ -127,10 +124,7 @@ __global__ void jalr_replay_tracegen(
     if (needs_write) {
         auto const &write = memory[write_index];
         uint16_t logged_rd[BLOCK_FE_WIDTH];
-        if (!replay_u16_block(write.value, logged_rd)) {
-            preflight_set_error(error, 206);
-            return;
-        }
+        replay_u16_block(write.value, logged_rd);
         bool matches = true;
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {

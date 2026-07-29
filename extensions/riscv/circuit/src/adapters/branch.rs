@@ -108,11 +108,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
     }
 }
 
-/// Reads instructions of the form OP a, b, c, d, e where if(\[a:8\]_d op \[b:8\]_e) pc += c.
-/// Operands d and e can only be 1.
-#[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64BranchAdapterExecutor;
-
 #[derive(derive_new::new)]
 pub struct Rv64BranchAdapterFiller;
 

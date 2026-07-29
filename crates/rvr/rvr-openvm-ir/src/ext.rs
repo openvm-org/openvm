@@ -90,11 +90,11 @@ pub trait ExtEmitCtx {
     /// does not reserve a second block-access slot.
     fn write_aligned_mem_block(&mut self, addr: &str, val: &str);
 
-    /// Ensure preflight can append `writes` memory writes and advance `slots`
-    /// logical clock slots before an instruction starts mutating state.
+    /// Ensure preflight can advance `slots` logical clock slots before an
+    /// instruction starts mutating state.
     ///
     /// Pure and metered emitters preserve their existing execution behavior.
-    fn reserve_preflight_writes(&mut self, writes: &str, slots: &str);
+    fn reserve_preflight_timestamp_slots(&mut self, slots: &str);
 
     /// Reserve space for a runtime-sized sequence of replay values.
     ///

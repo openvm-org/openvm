@@ -84,10 +84,8 @@ __global__ void addi_replay_tracegen(
     }
     uint16_t rs1[BLOCK_FE_WIDTH];
     uint16_t logged_rd[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(read.value, rs1) || !replay_u16_block(write.value, logged_rd)) {
-        preflight_set_error(error, 8);
-        return;
-    }
+    replay_u16_block(read.value, rs1);
+    replay_u16_block(write.value, logged_rd);
     uint16_t expected_rd[BLOCK_FE_WIDTH];
     uint32_t overflow = static_cast<uint32_t>(rs1[0]) + imm_low11 +
                         imm_sign * ((1u << U16_BITS) - (1u << 11));

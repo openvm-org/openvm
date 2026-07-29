@@ -152,9 +152,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
     }
 }
 
-#[derive(Clone, derive_new::new)]
-pub struct Rv64BaseAluWImmU16AdapterExecutor;
-
 #[derive(derive_new::new)]
 pub struct Rv64BaseAluWImmU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,

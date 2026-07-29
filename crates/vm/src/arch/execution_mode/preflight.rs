@@ -306,21 +306,18 @@ impl ExecutionCtxTrait for PreflightCtx {
         _pc: u32,
         phantom: SysPhantom,
     ) {
-        match phantom {
-            SysPhantom::DebugPanic => {
-                #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
-                {
-                    let metrics = &mut _exec_state.vm_state.metrics;
-                    metrics.update_backtrace(_pc);
-                    if let Some(mut backtrace) = metrics.prev_backtrace.take() {
-                        backtrace.resolve();
-                        eprintln!("openvm program failure; backtrace:\n{backtrace:?}");
-                    } else {
-                        eprintln!("openvm program failure; no backtrace");
-                    }
+        if phantom == SysPhantom::DebugPanic {
+            #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
+            {
+                let metrics = &mut _exec_state.vm_state.metrics;
+                metrics.update_backtrace(_pc);
+                if let Some(mut backtrace) = metrics.prev_backtrace.take() {
+                    backtrace.resolve();
+                    eprintln!("openvm program failure; backtrace:\n{backtrace:?}");
+                } else {
+                    eprintln!("openvm program failure; no backtrace");
                 }
             }
-            _ => {}
         }
     }
 

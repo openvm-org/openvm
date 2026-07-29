@@ -114,10 +114,8 @@ __global__ void blt_replay_tracegen(
 
     uint16_t rs1[BLOCK_FE_WIDTH];
     uint16_t rs2[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(first_read.value, rs1) || !replay_u16_block(second_read.value, rs2)) {
-        preflight_set_error(error, 17);
-        return;
-    }
+    replay_u16_block(first_read.value, rs1);
+    replay_u16_block(second_read.value, rs2);
 
     bool signed_op = local_opcode == 0 || local_opcode == 2;
     bool ge_op = local_opcode == 2 || local_opcode == 3;

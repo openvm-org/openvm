@@ -136,9 +136,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64MultAdapterExecutor;
-
-#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64MultAdapterFiller;
 
 impl Rv64MultAdapterFiller {

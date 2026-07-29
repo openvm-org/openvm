@@ -135,10 +135,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
     }
 }
 
-// This adapter reads from register [b]_d (rs1) and writes to register [a]_d (rd)
-#[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrAdapterExecutor;
-
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64JalrAdapterFiller;
 

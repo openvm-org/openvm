@@ -40,7 +40,7 @@ impl ExtInstr for HintStoreWInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_var(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, "1u"]);
-        ctx.reserve_preflight_writes("1u", "2u");
+        ctx.reserve_preflight_timestamp_slots("2u");
         if ctx.is_checkpoint_preflight() {
             ctx.reserve_replay_values("1u");
         }
@@ -88,7 +88,7 @@ impl ExtInstr for HintBufferInstr {
         ctx.write_line("}");
         let callback_count = format!("(uint32_t)({n})");
         ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, &callback_count]);
-        ctx.reserve_preflight_writes(&callback_count, &format!("((uint32_t)({n}) * 3u - 2u)"));
+        ctx.reserve_preflight_timestamp_slots(&format!("((uint32_t)({n}) * 3u - 2u)"));
         ctx.reserve_replay_values(&callback_count);
         ctx.write_line(&format!("uint64_t hint_words[{MAX_HINT_BUFFER_DWORDS}u];"));
         ctx.emit_call_without_page_flush(
@@ -167,7 +167,7 @@ impl ExtInstr for RevealInstr {
         // preflight can preserve the schedule without logging those events.
         // Full preflight still performs its exact write reservation inside the
         // callback after materializing the crossing-access plan.
-        ctx.reserve_preflight_writes("0u", slots);
+        ctx.reserve_preflight_timestamp_slots(slots);
         ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr, &width]);
         ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
     }
@@ -519,8 +519,8 @@ mod tests {
             self.write_line(&format!("write_aligned_mem_block({addr}, {val});"));
         }
 
-        fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
-            self.write_line(&format!("reserve_preflight_writes({writes}, {slots});"));
+        fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
+            self.write_line(&format!("reserve_preflight_timestamp_slots({slots});"));
         }
 
         fn reserve_replay_values(&mut self, count: &str) {
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(
             ctx.lines[0],
             format!(
-                "reserve_preflight_writes(0u, {}u);",
+                "reserve_preflight_timestamp_slots({}u);",
                 if width == 1 { 1 } else { 2 }
             )
         );
@@ -673,7 +673,7 @@ mod tests {
         };
         instr.emit_c(&mut ctx);
 
-        assert_eq!(ctx.lines[0], "reserve_preflight_writes(0u, 2u);");
+        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(2u);");
         assert_eq!(
             ctx.lines[1],
             "bool tmp1 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull), 4u);"
@@ -703,7 +703,7 @@ mod tests {
                 "if (unlikely(!openvm_hint_prepare(r5, 1u))) {",
                 "trap;",
                 "}",
-                "reserve_preflight_writes(1u, 2u);",
+                "reserve_preflight_timestamp_slots(2u);",
                 "reserve_replay_values(1u);",
                 "uint64_t hint_word;",
                 "openvm_hint_read_words(&hint_word, 1u);",
@@ -728,8 +728,7 @@ mod tests {
         let emitted = ctx.lines.join("\n");
         assert!(emitted.contains("if (unlikely((r6 - 1ull) >= 1023ull)) {"));
         assert!(emitted.contains("if (unlikely(!openvm_hint_prepare(r5, (uint32_t)(r6)))) {"));
-        assert!(emitted
-            .contains("reserve_preflight_writes((uint32_t)(r6), ((uint32_t)(r6) * 3u - 2u));"));
+        assert!(emitted.contains("reserve_preflight_timestamp_slots(((uint32_t)(r6) * 3u - 2u));"));
         assert!(emitted.contains("reserve_replay_values((uint32_t)(r6));"));
         assert!(emitted.contains("uint64_t hint_words[1023u];"));
         assert!(emitted.contains("openvm_hint_read_words(hint_words, (uint32_t)(r6));"));

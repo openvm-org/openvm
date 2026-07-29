@@ -245,7 +245,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
         let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
         state.rng = self.rng.clone();
-        let output = execute_test_preflight(executor, instruction, &program, initial_pc, state);
+        let output = execute_test_preflight(&self.memory.config, executor, &program, state);
         let initial_state = ExecutionState::new(initial_pc, 1u32);
         let final_event = *output
             .history

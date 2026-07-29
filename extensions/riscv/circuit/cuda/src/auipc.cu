@@ -21,11 +21,6 @@ template <typename T> struct Rv64AuipcCoreCols {
     T rd_data[RV64_PTR_U16_LIMBS];
 };
 
-struct Rv64AuipcCoreRecord {
-    uint32_t from_pc;
-    uint32_t imm;
-};
-
 __device__ uint64_t run_auipc(uint32_t pc, uint32_t imm) {
     uint32_t offset = imm << RV64_BYTE_BITS;
     int64_t signed_offset = (int64_t)(int32_t)offset;
@@ -70,20 +65,11 @@ struct Rv64AuipcCore {
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_sign_extend, is_sign_ext);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
     }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
-        fill_trace_row(row, record.from_pc, record.imm);
-    }
 };
 
 template <typename T> struct Rv64AuipcCols {
     Rv64RdWriteAdapterCols<T> adapter;
     Rv64AuipcCoreCols<T> core;
-};
-
-struct Rv64AuipcRecord {
-    Rv64RdWriteAdapterRecord adapter;
-    Rv64AuipcCoreRecord core;
 };
 
 #include "../rvr/src/auipc.inc.cuh"

@@ -74,7 +74,7 @@ impl GpuPostflightProgram {
         Ok((transcript, plan))
     }
 
-    #[cfg(feature = "rvr")]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn synthetic_for_test(
         opcodes: &[u32],
         pc_base: u32,
@@ -134,7 +134,7 @@ impl GpuPostflightProgram {
         })
     }
 
-    #[cfg(feature = "rvr")]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn index_program_log_for_test(
         &self,
         program_log: &[PreflightProgramEvent],
@@ -201,7 +201,7 @@ impl GpuPostflightTranscript {
             .collect())
     }
 
-    #[cfg(feature = "rvr")]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn memory_predecessors_host(&self) -> Result<Vec<u32>, MemCopyError> {
         self.memory_predecessors.to_host_on(&self.device_ctx)
     }
@@ -217,13 +217,13 @@ impl GpuPostflightPlan {
             .collect())
     }
 
-    #[cfg(feature = "rvr")]
+    #[cfg(all(test, feature = "rvr"))]
     pub(crate) fn program_frequencies_host(&self) -> Result<Vec<u32>, MemCopyError> {
         self.program_frequencies.to_host_on(&self.device_ctx)
     }
 }
 
-#[cfg(feature = "rvr")]
+#[cfg(all(test, feature = "rvr"))]
 pub(crate) type ChronologyOutputForTest = (
     Vec<PreflightMemoryEvent>,
     Vec<PreflightInitialWrite>,
@@ -233,7 +233,7 @@ pub(crate) type ChronologyOutputForTest = (
     Vec<TouchedBlock<BabyBear>>,
 );
 
-#[cfg(feature = "rvr")]
+#[cfg(all(test, feature = "rvr"))]
 pub(crate) fn build_memory_chronology_for_test(
     memory: &[PreflightMemoryEvent],
     write_masks: &[u8],
@@ -285,4 +285,44 @@ pub(crate) fn build_memory_chronology_for_test(
         index.predecessors.to_host_on(&device_ctx)?,
         touched,
     ))
+}
+
+#[cfg(all(test, feature = "rvr"))]
+pub(crate) fn empty_chronology_counts_for_test(
+    count_field_metadata: bool,
+) -> Result<Vec<u32>, GpuPostflightError> {
+    let device_ctx = GpuDeviceCtx::for_current_device()?;
+    let memory = DeviceBuffer::<PreflightMemoryEvent>::new();
+    let write_masks = DeviceBuffer::<u8>::new();
+    let field_values = DeviceBuffer::<PostflightFieldBlock>::new();
+    let address_spaces = DeviceBuffer::<GpuMemoryAddressSpace>::new();
+    let workspace = DeviceBuffer::<u64>::new();
+    let counts_len = if count_field_metadata { 7 } else { 3 };
+    let counts = upload(&vec![u32::MAX; counts_len], &device_ctx)?;
+    let temp_storage = DeviceBuffer::<u8>::new();
+    let error = [0u32].to_device_on(&device_ctx)?;
+    let memory_config = MemoryConfig::default();
+    // SAFETY: every view belongs to `device_ctx`, output buffers have the lengths required by the
+    // ABI, and the empty input does not dereference the zero-length event buffers.
+    unsafe {
+        postflight::memory_chronology_sort_and_count(
+            memory.view(),
+            write_masks.view(),
+            field_values.view(),
+            address_spaces.view(),
+            ADDR_SPACE_OFFSET,
+            memory_config.addr_space_height as u32,
+            memory_config.pointer_max_bits as u32,
+            DEFERRAL_AS,
+            count_field_metadata,
+            &workspace,
+            &workspace,
+            &counts,
+            &temp_storage,
+            0,
+            &error,
+            device_ctx.stream.as_raw(),
+        )?;
+    }
+    Ok(counts.to_host_on(&device_ctx)?)
 }

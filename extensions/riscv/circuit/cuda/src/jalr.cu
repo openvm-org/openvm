@@ -19,13 +19,6 @@ template <typename T> struct Rv64JalrCoreCols {
     T imm_sign;                             // 1 byte
 };
 
-struct Rv64JalrCoreRecord {
-    uint16_t imm;
-    uint32_t from_pc;
-    uint32_t rs1_val;
-    uint8_t imm_sign; // 0 or 1
-};
-
 __device__ void run_jalr(
     uint32_t pc,
     uint32_t rs1,
@@ -90,20 +83,11 @@ struct Rv64JalrCore {
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_high, rd_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm, imm);
     }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64JalrCoreRecord record) {
-        fill_trace_row(row, record.from_pc, record.rs1_val, record.imm, record.imm_sign);
-    }
 };
 
 template <typename T> struct Rv64JalrCols {
     Rv64JalrAdapterCols<T> adapter;
     Rv64JalrCoreCols<T> core;
-};
-
-struct Rv64JalrRecord {
-    Rv64JalrAdapterRecord adapter;
-    Rv64JalrCoreRecord core;
 };
 
 #include "../rvr/src/jalr.inc.cuh"

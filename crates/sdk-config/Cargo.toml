@@ -41,7 +41,6 @@ toml.workspace = true
 bon.workspace = true
 derive_more.workspace = true
 cfg-if.workspace = true
-metrics = { workspace = true, optional = true }
 tracing.workspace = true
 
 [dev-dependencies]
@@ -61,10 +60,7 @@ cuda = [
     "openvm-pairing-circuit/cuda",
     "openvm-riscv-circuit/cuda",
 ]
-metrics = [
-    "dep:metrics",
-    "openvm-circuit/metrics",
-]
+metrics = ["openvm-circuit/metrics"]
 tco = [
     "openvm-circuit/tco",
     "openvm-riscv-circuit/tco",

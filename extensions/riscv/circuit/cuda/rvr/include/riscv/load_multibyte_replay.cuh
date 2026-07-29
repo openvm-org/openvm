@@ -81,15 +81,11 @@ static __device__ bool replay_load_multibyte(
     uint32_t imm = instruction.words[3];
     uint32_t needs_write = instruction.words[6];
     uint32_t imm_sign = instruction.words[7];
-    constexpr uint32_t REGISTER_FILE_BYTES = 32 * RV64_REGISTER_NUM_LIMBS;
-    bool rd_is_canonical =
-        rd_ptr < REGISTER_FILE_BYTES && rd_ptr % RV64_REGISTER_NUM_LIMBS == 0;
-    bool rs1_is_canonical =
-        rs1_ptr < REGISTER_FILE_BYTES && rs1_ptr % RV64_REGISTER_NUM_LIMBS == 0;
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || imm > UINT16_MAX || needs_write > 1 ||
-        imm_sign > 1 || needs_write != (rd_ptr != 0) || !rd_is_canonical ||
-        !rs1_is_canonical) {
+        imm_sign > 1 || needs_write != (rd_ptr != 0) ||
+        !replay_canonical_register_pointer(rd_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr)) {
         preflight_set_error(error, ERROR_BASE + 3);
         return false;
     }
@@ -112,8 +108,9 @@ static __device__ bool replay_load_multibyte(
 
     uint16_t rs1[BLOCK_FE_WIDTH];
     uint16_t read_data[2][BLOCK_FE_WIDTH] = {};
-    if (!replay_u16_block(rs1_read.value, rs1) ||
-        !replay_u16_block(block0_read.value, read_data[0]) || rs1[2] != 0 || rs1[3] != 0) {
+    replay_u16_block(rs1_read.value, rs1);
+    replay_u16_block(block0_read.value, read_data[0]);
+    if (rs1[2] != 0 || rs1[3] != 0) {
         preflight_set_error(error, ERROR_BASE + 5);
         return false;
     }
@@ -153,11 +150,11 @@ static __device__ bool replay_load_multibyte(
         auto const &block1_read = memory[next_index];
         if (block1_read.timestamp != from.timestamp + 2 || preflight_is_write(block1_read) ||
             preflight_address_space(block1_read) != memory_as ||
-            block1_read.pointer != block1_ptr / U16_CELL_SIZE ||
-            !replay_u16_block(block1_read.value, read_data[1])) {
+            block1_read.pointer != block1_ptr / U16_CELL_SIZE) {
             preflight_set_error(error, ERROR_BASE + 7);
             return false;
         }
+        replay_u16_block(block1_read.value, read_data[1]);
         block1_index = next_index;
         next_index++;
     } else if (next_index < memory.len() &&
@@ -203,10 +200,7 @@ static __device__ bool replay_load_multibyte(
     }
     if (needs_write) {
         uint16_t logged_rd[BLOCK_FE_WIDTH];
-        if (!replay_u16_block(memory[write_index].value, logged_rd)) {
-            preflight_set_error(error, ERROR_BASE + 5);
-            return false;
-        }
+        replay_u16_block(memory[write_index].value, logged_rd);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             if (logged_rd[i] != expected_rd[i]) {

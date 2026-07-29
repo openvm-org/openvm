@@ -1158,14 +1158,18 @@ where
         VB: PostflightTracegen<E>,
     {
         self.transport_init_memory_to_device(&state.memory);
-        let mut output = interpreter.execute_segment(state, segment)?;
+        let output = interpreter.execute_segment(state, segment)?;
+        #[cfg(feature = "perf-metrics")]
+        let mut output = output;
         let ctx = self.generate_proving_ctx(program, prepared, &output)?;
         #[cfg(feature = "perf-metrics")]
-        self.emit_guest_instruction_metrics(
-            program,
-            &output.history.program,
-            &mut output.state.metrics,
-        )?;
+        info_span!("guest_profile").in_scope(|| {
+            self.emit_guest_instruction_metrics(
+                program,
+                &output.history.program,
+                &mut output.state.metrics,
+            )
+        })?;
         let proof = self
             .engine
             .prove(self.pk(), ctx)
@@ -1451,6 +1455,7 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
+        let _span = info_span!("guest_profile").entered();
         let program_log = transcript
             .copy_program_log()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;

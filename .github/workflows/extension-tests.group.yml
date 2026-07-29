@@ -109,7 +109,13 @@ jobs:
             echo "::group::Running circuit tests for $extension"
             pushd "extensions/$extension/circuit"
             if [[ "${{ inputs.mode }}" == "cuda" ]]; then
-              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features=cuda,touchemall --profile=heavy --no-tests=pass
+              cuda_features="cuda,touchemall"
+              if [[ "${{ inputs.cuda_group }}" == "riscv" ]]; then
+                # Exercise the shared GPU postflight path and the RV64 GPU-vs-CPU
+                # equivalence tests without adding another CUDA job.
+                cuda_features="$cuda_features,rvr,test-utils"
+              fi
+              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features="$cuda_features" --profile=heavy --no-tests=pass
             else
               test_threads=(--test-threads=32)
               if [[ "$extension" == "algebra" ]]; then

@@ -1,7 +1,5 @@
 use std::{iter, sync::Arc};
 
-use openvm_circuit_primitives::Chip;
-use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -16,9 +14,7 @@ use openvm_stark_backend::{
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine, StarkTestError,
 };
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
-};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
@@ -62,10 +58,9 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         trace: cached_trace,
     };
     let chip = ProgramChip {
-        filtered_exec_frequencies,
         cached: Some(cached),
     };
-    let ctx = chip.generate_proving_ctx();
+    let ctx = chip.generate_proving_ctx_with_frequencies(&filtered_exec_frequencies);
 
     let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
@@ -173,10 +168,9 @@ fn test_program_negative() {
         trace: cached_trace,
     };
     let chip = ProgramChip {
-        filtered_exec_frequencies: execution_frequencies.clone(),
         cached: Some(cached),
     };
-    let ctx = chip.generate_proving_ctx();
+    let ctx = chip.generate_proving_ctx_with_frequencies(&execution_frequencies);
 
     let counter_air = DummyInteractionAir::new(7, true, bus.inner.index);
     let mut program_rows = vec![];
@@ -240,41 +234,4 @@ fn test_program_with_undefined_instructions() {
     let program = Program::new_without_debug_infos_with_option(&instructions, 0);
 
     interaction_test(program, vec![0, 2, 5]);
-}
-
-#[test]
-fn direct_frequencies_match_legacy_program_trace() {
-    let instructions = [
-        Instruction::from_isize(SUB, 0, 0, 1, 1, 1),
-        Instruction::from_isize(JAL, 2, DEFAULT_PC_STEP as isize, 0, 1, 0),
-        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-    let program = Program::from_instructions(&instructions);
-    let cached_trace = generate_cached_trace(&program);
-    let engine = test_cpu_engine();
-    let (commitment, pcs_data) = TraceCommitter::commit(engine.device(), &[&cached_trace]).unwrap();
-    let cached: CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>> = CommittedTraceData {
-        commitment,
-        data: Arc::new(pcs_data),
-        trace: cached_trace,
-    };
-    let frequencies = vec![7, 3, 1];
-    let legacy = ProgramChip {
-        filtered_exec_frequencies: frequencies.clone(),
-        cached: Some(cached.clone()),
-    }
-    .generate_proving_ctx();
-    let direct_chip = ProgramChip {
-        filtered_exec_frequencies: vec![99; frequencies.len()],
-        cached: Some(cached),
-    };
-    let direct = direct_chip.generate_proving_ctx_with_frequencies(&frequencies);
-
-    assert_eq!(direct.common_main, legacy.common_main);
-    assert_eq!(direct.public_values, legacy.public_values);
-    assert_eq!(direct.cached_mains.len(), legacy.cached_mains.len());
-    assert_eq!(
-        direct_chip.filtered_exec_frequencies,
-        vec![99; frequencies.len()]
-    );
 }

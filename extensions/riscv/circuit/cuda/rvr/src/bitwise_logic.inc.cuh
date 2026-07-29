@@ -105,11 +105,9 @@ __global__ void bitwise_logic_replay_tracegen(
     uint16_t rs1_cells[BLOCK_FE_WIDTH];
     uint16_t rs2_cells[BLOCK_FE_WIDTH];
     uint16_t logged_result_cells[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(rs1.value, rs1_cells) || !replay_u16_block(rs2.value, rs2_cells) ||
-        !replay_u16_block(write.value, logged_result_cells)) {
-        preflight_set_error(error, 137);
-        return;
-    }
+    replay_u16_block(rs1.value, rs1_cells);
+    replay_u16_block(rs2.value, rs2_cells);
+    replay_u16_block(write.value, logged_result_cells);
     uint8_t b[RV64_REGISTER_NUM_LIMBS];
     uint8_t c[RV64_REGISTER_NUM_LIMBS];
     uint8_t logged_result[RV64_REGISTER_NUM_LIMBS];

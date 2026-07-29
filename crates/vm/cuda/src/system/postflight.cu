@@ -766,8 +766,8 @@ extern "C" int _postflight_memory_chronology_sort_and_count(
     }
     size_t num_entries = memory.len();
     if (num_entries == 0) {
-        size_t count_bytes = count_field_metadata != 0 ? 6 : 2;
-        if (cudaError_t err = cudaMemsetAsync(counts, 0, count_bytes * sizeof(uint32_t), stream);
+        size_t count_len = has_field_metadata ? 7 : 3;
+        if (cudaError_t err = cudaMemsetAsync(counts, 0, count_len * sizeof(uint32_t), stream);
             err != cudaSuccess) {
             return err;
         }

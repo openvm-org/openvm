@@ -11,7 +11,7 @@ pub use cpu::*;
 pub use cuda::*;
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
-use openvm_instructions::{instruction::Instruction, program::Program};
+use openvm_instructions::{exe::VmExe, instruction::Instruction, program::Program};
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_air::BaseAir,
@@ -20,16 +20,11 @@ use openvm_stark_backend::{
 };
 pub use utils::*;
 
-#[cfg(not(feature = "tco"))]
-use crate::arch::{execution_mode::PreflightCtx, interpreter::AlignedBuf};
-#[cfg(feature = "tco")]
-use crate::arch::{
-    execution_mode::PreflightCtx, ExecutorInventory, InterpretedInstance, SystemConfig,
-};
 use crate::{
     arch::{
-        ExecutionCtxTrait, ExecutionState, Executor, Postflight, PostflightError, PreflightHistory,
-        PreflightOutput, Streams, VmExecState, VmField, VmState,
+        ExecutionState, Executor, ExecutorInventory, InterpretedInstance, MemoryConfig, Postflight,
+        PostflightError, PreflightHistory, PreflightOutput, Streams, SystemConfig, VmField,
+        VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -76,59 +71,30 @@ pub struct TestChipHarness<F, E, A, C> {
 }
 
 pub(crate) fn execute_test_preflight<F, E>(
+    memory_config: &MemoryConfig,
     executor: &E,
-    instruction: &Instruction<F>,
     program: &Program<F>,
-    initial_pc: u32,
     state: VmState<GuestMemory>,
 ) -> PreflightOutput
 where
     F: VmField,
     E: Executor<F> + Clone,
 {
-    #[cfg(not(feature = "tco"))]
-    {
-        let _ = program;
-        let pre_compute_size = executor.pre_compute_size();
-        let pre_compute_align = pre_compute_size.next_power_of_two();
-        let pre_compute = AlignedBuf::uninit(pre_compute_size, pre_compute_align);
-        let pre_compute_data =
-            unsafe { std::slice::from_raw_parts_mut(pre_compute.ptr, pre_compute_size) };
-        let handler = executor
-            .pre_compute::<PreflightCtx>(initial_pc, instruction, pre_compute_data)
-            .expect("test instruction must be statically valid");
-
-        let ctx = PreflightCtx::new::<F>(&state.memory, Some(1));
-        let mut exec_state = VmExecState::new(state, ctx);
-        assert!(!exec_state.should_suspend());
-        PreflightCtx::on_instruction_start(&mut exec_state, initial_pc);
-        unsafe { handler(pre_compute.ptr, &mut exec_state) };
-        if let Err(error) = exec_state.exit_code {
-            panic!("{error}");
-        }
-        let final_pc = exec_state.vm_state.pc();
-        let history = exec_state.ctx.finish(final_pc);
-        PreflightOutput {
-            history,
-            state: exec_state.vm_state,
-            exit_code: None,
-        }
-    }
-
-    #[cfg(feature = "tco")]
-    {
-        let exe = openvm_instructions::exe::VmExe::new(program.clone()).with_pc_start(initial_pc);
-        let system_config = SystemConfig::default_from_memory(state.memory.config.clone());
-        let mut inventory = ExecutorInventory::<E>::new(system_config);
-        inventory
-            .add_executor(executor.clone(), [instruction.opcode])
-            .expect("test executor opcode must be unique");
-        let interpreter = InterpretedInstance::new(&inventory, &exe)
-            .expect("test instruction must be statically valid");
-        interpreter
-            .execute_preflight_from_state::<F>(state, Some(1))
-            .expect("test instruction preflight must succeed")
-    }
+    let instruction = &program
+        .get_instruction_and_debug_info(0)
+        .expect("test program must contain a starting instruction")
+        .0;
+    let exe = VmExe::new(program.clone()).with_pc_start(program.pc_base);
+    let system_config = SystemConfig::default_from_memory(memory_config.clone());
+    let mut inventory = ExecutorInventory::<E>::new(system_config);
+    inventory
+        .add_executor(executor.clone(), [instruction.opcode])
+        .expect("test executor opcode must be unique");
+    let interpreter = InterpretedInstance::new(&inventory, &exe)
+        .expect("test instruction must be statically valid");
+    interpreter
+        .execute_preflight_from_state::<F>(state, Some(1))
+        .expect("test instruction preflight must succeed")
 }
 
 impl<F, E, A, C> TestChipHarness<F, E, A, C>

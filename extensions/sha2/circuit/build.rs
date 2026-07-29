@@ -32,6 +32,7 @@ fn main() {
             .watch("../../../crates/circuits/primitives/cuda/include/primitives/buffer_view.cuh")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
+            .watch("cuda/src/sha2_hasher.cu")
             .files(["cuda/src/rvr/sha2_main.cu", "cuda/src/rvr/sha2_hasher.cu"]);
 
         builder.emit_link_directives();

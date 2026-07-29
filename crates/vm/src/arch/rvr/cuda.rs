@@ -1056,9 +1056,12 @@ mod tests {
 
     use super::*;
     use crate::arch::{
-        cuda::postflight::build_memory_chronology_for_test as gpu_chronology_with_fields,
-        postflight::PREDECESSOR_SEED_BIT, ExecutionState, MemoryCellType, Postflight,
-        PreflightHistory, ADDR_SPACE_OFFSET,
+        cuda::postflight::{
+            build_memory_chronology_for_test as gpu_chronology_with_fields,
+            empty_chronology_counts_for_test,
+        },
+        postflight::PREDECESSOR_SEED_BIT,
+        ExecutionState, MemoryCellType, Postflight, PreflightHistory, ADDR_SPACE_OFFSET,
     };
 
     fn event_value(
@@ -1093,6 +1096,12 @@ mod tests {
     fn raw_baby_bear(value: BabyBear) -> u32 {
         // BabyBear and the CUDA `Fp` ABI are both one raw Montgomery u32.
         unsafe { std::mem::transmute(value) }
+    }
+
+    #[test]
+    fn empty_gpu_chronology_zeroes_every_counter() {
+        assert_eq!(empty_chronology_counts_for_test(false).unwrap(), vec![0; 3]);
+        assert_eq!(empty_chronology_counts_for_test(true).unwrap(), vec![0; 7]);
     }
 
     fn gpu_program(opcodes: &[u32], device_ctx: &GpuDeviceCtx) -> GpuPostflightProgram {

@@ -88,11 +88,9 @@ __global__ void rv64_less_than_replay_tracegen(
     uint16_t b[BLOCK_FE_WIDTH];
     uint16_t c[BLOCK_FE_WIDTH];
     uint16_t logged_result[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(rs1.value, b) || !replay_u16_block(rs2.value, c) ||
-        !replay_u16_block(write.value, logged_result)) {
-        preflight_set_error(error, 127);
-        return;
-    }
+    replay_u16_block(rs1.value, b);
+    replay_u16_block(rs2.value, c);
+    replay_u16_block(write.value, logged_result);
     bool expected_result =
         run_less_than<BLOCK_FE_WIDTH, U16_BITS>(is_slt, b, c).cmp_result;
     if (logged_result[0] != expected_result || logged_result[1] != 0 ||

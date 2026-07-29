@@ -61,15 +61,11 @@ static __device__ bool replay_load_byte(
     uint32_t imm = instruction.words[3];
     uint32_t needs_write = instruction.words[6];
     uint32_t imm_sign = instruction.words[7];
-    constexpr uint32_t REGISTER_FILE_BYTES = 32 * RV64_REGISTER_NUM_LIMBS;
-    bool rd_is_canonical =
-        rd_ptr < REGISTER_FILE_BYTES && rd_ptr % RV64_REGISTER_NUM_LIMBS == 0;
-    bool rs1_is_canonical =
-        rs1_ptr < REGISTER_FILE_BYTES && rs1_ptr % RV64_REGISTER_NUM_LIMBS == 0;
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || imm > UINT16_MAX || needs_write > 1 ||
-        imm_sign > 1 || needs_write != (rd_ptr != 0) || !rd_is_canonical ||
-        !rs1_is_canonical) {
+        imm_sign > 1 || needs_write != (rd_ptr != 0) ||
+        !replay_canonical_register_pointer(rd_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr)) {
         preflight_set_error(error, 224);
         return false;
     }
@@ -111,8 +107,9 @@ static __device__ bool replay_load_byte(
 
     uint16_t rs1[BLOCK_FE_WIDTH];
     uint16_t read_data[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(rs1_read.value, rs1) || !replay_u16_block(read.value, read_data) ||
-        rs1[2] != 0 || rs1[3] != 0) {
+    replay_u16_block(rs1_read.value, rs1);
+    replay_u16_block(read.value, read_data);
+    if (rs1[2] != 0 || rs1[3] != 0) {
         preflight_set_error(error, 226);
         return false;
     }
@@ -147,10 +144,7 @@ static __device__ bool replay_load_byte(
     }
     if (needs_write) {
         uint16_t logged_rd[BLOCK_FE_WIDTH];
-        if (!replay_u16_block(memory[next_index - 1].value, logged_rd)) {
-            preflight_set_error(error, 226);
-            return false;
-        }
+        replay_u16_block(memory[next_index - 1].value, logged_rd);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             if (logged_rd[i] != expected_rd[i]) {

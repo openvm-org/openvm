@@ -112,10 +112,7 @@ __global__ void jal_lui_replay_tracegen(
             preflight_set_error(error, 185);
             return;
         }
-        if (!replay_u16_block(event.value, logged_data)) {
-            preflight_set_error(error, 186);
-            return;
-        }
+        replay_u16_block(event.value, logged_data);
         bool matches = true;
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {

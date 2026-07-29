@@ -1041,7 +1041,7 @@ __device__ bool replay_chunk(
     uint32_t initial_pc,
     uint32_t initial_timestamp,
     uint32_t endpoint_kind,
-    PreflightProgramEvent *program,
+    DeviceBufferView<PreflightProgramEvent> program,
     PreflightMemoryEvent *memory,
     uint8_t *write_masks,
     size_t memory_capacity,
@@ -1072,6 +1072,10 @@ __device__ bool replay_chunk(
         preflight_set_error(error, ERROR_BAD_CHUNK);
         return false;
     }
+    if (program.data() != nullptr && end.retired > program.len()) {
+        preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
+        return false;
+    }
 
     uint32_t expected_steps = end.retired - state.retired;
     uint32_t emitted = 0;
@@ -1089,7 +1093,9 @@ __device__ bool replay_chunk(
             return false;
         }
         uint32_t opcode = instruction->words[0];
-        if (program != nullptr) program[state.retired] = PreflightProgramEvent{state.pc, state.timestamp};
+        if (program.data() != nullptr) {
+            program[state.retired] = PreflightProgramEvent{state.pc, state.timestamp};
+        }
 
         uint32_t rd, rs1, rs2;
         uint64_t result;
@@ -1497,8 +1503,9 @@ __global__ void checkpoint_count(
                      schedule_dispatch, schedules, spans, static_values, chunk, opcodes,
                      register_as, memory_as, immediate_as, deferral_as,
                      byte_pointer_max_bits, cell_pointer_max_bits, initial_pc, initial_timestamp,
-                     endpoint_kind, nullptr,
-                     nullptr, nullptr, 0, 0, nullptr, 0, 0, memory_count, field_count, error)) {
+                     endpoint_kind, DeviceBufferView<PreflightProgramEvent>{nullptr, 0},
+                     nullptr, nullptr, 0, 0, nullptr, 0, 0,
+                     memory_count, field_count, error)) {
         event_counts[chunk] = RvrCheckpointEventCount{memory_count, field_count};
     }
 }
@@ -1539,10 +1546,10 @@ __global__ void checkpoint_emit(
     if (!replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
                       schedule_dispatch, schedules, spans, static_values, chunk, opcodes,
                       register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
-                      cell_pointer_max_bits,
-                      initial_pc, initial_timestamp, endpoint_kind, program.data(), memory.data(),
-                      write_masks.data(), memory.len(), offsets.memory, field_values.data(),
-                      field_values.len(), offsets.field, memory_count, field_count, error)) {
+                      cell_pointer_max_bits, initial_pc, initial_timestamp, endpoint_kind,
+                      program, memory.data(), write_masks.data(), memory.len(), offsets.memory,
+                      field_values.data(), field_values.len(), offsets.field, memory_count,
+                      field_count, error)) {
         return;
     }
     uint32_t expected_memory_end =

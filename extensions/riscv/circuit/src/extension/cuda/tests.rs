@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
+        cuda::postflight::GpuPostflightError,
         rvr::{cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightLimits},
         PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
@@ -501,9 +502,11 @@ fn preflight_gpu_replay_proves_a_suspended_segment() {
     )
     .err()
     .expect("a metered-boundary retirement mismatch must be rejected before replay");
-    assert!(error
-        .to_string()
-        .contains("retired 2 instructions, expected 3"));
+    assert!(matches!(
+        error,
+        GpuPostflightError::InvalidTranscript(message)
+            if message == "preflight instret 2 does not match segment num_insns 3"
+    ));
 
     let (transcript, replay_plan) =
         Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)

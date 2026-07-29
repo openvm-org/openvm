@@ -46,7 +46,6 @@ use {
         MemoryConfig,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
-    openvm_instructions::program::Program,
     openvm_stark_backend::p3_field::PrimeField32,
 };
 

@@ -215,30 +215,32 @@ __global__ void hintstore_replay_tracegen(
     uint32_t *error
 ) {
     size_t instruction_index = blockIdx.x;
-    if (instruction_index >= num_steps || *error != 0) return;
 
     __shared__ ReplayHintStoreInput input;
     __shared__ bool valid;
     if (threadIdx.x == 0) {
-        valid = replay_hintstore_instruction(
-            instructions,
-            pc_base,
-            program,
-            memory,
-            seeds,
-            predecessors,
-            steps[step_start + instruction_index],
-            hint_stored_opcode,
-            hint_buffer_opcode,
-            register_as,
-            memory_as,
-            pointer_max_bits,
-            input
-        );
-        if (!valid || row_offsets[instruction_index + 1] - row_offsets[instruction_index] !=
-                          input.num_words) {
-            preflight_set_error(error, HINTSTORE_REPLAY_ERROR);
-            valid = false;
+        valid = instruction_index < num_steps && *error == 0;
+        if (valid) {
+            valid = replay_hintstore_instruction(
+                instructions,
+                pc_base,
+                program,
+                memory,
+                seeds,
+                predecessors,
+                steps[step_start + instruction_index],
+                hint_stored_opcode,
+                hint_buffer_opcode,
+                register_as,
+                memory_as,
+                pointer_max_bits,
+                input
+            );
+            if (!valid || row_offsets[instruction_index + 1] - row_offsets[instruction_index] !=
+                              input.num_words) {
+                preflight_set_error(error, HINTSTORE_REPLAY_ERROR);
+                valid = false;
+            }
         }
     }
     __syncthreads();

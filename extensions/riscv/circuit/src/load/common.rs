@@ -7,7 +7,7 @@ use crate::adapters::{
 };
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadExecutor<const LOAD_WIDTH: usize, const NUM_BLOCKS: usize = 2> {
+pub struct LoadExecutor<const LOAD_WIDTH: usize> {
     pub offset: usize,
 }
 

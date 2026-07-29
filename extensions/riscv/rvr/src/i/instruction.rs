@@ -440,7 +440,7 @@ mod tests {
             unreachable!()
         }
 
-        fn reserve_preflight_writes(&mut self, _writes: &str, _slots: &str) {}
+        fn reserve_preflight_timestamp_slots(&mut self, _slots: &str) {}
 
         fn append_replay_value(&mut self, value: &str) {
             self.operations.push(format!("append:{value}"));

@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use itertools::Itertools;
-use openvm_circuit::{arch::hasher::poseidon2::Poseidon2Hasher, primitives::Chip};
+use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
@@ -27,14 +27,6 @@ use crate::{
         program::ProgramChip,
     },
 };
-
-impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for ProgramChip<SC> {
-    /// The cached program trace is cloned and left for future use. The clone is cheap because the
-    /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
-    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
-        self.generate_proving_ctx_with_frequencies(&self.filtered_exec_frequencies)
-    }
-}
 
 impl<SC: StarkProtocolConfig> ProgramChip<SC> {
     /// Generates the execution-frequency trace against the loaded program.

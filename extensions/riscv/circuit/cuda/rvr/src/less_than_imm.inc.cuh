@@ -90,10 +90,8 @@ __global__ void less_than_imm_replay_tracegen(
     }
     uint16_t rs1[BLOCK_FE_WIDTH];
     uint16_t logged_rd[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(read.value, rs1) || !replay_u16_block(write.value, logged_rd)) {
-        preflight_set_error(error, 48);
-        return;
-    }
+    replay_u16_block(read.value, rs1);
+    replay_u16_block(write.value, logged_rd);
     uint16_t imm[BLOCK_FE_WIDTH];
     imm[0] = static_cast<uint16_t>(imm_low11 + imm_sign * 0xf800);
 #pragma unroll

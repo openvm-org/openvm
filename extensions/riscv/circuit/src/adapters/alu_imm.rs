@@ -128,9 +128,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluImmAdapterAir {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64BaseAluImmAdapterExecutor;
-
-#[derive(Clone, derive_new::new)]
 pub struct Rv64BaseAluImmAdapterFiller;
 
 impl Rv64BaseAluImmAdapterFiller {

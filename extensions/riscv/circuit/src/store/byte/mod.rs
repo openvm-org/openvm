@@ -18,5 +18,5 @@ mod tests;
 pub(crate) mod trace;
 
 pub type Rv64StoreByteAir = VmAirWrapper<Rv64StoreByteAdapterAir, StoreByteCoreAir>;
-pub type Rv64StoreByteExecutor = StoreExecutor<BYTE_ACCESS_WIDTH, 1>;
+pub type Rv64StoreByteExecutor = StoreExecutor<BYTE_ACCESS_WIDTH>;
 pub type Rv64StoreByteChip<F> = VmChipWrapper<F, StoreByteFiller>;

@@ -101,7 +101,7 @@ impl ExtInstr for DeferralCallInstr {
             // The opaque call performs four input-key reads, five output-key
             // writes, and two reads plus two writes of two-block AS4 digests.
             // Register reads are emitted above, for 2 + 17 = 19 total slots.
-            ctx.reserve_preflight_writes(&format!("{DEFERRAL_OUTPUT_KEY_WORDS}u"), "17u");
+            ctx.reserve_preflight_timestamp_slots("17u");
             ctx.reserve_replay_values(&format!("{DEFERRAL_CALL_REPLAY_WORDS}u"));
             ctx.write_line(&format!(
                 "uint64_t deferral_replay[{DEFERRAL_CALL_REPLAY_WORDS}u];"
@@ -194,7 +194,7 @@ impl ExtInstr for DeferralOutputInstr {
                 "uint32_t {output_words} = deferral_output_len / {}u;",
                 size_of::<u64>()
             ));
-            ctx.reserve_preflight_writes(output_words, &format!("5u + {output_words}"));
+            ctx.reserve_preflight_timestamp_slots(&format!("5u + {output_words}"));
             ctx.reserve_replay_values(&format!("1u + {output_words}"));
         }
         let output = air_index_to_c(self.output_chip_idx);
@@ -773,8 +773,8 @@ mod tests {
             unreachable!()
         }
 
-        fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
-            self.operations.push(format!("reserve({writes}, {slots})"));
+        fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
+            self.operations.push(format!("reserve({slots})"));
         }
 
         fn reserve_replay_values(&mut self, count: &str) {
@@ -1145,7 +1145,7 @@ mod tests {
             [
                 "read(r1)",
                 "read(r2)",
-                "reserve(5u, 17u)",
+                "reserve(17u)",
                 "reserve_replay(13u)",
                 "uint64_t deferral_replay[13u];",
                 "bool tmp0 = rvr_ext_deferral_call(state, r1, r2, 3u, deferral_replay)",
@@ -1211,7 +1211,7 @@ mod tests {
                 "trap",
                 "}",
                 "uint32_t deferral_output_words = deferral_output_len / 8u;",
-                "reserve(deferral_output_words, 5u + deferral_output_words)",
+                "reserve(5u + deferral_output_words)",
                 "reserve_replay(1u + deferral_output_words)",
                 "uint32_t deferral_num_rows;",
                 "bool tmp0 = rvr_ext_deferral_output(state, r1, r2, 3u, &deferral_num_rows)",

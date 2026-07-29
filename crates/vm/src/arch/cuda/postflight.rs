@@ -37,7 +37,7 @@ use crate::{
 #[cfg(any(test, feature = "test-utils"))]
 mod testing;
 #[cfg(all(test, feature = "rvr"))]
-pub(crate) use testing::{build_memory_chronology_for_test, ChronologyOutputForTest};
+pub(crate) use testing::{build_memory_chronology_for_test, empty_chronology_counts_for_test};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct PostflightInstruction {

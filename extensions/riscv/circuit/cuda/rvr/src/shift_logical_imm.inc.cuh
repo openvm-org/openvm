@@ -84,11 +84,8 @@ __global__ void shift_logical_imm_replay_tracegen(
 
     uint16_t source[BLOCK_FE_WIDTH];
     uint16_t logged_result[BLOCK_FE_WIDTH];
-    if (!replay_u16_block(read.value, source) ||
-        !replay_u16_block(write.value, logged_result)) {
-        preflight_set_error(error, 57);
-        return;
-    }
+    replay_u16_block(read.value, source);
+    replay_u16_block(write.value, logged_result);
     uint16_t shamt_limbs[BLOCK_FE_WIDTH] = {0};
     shamt_limbs[0] = static_cast<uint16_t>(shamt);
     uint16_t expected_result[BLOCK_FE_WIDTH];

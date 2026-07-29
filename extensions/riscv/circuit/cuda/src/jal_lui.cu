@@ -19,12 +19,6 @@ template <typename T> struct Rv64JalLuiCoreCols {
     T is_sign_extend;                  // 1 if upper cells are 0xFFFF, 0 if 0x0000
 };
 
-struct Rv64JalLuiCoreRecord {
-    uint32_t imm;
-    uint16_t rd_data[BLOCK_FE_WIDTH];
-    bool is_jal;
-};
-
 struct Rv64JalLuiCore {
     VariableRangeChecker range_checker;
 
@@ -59,20 +53,11 @@ struct Rv64JalLuiCore {
         COL_WRITE_ARRAY(row, Rv64JalLuiCoreCols, rd_data, rd_u16);
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, imm, imm);
     }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64JalLuiCoreRecord record) {
-        fill_trace_row(row, record.imm, record.rd_data, record.is_jal);
-    }
 };
 
 template <typename T> struct Rv64JalLuiCols {
     Rv64CondRdWriteAdapterCols<T> adapter;
     Rv64JalLuiCoreCols<T> core;
-};
-
-struct Rv64JalLuiRecord {
-    Rv64RdWriteAdapterRecord adapter;
-    Rv64JalLuiCoreRecord core;
 };
 
 #include "../rvr/src/jal_lui.inc.cuh"

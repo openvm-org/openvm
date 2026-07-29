@@ -21,6 +21,8 @@ fn main() {
             .flag("-I../../../crates/vm/cuda/rvr/include")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
+            .watch("cuda/src/call.cu")
+            .watch("cuda/src/output.cu")
             .watch("cuda/rvr")
             .files(["cuda/rvr/call.cu", "cuda/rvr/output.cu"]);
 

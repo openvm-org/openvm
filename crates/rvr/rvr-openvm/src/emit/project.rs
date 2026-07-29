@@ -1045,10 +1045,7 @@ impl CProject {
                 block.terminator_source_loc.as_ref(),
             );
         }
-        let tc = TermCtx {
-            valid_blocks,
-            current_block: block.start_pc,
-        };
+        let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
         Self::emit_context_scope(&mut body, &mut ctx);
 
