@@ -3,6 +3,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
+            memory::{gen_distinct_register_pointers, gen_pointer},
             TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
         ExecutionBridge, Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
@@ -140,7 +141,6 @@ fn set_and_execute<E: Executor<F> + Clone>(
     let mut rand_input_arr = [0u8; MAX_LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
-    use openvm_circuit::arch::testing::memory::{gen_distinct_register_pointers, gen_pointer};
     let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     // Align buffer/input pointers to MEMORY_BLOCK_BYTES-byte blocks for memory bus compatibility
@@ -445,8 +445,6 @@ fn cuda_set_and_execute(
     rng: &mut StdRng,
     len: Option<usize>,
 ) {
-    use openvm_circuit::arch::testing::memory::{gen_distinct_register_pointers, gen_pointer};
-
     let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
     if len == 0 {
         return;
