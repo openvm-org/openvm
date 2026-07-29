@@ -12,47 +12,8 @@
 using namespace riscv;
 using namespace program;
 
-struct StoreRecord {
-    uint16_t read_data[BLOCK_FE_WIDTH];
-    // Previous contents of the first block followed by the second block, which is all-zero
-    // unless the access crosses a block boundary.
-    uint16_t prev_data[2][BLOCK_FE_WIDTH];
-};
-
-struct StoreByteRecord {
-    uint16_t read_data[BLOCK_FE_WIDTH];
-    uint16_t prev_data[BLOCK_FE_WIDTH];
-};
-
-struct Rv64StoreRecord {
-    Rv64StoreMultiByteAdapterRecord adapter;
-    StoreRecord core;
-};
-
-struct Rv64StoreByteRecord {
-    Rv64StoreByteAdapterRecord adapter;
-    StoreByteRecord core;
-};
-
-static_assert(sizeof(Rv64StoreMultiByteAdapterRecord) == 36);
-static_assert(sizeof(StoreRecord) == 24);
-static_assert(sizeof(Rv64StoreRecord) == 60);
-static_assert(offsetof(StoreRecord, read_data) == 0);
-static_assert(offsetof(StoreRecord, prev_data) == 8);
-static_assert(offsetof(Rv64StoreRecord, core) == 36);
-static_assert(sizeof(Rv64StoreByteAdapterRecord) == 32);
-static_assert(sizeof(StoreByteRecord) == 16);
-static_assert(sizeof(Rv64StoreByteRecord) == 48);
-static_assert(offsetof(StoreByteRecord, prev_data) == 8);
-static_assert(offsetof(Rv64StoreByteRecord, core) == 32);
-
 static __device__ __forceinline__ uint16_t store_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
-}
-
-static __device__ __forceinline__ uint16_t
-store_prev_full_cell(StoreRecord const &record, uint32_t cell) {
-    return record.prev_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
 }
 
 template <typename T, size_t WIDTH_BYTES> struct StoreWidthCoreCols {
@@ -114,9 +75,5 @@ template <size_t WIDTH_BYTES> struct StoreWidthCore {
         }
         row.write_array(offsetof(Cols, value_lo_bytes), NUM_VALUE_CELLS, value_lo_bytes);
         row.write_array(offsetof(Cols, prev_bound_bytes), 2, prev_bound_bytes);
-    }
-
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
-        fill_trace_row(row, record.read_data, record.prev_data, shift);
     }
 };

@@ -83,9 +83,8 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
-    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
-        let ext = Int256Extension::new(ctx).expect("failed to construct rvr Int256Extension");
-        extensions.register_lifter(ext);
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(Int256Extension::new());
     }
 }
 
@@ -394,7 +393,7 @@ where
 
         inventory.next_air::<Rv64BranchEqual256Air>()?;
         let beq = Rv64BranchEqual256Chip::new(
-            BranchEqualFiller::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualFiller::new(DEFAULT_PC_STEP),
             mem_helper.clone(),
         );
         let branch_equal_range_checker = range_checker.clone();
@@ -410,10 +409,7 @@ where
 
         inventory.next_air::<Rv64BranchLessThan256Air>()?;
         let blt = Rv64BranchLessThan256Chip::new(
-            BranchLessThanFiller::new(
-                range_checker.clone(),
-                Rv64BranchLessThan256Opcode::CLASS_OFFSET,
-            ),
+            BranchLessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_postflight_executor_chip(blt, move |chip, postflight| {
@@ -423,11 +419,7 @@ where
 
         inventory.next_air::<Rv64Multiplication256Air>()?;
         let mult = Rv64Multiplication256Chip::new(
-            MultiplicationFiller::new(
-                range_tuple_checker.clone(),
-                bitwise_lu.clone(),
-                Rv64Mul256Opcode::CLASS_OFFSET,
-            ),
+            MultiplicationFiller::new(range_tuple_checker.clone(), bitwise_lu.clone()),
             mem_helper.clone(),
         );
         let multiplication_range_checker = range_checker.clone();

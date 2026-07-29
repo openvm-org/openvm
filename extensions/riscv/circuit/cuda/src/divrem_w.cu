@@ -13,9 +13,4 @@ template <typename T> struct Rv64DivRemWCols {
     DivRemCoreCols<T, RV64_WORD_NUM_LIMBS> core;
 };
 
-struct Rv64DivRemWRecord {
-    Rv64MultWAdapterRecord adapter;
-    DivRemCoreRecords<RV64_WORD_NUM_LIMBS> core;
-};
-
 #include "../rvr/src/divrem_w.inc.cuh"

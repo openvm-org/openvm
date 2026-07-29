@@ -90,12 +90,7 @@ fn create_harness_fields(
     );
     let executor = Rv64DivRemExecutor::new(DivRemOpcode::CLASS_OFFSET);
     let chip = Rv64DivRemChip::<F>::new(
-        DivRemFiller::new(
-            Rv64MultAdapterFiller,
-            bitwise_chip,
-            range_tuple_chip,
-            DivRemOpcode::CLASS_OFFSET,
-        ),
+        DivRemFiller::new(Rv64MultAdapterFiller, bitwise_chip, range_tuple_chip),
         memory_helper,
     );
     (air, executor, chip)

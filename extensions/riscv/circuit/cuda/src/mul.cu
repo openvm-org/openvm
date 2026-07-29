@@ -19,9 +19,4 @@ template <typename T> struct Rv64MultiplicationCols {
     Rv64MultiplicationCoreCols<T> core;
 };
 
-struct Rv64MultiplicationRecord {
-    Rv64MultAdapterRecord adapter;
-    Rv64MultiplicationCoreRecord core;
-};
-
 #include "../rvr/src/mul.inc.cuh"

@@ -23,34 +23,6 @@ template <typename T> struct Rv64StoreMultiByteAdapterCols {
     MemoryBaseAuxCols<T> write_base_aux[2];
 };
 
-struct Rv64StoreMultiByteAdapterRecord {
-    uint32_t from_pc;
-    uint32_t from_timestamp;
-
-    uint32_t rs1_val;
-    MemoryReadAuxRecord rs1_aux_record;
-
-    MemoryReadAuxRecord read_data_aux;
-    // The second timestamp is UINT32_MAX when the access does not cross a block boundary.
-    uint32_t write_prev_timestamps[2];
-    uint16_t imm;
-    uint8_t rs1_ptr;
-    uint8_t rs2_ptr;
-    bool imm_sign;
-    uint8_t mem_as;
-};
-
-template <typename Record>
-static __device__ __forceinline__ uint32_t rv64_store_effective_ptr(Record record) {
-    return record.rs1_val + uint32_t(record.imm) +
-           uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
-}
-
-template <typename Record>
-static __device__ __forceinline__ uint32_t rv64_store_shift_amount(Record record) {
-    return rv64_store_effective_ptr(record) & (MEMORY_BLOCK_BYTES - 1);
-}
-
 struct Rv64StoreAdapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
@@ -144,24 +116,6 @@ struct Rv64StoreAdapter {
             range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
         }
     }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64StoreMultiByteAdapterRecord record) {
-        fill_trace_row(
-            row,
-            record.from_pc,
-            record.from_timestamp,
-            record.rs1_ptr,
-            record.rs2_ptr,
-            record.rs1_val,
-            record.rs1_aux_record.prev_timestamp,
-            record.read_data_aux.prev_timestamp,
-            record.write_prev_timestamps[0],
-            record.write_prev_timestamps[1],
-            record.imm,
-            record.imm_sign,
-            record.mem_as
-        );
-    }
 };
 
 // Byte stores use one memory block and need no crossing-related trace columns.
@@ -177,20 +131,6 @@ template <typename T> struct Rv64StoreByteAdapterCols {
     T mem_ptr_low_limb;
     T mem_as;
     MemoryBaseAuxCols<T> write_base_aux;
-};
-
-struct Rv64StoreByteAdapterRecord {
-    uint32_t from_pc;
-    uint32_t from_timestamp;
-    uint32_t rs1_val;
-    MemoryReadAuxRecord rs1_aux_record;
-    MemoryReadAuxRecord read_data_aux;
-    uint32_t write_prev_timestamp;
-    uint16_t imm;
-    uint8_t rs1_ptr;
-    uint8_t rs2_ptr;
-    bool imm_sign;
-    uint8_t mem_as;
 };
 
 struct Rv64StoreByteAdapter {
@@ -260,22 +200,5 @@ struct Rv64StoreByteAdapter {
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
-    }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64StoreByteAdapterRecord record) {
-        fill_trace_row(
-            row,
-            record.from_pc,
-            record.from_timestamp,
-            record.rs1_ptr,
-            record.rs2_ptr,
-            record.rs1_val,
-            record.rs1_aux_record.prev_timestamp,
-            record.read_data_aux.prev_timestamp,
-            record.write_prev_timestamp,
-            record.imm,
-            record.imm_sign,
-            record.mem_as
-        );
     }
 };

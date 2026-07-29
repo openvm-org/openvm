@@ -159,11 +159,7 @@ pub struct AddSubExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct AddSubFiller<
-    const NUM_LIMBS: usize,
-    const LIMB_BITS: usize,
-    const RANGE_CHECK_TOP_LIMB: bool,
-> {
+pub struct AddSubFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

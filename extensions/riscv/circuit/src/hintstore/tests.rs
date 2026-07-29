@@ -216,7 +216,7 @@ fn rand_hintstore_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-#[should_panic(expected = "hint buffer num_words 1024 exceeds MAX_HINT_BUFFER_DWORDS 1023")]
+#[should_panic(expected = "num_words: 1024, max_hint_buffer_words: 1023")]
 fn test_hint_buffer_exceeds_max_words() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -257,13 +257,13 @@ fn test_hint_buffer_exceeds_max_words() {
 }
 
 #[test]
-#[should_panic(expected = "hint buffer num_words is zero")]
+#[should_panic(expected = "HintBufferZeroWords")]
 fn test_hint_buffer_rejects_zero_words() {
     execute_invalid_hint_buffer(0, false);
 }
 
 #[test]
-#[should_panic(expected = "hint buffer num_words 4294967297 exceeds MAX_HINT_BUFFER_DWORDS 1023")]
+#[should_panic(expected = "num_words: 4294967297, max_hint_buffer_words: 1023")]
 fn test_hint_buffer_checks_full_rv64_count() {
     // The low 32 bits encode one word, so truncating before validation would accept this.
     execute_invalid_hint_buffer((1u64 << 32) | 1, true);

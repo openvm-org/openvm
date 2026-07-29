@@ -39,7 +39,7 @@ use crate::{
         },
         phantom::{
             CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,
-            PhantomChip, PhantomExecutor, PhantomFiller,
+            PhantomExecutor,
         },
         poseidon2::{
             air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
@@ -186,8 +186,8 @@ impl SystemAirInventory {
 impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor;
 
-    /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will always
-    /// add an executor for [PhantomChip], which handles all phantom sub-executors.
+    /// Creates the system executor inventory, including the executor that dispatches phantom
+    /// sub-executors.
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
@@ -426,8 +426,7 @@ where
             hasher_chip,
         );
 
-        let phantom_chip = PhantomChip::new(PhantomFiller, system.memory_controller.helper());
-        inventory.add_postflight_executor_chip(phantom_chip, |_, postflight| {
+        inventory.add_postflight_executor_chip((), |_, postflight| {
             phantom::generate_trace_from_postflight(postflight)
                 .map(AirProvingContext::simple_no_pis)
         });

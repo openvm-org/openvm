@@ -14,8 +14,6 @@ using namespace program;
 constexpr uint16_t SIGN_BYTE = 1 << (RV64_BYTE_BITS - 1);
 constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
 
-using LoadSignExtendRecord = LoadRecord;
-
 template <typename T, size_t WIDTH_BYTES> struct LoadSignExtendWidthCoreCols {
     static_assert(WIDTH_BYTES == HALFWORD_ACCESS_WIDTH || WIDTH_BYTES == WORD_ACCESS_WIDTH);
     static constexpr size_t NUM_OVERLAP_CELLS = WIDTH_BYTES / 2 + 1;
@@ -25,17 +23,6 @@ template <typename T, size_t WIDTH_BYTES> struct LoadSignExtendWidthCoreCols {
     T read_data[2][BLOCK_FE_WIDTH];
     T overlap_lo_bytes[NUM_OVERLAP_CELLS];
 };
-
-struct Rv64LoadSignExtendRecord {
-    Rv64LoadMultiByteAdapterRecord adapter;
-    LoadSignExtendRecord core;
-};
-
-static_assert(sizeof(Rv64LoadMultiByteAdapterRecord) == 44);
-static_assert(sizeof(LoadSignExtendRecord) == 16);
-static_assert(sizeof(Rv64LoadSignExtendRecord) == 60);
-static_assert(offsetof(LoadSignExtendRecord, read_data) == 0);
-static_assert(offsetof(Rv64LoadSignExtendRecord, core) == 44);
 
 static __device__ __forceinline__ uint16_t load_sign_extend_byte_from_cell(
     uint16_t cell,
@@ -100,9 +87,5 @@ template <size_t WIDTH_BYTES> struct LoadSignExtendWidthCore {
             range_checker.add_count(sign_cell - sign_bit, U16_BITS - 1);
         }
         row[offsetof(Cols, data_most_sig_bit)] = sign_bit != 0;
-    }
-
-    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
-        fill_trace_row(row, record.read_data, shift);
     }
 };

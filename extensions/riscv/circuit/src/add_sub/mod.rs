@@ -18,4 +18,4 @@ mod tests;
 pub type Rv64AddSubAir =
     VmAirWrapper<Rv64BaseAluRegU16AdapterAir, AddSubCoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
 pub type Rv64AddSubExecutor = AddSubExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64AddSubChip<F> = VmChipWrapper<F, AddSubFiller<BLOCK_FE_WIDTH, U16_BITS, true>>;
+pub type Rv64AddSubChip<F> = VmChipWrapper<F, AddSubFiller>;

@@ -33,8 +33,8 @@ pub type ModularIsEqualU16Air<const NUM_LANES: usize, const TOTAL_LIMBS: usize> 
 
 #[derive(Clone)]
 pub struct VmModularIsEqualU16Executor<const NUM_LANES: usize, const TOTAL_LIMBS: usize>(
-    ModularIsEqualExecutor<TOTAL_LIMBS, BLOCK_FE_WIDTH, U16_BITS>,
+    ModularIsEqualExecutor<TOTAL_LIMBS>,
 );
 
-pub type ModularIsEqualU16Chip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize> =
-    VmChipWrapper<F, ModularIsEqualFiller<NUM_LANES, TOTAL_LIMBS, BLOCK_FE_WIDTH, U16_BITS>>;
+pub type ModularIsEqualU16Chip<F, const TOTAL_LIMBS: usize> =
+    VmChipWrapper<F, ModularIsEqualFiller<TOTAL_LIMBS, U16_BITS>>;

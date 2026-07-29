@@ -709,6 +709,36 @@ fn test_sdk_compiled_metered_execute() -> Result<()> {
 }
 
 #[test]
+fn test_sdk_compiled_preflight_executes_metered_segment() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let metered = sdk.compile_metered(exe.clone())?;
+    let (_, segments) = sdk.execute_metered(&metered, stdin.clone())?;
+    let preflight = sdk.compile_preflight(exe)?;
+    let state = preflight.create_initial_vm_state(stdin);
+    let initial_pc = state.pc();
+    let mut empty_segment = segments[0].clone();
+    empty_segment.num_insns = 0;
+    empty_segment.num_preflight_residuals = 0;
+    let empty = sdk.execute_preflight(&preflight, state, &empty_segment)?;
+    assert!(!empty.is_terminated());
+    assert_eq!(empty.state().pc(), initial_pc);
+
+    let output = sdk.execute_preflight(&preflight, empty.into_state(), &segments[0])?;
+
+    assert_eq!(output.is_terminated(), segments.len() == 1);
+    Ok(())
+}
+
+#[test]
 fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(

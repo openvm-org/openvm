@@ -227,14 +227,7 @@ checkpoint_preflight_append_checkpoint(
 /* Extension callbacks use one tracing ABI in every execution mode. Timestamp
  * and residual accounting for checkpoint preflight stays block-local, so the
  * callback-facing hooks only preserve execution behavior. */
-static __attribute__((always_inline)) inline bool
-trace_reserve_memory_writes(RvState* restrict state [[maybe_unused]],
-                            uint32_t writes [[maybe_unused]],
-                            uint32_t slots [[maybe_unused]]) {
-  return true;
-}
-
-static __attribute__((always_inline)) inline bool
+static __attribute__((always_inline)) inline void
 trace_write_other_block_u64(
     RvState* restrict state,
     uint32_t address_space, uint32_t pointer,
@@ -246,11 +239,7 @@ trace_write_other_block_u64(
     checkpoint_preflight_mark_dirty_page(
         p->public_values_dirty_pages, p->public_values_dirty_page_words, page);
   }
-  return true;
 }
-
-static __attribute__((always_inline)) inline void
-trace_timestamp(RvState* restrict state [[maybe_unused]]) {}
 
 static __attribute__((always_inline)) inline void read_mem_u64_range(
     RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,

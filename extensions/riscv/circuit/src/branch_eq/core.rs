@@ -134,8 +134,7 @@ pub struct BranchEqualExecutor<const NUM_LIMBS: usize> {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct BranchEqualFiller<const NUM_LIMBS: usize> {
-    pub offset: usize,
+pub struct BranchEqualFiller {
     pub pc_step: u32,
 }
 

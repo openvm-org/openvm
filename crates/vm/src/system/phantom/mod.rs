@@ -20,9 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
 use super::memory::online::GuestMemory;
-use crate::arch::{
-    ExecutionBridge, ExecutionState, PcIncOrSet, PhantomSubExecutor, Streams, VmChipWrapper,
-};
+use crate::arch::{ExecutionBridge, ExecutionState, PcIncOrSet, PhantomSubExecutor, Streams};
 
 mod execution;
 #[cfg(test)]
@@ -86,15 +84,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
     }
 }
 
-/// `PhantomChip` is a special executor because it is stateful and stores all the phantom
-/// sub-executors.
+/// Stateful executor that stores and dispatches all phantom sub-executors.
 #[derive(Clone, derive_new::new)]
 pub struct PhantomExecutor {
     pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>>,
 }
-
-pub struct PhantomFiller;
-pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
 
 pub struct NopPhantomExecutor;
 pub struct CycleStartPhantomExecutor;

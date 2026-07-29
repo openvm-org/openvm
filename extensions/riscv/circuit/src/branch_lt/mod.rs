@@ -17,5 +17,4 @@ mod tests;
 pub type Rv64BranchLessThanAir =
     VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64BranchLessThanExecutor = BranchLessThanExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64BranchLessThanChip<F> =
-    VmChipWrapper<F, BranchLessThanFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64BranchLessThanChip<F> = VmChipWrapper<F, BranchLessThanFiller>;

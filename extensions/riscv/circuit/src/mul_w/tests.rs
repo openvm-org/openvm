@@ -92,7 +92,7 @@ fn create_harness_fields(
     );
     let executor = Rv64MulWExecutor::new(MulWOpcode::CLASS_OFFSET);
     let chip = Rv64MulWChip::<F>::new(
-        MulWFiller::new(range_tuple_chip, bitwise_chip, MulWOpcode::CLASS_OFFSET),
+        MulWFiller::new(range_tuple_chip, bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)

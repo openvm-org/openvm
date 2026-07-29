@@ -5,23 +5,11 @@
 
 #include "openvm_state.h"
 
-static __attribute__((always_inline)) inline bool
-trace_reserve_memory_writes(RvState* restrict state [[maybe_unused]],
-                            uint32_t writes [[maybe_unused]],
-                            uint32_t slots [[maybe_unused]]) {
-  return true;
-}
-
-static __attribute__((always_inline)) inline bool
+static __attribute__((always_inline)) inline void
 trace_write_other_block_u64(
     RvState* restrict state [[maybe_unused]],
     uint32_t address_space [[maybe_unused]], uint32_t pointer [[maybe_unused]],
-    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {
-  return true;
-}
-
-static __attribute__((always_inline)) inline void
-trace_timestamp(RvState* restrict state [[maybe_unused]]) {}
+    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {}
 
 /* Memory page accounting does not contribute to scalar metered cost. */
 static __attribute__((always_inline)) inline void read_mem_u64_range(

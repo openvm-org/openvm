@@ -23,13 +23,11 @@ pub use cuda::*;
 pub type Rv64ShiftLogicalImmAir =
     VmAirWrapper<Rv64BaseAluImmU16AdapterAir, ShiftLogicalImmCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64ShiftLogicalImmExecutor = ShiftLogicalImmExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftLogicalImmChip<F> =
-    VmChipWrapper<F, ShiftLogicalImmFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64ShiftLogicalImmChip<F> = VmChipWrapper<F, ShiftLogicalImmFiller>;
 
 pub type Rv64ShiftWLogicalImmAir = VmAirWrapper<
     Rv64BaseAluWImmU16AdapterAir,
     ShiftLogicalImmCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>,
 >;
 pub type Rv64ShiftWLogicalImmExecutor = ShiftLogicalImmExecutor<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type Rv64ShiftWLogicalImmChip<F> =
-    VmChipWrapper<F, ShiftLogicalImmFiller<RV64_WORD_U16_LIMBS, U16_BITS>>;
+pub type Rv64ShiftWLogicalImmChip<F> = VmChipWrapper<F, ShiftLogicalImmFiller>;

@@ -20,4 +20,4 @@ pub use cuda::*;
 pub type Rv64LessThanImmAir =
     VmAirWrapper<Rv64BaseAluImmU16AdapterAir, LessThanImmCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64LessThanImmExecutor = LessThanImmExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64LessThanImmChip<F> = VmChipWrapper<F, LessThanImmFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64LessThanImmChip<F> = VmChipWrapper<F, LessThanImmFiller>;

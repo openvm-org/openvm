@@ -73,10 +73,7 @@ fn create_harness_fields(
             BaseAluImmOpcode::ADDI as usize,
         ),
     );
-    let executor = Rv64AddIExecutor::new(
-        BaseAluImmOpcode::CLASS_OFFSET,
-        BaseAluImmOpcode::ADDI as usize,
-    );
+    let executor = Rv64AddIExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
     let chip = Rv64AddIChip::new(AddIFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
@@ -112,10 +109,7 @@ fn create_w_harness_fields(
             BaseAluWImmOpcode::ADDIW as usize,
         ),
     );
-    let executor = Rv64AddIWExecutor::new(
-        BaseAluWImmOpcode::CLASS_OFFSET,
-        BaseAluWImmOpcode::ADDIW as usize,
-    );
+    let executor = Rv64AddIWExecutor::new(BaseAluWImmOpcode::CLASS_OFFSET);
     let chip = Rv64AddIWChip::new(AddIFiller::new(range_checker), memory_helper);
     (air, executor, chip)
 }

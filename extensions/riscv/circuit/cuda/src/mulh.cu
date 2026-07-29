@@ -152,9 +152,4 @@ template <typename T> struct MulHCols {
     MulHCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
 };
 
-struct MulHRecord {
-    Rv64MultAdapterRecord adapter;
-    MulHCoreRecord<RV64_REGISTER_NUM_LIMBS> core;
-};
-
 #include "../rvr/src/mulh.inc.cuh"

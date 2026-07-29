@@ -207,7 +207,7 @@ pub struct ShiftRightArithmeticExecutor<const NUM_LIMBS: usize, const LIMB_BITS:
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct ShiftRightArithmeticFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

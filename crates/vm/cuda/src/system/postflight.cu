@@ -601,6 +601,9 @@ __global__ void scatter_value_chunks(
         }
         words[word_offset] = value0;
         words[word_offset + 1] = value1;
+        if (!field_block_is_valid(field_values[reference])) {
+            preflight_set_error(error, ERROR_FIELD_VALUE);
+        }
     } else {
         if (!preflight_is_write(event)) {
             auto const *observed = reinterpret_cast<uint8_t const *>(event.value);
@@ -623,12 +626,6 @@ __global__ void scatter_value_chunks(
         auto *words = reinterpret_cast<AliasedU32 *>(memory[ordinal].value);
         words[0] = uint32_t(chunk.bytes);
         words[1] = uint32_t(chunk.bytes >> 32);
-    }
-    if (config.cell_kind == MEMORY_CELL_FIELD32) {
-        uint32_t reference = field_reference(event);
-        if (!field_block_is_valid(field_values[reference])) {
-            preflight_set_error(error, ERROR_FIELD_VALUE);
-        }
     }
 }
 

@@ -21,5 +21,4 @@ pub type Rv64ShiftRightArithmeticAir = VmAirWrapper<
     ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>,
 >;
 pub type Rv64ShiftRightArithmeticExecutor = ShiftRightArithmeticExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftRightArithmeticChip<F> =
-    VmChipWrapper<F, ShiftRightArithmeticFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64ShiftRightArithmeticChip<F> = VmChipWrapper<F, ShiftRightArithmeticFiller>;

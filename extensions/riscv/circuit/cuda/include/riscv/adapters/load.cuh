@@ -23,36 +23,6 @@ template <typename T> struct Rv64LoadMultiByteAdapterCols {
     T needs_write;
 };
 
-struct Rv64LoadMultiByteAdapterRecord {
-    uint32_t from_pc;
-    uint32_t from_timestamp;
-
-    uint32_t rs1_val;
-    MemoryReadAuxRecord rs1_aux_record;
-
-    // The second timestamp is UINT32_MAX when the access does not cross a block boundary.
-    MemoryReadAuxRecord read_data_aux[2];
-    uint16_t imm;
-    bool imm_sign;
-
-    uint32_t write_prev_timestamp;
-    uint16_t write_prev_data[BLOCK_FE_WIDTH];
-    uint8_t rs1_ptr;
-    // UINT8_MAX means the load does not write a register.
-    uint8_t rd_ptr;
-};
-
-template <typename Record>
-static __device__ __forceinline__ uint32_t rv64_load_effective_ptr(Record record) {
-    return record.rs1_val + uint32_t(record.imm) +
-           uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
-}
-
-template <typename Record>
-static __device__ __forceinline__ uint32_t rv64_load_shift_amount(Record record) {
-    return rv64_load_effective_ptr(record) & (MEMORY_BLOCK_BYTES - 1);
-}
-
 struct Rv64LoadAdapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
@@ -154,28 +124,6 @@ struct Rv64LoadAdapter {
             range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
         }
     }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64LoadMultiByteAdapterRecord record) {
-        bool crosses = record.read_data_aux[1].prev_timestamp != UINT32_MAX;
-        bool needs_write = record.rd_ptr != UINT8_MAX;
-        fill_trace_row(
-            row,
-            record.from_pc,
-            record.from_timestamp,
-            record.rs1_ptr,
-            needs_write ? record.rd_ptr : 0,
-            needs_write,
-            record.rs1_val,
-            record.rs1_aux_record.prev_timestamp,
-            record.read_data_aux[0].prev_timestamp,
-            crosses ? record.read_data_aux[1].prev_timestamp : 0,
-            crosses,
-            needs_write ? record.write_prev_timestamp : 0,
-            record.write_prev_data,
-            record.imm,
-            record.imm_sign
-        );
-    }
 };
 
 // Byte loads use one memory block and need no crossing-related trace columns.
@@ -191,21 +139,6 @@ template <typename T> struct Rv64LoadByteAdapterCols {
     T mem_ptr_low_limb;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
-};
-
-struct Rv64LoadByteAdapterRecord {
-    uint32_t from_pc;
-    uint32_t from_timestamp;
-    uint32_t rs1_val;
-    MemoryReadAuxRecord rs1_aux_record;
-    MemoryReadAuxRecord read_data_aux;
-    uint16_t imm;
-    bool imm_sign;
-    uint32_t write_prev_timestamp;
-    uint16_t write_prev_data[BLOCK_FE_WIDTH];
-    uint8_t rs1_ptr;
-    // UINT8_MAX means the load does not write a register.
-    uint8_t rd_ptr;
 };
 
 struct Rv64LoadByteAdapter {
@@ -287,24 +220,5 @@ struct Rv64LoadByteAdapter {
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
-    }
-
-    __device__ void fill_trace_row(RowSlice row, Rv64LoadByteAdapterRecord record) {
-        bool needs_write = record.rd_ptr != UINT8_MAX;
-        fill_trace_row(
-            row,
-            record.from_pc,
-            record.from_timestamp,
-            record.rs1_ptr,
-            needs_write ? record.rd_ptr : 0,
-            needs_write,
-            record.rs1_val,
-            record.rs1_aux_record.prev_timestamp,
-            record.read_data_aux.prev_timestamp,
-            needs_write ? record.write_prev_timestamp : 0,
-            record.write_prev_data,
-            record.imm,
-            record.imm_sign
-        );
     }
 };

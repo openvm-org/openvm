@@ -63,10 +63,7 @@ fn create_harness_fields(
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
     let executor = Rv64BranchEqualExecutor::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
-    let chip = Rv64BranchEqualChip::new(
-        BranchEqualFiller::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        memory_helper,
-    );
+    let chip = Rv64BranchEqualChip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), memory_helper);
     (air, executor, chip)
 }
 

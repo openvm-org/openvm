@@ -244,7 +244,7 @@ pub struct ShiftLogicalExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> 
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct ShiftLogicalFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftLogicalFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

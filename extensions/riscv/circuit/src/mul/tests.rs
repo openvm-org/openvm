@@ -84,7 +84,7 @@ fn create_harness_fields(
     );
     let executor = Rv64MultiplicationExecutor::new(MulOpcode::CLASS_OFFSET);
     let chip = Rv64MultiplicationChip::<F>::new(
-        MultiplicationFiller::new(range_tuple_chip, bitwise_chip, MulOpcode::CLASS_OFFSET),
+        MultiplicationFiller::new(range_tuple_chip, bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)

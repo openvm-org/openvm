@@ -13,9 +13,4 @@ template <typename T> struct Rv64DivRemCols {
     DivRemCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
 };
 
-struct Rv64DivRemRecord {
-    Rv64MultAdapterRecord adapter;
-    DivRemCoreRecords<RV64_REGISTER_NUM_LIMBS> core;
-};
-
 #include "../rvr/src/divrem.inc.cuh"

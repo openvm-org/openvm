@@ -392,22 +392,16 @@ where
                 });
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()?;
-                let is_eq =
-                    ModularIsEqualU16Chip::<Val<SC>, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
-                        ModularIsEqualFiller::new(
-                            start_offset,
-                            modulus_limbs,
-                            range_checker.clone(),
-                        ),
-                        mem_helper.clone(),
-                    );
+                let is_eq = ModularIsEqualU16Chip::<Val<SC>, NUM_LIMBS_32_U16>::new(
+                    ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
+                    mem_helper.clone(),
+                );
                 inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
-                    generate_modular_is_equal_trace_from_postflight(
-                        chip,
-                        postflight,
-                        start_offset,
-                        byte_ptr_max_bits,
-                    )
+                    generate_modular_is_equal_trace_from_postflight::<
+                        _,
+                        MODULAR_BLOCKS_32,
+                        NUM_LIMBS_32_U16,
+                    >(chip, postflight, start_offset, byte_ptr_max_bits)
                     .map(AirProvingContext::simple_no_pis)
                 });
             } else if bytes <= NUM_LIMBS_48 {
@@ -460,22 +454,16 @@ where
                 });
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()?;
-                let is_eq =
-                    ModularIsEqualU16Chip::<Val<SC>, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
-                        ModularIsEqualFiller::new(
-                            start_offset,
-                            modulus_limbs,
-                            range_checker.clone(),
-                        ),
-                        mem_helper.clone(),
-                    );
+                let is_eq = ModularIsEqualU16Chip::<Val<SC>, NUM_LIMBS_48_U16>::new(
+                    ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
+                    mem_helper.clone(),
+                );
                 inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
-                    generate_modular_is_equal_trace_from_postflight(
-                        chip,
-                        postflight,
-                        start_offset,
-                        byte_ptr_max_bits,
-                    )
+                    generate_modular_is_equal_trace_from_postflight::<
+                        _,
+                        MODULAR_BLOCKS_48,
+                        NUM_LIMBS_48_U16,
+                    >(chip, postflight, start_offset, byte_ptr_max_bits)
                     .map(AirProvingContext::simple_no_pis)
                 });
             } else {

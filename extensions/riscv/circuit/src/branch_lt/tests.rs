@@ -69,10 +69,8 @@ fn create_harness_fields(
         BranchLessThanCoreAir::new(range_checker_chip.bus(), BranchLessThanOpcode::CLASS_OFFSET),
     );
     let executor = Rv64BranchLessThanExecutor::new(BranchLessThanOpcode::CLASS_OFFSET);
-    let chip = Rv64BranchLessThanChip::new(
-        BranchLessThanFiller::new(range_checker_chip, BranchLessThanOpcode::CLASS_OFFSET),
-        memory_helper,
-    );
+    let chip =
+        Rv64BranchLessThanChip::new(BranchLessThanFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 

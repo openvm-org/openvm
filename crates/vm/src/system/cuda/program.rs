@@ -2,10 +2,11 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::system::program::ProgramExecutionCols;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
+#[cfg(test)]
+use openvm_cuda_common::pinned;
 use openvm_cuda_common::{
     copy::MemCopyH2D,
     d_buffer::{DeviceBuffer, DeviceBufferView},
-    pinned,
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
@@ -143,7 +144,8 @@ impl Default for ProgramChipGPU {
 }
 
 impl ProgramChipGPU {
-    pub fn generate_proving_ctx(
+    #[cfg(test)]
+    pub(crate) fn generate_proving_ctx_from_host_for_test(
         &self,
         filtered_exec_freqs: Vec<u32>,
     ) -> AirProvingContext<GpuBackend> {
@@ -314,7 +316,7 @@ mod tests {
             .as_slice()
             .to_device_on(&gpu_device.device_ctx)
             .unwrap();
-        let legacy = chip.generate_proving_ctx(frequencies);
+        let legacy = chip.generate_proving_ctx_from_host_for_test(frequencies);
         // SAFETY: d_frequencies remains alive through the D2H synchronization
         // below on the same device context.
         let direct = unsafe { chip.generate_proving_ctx_from_device(d_frequencies.view()) };

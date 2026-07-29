@@ -19,4 +19,4 @@ mod tests;
 pub type Rv64ShiftLogicalAir =
     VmAirWrapper<Rv64BaseAluRegU16AdapterAir, ShiftLogicalCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64ShiftLogicalExecutor = ShiftLogicalExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftLogicalChip<F> = VmChipWrapper<F, ShiftLogicalFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64ShiftLogicalChip<F> = VmChipWrapper<F, ShiftLogicalFiller>;

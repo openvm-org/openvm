@@ -214,10 +214,7 @@ mod tests {
 
     #[test]
     fn validates_canonical_i12_encoding() {
-        let executor = Rv64AddIExecutor::new(
-            BaseAluImmOpcode::CLASS_OFFSET,
-            BaseAluImmOpcode::ADDI as usize,
-        );
+        let executor = Rv64AddIExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
         let mut data = AddIPreCompute {
             imm: 0,
             rd_ptr: 0,

@@ -18,4 +18,4 @@ mod tests;
 pub type Rv64LessThanAir =
     VmAirWrapper<Rv64BaseAluRegU16AdapterAir, LessThanCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64LessThanExecutor = LessThanExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64LessThanChip<F> = VmChipWrapper<F, LessThanFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64LessThanChip<F> = VmChipWrapper<F, LessThanFiller>;

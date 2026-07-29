@@ -19,7 +19,7 @@ use tracing::instrument;
 
 use super::{
     ExecutionState, MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory,
-    ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
+    PreflightMemoryEvent, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
 };
 use crate::system::{TouchedBlock, TouchedMemory};
 
@@ -519,44 +519,21 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
         is_write: bool,
         expected_write: Option<[u16; BLOCK_FE_WIDTH]>,
     ) -> Result<U16Access, PostflightError> {
-        self.validate_access_layout(address_space, MemoryCellType::U16)?;
-        let memory_end = self.postflight.memory_starts[self.step.0 as usize + 1] as usize;
-        if self.memory_cursor >= memory_end {
-            return Err(PostflightError::new(format!(
-                "instruction at PC {:#x} has too few memory events",
-                self.postflight.pc(self.step)
-            )));
-        }
-        let event = self.postflight.history.memory.accesses[self.memory_cursor];
-        if event.timestamp != self.timestamp
-            || event.address_space() != address_space
-            || event.pointer != pointer
-            || event.is_write() != is_write
-        {
-            return Err(PostflightError::new(format!(
-                "instruction at PC {:#x} has an invalid memory event at timestamp {}",
-                self.postflight.pc(self.step),
-                self.timestamp
-            )));
-        }
+        let (event_index, event) =
+            self.consume_event(address_space, pointer, is_write, MemoryCellType::U16)?;
         if expected_write.is_some_and(|expected| expected != event.value) {
             return Err(PostflightError::new(format!(
                 "instruction at PC {:#x} logged an unexpected write at timestamp {}",
                 self.postflight.pc(self.step),
-                self.timestamp
+                event.timestamp
             )));
         }
         let access = U16Access {
             value: event.value,
-            previous_value: self.postflight.previous_u16(self.memory_cursor),
-            previous_timestamp: self.postflight.previous_timestamp(self.memory_cursor),
-            timestamp: self.timestamp,
+            previous_value: self.postflight.previous_u16(event_index),
+            previous_timestamp: self.postflight.previous_timestamp(event_index),
+            timestamp: event.timestamp,
         };
-        self.memory_cursor += 1;
-        self.timestamp = self
-            .timestamp
-            .checked_add(1)
-            .ok_or_else(|| PostflightError::new("logical timestamp overflow"))?;
         Ok(access)
     }
 
@@ -567,7 +544,33 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
         is_write: bool,
         expected_write: Option<[F; BLOCK_FE_WIDTH]>,
     ) -> Result<Field32Access<F>, PostflightError> {
-        self.validate_access_layout(address_space, MemoryCellType::field32())?;
+        let (event_index, event) =
+            self.consume_event(address_space, pointer, is_write, MemoryCellType::field32())?;
+        let value = self.postflight.field_value(event_index);
+        if expected_write.is_some_and(|expected| expected != value) {
+            return Err(PostflightError::new(format!(
+                "instruction at PC {:#x} logged an unexpected write at timestamp {}",
+                self.postflight.pc(self.step),
+                event.timestamp
+            )));
+        }
+        let access = Field32Access {
+            value,
+            previous_value: self.postflight.previous_field32(event_index),
+            previous_timestamp: self.postflight.previous_timestamp(event_index),
+            timestamp: event.timestamp,
+        };
+        Ok(access)
+    }
+
+    fn consume_event(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        is_write: bool,
+        layout: MemoryCellType,
+    ) -> Result<(usize, PreflightMemoryEvent), PostflightError> {
+        self.validate_access_layout(address_space, layout)?;
         let memory_end = self.postflight.memory_starts[self.step.0 as usize + 1] as usize;
         if self.memory_cursor >= memory_end {
             return Err(PostflightError::new(format!(
@@ -587,26 +590,13 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
                 self.timestamp
             )));
         }
-        let value = self.postflight.field_value(self.memory_cursor);
-        if expected_write.is_some_and(|expected| expected != value) {
-            return Err(PostflightError::new(format!(
-                "instruction at PC {:#x} logged an unexpected write at timestamp {}",
-                self.postflight.pc(self.step),
-                self.timestamp
-            )));
-        }
-        let access = Field32Access {
-            value,
-            previous_value: self.postflight.previous_field32(self.memory_cursor),
-            previous_timestamp: self.postflight.previous_timestamp(self.memory_cursor),
-            timestamp: self.timestamp,
-        };
+        let event_index = self.memory_cursor;
         self.memory_cursor += 1;
         self.timestamp = self
             .timestamp
             .checked_add(1)
             .ok_or_else(|| PostflightError::new("logical timestamp overflow"))?;
-        Ok(access)
+        Ok((event_index, event))
     }
 
     fn validate_access_layout(
@@ -1247,6 +1237,42 @@ mod tests {
             },
         };
         (program, history)
+    }
+
+    #[test]
+    fn rejects_invalid_program_boundaries() {
+        let memory_config = MemoryConfig::default();
+        let (program, mut history) = mixed_history();
+        history.program[0].pc = 2;
+        assert!(Postflight::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("instruction-aligned"));
+
+        let terminate =
+            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
+        let phantom =
+            Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
+        let program = Program::<BabyBear>::new_without_debug_infos(&[terminate, phantom], 0);
+        let history = PreflightHistory {
+            program: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 1,
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(Postflight::new(&program, &history, &memory_config, Some(0))
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("duplicate the sentinel"));
     }
 
     #[test]

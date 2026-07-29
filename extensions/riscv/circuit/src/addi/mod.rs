@@ -19,12 +19,12 @@ pub use cuda::*;
 mod tests;
 
 pub type AddIWCoreAir = AddICoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;
-pub type AddIWFiller = AddIFiller<RV64_WORD_U16_LIMBS, U16_BITS, false>;
+pub type AddIWFiller = AddIFiller;
 
 pub type Rv64AddIAir =
     VmAirWrapper<Rv64BaseAluImmU16AdapterAir, AddICoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
 pub type Rv64AddIExecutor = AddIExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64AddIChip<F> = VmChipWrapper<F, AddIFiller<BLOCK_FE_WIDTH, U16_BITS, true>>;
+pub type Rv64AddIChip<F> = VmChipWrapper<F, AddIFiller>;
 
 pub type Rv64AddIWAir = VmAirWrapper<Rv64BaseAluWImmU16AdapterAir, AddIWCoreAir>;
 pub type Rv64AddIWExecutor = AddIExecutor<RV64_WORD_U16_LIMBS, U16_BITS>;

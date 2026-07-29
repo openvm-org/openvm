@@ -141,15 +141,10 @@ where
 #[derive(Clone, Copy, derive_new::new)]
 pub struct AddIExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
-    pub local_opcode: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct AddIFiller<
-    const NUM_LIMBS: usize,
-    const LIMB_BITS: usize,
-    const RANGE_CHECK_TOP_LIMB: bool,
-> {
+pub struct AddIFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

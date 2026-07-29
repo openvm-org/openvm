@@ -332,7 +332,7 @@ mod addsub_tests {
     }
 
     #[test]
-    fn postflight_modular_addsub_matches_record_trace_and_rejects_bad_output() {
+    fn postflight_modular_addsub_generates_trace_and_rejects_bad_output() {
         const BLOCKS: usize = MODULAR_BLOCKS_32;
         let mut tester = VmChipTestBuilder::default();
         let modulus = secp256k1_coord_prime();
@@ -873,7 +873,7 @@ mod is_equal_tests {
         F,
         VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>,
         ModularIsEqualU16Air<NUM_LANES, TOTAL_LIMBS>,
-        ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
+        ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
     >;
 
     fn create_harness<const NUM_LANES: usize, const TOTAL_LIMBS: usize>(
@@ -892,7 +892,7 @@ mod is_equal_tests {
             ModularIsEqualCoreAir::new(modulus.clone(), tester.range_checker().bus(), offset),
         );
         let executor = VmModularIsEqualU16Executor::new(offset, modulus_limbs);
-        let chip = ModularIsEqualU16Chip::<F, NUM_LANES, TOTAL_LIMBS>::new(
+        let chip = ModularIsEqualU16Chip::<F, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(offset, modulus_limbs, tester.range_checker()),
             tester.memory_helper(),
         );
@@ -903,7 +903,7 @@ mod is_equal_tests {
             chip,
             MAX_INS_CAPACITY,
             move |chip, postflight| {
-                generate_modular_is_equal_trace_from_postflight(
+                generate_modular_is_equal_trace_from_postflight::<_, NUM_LANES, TOTAL_LIMBS>(
                     chip,
                     postflight,
                     offset,
@@ -1024,7 +1024,7 @@ mod is_equal_tests {
     }
 
     #[test]
-    fn postflight_modular_is_equal_matches_record_trace_and_rejects_bad_output() {
+    fn postflight_modular_is_equal_generates_trace_and_rejects_bad_output() {
         const BLOCKS: usize = MODULAR_BLOCKS_32;
         const LIMBS: usize = NUM_LIMBS_32_U16;
         let mut tester = VmChipTestBuilder::default();
@@ -1081,7 +1081,7 @@ mod is_equal_tests {
         let program = Program::new_without_debug_infos(&[instruction, sentinel], 0);
         let memory_config = MemoryConfig::default();
         let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
-        let actual = generate_modular_is_equal_trace_from_postflight(
+        let actual = generate_modular_is_equal_trace_from_postflight::<_, BLOCKS, LIMBS>(
             &harness.chip,
             &postflight,
             offset,
@@ -1092,13 +1092,15 @@ mod is_equal_tests {
 
         history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
         let corrupt = Postflight::new(&program, history, &memory_config, None).unwrap();
-        assert!(generate_modular_is_equal_trace_from_postflight(
-            &harness.chip,
-            &corrupt,
-            offset,
-            tester.address_bits(),
-        )
-        .is_err());
+        assert!(
+            generate_modular_is_equal_trace_from_postflight::<_, BLOCKS, LIMBS>(
+                &harness.chip,
+                &corrupt,
+                offset,
+                tester.address_bits(),
+            )
+            .is_err()
+        );
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -1107,7 +1109,7 @@ mod is_equal_tests {
         VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>,
         ModularIsEqualU16Air<NUM_LANES, TOTAL_LIMBS>,
         HybridModularIsEqualChip<F, NUM_LANES, TOTAL_LIMBS>,
-        ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
+        ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
     >;
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -1132,12 +1134,12 @@ mod is_equal_tests {
 
         let executor = VmModularIsEqualU16Executor::new(offset, modulus_limbs);
 
-        let cpu_chip = ModularIsEqualU16Chip::<F, NUM_LANES, TOTAL_LIMBS>::new(
+        let cpu_chip = ModularIsEqualU16Chip::<F, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(offset, modulus_limbs, dummy_range_checker_chip),
             tester.dummy_memory_helper(),
         );
 
-        let gpu_cpu_chip = ModularIsEqualU16Chip::<F, NUM_LANES, TOTAL_LIMBS>::new(
+        let gpu_cpu_chip = ModularIsEqualU16Chip::<F, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(offset, modulus_limbs, tester.cpu_range_checker()),
             tester.cpu_memory_helper(),
         );

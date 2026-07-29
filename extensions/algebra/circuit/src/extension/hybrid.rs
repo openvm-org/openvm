@@ -192,7 +192,7 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
 
 /// Hybrid prover chip that can generate a CPU trace and transfer it to the GPU.
 pub struct HybridModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize> {
-    cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
+    cpu: ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
     device_ctx: GpuDeviceCtx,
     replay: Option<ModularIsEqualReplayChipGpu<NUM_LANES, TOTAL_LIMBS>>,
 }
@@ -200,10 +200,7 @@ pub struct HybridModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS
 impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     HybridModularIsEqualChip<F, NUM_LANES, TOTAL_LIMBS>
 {
-    pub fn new(
-        cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
-        device_ctx: GpuDeviceCtx,
-    ) -> Self {
+    pub fn new(cpu: ModularIsEqualU16Chip<F, TOTAL_LIMBS>, device_ctx: GpuDeviceCtx) -> Self {
         Self {
             cpu,
             device_ctx,
@@ -212,7 +209,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     }
 
     pub fn new_with_replay(
-        cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
+        cpu: ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
         device_ctx: GpuDeviceCtx,
         modulus_limbs: [u16; TOTAL_LIMBS],
         opcode_base: usize,
@@ -356,11 +353,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                 });
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()?;
-                let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
+                let is_eq = ModularIsEqualU16Chip::<F, NUM_LIMBS_32_U16>::new(
                     ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
                     mem_helper.clone(),
                 );
-                let is_eq = HybridModularIsEqualChip::new_with_replay(
+                let is_eq = HybridModularIsEqualChip::<
+                    F,
+                    MODULAR_BLOCKS_32,
+                    NUM_LIMBS_32_U16,
+                >::new_with_replay(
                     is_eq,
                     device_ctx.clone(),
                     modulus_limbs,
@@ -370,11 +371,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     range_checker_gpu.clone(),
                 );
                 inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
-                    let trace = generate_modular_is_equal_trace_from_postflight(
-                        &chip.cpu,
-                        postflight,
-                        start_offset,
-                        byte_ptr_max_bits,
+                    let trace = generate_modular_is_equal_trace_from_postflight::<
+                        _,
+                        MODULAR_BLOCKS_32,
+                        NUM_LIMBS_32_U16,
+                    >(
+                        &chip.cpu, postflight, start_offset, byte_ptr_max_bits
                     )?;
                     Ok(cpu_proving_ctx_to_gpu(
                         AirProvingContext::simple_no_pis(trace),
@@ -452,11 +454,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                 });
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()?;
-                let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
+                let is_eq = ModularIsEqualU16Chip::<F, NUM_LIMBS_48_U16>::new(
                     ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
                     mem_helper.clone(),
                 );
-                let is_eq = HybridModularIsEqualChip::new_with_replay(
+                let is_eq = HybridModularIsEqualChip::<
+                    F,
+                    MODULAR_BLOCKS_48,
+                    NUM_LIMBS_48_U16,
+                >::new_with_replay(
                     is_eq,
                     device_ctx.clone(),
                     modulus_limbs,
@@ -466,11 +472,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     range_checker_gpu.clone(),
                 );
                 inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
-                    let trace = generate_modular_is_equal_trace_from_postflight(
-                        &chip.cpu,
-                        postflight,
-                        start_offset,
-                        byte_ptr_max_bits,
+                    let trace = generate_modular_is_equal_trace_from_postflight::<
+                        _,
+                        MODULAR_BLOCKS_48,
+                        NUM_LIMBS_48_U16,
+                    >(
+                        &chip.cpu, postflight, start_offset, byte_ptr_max_bits
                     )?;
                     Ok(cpu_proving_ctx_to_gpu(
                         AirProvingContext::simple_no_pis(trace),

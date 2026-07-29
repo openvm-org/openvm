@@ -26,9 +26,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, expand_to_rv64_block,
-    is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm,
-    sign_extend_imm16, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, checked_register_pointer,
+    expand_to_rv64_block, is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    rv64_address_add_imm, sign_extend_imm16, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct LoadInstruction<T> {
@@ -307,8 +307,8 @@ impl Rv64LoadMultiByteAdapterFiller {
         let from_timestamp = postflight.timestamp(step);
         let rs1_ptr = instruction.b.as_canonical_u32();
         let rd_ptr = instruction.a.as_canonical_u32();
-        validate_register_pointer(rs1_ptr)?;
-        validate_register_pointer(rd_ptr)?;
+        checked_register_pointer(rs1_ptr)?;
+        checked_register_pointer(rd_ptr)?;
         if needs_write != (rd_ptr != 0) {
             return Err(PostflightError::new(
                 "multi-byte load write enable does not match its destination",
@@ -447,15 +447,4 @@ impl Rv64LoadMultiByteAdapterFiller {
 
         Ok((read_data, shift, output))
     }
-}
-
-fn validate_register_pointer(pointer: u32) -> Result<(), PostflightError> {
-    if pointer > u8::MAX as u32
-        || !pointer.is_multiple_of(openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS as u32)
-    {
-        return Err(PostflightError::new(
-            "RV64 register pointer is outside the register domain",
-        ));
-    }
-    Ok(())
 }

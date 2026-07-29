@@ -18,9 +18,4 @@ template <typename T> struct Rv64MulWCols {
     Rv64MulWCoreCols<T> core;
 };
 
-struct Rv64MulWRecord {
-    Rv64MultWAdapterRecord adapter;
-    Rv64MulWCoreRecord core;
-};
-
 #include "../rvr/src/mul_w.inc.cuh"

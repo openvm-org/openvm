@@ -102,19 +102,9 @@ impl ExtInstr for EcAddNeInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let checkpoint = ctx.is_checkpoint_preflight();
         let count_residuals = ctx.counts_checkpoint_residuals();
-        let (rd, rs1, rs2) = if checkpoint {
-            // Match the VecHeap adapter: source registers precede the destination register.
-            let rs1 = ctx.read_var(self.rs1_reg);
-            let rs2 = ctx.read_var(self.rs2_reg);
-            let rd = ctx.read_var(self.rd_reg);
-            (rd, rs1, rs2)
-        } else {
-            // Preserve the established pure and metered register order.
-            let rd = ctx.read_var(self.rd_reg);
-            let rs1 = ctx.read_var(self.rs1_reg);
-            let rs2 = ctx.read_var(self.rs2_reg);
-            (rd, rs1, rs2)
-        };
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
         emit_pointer_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let point_dwords = self.curve.point_dwords();
         if checkpoint {
@@ -168,17 +158,8 @@ impl ExtInstr for EcDoubleInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let checkpoint = ctx.is_checkpoint_preflight();
         let count_residuals = ctx.counts_checkpoint_residuals();
-        let (rd, rs1) = if checkpoint {
-            // Match the VecHeap adapter: the source register precedes the destination register.
-            let rs1 = ctx.read_var(self.rs1_reg);
-            let rd = ctx.read_var(self.rd_reg);
-            (rd, rs1)
-        } else {
-            // Preserve the established pure and metered register order.
-            let rd = ctx.read_var(self.rd_reg);
-            let rs1 = ctx.read_var(self.rs1_reg);
-            (rd, rs1)
-        };
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rd = ctx.read_var(self.rd_reg);
         emit_pointer_alignment_guard(ctx, &[&rd, &rs1]);
         let point_dwords = self.curve.point_dwords();
         if checkpoint {
@@ -573,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_emission_preserves_destination_first_order_without_checkpoint_data() {
+    fn execution_modes_use_air_operand_order_without_checkpoint_data() {
         let add = EcAddNeInstr {
             rd_reg: Variable::new(1),
             rs1_reg: Variable::new(2),
@@ -586,9 +567,9 @@ mod tests {
         assert_eq!(
             legacy.operations,
             [
-                "read(r1)",
                 "read(r2)",
                 "read(r3)",
+                "read(r1)",
                 "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
                 "trap",
                 "}",
@@ -607,8 +588,8 @@ mod tests {
         assert_eq!(
             legacy.operations,
             [
-                "read(r1)",
                 "read(r2)",
+                "read(r1)",
                 "if (unlikely(((r1 | r2) & 7ull) != 0ull)) {",
                 "trap",
                 "}",

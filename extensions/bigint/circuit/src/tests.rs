@@ -190,11 +190,7 @@ fn create_mul_harness_fields(
     );
     let executor = Rv64Multiplication256Executor;
     let chip = Rv64Multiplication256Chip::<F>::new(
-        MultiplicationFiller::new(
-            range_tuple_chip,
-            bitwise_chip,
-            Rv64Mul256Opcode::CLASS_OFFSET,
-        ),
+        MultiplicationFiller::new(range_tuple_chip, bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -279,10 +275,7 @@ fn create_beq_harness_fields(
         BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
     let executor = Rv64BranchEqual256Executor;
-    let chip = Rv64BranchEqual256Chip::new(
-        BranchEqualFiller::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        memory_helper,
-    );
+    let chip = Rv64BranchEqual256Chip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), memory_helper);
     (air, executor, chip)
 }
 
@@ -312,10 +305,7 @@ fn create_blt_harness_fields(
     );
     let executor = Rv64BranchLessThan256Executor;
     let chip = Rv64BranchLessThan256Chip::new(
-        BranchLessThanFiller::new(
-            range_checker_chip,
-            Rv64BranchLessThan256Opcode::CLASS_OFFSET,
-        ),
+        BranchLessThanFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)

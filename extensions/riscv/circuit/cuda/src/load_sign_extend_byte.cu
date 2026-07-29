@@ -47,10 +47,6 @@ struct LoadSignExtendByteCore {
         );
         COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_data, read_data);
     }
-
-    __device__ void fill_trace_row(RowSlice row, LoadByteRecord record, uint8_t shift) {
-        fill_trace_row(row, record.read_data, shift);
-    }
 };
 
 #include "../rvr/src/load_sign_extend_byte.inc.cuh"

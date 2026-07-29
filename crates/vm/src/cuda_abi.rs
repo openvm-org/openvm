@@ -756,6 +756,7 @@ pub mod program {
 
     /// Converts raw u32 execution frequencies to field elements on device,
     /// zero-filling `[filtered_len, height)`.
+    #[cfg(test)]
     pub unsafe fn fill_frequencies(
         d_freqs: &DeviceBuffer<u32>,
         filtered_len: usize,

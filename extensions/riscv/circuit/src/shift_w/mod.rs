@@ -21,8 +21,8 @@ pub type ShiftWRightArithmeticExecutor =
 pub struct ShiftWLogicalExecutor {
     pub offset: usize,
 }
-pub type ShiftWLogicalFiller = ShiftLogicalFiller<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type ShiftWRightArithmeticFiller = ShiftRightArithmeticFiller<RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type ShiftWLogicalFiller = ShiftLogicalFiller;
+pub type ShiftWRightArithmeticFiller = ShiftRightArithmeticFiller;
 
 #[cfg(feature = "cuda")]
 mod cuda;

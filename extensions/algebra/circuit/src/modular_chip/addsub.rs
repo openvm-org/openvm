@@ -112,7 +112,7 @@ pub fn get_modular_addsub_chip<F, const BLOCKS: usize>(
     let expr = FieldExpr::new(program, range_bus);
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

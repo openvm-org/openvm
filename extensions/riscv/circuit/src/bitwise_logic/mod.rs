@@ -20,5 +20,4 @@ pub type Rv64BitwiseLogicAir = VmAirWrapper<
     BitwiseLogicCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;
 pub type Rv64BitwiseLogicExecutor = BitwiseLogicExecutor<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64BitwiseLogicChip<F> =
-    VmChipWrapper<F, BitwiseLogicFiller<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
+pub type Rv64BitwiseLogicChip<F> = VmChipWrapper<F, BitwiseLogicFiller<RV64_BYTE_BITS>>;

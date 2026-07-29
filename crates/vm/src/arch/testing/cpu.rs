@@ -418,7 +418,10 @@ where
     SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
-    pub fn load<E, A, C>(mut self, harness: TestChipHarness<Val<SC>, E, A, C>) -> Self
+    fn harness_trace<E, A, C>(
+        &mut self,
+        harness: &TestChipHarness<Val<SC>, E, A, C>,
+    ) -> RowMajorMatrix<Val<SC>>
     where
         A: AnyAir<SC> + 'static,
     {
@@ -460,15 +463,23 @@ where
                 values.extend_from_slice(&trace.values[..rows_used * width]);
             }
         }
-        if !values.is_empty() {
-            let rows_used = values.len() / width;
-            let height = next_power_of_two_or_zero(rows_used);
-            values.resize(height * width, Val::<SC>::ZERO);
-            for row_index in rows_used..height {
-                (harness.fill_padding)(&mut values[row_index * width..(row_index + 1) * width]);
-            }
+        let rows_used = values.len() / width;
+        let height = next_power_of_two_or_zero(rows_used);
+        values.resize(height * width, Val::<SC>::ZERO);
+        for row_index in rows_used..height {
+            (harness.fill_padding)(&mut values[row_index * width..(row_index + 1) * width]);
+        }
+        RowMajorMatrix::new(values, width)
+    }
+
+    pub fn load<E, A, C>(mut self, harness: TestChipHarness<Val<SC>, E, A, C>) -> Self
+    where
+        A: AnyAir<SC> + 'static,
+    {
+        let trace = self.harness_trace(&harness);
+        if trace.height() != 0 {
             let air = Arc::new(harness.air) as AirRef<SC>;
-            let ctx = AirProvingContext::simple_no_pis(RowMajorMatrix::new(values, width));
+            let ctx = AirProvingContext::simple_no_pis(trace);
             tracing::debug!("Generated air proving context for {}", air.name());
             self.air_ctxs.push((air, ctx));
         }
@@ -560,52 +571,8 @@ where
         A: AnyAir<SC> + 'static,
         P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {
-        let width = harness.air.width();
+        let mut trace = self.harness_trace(&harness);
         let air = Arc::new(harness.air) as AirRef<SC>;
-        let memory = self
-            .memory
-            .as_mut()
-            .expect("chip traces must be loaded before memory finalization");
-        let memory_config = memory.controller.memory_config().clone();
-        let mut values = Vec::new();
-        let postflights = harness
-            .preflight
-            .executions
-            .iter()
-            .map(|execution| {
-                Postflight::new_for_test(&execution.program, &execution.history, &memory_config)
-                    .expect("test preflight history must be valid")
-            })
-            .collect::<Vec<_>>();
-        for postflight in &postflights {
-            if harness.balance_memory {
-                postflight.balance_test_memory(&mut memory.chip);
-            }
-        }
-        if let Some(generate_batch_trace) = &harness.generate_batch_trace {
-            let trace = generate_batch_trace(&harness.chip, &postflights)
-                .expect("test postflight trace generation must succeed");
-            assert_eq!(trace.width(), width);
-            let rows_used = (harness.rows_used)(&trace);
-            assert!(rows_used <= trace.height());
-            values.extend_from_slice(&trace.values[..rows_used * width]);
-        } else {
-            for postflight in &postflights {
-                let trace = (harness.generate_trace)(&harness.chip, postflight)
-                    .expect("test postflight trace generation must succeed");
-                assert_eq!(trace.width(), width);
-                let rows_used = (harness.rows_used)(&trace);
-                assert!(rows_used <= trace.height());
-                values.extend_from_slice(&trace.values[..rows_used * width]);
-            }
-        }
-        let rows_used = values.len() / width;
-        let height = next_power_of_two_or_zero(rows_used);
-        values.resize(height * width, Val::<SC>::ZERO);
-        for row_index in rows_used..height {
-            (harness.fill_padding)(&mut values[row_index * width..(row_index + 1) * width]);
-        }
-        let mut trace = RowMajorMatrix::new(values, width);
         modify_trace(&mut trace);
         self.air_ctxs
             .push((air, AirProvingContext::simple_no_pis(trace)));

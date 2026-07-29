@@ -161,7 +161,7 @@ pub struct LessThanExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct LessThanFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

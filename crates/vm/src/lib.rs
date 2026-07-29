@@ -18,9 +18,7 @@ pub mod arch;
 /// Instrumentation metrics for performance analysis and debugging
 #[cfg(feature = "metrics")]
 pub mod metrics;
-/// System chips that are always required by the architecture.
-/// (The [PhantomChip](system::phantom::PhantomChip) is not technically required for a functioning
-/// VM, but there is almost always a need for it.)
+/// System AIRs and executors used by the architecture.
 pub mod system;
 /// Utility functions and test utils
 pub mod utils;

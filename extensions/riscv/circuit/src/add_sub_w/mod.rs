@@ -9,7 +9,7 @@ mod execution;
 pub(crate) mod trace;
 
 pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;
-pub type AddSubWFiller = AddSubFiller<RV64_WORD_U16_LIMBS, U16_BITS, false>;
+pub type AddSubWFiller = AddSubFiller;
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct AddSubWExecutor {

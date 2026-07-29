@@ -228,30 +228,6 @@ where
     }
 }
 
-/// Wrapper that converts block-based read/write data to flat format for ALU operations.
-#[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct VecToFlatAluAdapterExecutor<
-    A,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCKS_PER_WRITE: usize,
-    const BLOCK_VALUE_WIDTH: usize,
-    const TOTAL_READ_SIZE: usize,
-    const TOTAL_WRITE_SIZE: usize,
->(pub A);
-
-/// U16 counterpart of [`VecToFlatAluAdapterExecutor`].
-#[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct VecToFlatAluU16AdapterExecutor<
-    A,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCKS_PER_WRITE: usize,
-    const BLOCK_VALUE_WIDTH: usize,
-    const TOTAL_READ_SIZE: usize,
-    const TOTAL_WRITE_SIZE: usize,
->(pub A);
-
 // =================================================================================================
 // Branch Adapter Wrappers (reads only, no writes)
 // =================================================================================================
@@ -394,14 +370,3 @@ where
         self.0.num_public_values()
     }
 }
-
-/// Wrapper that converts block-based read data to flat format for branch operations.
-/// Branch operations have no writes.
-#[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct VecToFlatBranchAdapterExecutor<
-    A,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCK_VALUE_WIDTH: usize,
-    const TOTAL_READ_SIZE: usize,
->(pub A);

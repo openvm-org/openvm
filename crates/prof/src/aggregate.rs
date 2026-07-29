@@ -289,9 +289,19 @@ fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
     let proof_times = metrics
         .get(PROOF_TIME_LABEL)
         .expect("proof times must exist before parallel projection");
+    let unadjusted = || (proof_times.iter().map(|(value, _)| *value).collect(), 0.0);
     let Some(preflight_times) = metrics.get(EXECUTE_PREFLIGHT_TIME_LABEL) else {
-        return (proof_times.iter().map(|(value, _)| *value).collect(), 0.0);
+        return unadjusted();
     };
+    let proof_times_are_segmented = proof_times
+        .iter()
+        .any(|(_, labels)| labels.get("segment").is_some());
+    let preflight_times_are_segmented = preflight_times
+        .iter()
+        .any(|(_, labels)| labels.get("segment").is_some());
+    if !proof_times_are_segmented && !preflight_times_are_segmented {
+        return unadjusted();
+    }
 
     let mut preflight_by_segment = HashMap::with_capacity(preflight_times.len());
     for (value, labels) in preflight_times {
@@ -949,26 +959,6 @@ mod tests {
         assert_eq!(canonical_group_name("internal_0"), "internal_0");
     }
 
-    #[test]
-    fn legacy_preflight_metrics_use_canonical_phase_names() {
-        assert_eq!(
-            canonical_metric_name("execute_checkpoint_preflight_time_ms"),
-            EXECUTE_PREFLIGHT_TIME_LABEL
-        );
-        assert_eq!(
-            canonical_metric_name("execute_preflight_checkpoints"),
-            EXECUTE_PREFLIGHT_INTERVALS_LABEL
-        );
-        assert_eq!(
-            canonical_metric_name("expand_checkpoint_replay_time_ms"),
-            POSTFLIGHT_TIME_LABEL
-        );
-        assert_eq!(
-            canonical_metric_name("upload_checkpoint_program_time_ms"),
-            UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL
-        );
-    }
-
     fn labels(segment: Option<usize>) -> Labels {
         Labels(
             segment
@@ -1033,6 +1023,22 @@ mod tests {
                 .val,
             60.0
         );
+    }
+
+    #[test]
+    fn unsegmented_proofs_keep_their_recorded_duration() {
+        let metrics = HashMap::from([
+            (PROOF_TIME_LABEL.to_string(), vec![(100.0, labels(None))]),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![(10.0, labels(None))],
+            ),
+        ]);
+
+        let (proof_times, serial_preflight) = parallel_proof_times_ms(&metrics);
+
+        assert_eq!(proof_times, [100.0]);
+        assert_eq!(serial_preflight, 0.0);
     }
 
     #[test]

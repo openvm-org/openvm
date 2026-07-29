@@ -1543,14 +1543,8 @@ mod tests {
 
         let ordinary = MemoryConfig::default();
         let uploaded = CheckpointReplayProgram::upload(&program, &ordinary, &device_ctx).unwrap();
-        assert_eq!(
-            uploaded.byte_pointer_max_bits,
-            to_byte_ptr_bits(ordinary.pointer_max_bits).min(u32::BITS as usize) as u32
-        );
-        assert_eq!(
-            uploaded.program().cell_pointer_max_bits(),
-            ordinary.pointer_max_bits as u32
-        );
+        assert_eq!(uploaded.byte_pointer_max_bits, 32);
+        assert_eq!(uploaded.program().cell_pointer_max_bits(), 31);
 
         for pointer_max_bits in [1, 33] {
             let config = MemoryConfig {

@@ -18,4 +18,4 @@ mod tests;
 pub type Rv64BranchEqualAir =
     VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<BLOCK_FE_WIDTH>>;
 pub type Rv64BranchEqualExecutor = BranchEqualExecutor<BLOCK_FE_WIDTH>;
-pub type Rv64BranchEqualChip<F> = VmChipWrapper<F, BranchEqualFiller<BLOCK_FE_WIDTH>>;
+pub type Rv64BranchEqualChip<F> = VmChipWrapper<F, BranchEqualFiller>;

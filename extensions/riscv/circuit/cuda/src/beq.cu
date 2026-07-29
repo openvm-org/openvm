@@ -18,9 +18,4 @@ template <typename T> struct BranchEqualCols {
     Rv64BranchEqualCoreCols<T> core;
 };
 
-struct BranchEqualRecord {
-    Rv64BranchAdapterRecord adapter;
-    Rv64BranchEqualCoreRecord core;
-};
-
 #include "../rvr/src/beq.inc.cuh"

@@ -142,6 +142,8 @@ fn with_gpu_memory_metrics<T, E>(
 pub enum GenerationError {
     #[error("extension trace generation failed: {0}")]
     ExtensionTracegen(String),
+    #[error("VM prover cannot be reused after an incomplete or failed proving session")]
+    ProverPoisoned,
     #[error("proof generation failed: {0}")]
     Proving(String),
     #[error("trace height for air_idx={air_idx} must be fixed to {expected}, actual={actual}")]
@@ -846,9 +848,7 @@ pub enum VirtualMachineError {
 
 fn begin_preflight_tracegen_session(poisoned: &mut bool) -> Result<(), GenerationError> {
     if *poisoned {
-        return Err(GenerationError::ExtensionTracegen(
-            "VM is poisoned by an incomplete or failed preflight tracegen session".to_string(),
-        ));
+        return Err(GenerationError::ProverPoisoned);
     }
     *poisoned = true;
     Ok(())
@@ -1776,8 +1776,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        begin_preflight_tracegen_session, SystemConfig, VirtualMachine, CONNECTOR_AIR_ID,
-        PROGRAM_AIR_ID,
+        begin_preflight_tracegen_session, GenerationError, SystemConfig, VirtualMachine,
+        CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
     };
     use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
 
@@ -1787,7 +1787,7 @@ mod tests {
         begin_preflight_tracegen_session(&mut poisoned).unwrap();
         // A late coverage failure deliberately does not complete the session.
         let retry = begin_preflight_tracegen_session(&mut poisoned).unwrap_err();
-        assert!(retry.to_string().contains("poisoned"));
+        assert!(matches!(retry, GenerationError::ProverPoisoned));
     }
 
     #[test]
@@ -2022,6 +2022,9 @@ where
         prepared: &VB::Prepared,
         input: Streams,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
+        if self.state.is_none() {
+            return Err(GenerationError::ProverPoisoned.into());
+        }
         self.reset_state(input.clone());
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);

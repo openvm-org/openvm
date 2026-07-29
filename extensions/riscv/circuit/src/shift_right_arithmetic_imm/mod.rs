@@ -26,8 +26,7 @@ pub type Rv64ShiftRightArithmeticImmAir = VmAirWrapper<
 >;
 pub type Rv64ShiftRightArithmeticImmExecutor =
     ShiftRightArithmeticImmExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftRightArithmeticImmChip<F> =
-    VmChipWrapper<F, ShiftRightArithmeticImmFiller<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64ShiftRightArithmeticImmChip<F> = VmChipWrapper<F, ShiftRightArithmeticImmFiller>;
 
 pub type Rv64ShiftWRightArithmeticImmAir = VmAirWrapper<
     Rv64BaseAluWImmU16AdapterAir,
@@ -35,5 +34,4 @@ pub type Rv64ShiftWRightArithmeticImmAir = VmAirWrapper<
 >;
 pub type Rv64ShiftWRightArithmeticImmExecutor =
     ShiftRightArithmeticImmExecutor<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type Rv64ShiftWRightArithmeticImmChip<F> =
-    VmChipWrapper<F, ShiftRightArithmeticImmFiller<RV64_WORD_U16_LIMBS, U16_BITS>>;
+pub type Rv64ShiftWRightArithmeticImmChip<F> = VmChipWrapper<F, ShiftRightArithmeticImmFiller>;

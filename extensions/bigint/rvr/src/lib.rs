@@ -20,8 +20,7 @@ use rvr_openvm_ir::{
     CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, Variable,
 };
 use rvr_openvm_lift::{
-    decode_variable, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
 };
 use strum::EnumCount;
 
@@ -117,8 +116,6 @@ pub struct Int256AluInstr {
     pub rs2_reg: Variable,
     /// The ALU operation to perform (selects the FFI function at codegen time).
     pub op: Int256AluOp,
-    /// AIR index associated with this instruction.
-    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for Int256AluInstr {
@@ -127,20 +124,9 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        // Preflight follows the AIR's source-read then destination-read
-        // schedule. Pure and metered execution retain destination-first codegen
-        // because they do not emit these memory events.
-        let (rd, rs1, rs2) = if ctx.is_checkpoint_preflight() {
-            let rs1 = ctx.read_var(self.rs1_reg);
-            let rs2 = ctx.read_var(self.rs2_reg);
-            let rd = ctx.read_var(self.rd_reg);
-            (rd, rs1, rs2)
-        } else {
-            let rd = ctx.read_var(self.rd_reg);
-            let rs1 = ctx.read_var(self.rs1_reg);
-            let rs2 = ctx.read_var(self.rs2_reg);
-            (rd, rs1, rs2)
-        };
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
         emit_pointer_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         // The FFI performs eight aligned heap reads followed by four aligned
         // heap writes. Checkpoint replay reconstructs those events from the
@@ -184,8 +170,6 @@ pub struct Int256BranchEqInstr {
     pub fall_pc: u64,
     /// If true, branch on *not* equal (BNE); otherwise branch on equal (BEQ).
     pub is_ne: bool,
-    /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
-    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for Int256BranchEqInstr {
@@ -252,8 +236,6 @@ pub struct Int256BranchLtInstr {
     pub fall_pc: u64,
     /// The branch-less-than variant (selects the FFI function at codegen time).
     pub op: Int256BranchLtOp,
-    /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
-    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for Int256BranchLtInstr {
@@ -302,73 +284,17 @@ impl ExtInstr for Int256BranchLtInstr {
 // ── Extension struct ────────────────────────────────────────────────────────
 
 /// The Int256 extension. Register this with the `ExtensionRegistry`.
-pub struct Int256Extension {
-    add_sub_chip_idx: Option<AirIndex>,
-    bitwise_logic_chip_idx: Option<AirIndex>,
-    shift_logical_chip_idx: Option<AirIndex>,
-    shift_right_arithmetic_chip_idx: Option<AirIndex>,
-    less_than_chip_idx: Option<AirIndex>,
-    mul_chip_idx: Option<AirIndex>,
-    branch_eq_chip_idx: Option<AirIndex>,
-    branch_lt_chip_idx: Option<AirIndex>,
-}
+pub struct Int256Extension;
 
 impl Int256Extension {
-    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let add_sub_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::ADD))?;
-        let bitwise_logic_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::XOR))?;
-        let shift_logical_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
-        let shift_right_arithmetic_chip_idx =
-            opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SRA))?;
-        let less_than_chip_idx = opcode_air_idx(ctx, Rv64LessThan256Opcode(LessThanOpcode::SLT))?;
-        let mul_chip_idx = opcode_air_idx(ctx, Rv64Mul256Opcode(MulOpcode::MUL))?;
-        let branch_eq_chip_idx =
-            opcode_air_idx(ctx, Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ))?;
-        let branch_lt_chip_idx =
-            opcode_air_idx(ctx, Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT))?;
-
-        Ok(Self {
-            add_sub_chip_idx,
-            bitwise_logic_chip_idx,
-            shift_logical_chip_idx,
-            shift_right_arithmetic_chip_idx,
-            less_than_chip_idx,
-            mul_chip_idx,
-            branch_eq_chip_idx,
-            branch_lt_chip_idx,
-        })
+    pub const fn new() -> Self {
+        Self
     }
+}
 
-    /// Map a global opcode to the chip index for that operation.
-    fn chip_idx_for_opcode(&self, opcode: usize) -> Option<AirIndex> {
-        let base_alu_start = Rv64BaseAlu256Opcode::CLASS_OFFSET;
-        let shift_start = Rv64Shift256Opcode::CLASS_OFFSET;
-        let lt_start = Rv64LessThan256Opcode::CLASS_OFFSET;
-        let beq_start = Rv64BranchEqual256Opcode::CLASS_OFFSET;
-        let blt_start = Rv64BranchLessThan256Opcode::CLASS_OFFSET;
-        let mul_start = Rv64Mul256Opcode::CLASS_OFFSET;
-
-        if opcode >= base_alu_start && opcode < base_alu_start + BaseAluOpcode::COUNT {
-            match opcode - base_alu_start {
-                0..=1 => self.add_sub_chip_idx,
-                _ => self.bitwise_logic_chip_idx,
-            }
-        } else if opcode >= shift_start && opcode < shift_start + ShiftOpcode::COUNT {
-            match opcode - shift_start {
-                0..=1 => self.shift_logical_chip_idx,
-                _ => self.shift_right_arithmetic_chip_idx,
-            }
-        } else if opcode >= lt_start && opcode < lt_start + LessThanOpcode::COUNT {
-            self.less_than_chip_idx
-        } else if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {
-            self.branch_eq_chip_idx
-        } else if opcode >= blt_start && opcode < blt_start + BranchLessThanOpcode::COUNT {
-            self.branch_lt_chip_idx
-        } else if opcode >= mul_start && opcode < mul_start + MulOpcode::COUNT {
-            self.mul_chip_idx
-        } else {
-            panic!("unknown Int256 opcode: {opcode:#x}");
-        }
+impl Default for Int256Extension {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -432,8 +358,6 @@ impl RvrExtension for Int256Extension {
             let imm = insn.signed_c();
             let target_pc = (pc as i64 + imm as i64) as u64;
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
-            let chip_idx = self.chip_idx_for_opcode(opcode);
-
             return Some(LiftedInstr::Term {
                 pc,
                 terminator: Terminator::instruction(Int256BranchEqInstr {
@@ -442,7 +366,6 @@ impl RvrExtension for Int256Extension {
                     target_pc,
                     fall_pc,
                     is_ne,
-                    chip_idx,
                 }),
                 source_loc: None,
             });
@@ -463,8 +386,6 @@ impl RvrExtension for Int256Extension {
             let imm = insn.signed_c();
             let target_pc = (pc as i64 + imm as i64) as u64;
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
-            let chip_idx = self.chip_idx_for_opcode(opcode);
-
             return Some(LiftedInstr::Term {
                 pc,
                 terminator: Terminator::instruction(Int256BranchLtInstr {
@@ -473,7 +394,6 @@ impl RvrExtension for Int256Extension {
                     target_pc,
                     fall_pc,
                     op,
-                    chip_idx,
                 }),
                 source_loc: None,
             });
@@ -508,8 +428,6 @@ impl Int256Extension {
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
-        let chip_idx = self.chip_idx_for_opcode(insn.opcode.as_usize());
-
         LiftedInstr::Body(InstrAt {
             pc,
             instr: Box::new(Int256AluInstr {
@@ -517,7 +435,6 @@ impl Int256Extension {
                 rs1_reg,
                 rs2_reg,
                 op,
-                chip_idx,
             }),
             source_loc: None,
         })
@@ -706,7 +623,7 @@ mod tests {
     #[test]
     fn bigint_branches_preserve_negative_field_encoded_offsets() {
         let pc = 0x1000;
-        let ext = Int256Extension::new(None).unwrap();
+        let ext = Int256Extension::new();
 
         for insn in [
             instruction(Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ), 101 - 12),
@@ -733,7 +650,6 @@ mod tests {
             rs1_reg: Variable::new(2),
             rs2_reg: Variable::new(3),
             op: Int256AluOp::Add,
-            chip_idx: None,
         };
         assert!(instruction.supports_preflight());
 
@@ -761,9 +677,9 @@ mod tests {
             assert_eq!(
                 execution.lines,
                 [
-                    "read(r1)",
                     "read(r2)",
                     "read(r3)",
+                    "read(r1)",
                     "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
                     "trap",
                     "}",
@@ -781,7 +697,6 @@ mod tests {
             target_pc: 40,
             fall_pc: 44,
             is_ne: false,
-            chip_idx: None,
         };
         assert!(instruction.supports_preflight());
 
@@ -832,7 +747,6 @@ mod tests {
             target_pc: 40,
             fall_pc: 44,
             op: Int256BranchLtOp::Bltu,
-            chip_idx: None,
         };
         let mut checkpoint = TestEmitCtx::default();
         instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));

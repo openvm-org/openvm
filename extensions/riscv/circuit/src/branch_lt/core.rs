@@ -188,9 +188,8 @@ pub struct BranchLessThanExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct BranchLessThanFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BranchLessThanFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)

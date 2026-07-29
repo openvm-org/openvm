@@ -300,7 +300,7 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
     const NUM_LANES: usize,
     const TOTAL_LIMBS: usize,
 >(
-    chip: &ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
+    chip: &ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
     postflight: &Postflight<'_, F>,
     opcode_base: usize,
     pointer_max_bits: usize,

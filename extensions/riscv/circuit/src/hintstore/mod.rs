@@ -28,7 +28,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    validate_memory_block_byte_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 mod execution;
@@ -67,11 +67,6 @@ fn validate_hint_buffer_num_words(pc: u32, num_words: u64) -> Result<u16, Execut
         });
     }
     Ok(num_words as u16)
-}
-
-#[inline]
-fn validate_hint_store_mem_ptr(pc: u32, mem_ptr: u32) -> Result<u32, ExecutionError> {
-    validate_memory_block_byte_ptr(pc, mem_ptr)
 }
 
 #[repr(C)]

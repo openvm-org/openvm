@@ -67,10 +67,6 @@ impl FieldKind for ModArithKind {
     fn known_suffix(field: KnownField) -> Option<&'static str> {
         Some(field.c_suffix())
     }
-
-    fn supports_preflight() -> bool {
-        true
-    }
 }
 
 impl ArithKind for ModArithKind {
@@ -593,7 +589,7 @@ mod tests {
                 instr.emit_c(&mut legacy);
                 assert_eq!(
                     &legacy.operations[..3],
-                    ["read(r1);", "read(r2);", "read(r3);"]
+                    ["read(r2);", "read(r3);", "read(r1);"]
                 );
                 assert!(!legacy
                     .operations

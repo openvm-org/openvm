@@ -22,9 +22,4 @@ template <typename T> struct BranchLessThanCols {
     Rv64BranchLessThanCoreCols<T> core;
 };
 
-struct BranchLessThanRecord {
-    Rv64BranchAdapterRecord adapter;
-    Rv64BranchLessThanCoreRecord core;
-};
-
 #include "../rvr/src/blt.inc.cuh"

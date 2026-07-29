@@ -166,6 +166,6 @@ pub struct ShiftRightArithmeticImmExecutor<const NUM_LIMBS: usize, const LIMB_BI
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct ShiftRightArithmeticImmFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticImmFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }

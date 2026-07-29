@@ -179,7 +179,7 @@ pub struct LessThanImmExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct LessThanImmFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanImmFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

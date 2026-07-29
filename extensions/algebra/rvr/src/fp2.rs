@@ -50,10 +50,6 @@ impl FieldKind for Fp2Kind {
     fn known_suffix(field: KnownField) -> Option<&'static str> {
         field.fp2_c_suffix()
     }
-
-    fn supports_preflight() -> bool {
-        true
-    }
 }
 
 impl ArithKind for Fp2Kind {
@@ -270,7 +266,7 @@ mod tests {
                 instr.emit_c(&mut legacy);
                 assert_eq!(
                     &legacy.operations[..3],
-                    ["read(r1);", "read(r2);", "read(r3);"]
+                    ["read(r2);", "read(r3);", "read(r1);"]
                 );
                 assert!(!legacy.operations.iter().any(|operation| {
                     operation.starts_with("checkpoint_slots(") || operation.starts_with("residual(")
@@ -339,7 +335,7 @@ mod tests {
             instr.emit_c(&mut legacy);
             assert_eq!(
                 &legacy.operations[..3],
-                ["read(r1);", "read(r2);", "read(r3);"]
+                ["read(r2);", "read(r3);", "read(r1);"]
             );
             assert!(!legacy.operations.iter().any(|operation| {
                 operation.starts_with("checkpoint_slots(") || operation.starts_with("residual(")

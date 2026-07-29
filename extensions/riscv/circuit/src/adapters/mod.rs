@@ -2,8 +2,8 @@ use std::ops::Mul;
 
 use openvm_circuit::{
     arch::{
-        execution_mode::ExecutionCtxTrait, ExecutionError, VmStateMut, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        execution_mode::ExecutionCtxTrait, ExecutionError, PostflightError, VmStateMut,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::online::GuestMemory,
 };
@@ -57,6 +57,15 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+
+pub(crate) fn checked_register_pointer(pointer: u32) -> Result<u8, PostflightError> {
+    if pointer > u8::MAX as u32 || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+        return Err(PostflightError::new(
+            "RV64 register pointer is outside the register domain",
+        ));
+    }
+    Ok(pointer as u8)
+}
 
 pub(crate) struct ReplayComputation<const NUM_LIMBS: usize, M> {
     pub output: [u8; NUM_LIMBS],

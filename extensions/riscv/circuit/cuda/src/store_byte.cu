@@ -44,10 +44,6 @@ struct StoreByteCore {
         COL_WRITE_ARRAY(row, StoreByteCoreCols, read_data, read_data);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_data, prev_data);
     }
-
-    __device__ void fill_trace_row(RowSlice row, StoreByteRecord record, uint8_t shift) {
-        fill_trace_row(row, record.read_data, record.prev_data, shift);
-    }
 };
 
 #include "../rvr/src/store_byte.inc.cuh"

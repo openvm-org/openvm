@@ -235,10 +235,7 @@ impl VmExecutionExtension for Rv64I {
             [ShiftWOpcode::SRAW].map(|x| x.global_opcode()),
         )?;
 
-        let addi_w = Rv64AddIWExecutor::new(
-            BaseAluWImmOpcode::CLASS_OFFSET,
-            BaseAluWImmOpcode::ADDIW as usize,
-        );
+        let addi_w = Rv64AddIWExecutor::new(BaseAluWImmOpcode::CLASS_OFFSET);
         inventory.add_executor(
             addi_w,
             [BaseAluWImmOpcode::ADDIW].map(|x| x.global_opcode()),
@@ -341,10 +338,7 @@ impl VmExecutionExtension for Rv64I {
         let auipc = Rv64AuipcExecutor::new();
         inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let addi = Rv64AddIExecutor::new(
-            BaseAluImmOpcode::CLASS_OFFSET,
-            BaseAluImmOpcode::ADDI as usize,
-        );
+        let addi = Rv64AddIExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
         inventory.add_executor(addi, [BaseAluImmOpcode::ADDI].map(|x| x.global_opcode()))?;
 
         let shift_logical_imm = Rv64ShiftLogicalImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
@@ -1017,10 +1011,8 @@ where
         );
 
         inventory.next_air::<Rv64BranchEqualAir>()?;
-        let beq = Rv64BranchEqualChip::new(
-            BranchEqualFiller::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-            mem_helper.clone(),
-        );
+        let beq =
+            Rv64BranchEqualChip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), mem_helper.clone());
         add_postflight_executor_chip!(
             inventory,
             beq,
@@ -1029,7 +1021,7 @@ where
 
         inventory.next_air::<Rv64BranchLessThanAir>()?;
         let blt = Rv64BranchLessThanChip::new(
-            BranchLessThanFiller::new(range_checker.clone(), BranchLessThanOpcode::CLASS_OFFSET),
+            BranchLessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
         add_postflight_executor_chip!(
@@ -1291,11 +1283,7 @@ where
         // safeguard to ensure that chip construction matches the circuit definition
         inventory.next_air::<Rv64MultiplicationAir>()?;
         let mult = Rv64MultiplicationChip::new(
-            MultiplicationFiller::new(
-                range_tuple_checker.clone(),
-                bitwise_lu.clone(),
-                MulOpcode::CLASS_OFFSET,
-            ),
+            MultiplicationFiller::new(range_tuple_checker.clone(), bitwise_lu.clone()),
             mem_helper.clone(),
         );
         add_postflight_executor_chip!(
@@ -1306,11 +1294,7 @@ where
 
         inventory.next_air::<Rv64MulWAir>()?;
         let mul_w = Rv64MulWChip::new(
-            crate::mul_w::MulWFiller::new(
-                range_tuple_checker.clone(),
-                bitwise_lu.clone(),
-                MulWOpcode::CLASS_OFFSET,
-            ),
+            crate::mul_w::MulWFiller::new(range_tuple_checker.clone(), bitwise_lu.clone()),
             mem_helper.clone(),
         );
         add_postflight_executor_chip!(
@@ -1336,7 +1320,6 @@ where
                 Rv64MultAdapterFiller,
                 bitwise_lu.clone(),
                 range_tuple_checker.clone(),
-                DivRemOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
@@ -1352,7 +1335,6 @@ where
                 Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_tuple_checker.clone(),
-                DivRemWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );

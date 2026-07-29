@@ -120,7 +120,6 @@ pub struct MultiplicationExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize
 
 #[derive(Clone)]
 pub struct MultiplicationFiller<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
@@ -129,7 +128,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationFiller<NUM_LI
     pub fn new(
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        offset: usize,
     ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
@@ -146,7 +144,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationFiller<NUM_LI
         );
 
         Self {
-            offset,
             range_tuple_chip,
             bitwise_lookup_chip,
         }

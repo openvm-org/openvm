@@ -36,26 +36,15 @@ bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
     return false;
   }
 
-  uint32_t writes = plan.crosses != 0u ? 2u : 1u;
-  uint32_t slots = width == 1u ? 1u : 2u;
-  if (unlikely(!trace_reserve_memory_writes(state, writes, slots))) {
-    return false;
-  }
-  if (unlikely(!trace_write_other_block_u64(
-          state, AS_PUBLIC_VALUES, (uint32_t)(plan.block_addr >> 1),
-          plan.post[0], plan.previous[0]))) {
-    return false;
-  }
+  trace_write_other_block_u64(
+      state, AS_PUBLIC_VALUES, (uint32_t)(plan.block_addr >> 1),
+      plan.post[0], plan.previous[0]);
   if (width != 1u) {
     if (plan.crosses != 0u) {
-      if (unlikely(!trace_write_other_block_u64(
-              state, AS_PUBLIC_VALUES,
-              (uint32_t)((plan.block_addr + WORD_SIZE) >> 1), plan.post[1],
-              plan.previous[1]))) {
-        return false;
-      }
-    } else {
-      trace_timestamp(state);
+      trace_write_other_block_u64(
+          state, AS_PUBLIC_VALUES,
+          (uint32_t)((plan.block_addr + WORD_SIZE) >> 1), plan.post[1],
+          plan.previous[1]);
     }
   }
 

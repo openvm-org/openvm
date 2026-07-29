@@ -19,7 +19,8 @@ use super::{
     validate_hint_buffer_num_words, Rv64HintStoreChip, Rv64HintStoreCols, REM_WORDS_SHIFT,
 };
 use crate::adapters::{
-    byte_ptr_to_u16_ptr_value, ptr_bound_from_ptr, ptr_to_field_u16_limbs, RV64_PTR_BITS, U16_BITS,
+    byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_bound_from_ptr,
+    ptr_to_field_u16_limbs, RV64_PTR_BITS, U16_BITS,
 };
 
 struct HintStoreReplayInput {
@@ -123,7 +124,7 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
         ));
     }
 
-    let mem_ptr_ptr = checked_register_pointer(instruction.b.as_canonical_u32(), "memory pointer")?;
+    let mem_ptr_ptr = u32::from(checked_register_pointer(instruction.b.as_canonical_u32())?);
     let num_words_ptr = if is_single {
         if instruction.a.as_canonical_u32() != 0 {
             return Err(PostflightError::new(
@@ -132,10 +133,9 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
         }
         None
     } else {
-        Some(checked_register_pointer(
+        Some(u32::from(checked_register_pointer(
             instruction.a.as_canonical_u32(),
-            "word count",
-        )?)
+        )?))
     };
 
     let from_pc = postflight.pc(step);
@@ -241,17 +241,6 @@ fn fill_row<F: PrimeField32>(
     cols.rem_words = F::from_u32(input.num_words - local_index);
     cols.is_buffer = F::from_bool(!is_single);
     cols.is_single = F::from_bool(is_single);
-}
-
-fn checked_register_pointer(pointer: u32, operand: &str) -> Result<u32, PostflightError> {
-    if pointer >= 32 * RV64_REGISTER_NUM_LIMBS as u32
-        || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32)
-    {
-        return Err(PostflightError::new(format!(
-            "hint-store {operand} is not an aligned register pointer"
-        )));
-    }
-    Ok(pointer)
 }
 
 fn u16_block_to_u64(value: [u16; BLOCK_FE_WIDTH]) -> u64 {

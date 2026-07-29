@@ -102,7 +102,6 @@ fn create_harness_fields(
             Rv64MultWAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_tuple_chip,
-            DivRemWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );

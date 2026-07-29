@@ -32,10 +32,6 @@ struct LoadByteCore {
         COL_WRITE_VALUE(row, LoadByteCoreCols, read_cell_lo_byte, read_cell_bytes[0]);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_data, read_data);
     }
-
-    __device__ void fill_trace_row(RowSlice row, LoadByteRecord record, uint8_t shift) {
-        fill_trace_row(row, record.read_data, shift);
-    }
 };
 
 #include "../rvr/src/load_byte.inc.cuh"

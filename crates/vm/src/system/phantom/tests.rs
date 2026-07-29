@@ -28,10 +28,7 @@ use crate::{
         Executor, MemoryConfig, PhantomSubExecutor, Postflight, PreflightHistory,
         PreflightMemoryEvent, PreflightProgramEvent, Streams,
     },
-    system::{
-        memory::online::GuestMemory,
-        phantom::{PhantomAir, PhantomChip, PhantomFiller},
-    },
+    system::{memory::online::GuestMemory, phantom::PhantomAir},
 };
 
 type F = BabyBear;
@@ -88,7 +85,7 @@ fn test_nops_and_terminate() {
         Arc::new(NopPhantomExecutor),
     );
     let executor = PhantomExecutor::new(phantom_executors);
-    let chip = PhantomChip::new(PhantomFiller, tester.memory_helper());
+    let chip = ();
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
         phantom_opcode,
@@ -124,7 +121,7 @@ fn postflight_trace_does_not_replay_callbacks() {
 
     let mut tester = VmChipTestBuilder::default();
     let executor = PhantomExecutor::new(phantom_executors);
-    let chip = PhantomChip::new(PhantomFiller, tester.memory_helper());
+    let chip = ();
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
         phantom_opcode,
@@ -225,7 +222,7 @@ fn test_cuda_phantom_tracegen() {
         phantom_opcode,
     };
     let gpu_chip = PhantomChipGPU::new(tester.range_checker().device_ctx.clone());
-    let cpu_chip = PhantomChip::new(PhantomFiller, tester.dummy_memory_helper());
+    let cpu_chip = ();
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, NUM_NOPS)
             .with_trace_generators(

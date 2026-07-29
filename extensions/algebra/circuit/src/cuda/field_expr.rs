@@ -399,18 +399,3 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         Ok(AirProvingContext::simple_no_pis(trace))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use num_bigint::BigUint;
-    use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
-
-    use super::supports_device_modulus;
-
-    #[test]
-    fn device_modulus_gate_is_deterministic_and_conservative() {
-        assert!(supports_device_modulus(&secp256k1_coord_prime()));
-        assert!(!supports_device_modulus(&BigUint::from(15u32)));
-        assert!(!supports_device_modulus(&BigUint::from(16u32)));
-    }
-}

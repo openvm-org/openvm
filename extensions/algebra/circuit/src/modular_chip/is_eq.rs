@@ -282,34 +282,19 @@ where
 }
 
 #[derive(derive_new::new, Clone)]
-pub struct ModularIsEqualExecutor<
-    const READ_LIMBS: usize,
-    const WRITE_LIMBS: usize,
-    const LIMB_BITS: usize,
-> {
+pub struct ModularIsEqualExecutor<const READ_LIMBS: usize> {
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
 }
 
 #[derive(derive_new::new, Clone)]
-pub struct ModularIsEqualFiller<
-    const NUM_LANES: usize,
-    const READ_LIMBS: usize,
-    const WRITE_LIMBS: usize,
-    const LIMB_BITS: usize,
-> {
+pub struct ModularIsEqualFiller<const READ_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
     pub modulus_limbs: [u16; READ_LIMBS],
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<
-        const NUM_LANES: usize,
-        const READ_LIMBS: usize,
-        const WRITE_LIMBS: usize,
-        const LIMB_BITS: usize,
-    > ModularIsEqualFiller<NUM_LANES, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-{
+impl<const READ_LIMBS: usize, const LIMB_BITS: usize> ModularIsEqualFiller<READ_LIMBS, LIMB_BITS> {
     pub(crate) fn fill_trace_row_from_execution_data<F: PrimeField32>(
         &self,
         range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
