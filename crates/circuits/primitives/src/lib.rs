@@ -35,6 +35,8 @@ pub use columns_air::ColumnsAir;
 pub mod assert_less_than;
 pub mod bigint;
 pub mod bitwise_op_lookup;
+#[cfg(feature = "cuda")]
+pub mod comm_stream;
 pub mod encoder;
 #[cfg(feature = "cuda")]
 pub mod hybrid_chip;

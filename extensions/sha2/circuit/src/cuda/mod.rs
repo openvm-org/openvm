@@ -8,10 +8,13 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    comm_stream::{CommDeviceBuffer, MemCopyH2DOverlapped},
+    var_range::VariableRangeCheckerChipGPU,
+    Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha512Config};
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -20,8 +23,11 @@ use crate::{Sha2Config, Sha2RecordLayout, Sha2RecordMut};
 mod cuda_abi;
 
 pub struct Sha2SharedRecordsGpu {
-    d_records: DeviceBuffer<u8>,
-    d_record_offsets: DeviceBuffer<usize>,
+    /// Uploaded via the comm stream by the main chip; the block hasher enqueues
+    /// onto the same main stream, which keeps its kernels ordered after the
+    /// upload and the deferred free after those kernels.
+    d_records: CommDeviceBuffer<u8>,
+    d_record_offsets: CommDeviceBuffer<usize>,
     num_records: usize,
 }
 
@@ -77,8 +83,8 @@ where
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, C::MAIN_CHIP_WIDTH, device_ctx);
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let d_record_offsets = record_offsets.to_device_on(device_ctx).unwrap();
+        let d_records = records.to_device_overlapped_on(device_ctx).unwrap();
+        let d_record_offsets = record_offsets.to_device_overlapped_on(device_ctx).unwrap();
 
         unsafe {
             match C::VARIANT {

@@ -10,7 +10,9 @@
 
 use std::sync::Arc;
 
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
+use openvm_circuit_primitives::{
+    comm_stream::MemCopyH2DOverlapped, var_range::VariableRangeCheckerChipGPU,
+};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
@@ -91,7 +93,7 @@ impl FieldExprChipGpu {
         let width = self.adapter_width + self.core_width;
 
         let device_ctx = &self.range_checker.device_ctx;
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = records.to_device_overlapped_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
 
         let n_threads = height.div_ceil(256).min(512) * 256;
