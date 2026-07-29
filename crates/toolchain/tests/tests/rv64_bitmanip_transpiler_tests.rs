@@ -7,7 +7,7 @@ use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::Program, riscv::RV64_REGISTER_NUM_LIMBS,
     LocalOpcode, SystemOpcode,
 };
-use openvm_riscv_circuit::{Rv64ImBConfig, Rv64ImBCpuBuilder};
+use openvm_riscv_circuit::{Rv64ImBBuilder, Rv64ImBConfig};
 use openvm_riscv_transpiler::{
     BitwiseInvOpcode, ByteUnaryOpcode, CountZerosOpcode, CountZerosWOpcode, CpopOpcode,
     CpopWOpcode, MinMaxOpcode, RotateImmOpcode, RotateOpcode, RotateWImmOpcode, RotateWOpcode,
@@ -248,5 +248,5 @@ fn bitmanip_program_executes_and_proves_with_rv64imb_config() {
     let instance = executor.instance(&exe).unwrap();
     instance.execute(vec![]).unwrap();
 
-    air_test(Rv64ImBCpuBuilder, config, exe);
+    air_test(Rv64ImBBuilder, config, exe);
 }

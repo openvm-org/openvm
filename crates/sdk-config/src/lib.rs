@@ -482,8 +482,8 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         if let Some(io) = &config.io {
             VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
         }
-        if config.rv64b.is_some() {
-            panic!("Rv64B does not have CUDA prover support yet");
+        if let Some(rv64b) = &config.rv64b {
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv64b, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;

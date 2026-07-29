@@ -12,7 +12,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
-    Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BitwiseLogicAir,
+    Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64B, Rv64BitManipImmAir,
+    Rv64BitManipImmChipGpu, Rv64BitManipRegAir, Rv64BitManipRegChipGpu, Rv64BitwiseLogicAir,
     Rv64BitwiseLogicChipGpu, Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChipGpu,
     Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu,
     Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir,
@@ -336,6 +337,29 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             timestamp_max_bits,
         );
         inventory.add_executor_chip(divrem_w);
+
+        Ok(())
+    }
+}
+
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64B> for Rv64ImGpuProverExt {
+    fn extend_prover(
+        &self,
+        _: &Rv64B,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+    ) -> Result<(), ChipInventoryError> {
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let range_checker = get_inventory_range_checker(inventory);
+
+        inventory.next_air::<Rv64BitManipRegAir>()?;
+        let reg = Rv64BitManipRegChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(reg);
+
+        inventory.next_air::<Rv64BitManipImmAir>()?;
+        let imm = Rv64BitManipImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(imm);
 
         Ok(())
     }
