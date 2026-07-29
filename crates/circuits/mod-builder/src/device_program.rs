@@ -3,6 +3,10 @@
 //! This module only defines the pure data transformation. Device allocation, launch policy, and
 //! trace-generation ownership remain with the prover extension that consumes the serialized
 //! program.
+//!
+//! The device runs two tapes. The evaluation tape computes canonical field values. The witness
+//! tape evaluates limb expressions and produces the quotients and carries that prove each
+//! constraint. Both tapes and their metadata are serialized into one header-indexed `u32` blob.
 
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};

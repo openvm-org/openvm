@@ -25,10 +25,10 @@ static constexpr uint32_t NO_FLAG = UINT32_MAX;
 static constexpr size_t FIELD_EXPR_HEADER_WORDS = 34;
 static constexpr uint32_t MAX_U32_LIMBS = 12;
 
-// Value-phase opcodes
+// Evaluation opcodes compute canonical field values.
 enum { VOP_LOAD_INPUT = 0, VOP_CONST, VOP_ADD, VOP_SUB, VOP_MUL, VOP_DIV,
        VOP_INTADD, VOP_INTMUL, VOP_SELECT, VOP_SAVE_VAR, VOP_LOAD_OUTPUT };
-// Limb-phase opcodes
+// Witness opcodes evaluate limb expressions used by the constraints.
 enum { LOP_INPUT = 0, LOP_VAR, LOP_CONST, LOP_ADD, LOP_SUB, LOP_MUL,
        LOP_INTADD, LOP_INTMUL, LOP_SELECT };
 
@@ -467,7 +467,7 @@ __device__ __forceinline__ uint32_t f_of_i64(int64_t v) {
     return static_cast<uint32_t>(m);
 }
 
-// Fill the core sub-row (validated logic; see device_program.rs reference interpreter).
+// Fill the core sub-row; CUDA tests compare it against FieldExpressionFiller.
 // `core_row` must point at the first core column. When `is_dummy`, inputs are zero,
 // flags false, range checks skipped, is_valid = 0 (mirrors fill_dummy_trace_row).
 template <uint32_t K>
@@ -483,7 +483,7 @@ static __device__ bool field_expr_fill_core_row(
     uint32_t *err) {
     constexpr uint32_t k = K;
     const uint32_t nl = s.num_limbs, lb = s.limb_bits;
-    uint32_t *var_canon = my_aux; // num_vars * k, retained between phases
+    uint32_t *var_canon = my_aux; // num_vars * k, retained for the witness phase
     uint32_t *workspace = var_canon + s.num_vars * k;
     uint32_t *slots = workspace; // num_slots * k
     uint32_t *mont_workspace = slots + s.num_slots * k; // 2k+2
@@ -534,7 +534,7 @@ static __device__ bool field_expr_fill_core_row(
         }
     }
 
-    // ---- value phase ----
+    // Evaluation computes canonical field values and stores the variables written to the trace.
     for (uint32_t i = 0; i < s.num_slots * k; i++) slots[i] = 0;
     for (uint32_t io = 0; io < s.n_vops; io++) {
         const uint32_t *op = s.vops + 7 * io;
@@ -654,7 +654,7 @@ static __device__ bool field_expr_fill_core_row(
             if (!is_dummy) rc.add_count(limb, lb);
         }
 
-    // ---- constraint phase ----
+    // Witness generation emits the quotients and carries that prove each limb constraint.
     size_t carry_col = col;
     for (int ci = 0; ci < s.n_cons; ci++) carry_col += (s.cons + 8 * ci)[4];
     for (int ci = 0; ci < s.n_cons; ci++) {
