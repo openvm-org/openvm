@@ -15,9 +15,7 @@ use openvm_circuit::arch::{
     },
 };
 #[cfg(not(feature = "rvr"))]
-use openvm_circuit::arch::{
-    interpreter_preflight::PreflightInterpretedInstance, PreflightOutput, VmExecutionConfig,
-};
+use openvm_circuit::arch::{PreflightInterpretedInstance, PreflightOutput, VmExecutionConfig};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
@@ -190,7 +188,9 @@ impl PreparedSegment {
 
         #[cfg(feature = "rvr")]
         let (state, exit_code, gpu_transcript, replay_plan) = {
-            let mut execution = self.execute_segment(state, segment, None)?;
+            let execution = self.execute_segment(state, segment, None)?;
+            #[cfg(feature = "perf-metrics")]
+            let mut execution = execution;
             let exit_code = matches!(&execution.endpoint, PreflightEndpoint::Terminated)
                 .then_some(ExitCode::Success as u32);
             let (gpu_transcript, replay_plan) =
@@ -346,9 +346,11 @@ fn prove_inner(
 
         #[cfg(feature = "rvr")]
         let (next_state, gpu_transcript, replay_plan) = {
-            let mut execution = prepared
+            let execution = prepared
                 .segment
                 .execute_segment(state, &segment, reuse.take())?;
+            #[cfg(feature = "perf-metrics")]
+            let mut execution = execution;
             validate_endpoint(
                 matches!(&execution.endpoint, PreflightEndpoint::Terminated),
                 segment_idx + 1 == num_segments,

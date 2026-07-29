@@ -15,28 +15,21 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[cfg(feature = "metrics")]
-use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
 use crate::{
     arch::{
-        execution_mode::{
-            ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCtx, MeteredExecutionCtxTrait,
-            PreflightCtx, Segment,
-        },
-        ExecuteFunc, ExecutionError, ExecutionOutcome, Executor, ExecutorInventory, ExitCode,
-        MeteredExecutor, PreflightOutput, StaticProgramError, Streams, SystemConfig, VmExecState,
-        VmState,
+        execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
+        ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
+        StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
 
-/// VM pure executor which doesn't consider trace generation.
-/// Note: This executor doesn't hold any VM state and can be used for multiple execution.
+/// Precomputed interpreter for pure, metered, or preflight execution.
 ///
-/// The generic `Ctx` and constructor determine whether this supported pure execution or metered
-/// execution.
+/// The execution context and constructor select the mode. The interpreter owns no VM state, so it
+/// can execute multiple inputs or segments.
 // NOTE: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
@@ -88,17 +81,23 @@ macro_rules! run {
             #[cfg(not(feature = "tco"))]
             {
                 unsafe {
-                    execute_trampoline(&mut $exec_state, &$interpreter.pre_compute_insns);
+                    $crate::arch::interpreter::execute_trampoline(
+                        &mut $exec_state,
+                        &$interpreter.pre_compute_insns,
+                    );
                 }
             }
             #[cfg(feature = "tco")]
             {
-                if $ctx::should_suspend(&mut $exec_state) {
+                if <$ctx as $crate::arch::ExecutionCtxTrait>::should_suspend(&mut $exec_state) {
                     return Ok(());
                 }
 
                 let pc = $exec_state.pc();
-                $ctx::on_instruction_start(&mut $exec_state, pc);
+                <$ctx as $crate::arch::ExecutionCtxTrait>::on_instruction_start(
+                    &mut $exec_state,
+                    pc,
+                );
                 let handler = $interpreter
                     .get_handler(pc)
                     .ok_or(ExecutionError::PcOutOfBounds(pc))?;
@@ -115,6 +114,12 @@ macro_rules! run {
     }};
 }
 
+mod metered;
+mod preflight;
+mod pure;
+
+pub use preflight::PreflightInterpretedInstance;
+
 // Constructors for pure and metered execution, which generate pre-computed buffers and function
 // pointers
 // - Generic in `Ctx`
@@ -123,8 +128,7 @@ impl<'a, Ctx> InterpretedInstance<'a, Ctx>
 where
     Ctx: ExecutionCtxTrait,
 {
-    /// Creates a new interpreter instance for pure execution.
-    // (pure execution)
+    /// Creates an interpreter for pure or preflight execution.
     pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -225,8 +229,7 @@ impl<'a, Ctx> InterpretedInstance<'a, Ctx>
 where
     Ctx: MeteredExecutionCtxTrait,
 {
-    /// Creates a new interpreter instance for pure execution.
-    // (metered execution)
+    /// Creates an interpreter for metered execution.
     pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -289,279 +292,6 @@ where
             #[cfg(feature = "tco")]
             handlers,
         })
-    }
-}
-
-// Execute functions specialize to relevant Ctx types to provide more streamlines APIs
-
-impl InterpretedInstance<'_, ExecutionCtx> {
-    /// Execute from the program's initial state until successful termination.
-    pub fn execute(
-        &self,
-        inputs: impl Into<Streams>,
-    ) -> Result<VmState<GuestMemory>, ExecutionError> {
-        let vm_state =
-            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
-        self.execute_from_state(vm_state)
-    }
-
-    /// Execute for at most `num_insns` and report whether the program terminated or suspended.
-    pub fn execute_for(
-        &self,
-        inputs: impl Into<Streams>,
-        num_insns: u64,
-    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
-        let vm_state =
-            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
-        self.execute_from_state_for(vm_state, num_insns)
-    }
-
-    /// Continue from `from_state` until successful termination.
-    pub fn execute_from_state(
-        &self,
-        from_state: VmState<GuestMemory>,
-    ) -> Result<VmState<GuestMemory>, ExecutionError> {
-        match self.execute_from_state_inner(from_state, None)? {
-            ExecutionOutcome::Terminated(state) => Ok(state),
-            ExecutionOutcome::Suspended(_) => {
-                unreachable!("unbounded interpreter execution cannot suspend")
-            }
-        }
-    }
-
-    /// Continue from `from_state` for at most `num_insns` and report whether the program
-    /// terminated or suspended.
-    pub fn execute_from_state_for(
-        &self,
-        from_state: VmState<GuestMemory>,
-        num_insns: u64,
-    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
-        self.execute_from_state_inner(from_state, Some(num_insns))
-    }
-
-    fn execute_from_state_inner(
-        &self,
-        from_state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
-    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
-        let ctx = ExecutionCtx::new(num_insns);
-        let mut exec_state = VmExecState::new(from_state, ctx);
-
-        #[cfg(feature = "metrics")]
-        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Pure);
-        #[cfg(feature = "metrics")]
-        let start_instret_left = exec_state.ctx.instret_left;
-
-        run!("execute_pure", self, exec_state, ExecutionCtx);
-
-        #[cfg(feature = "metrics")]
-        {
-            let insns = start_instret_left - exec_state.ctx.instret_left;
-            metrics.record(insns);
-        }
-        tracing::debug!("pc: {}", exec_state.vm_state.pc());
-        tracing::debug!("interpreter exit code {:?}", exec_state.exit_code);
-        tracing::debug!("num_insns {:?}", num_insns);
-
-        let terminated = matches!(exec_state.exit_code.as_ref(), Ok(Some(_)));
-        if num_insns.is_some() {
-            check_exit_code(exec_state.exit_code)?;
-        } else {
-            check_termination(exec_state.exit_code)?;
-        }
-        Ok(if terminated {
-            ExecutionOutcome::Terminated(exec_state.vm_state)
-        } else {
-            ExecutionOutcome::Suspended(exec_state.vm_state)
-        })
-    }
-}
-
-impl InterpretedInstance<'_, PreflightCtx> {
-    /// Executes exactly one metered segment from its architectural start state.
-    pub fn execute_segment<F: PrimeField32>(
-        &self,
-        state: VmState<GuestMemory>,
-        segment: &Segment,
-    ) -> Result<PreflightOutput, ExecutionError> {
-        let mut output = self.execute_preflight_from_state::<F>(state, Some(segment.num_insns))?;
-        if let Some(exit_code) = output.exit_code {
-            if exit_code != ExitCode::Success as u32 {
-                return Err(ExecutionError::FailedWithExitCode(exit_code));
-            }
-        }
-        output.mark_written_pages();
-        Ok(output)
-    }
-
-    /// Execute with ordinary interpreter semantics while recording the minimal
-    /// append-only history needed by postflight.
-    pub fn execute_preflight_from_state<F: PrimeField32>(
-        &self,
-        from_state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
-    ) -> Result<PreflightOutput, ExecutionError> {
-        let ctx = PreflightCtx::new::<F>(&from_state.memory, num_insns);
-        let mut exec_state = VmExecState::new(from_state, ctx);
-        let start_instret_left = exec_state.ctx.instret_left;
-
-        #[cfg(feature = "metrics")]
-        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Preflight);
-
-        run!("execute_preflight", self, exec_state, PreflightCtx);
-
-        let retired = start_instret_left - exec_state.ctx.instret_left;
-        #[cfg(feature = "metrics")]
-        metrics.record(retired);
-
-        if let Some(expected) = num_insns {
-            if retired != expected {
-                return Err(ExecutionError::RetiredInstructionCountMismatch {
-                    expected,
-                    actual: retired,
-                });
-            }
-        }
-
-        let exit_code = exec_state.exit_code?;
-        if num_insns.is_none() && exit_code.is_none() {
-            return Err(ExecutionError::DidNotTerminate);
-        }
-        let pc = exec_state.vm_state.pc();
-        let history = exec_state.ctx.finish(pc);
-        Ok(PreflightOutput {
-            history,
-            state: exec_state.vm_state,
-            exit_code,
-        })
-    }
-}
-
-impl InterpretedInstance<'_, MeteredCtx> {
-    /// Metered execution for the given `inputs`. Execution begins from the initial
-    /// state specified by the `VmExe`. This function executes the program until termination.
-    ///
-    /// Returns the segmentation boundary data and the final VM state when execution stops.
-    pub fn execute_metered(
-        &self,
-        inputs: impl Into<Streams>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
-        let vm_state = self.create_initial_vm_state(inputs);
-        self.execute_metered_from_state(vm_state, ctx)
-    }
-
-    /// Metered execution for the given `VmState`. This function executes the program until
-    /// termination.
-    ///
-    /// Returns the segmentation boundary data and the final VM state when execution stops.
-    ///
-    /// The [MeteredCtx] can be constructed using either
-    /// [VmExecutor::build_metered_ctx](super::VmExecutor::build_metered_ctx) or
-    /// [VirtualMachine::build_metered_ctx](super::VirtualMachine::build_metered_ctx).
-    pub fn execute_metered_from_state(
-        &self,
-        from_state: VmState<GuestMemory>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
-        let mut exec_state = VmExecState::new(from_state, ctx);
-
-        loop {
-            exec_state = self.execute_metered_until_suspend(exec_state)?;
-            let exit_code = std::mem::replace(&mut exec_state.exit_code, Ok(None))?;
-            // The execution has terminated.
-            if exit_code.is_some() {
-                exec_state.exit_code = Ok(exit_code);
-                break;
-            }
-        }
-        check_termination(exec_state.exit_code)?;
-        let VmExecState { vm_state, ctx, .. } = exec_state;
-        Ok((ctx.into_segments(), vm_state))
-    }
-    /// Executes a metered virtual machine operation starting from a given execution state until
-    /// suspension.
-    ///
-    /// This function resumes and continues execution of a guest virtual machine until either it:
-    /// - Hits a suspension trigger (e.g. out of gas or a specific halt condition). ATTENTION: when
-    ///   a suspension is triggered, the VM state is not at the boundary of the last segment.
-    ///   Instead, the VM state is slightly after the segment boundary.
-    /// - Completes its run based on the instructions or context provided.
-    ///
-    /// # Parameters
-    /// - `self`: The reference to the current executor or VM context.
-    /// - `exec_state`: A mutable `VmExecState<GuestMemory, MeteredCtx>` which represents the
-    ///   execution state of the virtual machine, including its program counter (`pc`), instruction
-    ///   retirement (`instret`), and execution context (`MeteredCtx`).
-    ///
-    /// # Returns
-    /// - `Ok(VmExecState<GuestMemory, MeteredCtx>)`: The execution state after suspension or normal
-    ///   completion.
-    /// - `Err(ExecutionError)`: If there is an error during execution, such as an invalid state or
-    ///   run-time error.
-    pub fn execute_metered_until_suspend(
-        &self,
-        mut exec_state: VmExecState<GuestMemory, MeteredCtx>,
-    ) -> Result<VmExecState<GuestMemory, MeteredCtx>, ExecutionError> {
-        #[cfg(feature = "metrics")]
-        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
-        #[cfg(feature = "metrics")]
-        let start_instret = exec_state.ctx.segmentation_ctx.instret;
-
-        // Start execution
-        run!("execute_metered", self, exec_state, MeteredCtx);
-
-        #[cfg(feature = "metrics")]
-        {
-            let insns = exec_state.ctx.segmentation_ctx.instret - start_instret;
-            metrics.record(insns);
-        }
-        Ok(exec_state)
-    }
-}
-
-impl InterpretedInstance<'_, MeteredCostCtx> {
-    /// Metered cost execution for the given `inputs`. Execution begins from the initial
-    /// state specified by the `VmExe`. This function executes the program until termination.
-    ///
-    /// Returns the trace cost and final VM state when execution stops.
-    pub fn execute_metered_cost(
-        &self,
-        inputs: impl Into<Streams>,
-        ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
-        let vm_state = self.create_initial_vm_state(inputs);
-        self.execute_metered_cost_from_state(vm_state, ctx)
-    }
-
-    /// Metered cost execution for the given `VmState`. This function executes the program until
-    /// termination.
-    ///
-    /// Returns the trace cost and final VM state when execution stops.
-    pub fn execute_metered_cost_from_state(
-        &self,
-        from_state: VmState<GuestMemory>,
-        ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
-        let mut exec_state = VmExecState::new(from_state, ctx);
-
-        #[cfg(feature = "metrics")]
-        let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
-        #[cfg(feature = "metrics")]
-        let start_instret = exec_state.ctx.instret;
-
-        // Start execution
-        run!("execute_metered_cost", self, exec_state, MeteredCostCtx);
-
-        #[cfg(feature = "metrics")]
-        {
-            let insns = exec_state.ctx.instret - start_instret;
-            metrics.record(insns);
-        }
-
-        check_exit_code(exec_state.exit_code)?;
-        let VmExecState { ctx, vm_state, .. } = exec_state;
-        Ok((ctx, vm_state))
     }
 }
 

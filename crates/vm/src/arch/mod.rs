@@ -24,10 +24,8 @@ mod state;
 pub mod vm;
 
 pub mod hasher;
-/// Interpreter for pure and metered VM execution
+/// Interpreter implementations for pure, metered, and preflight execution.
 pub mod interpreter;
-/// Interpreter for preflight VM execution, for trace generation purposes.
-pub mod interpreter_preflight;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
@@ -38,7 +36,7 @@ pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
 pub use hint_stream::HintStream;
 pub use integration_api::*;
-pub use interpreter::InterpretedInstance;
+pub use interpreter::{InterpretedInstance, PreflightInterpretedInstance};
 pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use postflight::{
