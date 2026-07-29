@@ -265,7 +265,7 @@ impl MemoryInventoryGPU {
         mem.emit_metrics();
     }
 
-    /// Generates memory traces from host-resident history produced by interpreter preflight.
+    /// Differential reference for memory traces from host-resident interpreter history.
     #[instrument(name = "generate_proving_ctxs", skip_all)]
     pub fn generate_proving_ctxs(
         &mut self,
