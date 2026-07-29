@@ -175,14 +175,19 @@ pub enum GenerationError {
 pub trait PostflightTracegen<E: StarkEngine>: VmBuilder<E> {
     type Prepared;
 
+    /// Prepares fixed-program data. CPU preparation indexes `program`; GPU preparation uses `vm`
+    /// to upload it.
     fn prepare_postflight(
         vm: &VirtualMachine<E, Self>,
         program: &Program<Val<E::SC>>,
     ) -> Result<Self::Prepared, GenerationError>;
 
+    /// Builds one segment's proving context. CPU trace generation reads instructions from
+    /// `host_program`; GPU implementations receive it through this shared trait but read the
+    /// uploaded `prepared` program instead.
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<E, Self>,
-        program: &Program<Val<E::SC>>,
+        host_program: &Program<Val<E::SC>>,
         prepared: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<E::PB>, GenerationError>;
@@ -208,13 +213,13 @@ where
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<E, Self>,
-        program: &Program<Val<SC>>,
+        host_program: &Program<Val<SC>>,
         prepared: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
         begin_preflight_tracegen_session(&mut vm.preflight_tracegen_poisoned)?;
         let postflight = Postflight::new_prepared(
-            program,
+            host_program,
             prepared,
             &output.history,
             &vm.config().as_ref().memory_config,

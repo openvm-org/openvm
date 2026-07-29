@@ -98,6 +98,7 @@ impl VmExecutionExtension for PairingExtension {
 }
 
 impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for PairingExtension {
+    // Pairing hints execute as phantoms and add no AIRs.
     fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         Ok(())
     }
@@ -108,6 +109,7 @@ impl<E> VmProverExtension<E, PairingExtension> for PairingProverExt
 where
     E: StarkEngine,
 {
+    // Pairing hints execute as phantoms and add no prover chips.
     fn extend_prover(
         &self,
         _: &PairingExtension,

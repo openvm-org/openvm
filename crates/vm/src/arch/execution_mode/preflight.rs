@@ -300,6 +300,7 @@ impl ExecutionCtxTrait for PreflightCtx {
         self.timestamp += slots;
     }
 
+    // State and PC are used only in builds that collect guest backtraces.
     #[inline(always)]
     fn on_system_phantom(
         _exec_state: &mut crate::arch::VmExecState<GuestMemory, Self>,

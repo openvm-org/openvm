@@ -15,6 +15,8 @@ pub use metered_cost::MeteredCostCtx;
 pub use preflight::PreflightCtx;
 pub use pure::ExecutionCtx;
 
+/// Hooks used by shared instruction handlers to notify an execution mode about observable state.
+/// Default no-op hooks let each mode implement only the events it records.
 pub trait ExecutionCtxTrait: Sized {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32);
 
