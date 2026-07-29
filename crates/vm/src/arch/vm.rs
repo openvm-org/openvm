@@ -120,6 +120,17 @@ pub const BABYBEAR_S_BOX_DEGREE: u64 = 7;
 pub trait VmField: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
 impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
 
+#[cfg(feature = "cuda")]
+fn with_gpu_memory_metrics<T, E>(
+    name: &'static str,
+    f: impl FnOnce() -> Result<T, E>,
+) -> Result<T, E> {
+    let memory = MemTracker::start_and_reset_peak(name);
+    let result = f();
+    memory.emit_metrics();
+    result
+}
+
 #[derive(Error, Debug)]
 pub enum GenerationError {
     #[error("extension trace generation failed: {0}")]
@@ -1473,8 +1484,7 @@ where
         num_insns: u32,
         opcodes: PostflightOpcodeBases,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let memory = MemTracker::start_and_reset_peak("postflight");
-        let result = (|| {
+        with_gpu_memory_metrics("postflight", || {
             let system = &self.chip_complex.system;
             program.program().validate_system_inputs(
                 &system.program.device_ctx,
@@ -1510,9 +1520,7 @@ where
                 &initial_memory_images,
                 opcodes,
             )
-        })();
-        memory.emit_metrics();
-        result
+        })
     }
 }
 
@@ -1530,8 +1538,7 @@ where
         program: &GpuPostflightProgram,
         output: &PreflightOutput,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let memory = MemTracker::start_and_reset_peak("postflight");
-        let result = (|| {
+        with_gpu_memory_metrics("postflight", || {
             let system = &self.chip_complex.system;
             program.validate_system_inputs(
                 &system.program.device_ctx,
@@ -1558,9 +1565,7 @@ where
                 ),
                 &initial_memory_images,
             )
-        })();
-        memory.emit_metrics();
-        result
+        })
     }
 
     #[cfg(feature = "metrics")]
@@ -1623,9 +1628,8 @@ where
         // phase-wide high-water mark. The allocator's logical peak is the
         // source of truth for live buffers; reserved pool pages are reported
         // separately and may remain mapped after a correct drop.
-        let memory = MemTracker::start_and_reset_peak("tracegen");
         let mut producer = producer;
-        let result = (|| {
+        let result = with_gpu_memory_metrics("tracegen", || {
             let ctx = self.chip_complex.generate_proving_ctx_from_postflight(
                 program,
                 transcript,
@@ -1663,8 +1667,7 @@ where
             let ctx = self.validate_proving_ctx(ctx)?;
             finish(producer)?;
             Ok(ctx)
-        })();
-        memory.emit_metrics();
+        });
         if result.is_ok() {
             self.preflight_tracegen_poisoned = false;
         }
