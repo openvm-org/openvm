@@ -990,6 +990,12 @@ fn memory_index<F: PrimeField32>(
     history: &PreflightHistory,
     config: &MemoryConfig,
 ) -> Result<(Vec<u32>, TouchedMemory<F>), PostflightError> {
+    #[derive(Clone, Copy)]
+    enum BlockState {
+        Seed(u32),
+        Event { index: u32, dirty: bool },
+    }
+
     let memory = &history.memory.accesses;
     let seeds = &history.memory.initial_writes;
     if memory.len() >= PREDECESSOR_INDEX_MASK as usize
@@ -1000,7 +1006,7 @@ fn memory_index<F: PrimeField32>(
         ));
     }
 
-    let mut seed_by_block = FxHashMap::with_capacity_and_hasher(seeds.len(), Default::default());
+    let mut blocks = FxHashMap::with_capacity_and_hasher(seeds.len(), Default::default());
     let mut field_seed_cursor = 0usize;
     for (index, seed) in seeds.iter().enumerate() {
         if seed.address_space & rvr_state::PREFLIGHT_WRITE_BIT != 0 {
@@ -1024,8 +1030,8 @@ fn memory_index<F: PrimeField32>(
             _ => unreachable!("validate_memory_block rejects other layouts"),
         }
         let key = memory_key(seed.address_space, seed.pointer);
-        if seed_by_block
-            .insert(key, u32::try_from(index).unwrap())
+        if blocks
+            .insert(key, BlockState::Seed(u32::try_from(index).unwrap()))
             .is_some()
         {
             return Err(PostflightError::new(format!(
@@ -1040,8 +1046,7 @@ fn memory_index<F: PrimeField32>(
         ));
     }
 
-    let mut last_event = FxHashMap::<u64, (u32, bool)>::default();
-    last_event.reserve(seeds.len());
+    let mut unreferenced_seeds = seeds.len();
     let mut predecessors = Vec::with_capacity(memory.len());
     let mut previous_timestamp = None;
     let timestamp_limit = 1u64 << config.timestamp_max_bits;
@@ -1077,27 +1082,43 @@ fn memory_index<F: PrimeField32>(
 
         let key = memory_key(address_space, event.pointer);
         let event_index = u32::try_from(event_index).unwrap();
-        let predecessor = match last_event.entry(key) {
-            Entry::Occupied(mut previous) => {
-                let &(previous_index, dirty) = previous.get();
-                let predecessor = previous_index + 1;
-                previous.insert((event_index, dirty || event.is_write()));
-                predecessor
-            }
-            Entry::Vacant(vacant) => {
-                let predecessor = if event.is_write() {
-                    let seed_index = seed_by_block.remove(&key).ok_or_else(|| {
-                        PostflightError::new(format!(
-                            "first event is a write without a seed for AS={} pointer={}",
-                            address_space, event.pointer
-                        ))
-                    })?;
-                    PREDECESSOR_SEED_BIT | seed_index
-                } else {
-                    0
-                };
-                vacant.insert((event_index, event.is_write()));
-                predecessor
+        let predecessor = match blocks.entry(key) {
+            Entry::Occupied(mut state) => match *state.get() {
+                BlockState::Seed(seed_index) => {
+                    state.insert(BlockState::Event {
+                        index: event_index,
+                        dirty: event.is_write(),
+                    });
+                    if event.is_write() {
+                        unreferenced_seeds -= 1;
+                        PREDECESSOR_SEED_BIT | seed_index
+                    } else {
+                        0
+                    }
+                }
+                BlockState::Event {
+                    index: previous_index,
+                    dirty,
+                } => {
+                    state.insert(BlockState::Event {
+                        index: event_index,
+                        dirty: dirty || event.is_write(),
+                    });
+                    previous_index + 1
+                }
+            },
+            Entry::Vacant(state) => {
+                if event.is_write() {
+                    return Err(PostflightError::new(format!(
+                        "first event is a write without a seed for AS={} pointer={}",
+                        address_space, event.pointer
+                    )));
+                }
+                state.insert(BlockState::Event {
+                    index: event_index,
+                    dirty: false,
+                });
+                0
             }
         };
         predecessors.push(predecessor);
@@ -1107,18 +1128,25 @@ fn memory_index<F: PrimeField32>(
             "field event sidecar contains unreferenced values",
         ));
     }
-    if !seed_by_block.is_empty() {
+    if unreferenced_seeds != 0 {
         return Err(PostflightError::new(format!(
             "{} initial-write seeds are not referenced",
-            seed_by_block.len()
+            unreferenced_seeds
         )));
     }
 
-    let mut final_blocks = last_event.into_iter().collect::<Vec<_>>();
+    let mut final_blocks = blocks.into_iter().collect::<Vec<_>>();
     final_blocks.sort_unstable_by_key(|&(key, _)| key);
     let touched_memory = final_blocks
         .into_iter()
-        .map(|(_, (event_index, dirty))| {
+        .map(|(_, state)| {
+            let BlockState::Event {
+                index: event_index,
+                dirty,
+            } = state
+            else {
+                unreachable!("all initial-write seeds were referenced")
+            };
             let event = history.memory.accesses[event_index as usize];
             let values = match config.addr_spaces[event.address_space() as usize].layout {
                 MemoryCellType::U16 => event.value.map(F::from_u16),
