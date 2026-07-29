@@ -23,11 +23,13 @@ mod tests {
         exe::VmExe, instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
         SystemOpcode,
     };
-    use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
+    use openvm_riscv_circuit::{
+        Rv64IBuilder, Rv64IConfig, Rv64ImBBuilder, Rv64ImBConfig, Rv64ImBuilder, Rv64ImConfig,
+    };
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
-        DivRemOpcode, MulHOpcode, MulOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
-        Rv64MTranspilerExtension,
+        DivRemOpcode, MulHOpcode, MulOpcode, Rv64BTranspilerExtension, Rv64ITranspilerExtension,
+        Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
@@ -43,6 +45,56 @@ mod tests {
     type F = BabyBear;
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     const RVR_OOB_CHILD_ENV: &str = "OPENVM_RVR_OOB_CHILD";
+
+    #[cfg(feature = "rvr")]
+    const BITMANIP_GOLDEN_WORDS: &[u32] = &[
+        0x087302bb, // add.uw
+        0x20a4a433, // sh1add
+        0x20d645b3, // sh2add
+        0x2107e733, // sh3add
+        0x213928bb, // sh1add.uw
+        0x216aca3b, // sh2add.uw
+        0x219c6bbb, // sh3add.uw
+        0x0a5d9d1b, // slli.uw
+        0x407372b3, // andn
+        0x40a4e433, // orn
+        0x40d645b3, // xnor
+        0x60079713, // clz
+        0x60189813, // ctz
+        0x60299913, // cpop
+        0x600a9a1b, // clzw
+        0x601b9b1b, // ctzw
+        0x602c9c1b, // cpopw
+        0x0a7342b3, // min
+        0x0aa4d433, // minu
+        0x0ad665b3, // max
+        0x0b07f733, // maxu
+        0x60491893, // sext.b
+        0x605a1993, // sext.h
+        0x080b4abb, // zext.h
+        0x607312b3, // rol
+        0x60a4d433, // ror
+        0x62d65593, // rori
+        0x60f716bb, // rolw
+        0x6128d83b, // rorw
+        0x615a599b, // roriw
+        0x287bdb13, // orc.b
+        0x6b8cdc13, // rev8
+        0x487312b3, // bclr
+        0x28a49433, // bset
+        0x68d615b3, // binv
+        0x4907d733, // bext
+        0x4af91893, // bclri
+        0x2b0a1993, // bseti
+        0x6b1b1a93, // binvi
+        0x4b2c5b93, // bexti
+    ];
+
+    #[cfg(feature = "rvr")]
+    fn addi_word(rd: u32, imm: i32) -> u32 {
+        assert!((-2048..=2047).contains(&imm));
+        (((imm as u32) & 0xfff) << 20) | (rd << 7) | 0x13
+    }
 
     #[cfg(test)]
     fn test_rv64im_config() -> Rv64ImConfig {
@@ -127,6 +179,39 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_hint_io() {
         execute_rvr_example_with_input("hint", vec![vec![0, 1, 2, 3]]);
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_bitmanip_golden_program() {
+        let mut words = (1..32)
+            .map(|rd| addi_word(rd, rd as i32 * 37 - 997))
+            .collect::<Vec<_>>();
+        words.extend_from_slice(BITMANIP_GOLDEN_WORDS);
+
+        let mut instructions = Transpiler::<F>::default()
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
+            .with_extension(Rv64BTranspilerExtension)
+            .transpile(&words)
+            .unwrap();
+        instructions.push(Some(Instruction {
+            opcode: SystemOpcode::TERMINATE.global_opcode(),
+            ..Default::default()
+        }));
+        let exe = VmExe::new(
+            openvm_instructions::program::Program::new_without_debug_infos_with_option(
+                &instructions,
+                0,
+            ),
+        );
+        let config = Rv64ImBConfig {
+            rv64im: test_rv64im_config(),
+            ..Default::default()
+        };
+
+        air_test(Rv64ImBBuilder, config, exe);
     }
 
     #[test]
