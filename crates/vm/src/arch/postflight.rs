@@ -591,11 +591,12 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
             )));
         }
         let event_index = self.memory_cursor;
-        self.memory_cursor += 1;
-        self.timestamp = self
+        let next_timestamp = self
             .timestamp
             .checked_add(1)
             .ok_or_else(|| PostflightError::new("logical timestamp overflow"))?;
+        self.memory_cursor += 1;
+        self.timestamp = next_timestamp;
         Ok((event_index, event))
     }
 

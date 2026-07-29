@@ -3,6 +3,7 @@
 
 use std::{
     borrow::Cow,
+    mem::{offset_of, size_of},
     path::{Path, PathBuf},
 };
 
@@ -83,6 +84,11 @@ pub struct MeteringState {
     /// Replay residuals accumulated in the current segment.
     pub num_checkpoint_residuals: u32,
 }
+
+const _: () = {
+    assert!(size_of::<MeteringState>() == 80);
+    assert!(offset_of!(MeteringState, num_checkpoint_residuals) == 76);
+};
 
 /// Sentinel indicating no last-seen page (matches `NO_LAST_PAGE` in C).
 pub const NO_LAST_PAGE: u32 = u32::MAX;
@@ -592,15 +598,6 @@ mod tests {
         },
         utils::{test_cpu_engine, test_system_config},
     };
-
-    #[test]
-    fn metering_state_reuses_tail_padding_without_changing_the_abi() {
-        assert_eq!(std::mem::size_of::<MeteringState>(), 80);
-        assert_eq!(
-            std::mem::offset_of!(MeteringState, num_checkpoint_residuals),
-            76
-        );
-    }
 
     fn make_segmentation_state() -> SegmentationState {
         let system_config = test_system_config();

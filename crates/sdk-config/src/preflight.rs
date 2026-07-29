@@ -57,12 +57,8 @@ impl SdkVmGpuBuilder {
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
     ) -> Result<GpuPostflightProgram, GpuPostflightError> {
+        validate_preflight_config(vm.config())?;
         let config = vm.config().to_inner();
-        validate_preflight_config(
-            config.modular.is_some(),
-            config.fp2.is_some(),
-            config.ecc.is_some(),
-        )?;
         GpuPostflightProgram::upload(
             program,
             &vm.config().as_ref().memory_config,
@@ -77,12 +73,8 @@ impl SdkVmGpuBuilder {
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
     ) -> Result<CheckpointReplayProgram, GpuPostflightError> {
+        validate_preflight_config(vm.config())?;
         let config = vm.config().to_inner();
-        validate_preflight_config(
-            config.modular.is_some(),
-            config.fp2.is_some(),
-            config.ecc.is_some(),
-        )?;
         let mut registry = PostflightAccessRegistry::default();
         if config.keccak.is_some() {
             Keccak256PreflightGpuTracegen::register_postflight_access_schedules(&mut registry)?;
@@ -199,11 +191,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         replay_plan: &'a GpuPostflightPlan,
         max_trace_height: usize,
     ) -> Result<Self, GpuPostflightError> {
-        validate_preflight_config(
-            config.modular.is_some(),
-            config.fp2.is_some(),
-            config.ecc.is_some(),
-        )?;
+        validate_preflight_config(config)?;
         let keccak = config
             .keccak
             .as_ref()
@@ -370,17 +358,13 @@ fn extension_error(error: GpuPostflightError) -> GenerationError {
     GenerationError::ExtensionTracegen(error.to_string())
 }
 
-fn validate_preflight_config(
-    has_modular: bool,
-    has_fp2: bool,
-    has_ecc: bool,
-) -> Result<(), GpuPostflightError> {
-    if !has_modular && has_fp2 {
+fn validate_preflight_config(config: &SdkVmConfig) -> Result<(), GpuPostflightError> {
+    if config.modular.is_none() && config.fp2.is_some() {
         return Err(GpuPostflightError::InvalidAccessSchedule(
             "Fp2 preflight replay requires the Modular extension".to_string(),
         ));
     }
-    if !has_modular && has_ecc {
+    if config.modular.is_none() && config.ecc.is_some() {
         return Err(GpuPostflightError::InvalidAccessSchedule(
             "Weierstrass preflight replay requires the Modular extension".to_string(),
         ));

@@ -624,6 +624,11 @@ impl PostflightAccessRegistry {
         let num_spans = u32::try_from(spans.len()).map_err(|_| {
             GpuPostflightError::InvalidAccessSchedule("too many spans in schedule".to_string())
         })?;
+        first_span.checked_add(num_spans).ok_or_else(|| {
+            GpuPostflightError::InvalidAccessSchedule(
+                "access schedule exceeds the u32 span index domain".to_string(),
+            )
+        })?;
         let schedule_index = u32::try_from(self.schedules.len()).map_err(|_| {
             GpuPostflightError::InvalidAccessSchedule("too many access schedules".to_string())
         })?;
@@ -661,6 +666,7 @@ impl PostflightAccessRegistry {
                 register_as_operand,
                 memory_as_operand,
             });
+        debug_assert_eq!(self.schedules.len(), self.instruction_layouts.len());
         self.dispatch[opcode as usize] = schedule_index;
         Ok(())
     }
@@ -698,34 +704,21 @@ impl PostflightAccessRegistry {
         if schedule_index == RVR_CHECKPOINT_NO_SCHEDULE {
             return Ok(());
         }
-        let schedule = self.schedules.get(schedule_index as usize).ok_or_else(|| {
-            GpuPostflightError::InvalidAccessSchedule(
-                "dispatch references a missing schedule".to_string(),
-            )
-        })?;
+        debug_assert_eq!(self.schedules.len(), self.instruction_layouts.len());
+        let schedule = self
+            .schedules
+            .get(schedule_index as usize)
+            .expect("registered dispatch must reference a schedule");
         let layout = self
             .instruction_layouts
             .get(schedule_index as usize)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidAccessSchedule(
-                    "schedule is missing its host instruction layout".to_string(),
-                )
-            })?;
+            .expect("registered schedule must have a host instruction layout");
         let span_start = schedule.first_span as usize;
-        let span_end = schedule
-            .first_span
-            .checked_add(schedule.num_spans)
-            .map(|end| end as usize)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidAccessSchedule(
-                    "schedule span range exceeds the u32 index domain".to_string(),
-                )
-            })?;
-        let schedule_spans = self.spans.get(span_start..span_end).ok_or_else(|| {
-            GpuPostflightError::InvalidAccessSchedule(
-                "schedule references a missing access span".to_string(),
-            )
-        })?;
+        let span_end = (schedule.first_span + schedule.num_spans) as usize;
+        let schedule_spans = self
+            .spans
+            .get(span_start..span_end)
+            .expect("registered schedule must reference valid access spans");
         let invalid_deferral_span = schedule_spans
             .iter()
             .filter(|span| {

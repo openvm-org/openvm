@@ -180,6 +180,12 @@ jobs:
             fi
           done
 
+      - name: Run VM CUDA and RVR integration tests
+        if: inputs.mode == 'cuda' && inputs.cuda_group == 'riscv'
+        working-directory: crates/vm
+        run: |
+          CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast test_cuda_phantom --features=parallel,cuda,rvr --profile=heavy --no-tests=pass
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats || true

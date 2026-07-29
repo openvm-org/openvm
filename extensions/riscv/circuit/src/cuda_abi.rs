@@ -50,7 +50,6 @@ pub mod auipc_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -146,7 +145,6 @@ pub mod hintstore_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_count(
         d_instructions: DeviceBufferView,
         pc_base: u32,
@@ -185,7 +183,6 @@ pub mod hintstore_cuda {
         ))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -262,7 +259,6 @@ pub mod jalr_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -337,7 +333,6 @@ pub mod less_than_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -418,7 +413,6 @@ pub mod load_byte_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -499,7 +493,6 @@ pub mod load_halfword_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -580,7 +573,6 @@ pub mod load_word_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -661,7 +653,6 @@ pub mod load_doubleword_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -743,7 +734,6 @@ pub mod store_byte_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1075,7 +1065,6 @@ pub mod load_sign_extend_byte_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1156,7 +1145,6 @@ pub mod load_sign_extend_halfword_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1237,7 +1225,6 @@ pub mod load_sign_extend_word_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1318,7 +1305,6 @@ pub mod mul_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1407,7 +1393,6 @@ pub mod divrem_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1505,7 +1490,6 @@ pub mod shift_logical_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1583,7 +1567,6 @@ pub mod shift_right_arithmetic_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1657,7 +1640,6 @@ pub mod add_sub_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1736,7 +1718,6 @@ pub mod addi_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1809,7 +1790,6 @@ pub mod addi_w_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1889,7 +1869,6 @@ pub mod bitwise_logic_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1978,7 +1957,6 @@ pub mod jal_lui_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2060,7 +2038,6 @@ pub mod beq_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2148,7 +2125,6 @@ pub mod branch_lt_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2247,7 +2223,6 @@ pub mod mulh_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2338,7 +2313,6 @@ pub mod add_sub_w_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2441,7 +2415,6 @@ pub mod shift_w_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen_logical(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2491,7 +2464,6 @@ pub mod shift_w_cuda {
         ))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen_right_arithmetic(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2566,7 +2538,6 @@ pub mod mul_w_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2655,7 +2626,6 @@ pub mod divrem_w_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2753,7 +2723,6 @@ pub mod shift_logical_imm_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2836,7 +2805,6 @@ pub mod shift_w_logical_imm_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2916,7 +2884,6 @@ pub mod shift_right_arithmetic_imm_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -2990,7 +2957,6 @@ pub mod shift_w_right_arithmetic_imm_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3067,7 +3033,6 @@ pub mod less_than_imm_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -3154,7 +3119,6 @@ pub mod bitwise_logic_imm_cuda {
         ) -> i32;
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
