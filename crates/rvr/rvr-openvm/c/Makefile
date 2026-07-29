@@ -36,8 +36,10 @@ LDLIBS ?=
 HOST_OS ?= $(shell uname -s)
 ifeq ($(HOST_OS),Linux)
 # Reject unresolved symbols and linker warnings while the generated artifact is
-# still being built instead of deferring failures until dlopen.
-LDFLAGS += -Wl,-z,now -Wl,-z,defs -Wl,--fatal-warnings
+# still being built instead of deferring failures until dlopen. Static extension
+# libraries are internal implementation details and must not interpose with
+# copies of the same libraries linked into the host process.
+LDFLAGS += -Wl,-z,now -Wl,-z,defs -Wl,--fatal-warnings -Wl,--exclude-libs,ALL
 CFLAGS += -fno-plt -fno-semantic-interposition
 LDLIBS += -lm
 endif
