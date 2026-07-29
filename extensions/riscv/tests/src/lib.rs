@@ -29,14 +29,14 @@ mod tests {
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv64BTranspilerExtension, Rv64ITranspilerExtension,
-        Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+        Rv64IoTranspilerExtension, Rv64MTranspilerExtension, ShAddOpcode, SingleBitImmOpcode,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
-        get_programs_dir,
+        build_example_program_at_path_with_features_and_rustc_flags, get_programs_dir,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use strum::IntoEnumIterator;
@@ -459,6 +459,48 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension),
         )?;
         air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        Ok(())
+    }
+
+    #[test]
+    fn test_rv64imb_target_features() -> Result<()> {
+        let config = Rv64ImBConfig {
+            rv64im: test_rv64im_config(),
+            ..Default::default()
+        };
+        let elf = build_example_program_at_path_with_features_and_rustc_flags(
+            get_programs_dir!(),
+            "bitmanip",
+            std::iter::empty::<&str>(),
+            ["-C", "target-feature=+zba,+zbb,+zbs"],
+            &config,
+        )?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64BTranspilerExtension),
+        )?;
+
+        let first_bitmanip_opcode = ShAddOpcode::SH1ADD.global_opcode().as_usize();
+        let last_bitmanip_opcode = SingleBitImmOpcode::BEXTI.global_opcode().as_usize();
+        let bitmanip_count = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .flatten()
+            .filter(|(insn, _)| {
+                (first_bitmanip_opcode..=last_bitmanip_opcode).contains(&insn.opcode.as_usize())
+            })
+            .count();
+        assert!(
+            bitmanip_count >= 40,
+            "expected at least 40 bitmanip instructions, found {bitmanip_count}"
+        );
+
+        air_test_with_min_segments(Rv64ImBBuilder, config, exe, vec![], 1);
         Ok(())
     }
 
