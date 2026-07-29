@@ -213,10 +213,11 @@ type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // ((addr_space, leaf_label)
 /// Touched memory grouped into merkle leaves: `(addr_space, leaf_label) -> blocks`.
 pub(crate) type LeafGroupedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
-pub(crate) fn group_touched_memory_by_leaf<F: Copy + Send + Sync>(
+/// Groups final memory blocks that are strictly ordered by `(address_space, pointer)`.
+pub(crate) fn group_sorted_touched_memory_by_leaf<F: Copy + Send + Sync>(
     final_memory: &TouchedMemory<F>,
 ) -> LeafGroupedTouchedMemory<F> {
-    let mut enriched: Vec<EnrichedEntry<F>> = final_memory
+    let enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
         .map(|block| {
             let leaf_label = block.ptr / VM_DIGEST_WIDTH as u32;
@@ -231,7 +232,9 @@ pub(crate) fn group_touched_memory_by_leaf<F: Copy + Send + Sync>(
             (key, block_info)
         })
         .collect();
-    enriched.sort_unstable_by_key(|(key, _)| *key);
+    debug_assert!(enriched
+        .windows(2)
+        .all(|window| (window[0].0, (window[0].1).0) < (window[1].0, (window[1].1).0)));
 
     enriched
         .chunk_by(|a, b| a.0 == b.0)

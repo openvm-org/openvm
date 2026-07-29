@@ -952,9 +952,9 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     let output = interpreter
         .execute_preflight_from_state(from_state, None)
         .unwrap();
-    SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
+    let prepared = SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
     let mut ctx = vm
-        .generate_proving_ctx(&vm_exe.program, &(), &output)
+        .generate_proving_ctx(&vm_exe.program, &prepared, &output)
         .unwrap();
 
     // Overwrite the merkle + poseidon2 contexts with the fraudulent ones.

@@ -57,7 +57,42 @@ pub struct Field32Access<F> {
     pub timestamp: u32,
 }
 
+/// Fixed program metadata prepared once and reused by CPU postflight across segments.
+pub struct PostflightProgramIndex {
+    dense_rows: Vec<u32>,
+    num_rows: usize,
+}
+
+impl PostflightProgramIndex {
+    pub(crate) fn new<F>(program: &Program<F>) -> Result<Self, PostflightError> {
+        let mut num_rows = 0u32;
+        let dense_rows = program
+            .instructions_and_debug_infos
+            .iter()
+            .map(|instruction| {
+                if instruction.is_some() {
+                    let row = num_rows;
+                    num_rows = num_rows.checked_add(1).ok_or_else(|| {
+                        PostflightError::new("program contains more than u32::MAX instructions")
+                    })?;
+                    Ok(row)
+                } else {
+                    Ok(u32::MAX)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            dense_rows,
+            num_rows: num_rows as usize,
+        })
+    }
+}
+
 /// Fills one contiguous range of trace rows from independent preflight steps.
+///
+/// Rows may be filled concurrently. If `fill` returns an error, other rows may
+/// already have run and mutated shared lookup state. The caller must discard
+/// the trace-generation session after an error.
 pub fn fill_trace_rows<F, E>(
     trace: &mut RowMajorMatrix<F>,
     row_start: usize,
@@ -68,6 +103,10 @@ where
     F: Send,
     E: Send,
 {
+    if steps.is_empty() {
+        return Ok(());
+    }
+
     let width = trace.width;
     let start = row_start * width;
     let end = start + steps.len() * width;
@@ -106,14 +145,38 @@ impl PostflightError {
 }
 
 impl<'a, F: PrimeField32> Postflight<'a, F> {
-    #[instrument(name = "postflight", skip_all)]
     pub fn new(
         program: &'a Program<F>,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
         exit_code: Option<u32>,
     ) -> Result<Self, PostflightError> {
-        Self::new_inner(program, history, memory_config, exit_code, true)
+        let program_index = PostflightProgramIndex::new(program)?;
+        Self::new_inner(
+            program,
+            &program_index,
+            history,
+            memory_config,
+            exit_code,
+            true,
+        )
+    }
+
+    pub(crate) fn new_prepared(
+        program: &'a Program<F>,
+        program_index: &PostflightProgramIndex,
+        history: &'a PreflightHistory,
+        memory_config: &MemoryConfig,
+        exit_code: Option<u32>,
+    ) -> Result<Self, PostflightError> {
+        Self::new_inner(
+            program,
+            program_index,
+            history,
+            memory_config,
+            exit_code,
+            true,
+        )
     }
 
     #[cfg(any(test, feature = "test-utils"))]
@@ -122,38 +185,37 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
     ) -> Result<Self, PostflightError> {
-        Self::new_inner(program, history, memory_config, None, false)
+        let program_index = PostflightProgramIndex::new(program)?;
+        Self::new_inner(program, &program_index, history, memory_config, None, false)
     }
 
+    #[instrument(name = "postflight", skip_all)]
     fn new_inner(
         program: &'a Program<F>,
+        program_index: &PostflightProgramIndex,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
         exit_code: Option<u32>,
         validate_final_pc: bool,
     ) -> Result<Self, PostflightError> {
         validate_memory_config(memory_config)?;
+        if program_index.dense_rows.len() != program.instructions_and_debug_infos.len() {
+            return Err(PostflightError::new(
+                "postflight program index does not match the program",
+            ));
+        }
         let memory_starts = memory_starts(history, memory_config)?;
         let mut opcode_counts = FxHashMap::<u32, usize>::default();
-        let mut dense_program_rows = Vec::with_capacity(program.instructions_and_debug_infos.len());
-        let mut filtered_exec_frequencies = Vec::new();
-        for instruction in &program.instructions_and_debug_infos {
-            if instruction.is_some() {
-                dense_program_rows.push(filtered_exec_frequencies.len());
-                filtered_exec_frequencies.push(0u32);
-            } else {
-                dense_program_rows.push(usize::MAX);
-            }
-        }
+        let mut filtered_exec_frequencies = vec![0u32; program_index.num_rows];
         let mut opcodes = Vec::with_capacity(memory_starts.len() - 1);
-        for program_index in 0..memory_starts.len() - 1 {
-            let slot = resolve_program_slot(program, history, program_index)?;
+        for program_event_index in 0..memory_starts.len() - 1 {
+            let slot = resolve_program_slot(program, history, program_event_index)?;
             let instruction = &program.instructions_and_debug_infos[slot]
                 .as_ref()
                 .expect("resolve_program_slot rejects gaps")
                 .0;
             let opcode = instruction.opcode;
-            validate_step(history, program_index, opcode, exit_code)?;
+            validate_step(history, program_event_index, opcode, exit_code)?;
             if opcode == SystemOpcode::TERMINATE.global_opcode()
                 && exit_code != Some(instruction.c.as_canonical_u32())
             {
@@ -161,9 +223,16 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                     "TERMINATE exit code does not match the fetched instruction",
                 ));
             }
-            let opcode = opcode.as_usize() as u32;
+            let opcode = u32::try_from(opcode.as_usize())
+                .map_err(|_| PostflightError::new("instruction opcode exceeds u32::MAX"))?;
             *opcode_counts.entry(opcode).or_default() += 1;
-            let frequency = &mut filtered_exec_frequencies[dense_program_rows[slot]];
+            let dense_row = program_index.dense_rows[slot];
+            if dense_row == u32::MAX {
+                return Err(PostflightError::new(
+                    "postflight program index marks a defined instruction as empty",
+                ));
+            }
+            let frequency = &mut filtered_exec_frequencies[dense_row as usize];
             *frequency = frequency
                 .checked_add(1)
                 .ok_or_else(|| PostflightError::new("program frequency exceeds u32::MAX"))?;
@@ -349,8 +418,16 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     }
 
     pub fn instruction(&self, step: PostflightStep) -> &Instruction<F> {
-        resolve_instruction(self.program, self.history, step.0 as usize)
+        let pc = self.pc(step);
+        debug_assert!(pc >= self.program.pc_base);
+        debug_assert!(pc
+            .wrapping_sub(self.program.pc_base)
+            .is_multiple_of(DEFAULT_PC_STEP));
+        let slot = pc.wrapping_sub(self.program.pc_base) as usize / DEFAULT_PC_STEP as usize;
+        &self.program.instructions_and_debug_infos[slot]
+            .as_ref()
             .expect("postflight validated every program event")
+            .0
     }
 
     pub fn pc(&self, step: PostflightStep) -> u32 {
@@ -1048,23 +1125,10 @@ fn memory_index<F: PrimeField32>(
 
     let mut unreferenced_seeds = seeds.len();
     let mut predecessors = Vec::with_capacity(memory.len());
-    let mut previous_timestamp = None;
-    let timestamp_limit = 1u64 << config.timestamp_max_bits;
     let mut field_event_cursor = 0usize;
     for (event_index, event) in memory.iter().enumerate() {
         let address_space = event.address_space();
         let layout = validate_memory_block(address_space, event.pointer, config)?;
-        if u64::from(event.timestamp) >= timestamp_limit {
-            return Err(PostflightError::new(format!(
-                "memory event {event_index} timestamp exceeds the configured domain"
-            )));
-        }
-        if previous_timestamp.is_some_and(|previous| previous >= event.timestamp) {
-            return Err(PostflightError::new(
-                "memory timestamps are not strictly increasing",
-            ));
-        }
-        previous_timestamp = Some(event.timestamp);
         match layout {
             MemoryCellType::U16 => {}
             MemoryCellType::F { size: 4 } => {
@@ -1180,6 +1244,12 @@ mod tests {
     use crate::arch::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightMemoryLog, PreflightProgramEvent,
     };
+
+    #[test]
+    fn fill_trace_rows_skips_empty_ranges() {
+        let mut trace = RowMajorMatrix::<BabyBear>::new(Vec::new(), 1);
+        fill_trace_rows::<_, ()>(&mut trace, usize::MAX, &[], |_, _| unreachable!()).unwrap();
+    }
 
     #[test]
     fn peek_uses_the_already_consumed_timed_event_prefix() {
@@ -1576,17 +1646,13 @@ mod tests {
         assert!(
             error(&history(vec![invalid_address_space], vec![]), &config).contains("out of range")
         );
-        assert!(error(
-            &history(vec![read(1, 0), read(1, BLOCK_FE_WIDTH as u32)], vec![]),
-            &config,
-        )
-        .contains("not strictly increasing"));
 
-        let narrow_timestamp = MemoryConfig {
-            timestamp_max_bits: 1,
-            ..config
-        };
-        assert!(error(&history(vec![read(2, 0)], vec![]), &narrow_timestamp)
-            .contains("timestamp exceeds"));
+        let (program, mut history) = mixed_history();
+        history.memory.accesses[1].timestamp = history.memory.accesses[0].timestamp;
+        assert!(Postflight::new(&program, &history, &config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("not strictly increasing"));
     }
 }

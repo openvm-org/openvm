@@ -347,7 +347,7 @@ where
 
         let memory_ctxs = self
             .memory_controller
-            .generate_proving_ctx(postflight.touched_memory().to_vec());
+            .generate_proving_ctx(postflight.touched_memory());
 
         [program_ctx, connector_ctx]
             .into_iter()

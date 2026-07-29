@@ -90,9 +90,9 @@ use super::{
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
-    ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
-    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
-    VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PostflightProgramIndex,
+    PreflightOutput, StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
+    VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "cuda")]
@@ -177,24 +177,26 @@ where
     VB: VmBuilder<E, SystemChipInventory = SystemChipInventory<SC>>,
     <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>,
 {
-    type Prepared = ();
+    type Prepared = PostflightProgramIndex;
 
     fn prepare_postflight(
         _vm: &VirtualMachine<E, Self>,
-        _program: &Program<Val<E::SC>>,
+        program: &Program<Val<E::SC>>,
     ) -> Result<Self::Prepared, GenerationError> {
-        Ok(())
+        PostflightProgramIndex::new(program)
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
     }
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<E, Self>,
         program: &Program<Val<SC>>,
-        _prepared: &Self::Prepared,
+        prepared: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
         begin_preflight_tracegen_session(&mut vm.preflight_tracegen_poisoned)?;
-        let postflight = Postflight::new(
+        let postflight = Postflight::new_prepared(
             program,
+            prepared,
             &output.history,
             &vm.config().as_ref().memory_config,
             output.exit_code,
@@ -205,10 +207,12 @@ where
             &output.state.metrics,
             vm.postflight_opcode_counts(&postflight),
         );
-        let result = vm
-            .chip_complex
-            .generate_proving_ctx_from_postflight(&postflight)
-            .and_then(|ctx| vm.validate_proving_ctx(ctx));
+        let result = {
+            let _span = info_span!("trace_gen").entered();
+            vm.chip_complex
+                .generate_proving_ctx_from_postflight(&postflight)
+                .and_then(|ctx| vm.validate_proving_ctx(ctx))
+        };
         if result.is_ok() {
             vm.preflight_tracegen_poisoned = false;
         }
@@ -1195,7 +1199,6 @@ where
         state
     }
 
-    #[instrument(name = "trace_gen", skip_all)]
     pub(crate) fn generate_proving_ctx(
         &mut self,
         program: &Program<Val<E::SC>>,
@@ -1744,17 +1747,18 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
     Val<SC>: VmField,
-    VB: VmBuilder<E, SystemChipInventory = SystemChipInventory<SC>>,
+    VB: VmBuilder<E, SystemChipInventory = SystemChipInventory<SC>> + PostflightTracegen<E>,
     <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
         Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
 {
-    type PreparedContinuation = (PreflightInterpreter<Val<SC>, VB::VmConfig>, ());
+    type PreparedContinuation = (PreflightInterpreter<Val<SC>, VB::VmConfig>, VB::Prepared);
 
     fn prepare_continuation(
         instance: &VmInstance<E, Self>,
     ) -> Result<Self::PreparedContinuation, VirtualMachineError> {
         let preflight = instance.vm.preflight_interpreter(instance.exe())?;
-        Ok((preflight, ()))
+        let prepared = VB::prepare_postflight(&instance.vm, &instance.exe().program)?;
+        Ok((preflight, prepared))
     }
 
     fn prove_continuation(

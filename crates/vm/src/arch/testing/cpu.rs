@@ -508,7 +508,7 @@ where
                 PermutationCheckBus::new(MEMORY_MERKLE_BUS),
                 PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             );
-            let ctxs = memory_controller.generate_proving_ctx(touched_memory);
+            let ctxs = memory_controller.generate_proving_ctx(&touched_memory);
             for (air, ctx) in
                 zip_eq(mem_inventory.into_airs(), ctxs).filter(|(_, ctx)| ctx.height() > 0)
             {

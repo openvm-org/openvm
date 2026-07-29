@@ -130,9 +130,9 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     assert_eq!(output.history.program[0].timestamp, 1);
     assert!(output.history.memory.accesses.is_empty());
     assert!(output.history.memory.initial_writes.is_empty());
-    SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
+    let prepared = SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
     let mut ctx = vm
-        .generate_proving_ctx(&vm_exe.program, &(), &output)
+        .generate_proving_ctx(&vm_exe.program, &prepared, &output)
         .unwrap();
     let connector_air_ctx = &mut ctx
         .per_trace
