@@ -171,14 +171,22 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 }
 
+/// Backing storage for a [DenseRecordArena]: a pooled pinned host buffer
+/// under CUDA (so record uploads hit the fast DMA path), a plain `Vec`
+/// otherwise. Both deref to `[u8]`.
+#[cfg(feature = "cuda")]
+type RecordsBuffer = pinned::PinnedBuffer;
+#[cfg(not(feature = "cuda"))]
+type RecordsBuffer = Vec<u8>;
+
 pub struct DenseRecordArena {
-    pub records_buffer: Cursor<Vec<u8>>,
+    pub records_buffer: Cursor<RecordsBuffer>,
 }
 
 const MAX_ALIGNMENT: usize = 32;
 
 impl DenseRecordArena {
-    fn new_buffer(size_bytes: usize) -> Vec<u8> {
+    fn new_buffer(size_bytes: usize) -> RecordsBuffer {
         #[cfg(feature = "cuda")]
         {
             pinned::take(size_bytes + MAX_ALIGNMENT)
@@ -208,8 +216,10 @@ impl DenseRecordArena {
         #[cfg(feature = "cuda")]
         {
             let dirty_len = self.records_buffer.position() as usize;
-            pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
+            self.records_buffer.get_mut().set_dirty_len(dirty_len);
         }
+        // Under CUDA the replaced buffer's guard drops here, handing it back
+        // to the pinned pool.
         self.records_buffer = cursor;
     }
 
@@ -272,11 +282,13 @@ impl DenseRecordArena {
     }
 }
 
+/// Narrows the prefix the pinned pool re-zeroes to what was actually
+/// allocated; the buffer itself returns to the pool when its guard drops.
 #[cfg(feature = "cuda")]
 impl Drop for DenseRecordArena {
     fn drop(&mut self) {
         let dirty_len = self.records_buffer.position() as usize;
-        pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
+        self.records_buffer.get_mut().set_dirty_len(dirty_len);
     }
 }
 
