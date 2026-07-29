@@ -401,7 +401,10 @@ __global__ void field_expr_tracegen_kernel(
     uint32_t *__restrict__ d_aux, size_t aux_words,
     uint32_t pointer_max_bits, uint32_t timestamp_max_bits,
     int should_finalize, uint32_t *__restrict__ d_err) {
-    const FieldExprProg s = load_prog(d_blob);
+    __shared__ FieldExprProg shared_prog;
+    if (threadIdx.x == 0) shared_prog = load_prog(d_blob);
+    __syncthreads();
+    const FieldExprProg &s = shared_prog;
     constexpr size_t ADAPTER_WIDTH =
         sizeof(Rv64VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
     const size_t tid = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
