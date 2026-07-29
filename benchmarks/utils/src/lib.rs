@@ -26,7 +26,16 @@ pub fn build_elf_with_path(
     profile: impl ToString,
     elf_path: Option<&PathBuf>,
 ) -> Result<Elf> {
-    let guest_opts = GuestOptions::default().with_profile(profile.to_string());
+    // Mirror `cargo openvm build`: let callers inject codegen flags (e.g.
+    // `-C target-feature=+zba,+zbb,+zbs`) via RUSTFLAGS. `build_guest_package`
+    // otherwise overrides the inherited environment.
+    let guest_opts = GuestOptions::default()
+        .with_profile(profile.to_string())
+        .with_rustc_flags(
+            std::env::var("RUSTFLAGS")
+                .unwrap_or_default()
+                .split_whitespace(),
+        );
 
     let output_dir = match build_guest_package(pkg, &guest_opts, None, &None) {
         Ok(dir) => dir,
