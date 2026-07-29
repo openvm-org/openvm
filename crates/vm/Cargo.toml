@@ -35,6 +35,7 @@ tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 backtrace.workspace = true
+bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
