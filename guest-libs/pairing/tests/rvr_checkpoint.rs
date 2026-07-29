@@ -152,7 +152,7 @@ fn prove_pairing_checkpoint(
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64PairingGpuBuilder, config.clone())?;
     let cached_program = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program);
-    let gpu_program = WeierstrassPreflightGpuTracegen::upload_postflight_program(
+    let replay_program = WeierstrassPreflightGpuTracegen::upload_postflight_program(
         &exe.program,
         &config.modular.system.memory_config,
         &config.modular.modular,
@@ -199,7 +199,7 @@ fn prove_pairing_checkpoint(
         }
 
         let (gpu_transcript, replay_plan) =
-            WeierstrassPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, retired)?;
+            WeierstrassPreflightGpuTracegen::postflight(&vm, &replay_program, &execution, retired)?;
         let program_log = gpu_transcript.program_log_host()?;
         let memory_log = gpu_transcript.memory_log_host()?;
         for event in program_log.iter().take(program_log.len().saturating_sub(1)) {
@@ -248,7 +248,7 @@ fn prove_pairing_checkpoint(
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
-            &gpu_program,
+            replay_program.program(),
             &gpu_transcript,
             &replay_plan,
         )?;

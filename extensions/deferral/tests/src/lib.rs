@@ -17,6 +17,8 @@ mod tests {
         system::memory::online::{GuestMemory, LinearMemory, TouchedPages, PAGE_SIZE},
         utils::test_cpu_engine,
     };
+    #[cfg(feature = "rvr")]
+    use openvm_deferral_circuit::Rv64DeferralCpuBuilder;
     use openvm_deferral_circuit::{
         DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
     };
@@ -295,7 +297,7 @@ mod tests {
         assert_rvr_trap(checkpoint_error);
 
         let (vm, _) =
-            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64DeferralBuilder, config)?;
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64DeferralCpuBuilder, config)?;
         let metered_error = vm
             .metered_instance(&exe)?
             .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))

@@ -249,7 +249,14 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     })
 }
 
-fn build_metered_ctx_for(exe: &VmExe<BabyBear>) -> (MeteredCtx, Vec<usize>) {
+struct MeteredSetup {
+    ctx: MeteredCtx,
+    executor_idx_to_air_idx: Vec<usize>,
+    #[cfg(feature = "rvr")]
+    num_airs: usize,
+}
+
+fn build_metered_ctx_for(exe: &VmExe<BabyBear>) -> MeteredSetup {
     let config = ExecuteConfig::default();
     let engine = Engine::new(SystemParams::new_for_testing(21));
     let pk = vm_proving_key();
@@ -258,7 +265,12 @@ fn build_metered_ctx_for(exe: &VmExe<BabyBear>) -> (MeteredCtx, Vec<usize>) {
         .expect("Failed to create VM for metered setup");
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
     let ctx = vm.build_metered_ctx(exe);
-    (ctx, executor_idx_to_air_idx)
+    MeteredSetup {
+        ctx,
+        executor_idx_to_air_idx,
+        #[cfg(feature = "rvr")]
+        num_airs: vm.num_airs(),
+    }
 }
 
 struct PureExecution;
@@ -356,10 +368,17 @@ impl BenchExecutor for MeteredExecution {
     }
 
     fn build_instance(exe: &VmExe<BabyBear>) -> Self::Instance {
-        let (ctx, executor_idx_to_air_idx) = build_metered_ctx_for(exe);
+        let setup = build_metered_ctx_for(exe);
+        #[cfg(feature = "rvr")]
+        let instance = Self::unwrap_instance(executor().metered_instance(
+            exe,
+            &setup.executor_idx_to_air_idx,
+            setup.num_airs,
+        ));
+        #[cfg(not(feature = "rvr"))]
         let instance =
-            Self::unwrap_instance(executor().metered_instance(exe, &executor_idx_to_air_idx));
-        (instance, ctx)
+            Self::unwrap_instance(executor().metered_instance(exe, &setup.executor_idx_to_air_idx));
+        (instance, setup.ctx)
     }
 
     fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError> {

@@ -1156,7 +1156,7 @@ mod is_equal_tests {
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
             .with_trace_generators(
                 move |chip, postflight| {
-                    generate_modular_is_equal_trace_from_postflight(
+                    generate_modular_is_equal_trace_from_postflight::<_, NUM_LANES, TOTAL_LIMBS>(
                         chip,
                         postflight,
                         offset,

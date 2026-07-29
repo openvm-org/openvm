@@ -116,6 +116,10 @@ type GpuPostflightTraceGenerator<G> = Box<
         &GpuPostflightPlan,
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError>,
 >;
+#[cfg(feature = "rvr")]
+type RowsUsed<F> = Box<dyn Fn(&RowMajorMatrix<F>) -> usize>;
+#[cfg(feature = "rvr")]
+type FillPadding<F> = Box<dyn Fn(&mut [F])>;
 
 #[cfg(feature = "rvr")]
 pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
@@ -127,8 +131,8 @@ pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
     generate_cpu_trace: Option<CpuPostflightTraceGenerator<F, CpuChip>>,
     generate_cpu_batch_trace: Option<CpuPostflightBatchTraceGenerator<F, CpuChip>>,
     generate_gpu_trace: Option<GpuPostflightTraceGenerator<GpuChip>>,
-    rows_used: Box<dyn Fn(&RowMajorMatrix<F>) -> usize>,
-    fill_padding: Box<dyn Fn(&mut [F])>,
+    rows_used: RowsUsed<F>,
+    fill_padding: FillPadding<F>,
     balance_memory: bool,
 }
 

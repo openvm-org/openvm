@@ -40,7 +40,7 @@ use {
         PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
     },
 };
-#[cfg(all(feature = "rvr", test))]
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
     openvm_stark_backend::p3_field::PrimeField32,
@@ -309,7 +309,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     }
 
     /// Uploads one concrete RV64+Algebra+Weierstrass checkpoint program.
-    #[cfg(all(test, feature = "rvr"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn upload_postflight_program<T: PrimeField32>(
         program: &Program<T>,
         memory_config: &MemoryConfig,
@@ -335,7 +335,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         )
     }
 
-    #[cfg(all(test, feature = "rvr"))]
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &CheckpointReplayProgram,

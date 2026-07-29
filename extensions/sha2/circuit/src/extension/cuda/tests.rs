@@ -1,7 +1,7 @@
 use openvm_circuit::{
     arch::{
-        cuda::postflight::GpuPostflightProgram, rvr::PreflightLimits, PreflightHistory,
-        PreflightMemoryLog, VirtualMachine, VmExecutor,
+        cuda::postflight::GpuPostflightProgram, rvr::PreflightLimits, GenerationError,
+        PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -324,7 +324,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
         .generate_proving_ctx(&mut vm)
         .err()
         .expect("a VM with partially updated lookup counts must reject retry");
-    assert!(retry.to_string().contains("poisoned"), "{retry}");
+    assert!(matches!(retry, GenerationError::ProverPoisoned));
 }
 
 #[test]

@@ -1144,8 +1144,7 @@ mod ec_addne_tests {
         );
         let error = incomplete
             .finish()
-            .err()
-            .expect("the second curve's opcode must remain unclaimed");
+            .expect_err("the second curve's opcode must remain unclaimed");
         assert!(error
             .to_string()
             .contains(&(second_base as u32).to_string()));
