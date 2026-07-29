@@ -64,6 +64,20 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         }
     }
 
+    /// Replaces the value at `index`, returning its previous value.
+    ///
+    /// Panics if the index is out of bounds. Creates the page before writing
+    /// when necessary.
+    #[inline]
+    pub fn replace(&mut self, index: usize, value: T) -> T {
+        let page_idx = index / PAGE_SIZE;
+        let offset = index % PAGE_SIZE;
+        let page = self.pages[page_idx].get_or_insert_with(Self::create_zeroed_page);
+
+        // SAFETY: offset < PAGE_SIZE by construction.
+        unsafe { std::mem::replace(page.get_unchecked_mut(offset), value) }
+    }
+
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (usize, T)> + '_
     where
         T: Send + Sync,

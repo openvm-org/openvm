@@ -65,7 +65,7 @@ impl PreflightCtx {
             history,
             timestamp: 1,
             seen_blocks,
-            pending_writes: Vec::new(),
+            pending_writes: Vec::with_capacity(2),
             read_canonical_field_block: read_canonical_field_block::<F>,
             instret_left: instret_left.unwrap_or(u64::MAX),
         }
@@ -144,8 +144,7 @@ impl PreflightCtx {
         let timestamp = self.timestamp;
         self.timestamp += 1;
         let seen = &mut self.seen_blocks[address_space as usize];
-        let was_seen = seen.get(block_index as usize);
-        seen.set(block_index as usize, true);
+        let was_seen = seen.replace(block_index as usize, true);
         (timestamp, was_seen)
     }
 
