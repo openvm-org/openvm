@@ -400,9 +400,9 @@ __global__ void field_expr_tracegen_kernel(
     const size_t tid = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
     const size_t nthreads = gridDim.x * (size_t)blockDim.x;
     VariableRangeChecker rc(rc_ptr, rc_bins);
-    uint32_t *my_aux = aux + tid * aux_words;
 
     for (size_t row = tid; row < height; row += nthreads) {
+        uint32_t *my_aux = aux + tid * aux_words;
         RowSlice row_slice(d_trace + row, height);
         if (row < rows_used) {
             const uint8_t *rec = records + row * rec_stride;
@@ -433,8 +433,15 @@ __global__ void field_expr_tracegen_kernel(
         uint32_t pointer_max_bits, uint32_t timestamp_max_bits, int should_finalize,          \
         uint32_t *d_err, cudaStream_t stream) {                                               \
         const int threads = 256;                                                              \
+        int device, sm_count;                                                                 \
+        cudaError_t err = cudaGetDevice(&device);                                             \
+        if (err != cudaSuccess) return err;                                                   \
+        err = cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device);       \
+        if (err != cudaSuccess) return err;                                                   \
         const size_t want = (height + threads - 1) / threads;                                 \
-        const int blocks = (int)(want < 512 ? want : 512);                                    \
+        const size_t max_blocks = 512 / sm_count * sm_count;                                  \
+        const size_t rounded = (want + sm_count - 1) / sm_count * sm_count;                    \
+        const int blocks = (int)(rounded < max_blocks ? rounded : max_blocks);                 \
         field_expr_tracegen_kernel<R, B><<<blocks, threads, 0, stream>>>(                     \
             d_trace, height, rows_used, d_blob, d_records, rec_stride, rec_core_offset,       \
             d_range_checker, rc_bins, d_aux, aux_words, pointer_max_bits,                     \
