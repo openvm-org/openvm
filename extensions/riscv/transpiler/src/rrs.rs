@@ -12,14 +12,33 @@ use openvm_transpiler::util::{
 };
 
 use crate::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
-    Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BitwiseInvOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, ByteUnaryOpcode, CountZerosOpcode, CountZerosWOpcode,
+    CpopOpcode, CpopWOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MinMaxOpcode, MulHOpcode, MulOpcode, MulWOpcode, RotateImmOpcode, RotateOpcode,
+    RotateWImmOpcode, RotateWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+    Rv64LoadStoreOpcode, ShAddOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    SingleBitImmOpcode, SingleBitOpcode, SlliUwOpcode,
 };
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
 pub(crate) struct InstructionTranspiler<F>(pub PhantomData<F>);
+
+/// Unary bit-manipulation ops (`rd = f(rs1)`) reuse the ALU-immediate operand
+/// layout with a zero immediate, so they can run on the one-register-read
+/// immediate adapters. The raw `imm` field of these words carries the funct12
+/// sub-operation selector, which must not leak into the operands.
+fn from_unary<F: PrimeField32>(opcode: usize, rd: usize, rs1: usize) -> Instruction<F> {
+    from_i_type(
+        opcode,
+        &IType {
+            imm: 0,
+            rs1,
+            funct3: 0,
+            rd,
+        },
+    )
+}
 
 impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
@@ -492,6 +511,352 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             0,
             &dec_insn,
             false,
+        )
+    }
+
+    // ---- Zba ----
+
+    fn process_add_uw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::ADD_UW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sh1add(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::SH1ADD.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sh2add(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::SH2ADD.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sh3add(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::SH3ADD.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sh1add_uw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::SH1ADD_UW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sh2add_uw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::SH2ADD_UW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sh3add_uw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            ShAddOpcode::SH3ADD_UW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_slli_uw(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(SlliUwOpcode::SLLI_UW.global_opcode().as_usize(), &dec_insn)
+    }
+
+    // ---- Zbb: logical with negate ----
+
+    fn process_andn(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            BitwiseInvOpcode::ANDN.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_orn(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            BitwiseInvOpcode::ORN.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_xnor(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            BitwiseInvOpcode::XNOR.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    // ---- Zbb: counts (unary) ----
+
+    fn process_clz(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            CountZerosOpcode::CLZ.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_ctz(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            CountZerosOpcode::CTZ.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_cpop(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            CpopOpcode::CPOP.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_clzw(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            CountZerosWOpcode::CLZW.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_ctzw(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            CountZerosWOpcode::CTZW.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_cpopw(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            CpopWOpcode::CPOPW.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    // ---- Zbb: min/max ----
+
+    fn process_min(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            MinMaxOpcode::MIN.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_minu(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            MinMaxOpcode::MINU.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_max(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            MinMaxOpcode::MAX.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_maxu(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            MinMaxOpcode::MAXU.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    // ---- Zbb: sign/zero extension (unary) ----
+
+    fn process_sext_b(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            ByteUnaryOpcode::SEXT_B.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_sext_h(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            ByteUnaryOpcode::SEXT_H.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_zext_h(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        // R-type encoding with rs2 hardwired to zero; transpiles as unary.
+        from_unary(
+            ByteUnaryOpcode::ZEXT_H.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    // ---- Zbb: rotates ----
+
+    fn process_rol(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            RotateOpcode::ROL.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_ror(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            RotateOpcode::ROR.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_rori(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(RotateImmOpcode::RORI.global_opcode().as_usize(), &dec_insn)
+    }
+
+    fn process_rolw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            RotateWOpcode::ROLW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_rorw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            RotateWOpcode::RORW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_roriw(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(
+            RotateWImmOpcode::RORIW.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    // ---- Zbb: byte ops (unary) ----
+
+    fn process_orc_b(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            ByteUnaryOpcode::ORC_B.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    fn process_rev8(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_unary(
+            ByteUnaryOpcode::REV8.global_opcode().as_usize(),
+            dec_insn.rd,
+            dec_insn.rs1,
+        )
+    }
+
+    // ---- Zbs ----
+
+    fn process_bclr(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            SingleBitOpcode::BCLR.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_bset(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            SingleBitOpcode::BSET.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_binv(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            SingleBitOpcode::BINV.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_bext(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type(
+            SingleBitOpcode::BEXT.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_bclri(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(
+            SingleBitImmOpcode::BCLRI.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    fn process_bseti(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(
+            SingleBitImmOpcode::BSETI.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    fn process_binvi(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(
+            SingleBitImmOpcode::BINVI.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    fn process_bexti(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt(
+            SingleBitImmOpcode::BEXTI.global_opcode().as_usize(),
+            &dec_insn,
         )
     }
 

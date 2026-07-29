@@ -19,6 +19,7 @@ mod add_sub;
 mod add_sub_w;
 mod addi;
 mod auipc;
+mod bitmanip;
 mod bitwise_logic;
 mod bitwise_logic_imm;
 mod branch_eq;
@@ -46,6 +47,7 @@ pub use add_sub::*;
 pub use add_sub_w::*;
 pub use addi::*;
 pub use auipc::*;
+pub use bitmanip::*;
 pub use bitwise_logic::*;
 pub use bitwise_logic_imm::*;
 pub use branch_eq::*;
@@ -86,6 +88,7 @@ cfg_if::cfg_if! {
     } else {
         pub use self::{
             Rv64ICpuBuilder as Rv64IBuilder,
+            Rv64ImBCpuBuilder as Rv64ImBBuilder,
             Rv64ImCpuBuilder as Rv64ImBuilder,
         };
     }
@@ -120,6 +123,18 @@ pub struct Rv64ImConfig {
 // Default implementation uses no init file
 impl InitFileGenerator for Rv64ImConfig {}
 
+/// Config for a VM with base, IO, multiplication, and bit-manipulation extensions.
+#[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Rv64ImBConfig {
+    #[config]
+    pub rv64im: Rv64ImConfig,
+    #[extension]
+    pub bitmanip: Rv64B,
+}
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv64ImBConfig {}
+
 impl Default for Rv64IConfig {
     fn default() -> Self {
         let system = SystemConfig::default();
@@ -147,6 +162,15 @@ impl Rv64ImConfig {
         Self {
             rv64i: Rv64IConfig::with_public_values_bytes(num_public_values_bytes),
             mul: Default::default(),
+        }
+    }
+}
+
+impl Rv64ImBConfig {
+    pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
+        Self {
+            rv64im: Rv64ImConfig::with_public_values_bytes(num_public_values_bytes),
+            bitmanip: Default::default(),
         }
     }
 }
@@ -218,6 +242,45 @@ where
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        Ok(chip_complex)
+    }
+}
+
+#[derive(Clone)]
+pub struct Rv64ImBCpuBuilder;
+
+impl<SC, E> VmBuilder<E> for Rv64ImBCpuBuilder
+where
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: VmField,
+    SC::EF: Ord,
+{
+    type VmConfig = Rv64ImBConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &Self::VmConfig,
+        circuit: AirInventory<E::SC>,
+        device_ctx: &EngineDeviceCtx<E>,
+    ) -> Result<
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &Rv64ImCpuBuilder,
+            &config.rv64im,
+            circuit,
+            device_ctx,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImCpuProverExt,
+            &config.bitmanip,
+            inventory,
+        )?;
         Ok(chip_complex)
     }
 }

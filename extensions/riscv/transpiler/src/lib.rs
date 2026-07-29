@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use openvm_decoder::{
     instruction_formats::{IType, RType},
-    process_instruction,
+    is_bitmanip_instruction, process_instruction,
 };
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
@@ -34,6 +34,13 @@ pub struct Rv64MTranspilerExtension;
 #[derive(Default)]
 pub struct Rv64IoTranspilerExtension;
 
+/// Transpiler extension for the RISC-V bit-manipulation instructions
+/// (Zba + Zbb + Zbs). It claims exactly the words for which
+/// [`is_bitmanip_instruction`] holds, which [`Rv64ITranspilerExtension`]
+/// skips, so both extensions can be registered together unambiguously.
+#[derive(Default)]
+pub struct Rv64BTranspilerExtension;
+
 impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         let mut transpiler = InstructionTranspiler::<F>(PhantomData);
@@ -41,6 +48,13 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
             return None;
         }
         let instruction_u32 = instruction_stream[0];
+
+        // Bit-manipulation (Zba/Zbb/Zbs) words belong to
+        // `Rv64BTranspilerExtension`; when it is not registered they fall
+        // through to `unimp` like any other unsupported instruction.
+        if is_bitmanip_instruction(instruction_u32) {
+            return None;
+        }
 
         let opcode = (instruction_u32 & 0x7f) as u8;
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R-, I- or B-type
@@ -103,6 +117,26 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
             }
             _ => process_instruction(&mut transpiler, instruction_u32),
         };
+
+        instruction.map(TranspilerOutput::one_to_one)
+    }
+}
+
+impl<F: PrimeField32> TranspilerExtension<F> for Rv64BTranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+        if instruction_stream.is_empty() {
+            return None;
+        }
+        let instruction_u32 = instruction_stream[0];
+
+        if !is_bitmanip_instruction(instruction_u32) {
+            return None;
+        }
+
+        let instruction = process_instruction(
+            &mut InstructionTranspiler::<F>(PhantomData),
+            instruction_u32,
+        );
 
         instruction.map(TranspilerOutput::one_to_one)
     }
