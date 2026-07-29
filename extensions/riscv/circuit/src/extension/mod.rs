@@ -724,7 +724,7 @@ where
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
                 inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
-                    Ok(chip.generate_proving_ctx(()))
+                    Ok(chip.generate_proving_ctx())
                 });
                 chip
             }
@@ -1262,7 +1262,7 @@ where
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
                 inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
-                    Ok(chip.generate_proving_ctx(()))
+                    Ok(chip.generate_proving_ctx())
                 });
                 chip
             }
@@ -1281,7 +1281,7 @@ where
                 let air: &RangeTupleCheckerAir<2> = inventory.next_air()?;
                 let chip = SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::new(air.bus));
                 inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
-                    Ok(chip.generate_proving_ctx(()))
+                    Ok(chip.generate_proving_ctx())
                 });
                 chip
             }

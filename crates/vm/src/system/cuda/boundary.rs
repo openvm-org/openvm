@@ -90,8 +90,8 @@ impl BoundaryChipGPU {
     }
 }
 
-impl Chip<(), GpuBackend> for BoundaryChipGPU {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
+impl Chip<GpuBackend> for BoundaryChipGPU {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
         let num_records = self.num_records.unwrap();
         if num_records == 0 {
             // Boundary AIR should always be present, so return a single zero-filled

@@ -182,7 +182,6 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
         Data::Struct(inner) => {
             let generics = &ast.generics;
             let mut new_generics = generics.clone();
-            new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
                 .push(syn::parse_quote! { PB: openvm_stark_backend::prover::ProverBackend });
@@ -202,11 +201,11 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: openvm_circuit::primitives::Chip<R, PB> });
+                .push(syn::parse_quote! { #inner_ty: openvm_circuit::primitives::Chip<PB> });
             quote! {
-                impl #impl_generics openvm_circuit::primitives::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, input: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
-                        self.0.generate_proving_ctx(input)
+                impl #impl_generics openvm_circuit::primitives::Chip<PB> for #name #ty_generics #where_clause {
+                    fn generate_proving_ctx(&self) -> openvm_stark_backend::prover::AirProvingContext<PB> {
+                        self.0.generate_proving_ctx()
                     }
                 }
             }.into()
@@ -229,17 +228,16 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let generate_proving_ctx_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as openvm_circuit::primitives::Chip<R, PB>>::generate_proving_ctx(x, input)
+                    #name::#variant_name(x) => <#field_ty as openvm_circuit::primitives::Chip<PB>>::generate_proving_ctx(x)
                 };
                 let where_predicate =
-                    syn::parse_quote! { #field_ty: openvm_circuit::primitives::Chip<R, PB> };
+                    syn::parse_quote! { #field_ty: openvm_circuit::primitives::Chip<PB> };
                 (generate_proving_ctx_arm, where_predicate)
             }).collect();
 
-            // Attach extra generics R and PB to the impl_generics
+            // Attach the prover backend to the implementation generics.
             let generics = &ast.generics;
             let mut new_generics = generics.clone();
-            new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
                 .push(syn::parse_quote! { PB: openvm_stark_backend::prover::ProverBackend });
@@ -284,8 +282,8 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl #impl_generics openvm_circuit::primitives::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, input: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
+                impl #impl_generics openvm_circuit::primitives::Chip<PB> for #name #ty_generics #where_clause {
+                    fn generate_proving_ctx(&self) -> openvm_stark_backend::prover::AirProvingContext<PB> {
                         match self {
                             #(#generate_proving_ctx_arms,)*
                         }

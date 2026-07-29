@@ -43,8 +43,8 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
     }
 }
 
-impl<const N: usize> Chip<(), GpuBackend> for RangeTupleCheckerChipGPU<N> {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
+impl<const N: usize> Chip<GpuBackend> for RangeTupleCheckerChipGPU<N> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
         let cpu_count = self.cpu_chip.as_ref().map(|cpu_chip| {
             cpu_chip
                 .count

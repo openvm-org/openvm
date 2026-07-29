@@ -343,7 +343,7 @@ where
         self.connector_chip.begin(postflight.from_state());
         self.connector_chip
             .end(postflight.to_state(), postflight.exit_code());
-        let connector_ctx = self.connector_chip.generate_proving_ctx(());
+        let connector_ctx = self.connector_chip.generate_proving_ctx();
 
         let memory_ctxs = self
             .memory_controller
@@ -402,7 +402,7 @@ where
         let mut inventory = ChipInventory::new(airs);
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_postflight_periphery_chip(range_checker.clone(), |chip, _| {
-            Ok(chip.generate_proving_ctx(()))
+            Ok(chip.generate_proving_ctx())
         });
 
         assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
@@ -417,7 +417,7 @@ where
             config.max_constraint_degree,
         ));
         inventory.add_postflight_periphery_chip(hasher_chip.clone(), |chip, _| {
-            Ok(chip.generate_proving_ctx(()))
+            Ok(chip.generate_proving_ctx())
         });
         let system = SystemChipInventory::new(
             config,

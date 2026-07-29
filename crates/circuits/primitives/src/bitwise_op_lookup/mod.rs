@@ -233,11 +233,11 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 }
 
-impl<SC: StarkProtocolConfig, const NUM_BITS: usize> Chip<(), CpuBackend<SC>>
+impl<SC: StarkProtocolConfig, const NUM_BITS: usize> Chip<CpuBackend<SC>>
     for BitwiseOperationLookupChip<NUM_BITS>
 {
     /// Generates trace and resets all internal counters to 0.
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let trace_row_maj = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(trace_row_maj)
     }

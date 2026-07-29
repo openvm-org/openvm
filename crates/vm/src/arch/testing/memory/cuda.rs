@@ -220,8 +220,8 @@ impl FixedSizeMemoryTester {
     }
 }
 
-impl Chip<(), GpuBackend> for FixedSizeMemoryTester {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
+impl Chip<GpuBackend> for FixedSizeMemoryTester {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
         let width = BaseAir::<F>::width(&self.0.air);
         let height = (self.0.trace.len() / width).next_power_of_two();
 

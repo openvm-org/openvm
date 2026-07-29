@@ -30,8 +30,8 @@ impl DeviceProgramTester {
     }
 }
 
-impl Chip<(), GpuBackend> for DeviceProgramTester {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
+impl Chip<GpuBackend> for DeviceProgramTester {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
         let height = next_power_of_two_or_zero(self.0.records.len());
         let width = ProgramTester::<F>::width();
 

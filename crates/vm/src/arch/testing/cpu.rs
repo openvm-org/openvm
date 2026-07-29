@@ -474,7 +474,7 @@ where
     pub fn load_periphery<A, C>(self, (air, chip): (A, C)) -> Self
     where
         A: AnyAir<SC> + 'static,
-        C: Chip<(), CpuBackend<SC>>,
+        C: Chip<CpuBackend<SC>>,
     {
         let air = Arc::new(air) as AirRef<SC>;
         self.load_periphery_ref((air, chip))
@@ -482,9 +482,9 @@ where
 
     pub fn load_periphery_ref<C>(mut self, (air, chip): (AirRef<SC>, C)) -> Self
     where
-        C: Chip<(), CpuBackend<SC>>,
+        C: Chip<CpuBackend<SC>>,
     {
-        let ctx = chip.generate_proving_ctx(());
+        let ctx = chip.generate_proving_ctx();
         tracing::debug!("Generated air proving context for {}", air.name());
         self.air_ctxs.push((air, ctx));
 
@@ -614,10 +614,10 @@ where
     ) -> Self
     where
         A: AnyAir<SC> + 'static,
-        C: Chip<(), CpuBackend<SC>>,
+        C: Chip<CpuBackend<SC>>,
         P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {
-        let mut ctx = chip.generate_proving_ctx(());
+        let mut ctx = chip.generate_proving_ctx();
         modify_trace(&mut ctx.common_main);
         self.air_ctxs.push((Arc::new(air), ctx));
         self

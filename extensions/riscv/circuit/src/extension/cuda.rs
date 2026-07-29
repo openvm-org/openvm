@@ -485,32 +485,22 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
         );
         if let Some(chip) = chip.downcast_ref::<Arc<VariableRangeCheckerChipGPU>>() {
             return Ok(
-                <Arc<VariableRangeCheckerChipGPU> as Chip<(), GpuBackend>>::generate_proving_ctx(
-                    chip,
-                    (),
-                ),
+                <Arc<VariableRangeCheckerChipGPU> as Chip<GpuBackend>>::generate_proving_ctx(chip),
             );
         }
         if let Some(chip) = chip.downcast_ref::<Arc<BitwiseOperationLookupChipGPU<8>>>() {
             return Ok(<Arc<BitwiseOperationLookupChipGPU<8>> as Chip<
-                (),
                 GpuBackend,
-            >>::generate_proving_ctx(chip, ()));
+            >>::generate_proving_ctx(chip));
         }
         if let Some(chip) = chip.downcast_ref::<Arc<RangeTupleCheckerChipGPU<2>>>() {
             return Ok(
-                <Arc<RangeTupleCheckerChipGPU<2>> as Chip<(), GpuBackend>>::generate_proving_ctx(
-                    chip,
-                    (),
-                ),
+                <Arc<RangeTupleCheckerChipGPU<2>> as Chip<GpuBackend>>::generate_proving_ctx(chip),
             );
         }
         if let Some(chip) = chip.downcast_ref::<Arc<Poseidon2PeripheryChipGPU>>() {
             return Ok(
-                <Arc<Poseidon2PeripheryChipGPU> as Chip<(), GpuBackend>>::generate_proving_ctx(
-                    chip,
-                    (),
-                ),
+                <Arc<Poseidon2PeripheryChipGPU> as Chip<GpuBackend>>::generate_proving_ctx(chip),
             );
         }
 

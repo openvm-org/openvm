@@ -56,8 +56,8 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
     }
 }
 
-impl<const NUM_BITS: usize> Chip<(), GpuBackend> for BitwiseOperationLookupChipGPU<NUM_BITS> {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
+impl<const NUM_BITS: usize> Chip<GpuBackend> for BitwiseOperationLookupChipGPU<NUM_BITS> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
         let num_cols = BitwiseOperationLookupCols::<F, NUM_BITS>::width();
         debug_assert_eq!(
             NUM_BITWISE_OP_LOOKUP_MULT_COLS * Self::num_rows(),

@@ -201,7 +201,7 @@ impl<F: VmField> MemoryController<F> {
         );
 
         vec![
-            boundary_chip.generate_proving_ctx(()),
+            boundary_chip.generate_proving_ctx(),
             merkle_chip.generate_proving_ctx(),
         ]
     }

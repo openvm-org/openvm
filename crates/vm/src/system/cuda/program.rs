@@ -1,6 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
+use openvm_circuit::system::program::ProgramExecutionCols;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 use openvm_cuda_common::{
     copy::MemCopyH2D,
@@ -142,8 +142,11 @@ impl Default for ProgramChipGPU {
     }
 }
 
-impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
-    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
+impl ProgramChipGPU {
+    pub fn generate_proving_ctx(
+        &self,
+        filtered_exec_freqs: Vec<u32>,
+    ) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
         let height = cached.height();
         let filtered_len = filtered_exec_freqs.len();
@@ -197,7 +200,6 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 mod tests {
     use std::sync::Arc;
 
-    use openvm_circuit_primitives::Chip;
     use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::F};
     use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
     use openvm_instructions::{

@@ -71,7 +71,7 @@ impl DeferralCircuitCountChip {
     }
 }
 
-impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for DeferralCircuitCountChip
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for DeferralCircuitCountChip
 where
     Val<SC>: PrimeCharacteristicRing,
 {
@@ -79,7 +79,7 @@ where
         Some(next_power_of_two_or_zero(self.count.len()))
     }
 
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         AirProvingContext::simple_no_pis(self.generate_trace())
     }
 }

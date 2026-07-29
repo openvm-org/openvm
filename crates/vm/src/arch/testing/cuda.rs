@@ -642,12 +642,8 @@ impl GpuChipTestBuilder {
             memory: Some(self.memory),
             ..Default::default()
         }
-        .load(
-            ExecutionDummyAir::new(self.execution.bus()),
-            self.execution,
-            (),
-        )
-        .load(ProgramDummyAir::new(self.program.bus()), self.program, ())
+        .load(ExecutionDummyAir::new(self.execution.bus()), self.execution)
+        .load(ProgramDummyAir::new(self.program.bus()), self.program)
     }
 }
 
@@ -662,12 +658,12 @@ pub struct GpuChipTester {
 }
 
 impl GpuChipTester {
-    pub fn load<A, G, R>(mut self, air: A, gpu_chip: G, input: R) -> Self
+    pub fn load<A, G>(mut self, air: A, gpu_chip: G) -> Self
     where
         A: AnyAir<SC> + 'static,
-        G: Chip<R, GpuBackend>,
+        G: Chip<GpuBackend>,
     {
-        let proving_ctx = gpu_chip.generate_proving_ctx(input);
+        let proving_ctx = gpu_chip.generate_proving_ctx();
         if proving_ctx.height() > 0 {
             self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
@@ -677,9 +673,9 @@ impl GpuChipTester {
     pub fn load_periphery<A, G>(self, air: A, gpu_chip: G) -> Self
     where
         A: AnyAir<SC> + 'static,
-        G: Chip<(), GpuBackend>,
+        G: Chip<GpuBackend>,
     {
-        self.load(air, gpu_chip, ())
+        self.load(air, gpu_chip)
     }
 
     pub fn load_air_proving_ctx(
@@ -947,7 +943,7 @@ impl GpuChipTester {
                         ))
                     }
                 };
-                let ctx = hasher_chip.generate_proving_ctx(());
+                let ctx = hasher_chip.generate_proving_ctx();
                 self = self.load_air_proving_ctx(air, ctx);
             }
         }

@@ -56,8 +56,8 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramTester<Val<SC>> {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for ProgramTester<Val<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
         let width = Self::width();
         let mut values = Val::<SC>::zero_vec(height * width);

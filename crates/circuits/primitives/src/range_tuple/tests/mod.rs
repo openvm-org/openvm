@@ -219,8 +219,8 @@ fn test_cuda_range_tuple() {
         Arc::new(RangeTupleCheckerAir::<TUPLE_SIZE> { bus }),
     ];
     let ctxs = vec![
-        dummy_chip.generate_proving_ctx(()),
-        range_tuple_checker.generate_proving_ctx(()),
+        dummy_chip.generate_proving_ctx(),
+        range_tuple_checker.generate_proving_ctx(),
     ];
 
     test_gpu_engine_small()
@@ -295,8 +295,8 @@ fn test_cuda_range_tuple_hybrid() {
     ];
     let ctxs = vec![
         cpu_proving_ctx,
-        gpu_dummy_chip.generate_proving_ctx(()),
-        range_tuple_checker.generate_proving_ctx(()),
+        gpu_dummy_chip.generate_proving_ctx(),
+        range_tuple_checker.generate_proving_ctx(),
     ];
 
     test_gpu_engine_small()

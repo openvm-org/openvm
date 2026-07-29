@@ -42,11 +42,11 @@ fn test_cuda_deferral_count_tracegen_equivalence() {
     let gpu_chip =
         DeferralCircuitCountChipGpu::new(count, NUM_DEFERRAL_CIRCUITS, device_ctx.clone());
 
-    let cpu_trace = <DeferralCircuitCountChip as Chip<
-        (),
-        CpuBackend<BabyBearPoseidon2Config>,
-    >>::generate_proving_ctx(&cpu_chip, ())
-    .common_main;
+    let cpu_trace =
+        <DeferralCircuitCountChip as Chip<CpuBackend<BabyBearPoseidon2Config>>>::generate_proving_ctx(
+            &cpu_chip,
+        )
+        .common_main;
     let gpu_trace = gpu_chip
         .generate_proving_ctx_direct(NUM_DEFERRAL_CIRCUITS.next_power_of_two())
         .expect("Deferral Count postflight trace generation must succeed")

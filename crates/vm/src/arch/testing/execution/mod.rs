@@ -53,11 +53,11 @@ impl<F: PrimeField32> ExecutionTester<F> {
     }
 }
 
-impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ExecutionTester<Val<SC>>
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for ExecutionTester<Val<SC>>
 where
     Val<SC>: Field,
 {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
         let width = size_of::<DummyExecutionInteractionCols<u8>>();
         let mut values = Val::<SC>::zero_vec(height * width);

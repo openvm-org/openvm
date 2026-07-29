@@ -93,7 +93,7 @@ impl SystemChipInventoryGPU {
         self.connector.cpu_chip.end(to_state, exit_code);
         let connector_ctx = {
             let _span = tracing::info_span!("connector_trace_gen").entered();
-            self.connector.generate_proving_ctx(())
+            self.connector.generate_proving_ctx()
         };
 
         // SAFETY: transcript owns the validated initialized prefix and remains

@@ -66,7 +66,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         cached: Some(cached),
         _marker: std::marker::PhantomData,
     };
-    let ctx = chip.generate_proving_ctx(());
+    let ctx = chip.generate_proving_ctx();
 
     let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
@@ -178,7 +178,7 @@ fn test_program_negative() {
         cached: Some(cached),
         _marker: std::marker::PhantomData,
     };
-    let ctx = chip.generate_proving_ctx(());
+    let ctx = chip.generate_proving_ctx();
 
     let counter_air = DummyInteractionAir::new(7, true, bus.inner.index);
     let mut program_rows = vec![];
@@ -266,7 +266,7 @@ fn direct_frequencies_match_legacy_program_trace() {
         cached: Some(cached.clone()),
         _marker: std::marker::PhantomData,
     }
-    .generate_proving_ctx(());
+    .generate_proving_ctx();
     let direct_chip = ProgramChip {
         filtered_exec_frequencies: vec![99; frequencies.len()],
         cached: Some(cached),

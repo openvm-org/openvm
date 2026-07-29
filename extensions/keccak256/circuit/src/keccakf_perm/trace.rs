@@ -28,13 +28,13 @@ pub struct KeccakfPermChip {
     pub(crate) shared_preimages: Arc<Mutex<Vec<KeccakfPreimage>>>,
 }
 
-impl<SC> Chip<(), CpuBackend<SC>> for KeccakfPermChip
+impl<SC> Chip<CpuBackend<SC>> for KeccakfPermChip
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
     /// Generates the trace and clears the shared preimage handoff.
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let preimages = std::mem::take(&mut *self.shared_preimages.lock().unwrap());
         AirProvingContext::simple_no_pis(generate_trace_from_preimages::<Val<SC>>(&preimages))
     }

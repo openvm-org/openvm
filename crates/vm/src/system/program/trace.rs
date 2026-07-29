@@ -28,10 +28,10 @@ use crate::{
     },
 };
 
-impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
     /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         self.generate_proving_ctx_with_frequencies(&self.filtered_exec_frequencies)
     }
 }

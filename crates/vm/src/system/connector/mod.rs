@@ -277,12 +277,12 @@ impl VmConnectorChip {
     }
 }
 
-impl<SC> Chip<(), CpuBackend<SC>> for VmConnectorChip
+impl<SC> Chip<CpuBackend<SC>> for VmConnectorChip
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let [initial_state, final_state] = self.boundary_states.map(|state| {
             let mut state = state.unwrap();
             // Decompose and range check timestamp

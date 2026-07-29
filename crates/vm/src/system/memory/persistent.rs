@@ -347,13 +347,13 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
     }
 }
 
-impl<const DIGEST_WIDTH: usize, SC> Chip<(), CpuBackend<SC>>
+impl<const DIGEST_WIDTH: usize, SC> Chip<CpuBackend<SC>>
     for PersistentBoundaryChip<Val<SC>, DIGEST_WIDTH>
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let trace = {
             let touched_labels = self
                 .touched_labels

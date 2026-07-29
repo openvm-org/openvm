@@ -969,7 +969,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         AirProvingContext::simple(merkle_trace, merkle_pvs),
     ));
     ctx.per_trace
-        .push((poseidon2_air_id, poseidon2_chip.generate_proving_ctx(())));
+        .push((poseidon2_air_id, poseidon2_chip.generate_proving_ctx()));
     ctx.per_trace.sort_by_key(|(id, _)| *id);
 
     let proof = vm.engine.prove(vm.pk(), ctx).unwrap();

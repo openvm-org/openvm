@@ -160,7 +160,7 @@ fn poseidon2_periphery_duplicate_hashes_test() {
 fn poseidon2_periphery_empty_trace() {
     let chip = Poseidon2PeripheryBaseChip::<BabyBear, 1>::new(Poseidon2Config::default());
     for _ in 0..2 {
-        let ctx: AirProvingContext<CpuBackend<TestSC>> = chip.generate_proving_ctx(());
+        let ctx: AirProvingContext<CpuBackend<TestSC>> = chip.generate_proving_ctx();
         assert_eq!(
             ctx.common_main.height(),
             0,

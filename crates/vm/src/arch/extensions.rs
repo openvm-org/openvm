@@ -612,7 +612,7 @@ where
 
     /// Adds a chip that is not associated with any executor, as defined by the
     /// [VmExecutionExtension] trait.
-    pub fn add_periphery_chip<C: Chip<(), PB> + 'static>(&mut self, chip: C) {
+    pub fn add_periphery_chip<C: Chip<PB> + 'static>(&mut self, chip: C) {
         let constant_trace_height = chip.constant_trace_height();
         self.add_periphery_chip_with_height(chip, constant_trace_height);
     }
@@ -640,7 +640,7 @@ where
     /// Adds a periphery chip with its record-free CPU trace generator.
     pub fn add_postflight_periphery_chip<C, G>(&mut self, chip: C, generate: G)
     where
-        C: Chip<(), PB> + 'static,
+        C: Chip<PB> + 'static,
         G: for<'a> Fn(
                 &C,
                 &Postflight<'a, PB::Val>,

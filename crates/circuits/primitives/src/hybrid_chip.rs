@@ -16,12 +16,12 @@ pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<Gener
 }
 
 // Wraps a CPU chip for use with GpuBackend
-pub struct HybridChip<C: Chip<(), CpuBackend<SC>>> {
+pub struct HybridChip<C: Chip<CpuBackend<SC>>> {
     pub cpu_chip: C,
     pub device_ctx: GpuDeviceCtx,
 }
 
-impl<C: Chip<(), CpuBackend<SC>>> HybridChip<C> {
+impl<C: Chip<CpuBackend<SC>>> HybridChip<C> {
     pub fn new(cpu_chip: C, device_ctx: GpuDeviceCtx) -> Self {
         Self {
             cpu_chip,
@@ -30,9 +30,9 @@ impl<C: Chip<(), CpuBackend<SC>>> HybridChip<C> {
     }
 }
 
-impl<C: Chip<(), CpuBackend<SC>>> Chip<(), GpuBackend> for HybridChip<C> {
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<GpuBackend> {
-        let ctx = self.cpu_chip.generate_proving_ctx(());
+impl<C: Chip<CpuBackend<SC>>> Chip<GpuBackend> for HybridChip<C> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
+        let ctx = self.cpu_chip.generate_proving_ctx();
         cpu_proving_ctx_to_gpu(ctx, &self.device_ctx)
     }
 }

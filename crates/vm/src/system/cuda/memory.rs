@@ -603,7 +603,7 @@ impl MemoryInventoryGPU {
         mem.tracing_info("boundary tracegen");
         let ret = {
             let _span = tracing::info_span!("boundary_trace_gen").entered();
-            vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx]
+            vec![self.boundary.generate_proving_ctx(), merkle_proof_ctx]
         };
         mem.tracing_info("dropping merkle tree");
         {
