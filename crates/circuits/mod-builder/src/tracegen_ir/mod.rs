@@ -13,42 +13,50 @@ mod tests;
 use abi::*;
 pub use compiler::{compile_tracegen_ir, TracegenCompileError};
 
-/// Value-phase operations over `K`-word Montgomery field elements.
+/// Operations that compute field-variable values during trace generation.
+///
+/// The CUDA interpreter executes this tape over `K`-word Montgomery field elements, reducing
+/// arithmetic modulo the configured prime. Its results populate the variable columns later used
+/// by the witness phase and exposed as instruction outputs.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u32)]
-pub enum ValueOpcode {
+pub enum EvalOpcode {
     #[default]
-    LoadInput = VOP_LOAD_INPUT,
-    Constant = VOP_CONST,
-    Add = VOP_ADD,
-    Sub = VOP_SUB,
-    Mul = VOP_MUL,
-    Div = VOP_DIV,
-    IntAdd = VOP_INTADD,
-    IntMul = VOP_INTMUL,
-    Select = VOP_SELECT,
-    SaveVar = VOP_SAVE_VAR,
+    LoadInput = EVAL_OP_LOAD_INPUT,
+    Constant = EVAL_OP_CONST,
+    Add = EVAL_OP_ADD,
+    Sub = EVAL_OP_SUB,
+    Mul = EVAL_OP_MUL,
+    Div = EVAL_OP_DIV,
+    IntAdd = EVAL_OP_INTADD,
+    IntMul = EVAL_OP_INTMUL,
+    Select = EVAL_OP_SELECT,
+    SaveVar = EVAL_OP_SAVE_VAR,
 }
 
-/// Limb-phase operations over signed vectors in the scratch arena.
+/// Operations that generate witnesses proving the evaluated field variables are correct.
+///
+/// The CUDA interpreter executes one such tape per constraint using unreduced signed limb
+/// arithmetic. The resulting integer expression is used to derive the quotient and carry columns
+/// that prove it is zero modulo the configured prime.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u32)]
-pub enum LimbOpcode {
+pub enum WitnessOpcode {
     #[default]
-    Input = LOP_INPUT,
-    Var = LOP_VAR,
-    Constant = LOP_CONST,
-    Add = LOP_ADD,
-    Sub = LOP_SUB,
-    Mul = LOP_MUL,
-    IntAdd = LOP_INTADD,
-    IntMul = LOP_INTMUL,
-    Select = LOP_SELECT,
+    Input = WITNESS_OP_INPUT,
+    Var = WITNESS_OP_VAR,
+    Constant = WITNESS_OP_CONST,
+    Add = WITNESS_OP_ADD,
+    Sub = WITNESS_OP_SUB,
+    Mul = WITNESS_OP_MUL,
+    IntAdd = WITNESS_OP_INTADD,
+    IntMul = WITNESS_OP_INTMUL,
+    Select = WITNESS_OP_SELECT,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ValueOp {
-    pub opcode: ValueOpcode,
+pub struct EvalOp {
+    pub opcode: EvalOpcode,
     pub flag: u32,
     pub dst: u32,
     pub a: u32,
@@ -56,8 +64,8 @@ pub struct ValueOp {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct LimbOp {
-    pub opcode: LimbOpcode,
+pub struct WitnessOp {
+    pub opcode: WitnessOpcode,
     pub flag: u32,
     pub dst_off: u32,
     pub dst_len: u32,
@@ -97,9 +105,9 @@ pub struct TracegenIr {
     /// Trace sub-row width (must equal `BaseAir::width(&expr)`).
     width: usize,
 
-    value_ops: Vec<ValueOp>,
-    num_value_slots: usize,
-    limb_ops: Vec<LimbOp>,
+    eval_ops: Vec<EvalOp>,
+    num_eval_slots: usize,
+    witness_ops: Vec<WitnessOp>,
     scratch_len: usize,
     constraints: Vec<ConstraintMeta>,
 
@@ -113,9 +121,10 @@ pub struct TracegenIr {
     /// Prime as `ceil(p.bits()/limb_bits)` canonical limbs (matches `prime_overflow`).
     p8: Vec<i32>,
 
-    /// Montgomery-form payload for VOP_CONST / VOP_INTADD / VOP_INTMUL (K limbs each).
+    /// Montgomery-form payload for EVAL_OP_CONST / EVAL_OP_INTADD / EVAL_OP_INTMUL
+    /// (K limbs each).
     mont_payload: Vec<u32>,
-    /// Limb payload for LOP_CONST (concatenated, offsets stored in op.b_off).
+    /// Limb payload for WITNESS_OP_CONST (concatenated, offsets stored in op.a_off).
     const_limbs_payload: Vec<i32>,
 
     /// Opcode -> flags mapping (from FieldExpressionFiller): position of the record's
@@ -131,6 +140,6 @@ impl TracegenIr {
 
     #[cfg(feature = "cuda")]
     pub(crate) fn aux_words(&self) -> usize {
-        (self.num_value_slots + self.num_vars) * self.k + self.scratch_len + 4 * self.k
+        (self.num_eval_slots + self.num_vars) * self.k + self.scratch_len + 4 * self.k
     }
 }

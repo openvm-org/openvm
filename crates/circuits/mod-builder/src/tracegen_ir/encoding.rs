@@ -1,4 +1,19 @@
-//! Flat encoding consumed by the CUDA interpreter.
+//! Flat `u32` encoding consumed by the CUDA trace-generation interpreter.
+//!
+//! [`TracegenIr`] is serialized as one self-describing blob:
+//!
+//! ```text
+//! [header | eval ops | witness ops | constraints | field constants | payloads | opcode table]
+//! ```
+//!
+//! The fixed-size header contains dimensions, section counts, and absolute word offsets into the
+//! blob. Evaluation operations occupy five words, witness operations occupy nine words, and
+//! constraint metadata occupies eight words per constraint. The remaining sections contain
+//! variable-length field constants, Montgomery values, signed limb values, and opcode-to-flag
+//! mappings. Signed `i32` values are stored by preserving their bit pattern in a `u32`.
+//!
+//! The constants generated from `tracegen_abi.def` define the header indices and opcode values
+//! shared by this encoder and the CUDA decoder, so changing the layout requires updating that ABI.
 
 use super::{abi::*, TracegenIr};
 
@@ -14,21 +29,21 @@ impl TracegenIr {
         blob[H_NUM_FLAGS as usize] = self.num_flags as u32;
         blob[H_NEEDS_SETUP as usize] = self.needs_setup as u32;
         blob[H_WIDTH as usize] = self.width as u32;
-        blob[H_NUM_SLOTS as usize] = self.num_value_slots as u32;
-        blob[H_N_VOPS as usize] = self.value_ops.len() as u32;
-        blob[H_N_LOPS as usize] = self.limb_ops.len() as u32;
+        blob[H_NUM_SLOTS as usize] = self.num_eval_slots as u32;
+        blob[H_N_EVAL_OPS as usize] = self.eval_ops.len() as u32;
+        blob[H_N_WITNESS_OPS as usize] = self.witness_ops.len() as u32;
         blob[H_N_CONS as usize] = self.constraints.len() as u32;
         blob[H_SCRATCH_LEN as usize] = self.scratch_len as u32;
         blob[H_P8_LEN as usize] = self.p8.len() as u32;
         blob[H_N_LOCAL_OPS as usize] = self.local_opcode_idx.len() as u32;
         blob[H_N_OP_FLAGS as usize] = self.opcode_flag_idx.len() as u32;
 
-        blob[H_OFF_VOPS as usize] = blob.len() as u32;
-        for op in &self.value_ops {
+        blob[H_OFF_EVAL_OPS as usize] = blob.len() as u32;
+        for op in &self.eval_ops {
             blob.extend([op.opcode as u32, op.flag, op.dst, op.a, op.b]);
         }
-        blob[H_OFF_LOPS as usize] = blob.len() as u32;
-        for op in &self.limb_ops {
+        blob[H_OFF_WITNESS_OPS as usize] = blob.len() as u32;
+        for op in &self.witness_ops {
             blob.extend([
                 op.opcode as u32,
                 op.flag,

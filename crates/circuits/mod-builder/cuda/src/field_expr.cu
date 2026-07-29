@@ -21,9 +21,11 @@ static constexpr uint32_t MB_BB_P = 0x78000001u; // canonical arithmetic on carr
 
 struct FieldExprProg {
     int num_limbs, limb_bits, k, num_input, num_vars, num_flags, needs_setup, width;
-    int num_slots, n_vops, n_lops, n_cons, scratch_len, p8_len, n_local_ops, n_op_flags;
+    int num_slots, n_eval_ops, n_witness_ops, n_cons, scratch_len, p8_len;
+    int n_local_ops, n_op_flags;
     uint32_t mprime;
-    const uint32_t *vops, *lops, *cons, *p, *r2, *pm2, *pinv, *p8, *mont, *climbs, *optab;
+    const uint32_t *eval_ops, *witness_ops, *cons, *p, *r2, *pm2, *pinv, *p8;
+    const uint32_t *mont, *climbs, *optab;
 };
 #define Prog FieldExprProg
 
@@ -33,11 +35,13 @@ __device__ __forceinline__ FieldExprProg load_prog(const uint32_t *blob) {
     s.num_input = blob[H_NUM_INPUT]; s.num_vars = blob[H_NUM_VARS];
     s.num_flags = blob[H_NUM_FLAGS]; s.needs_setup = blob[H_NEEDS_SETUP];
     s.width = blob[H_WIDTH]; s.num_slots = blob[H_NUM_SLOTS];
-    s.n_vops = blob[H_N_VOPS]; s.n_lops = blob[H_N_LOPS]; s.n_cons = blob[H_N_CONS];
+    s.n_eval_ops = blob[H_N_EVAL_OPS]; s.n_witness_ops = blob[H_N_WITNESS_OPS];
+    s.n_cons = blob[H_N_CONS];
     s.scratch_len = blob[H_SCRATCH_LEN]; s.p8_len = blob[H_P8_LEN];
     s.n_local_ops = blob[H_N_LOCAL_OPS]; s.n_op_flags = blob[H_N_OP_FLAGS];
     s.mprime = blob[H_MPRIME];
-    s.vops = blob + blob[H_OFF_VOPS]; s.lops = blob + blob[H_OFF_LOPS];
+    s.eval_ops = blob + blob[H_OFF_EVAL_OPS];
+    s.witness_ops = blob + blob[H_OFF_WITNESS_OPS];
     s.cons = blob + blob[H_OFF_CONS]; s.p = blob + blob[H_OFF_P];
     s.r2 = blob + blob[H_OFF_R2]; s.pm2 = blob + blob[H_OFF_PM2];
     s.pinv = blob + blob[H_OFF_PINV]; s.p8 = blob + blob[H_OFF_P8];
@@ -182,18 +186,18 @@ __device__ void field_expr_fill_core_row(
         }
     }
 
-    // ---- value phase ----
+    // ---- evaluation phase ----
     uint32_t one[TRACEGEN_MAX_K];
     for (int j = 0; j < k; j++) one[j] = j == 0 ? 1 : 0;
     for (int i = 0; i < s.num_slots * k; i++) slots[i] = 0;
-    for (int io = 0; io < s.n_vops; io++) {
-        const uint32_t *op = s.vops + 5 * io;
+    for (int io = 0; io < s.n_eval_ops; io++) {
+        const uint32_t *op = s.eval_ops + 5 * io;
         const uint32_t opc = op[0], flag = op[1], dst = op[2], a = op[3], b = op[4];
         uint32_t *d = slots + dst * k;
         const uint32_t *pa = slots + a * k;
         const uint32_t *pb = slots + b * k;
         switch (opc) {
-            case VOP_LOAD_INPUT: {
+            case EVAL_OP_LOAD_INPUT: {
                 uint32_t canon[TRACEGEN_MAX_K];
                 for (int j = 0; j < k; j++) canon[j] = 0;
                 if (!is_dummy) {
@@ -204,26 +208,26 @@ __device__ void field_expr_fill_core_row(
                 mont_mul(s, canon, s.r2, d);
                 break;
             }
-            case VOP_CONST:
+            case EVAL_OP_CONST:
                 for (int j = 0; j < k; j++) d[j] = s.mont[a * k + j];
                 break;
-            case VOP_ADD: add_mod(s, pa, pb, d); break;
-            case VOP_SUB: sub_mod(s, pa, pb, d); break;
-            case VOP_MUL: mont_mul(s, pa, pb, d); break;
-            case VOP_DIV: {
+            case EVAL_OP_ADD: add_mod(s, pa, pb, d); break;
+            case EVAL_OP_SUB: sub_mod(s, pa, pb, d); break;
+            case EVAL_OP_MUL: mont_mul(s, pa, pb, d); break;
+            case EVAL_OP_DIV: {
                 uint32_t inv[TRACEGEN_MAX_K];
                 mont_inv(s, pb, inv);
                 mont_mul(s, pa, inv, d);
                 break;
             }
-            case VOP_INTADD: add_mod(s, pa, s.mont + b * k, d); break;
-            case VOP_INTMUL: mont_mul(s, pa, s.mont + b * k, d); break;
-            case VOP_SELECT: {
+            case EVAL_OP_INTADD: add_mod(s, pa, s.mont + b * k, d); break;
+            case EVAL_OP_INTMUL: mont_mul(s, pa, s.mont + b * k, d); break;
+            case EVAL_OP_SELECT: {
                 const uint32_t *src = flags[flag] ? pa : pb;
                 for (int j = 0; j < k; j++) d[j] = src[j];
                 break;
             }
-            case VOP_SAVE_VAR:
+            case EVAL_OP_SAVE_VAR:
                 mont_mul(s, pb, one, var_canon + a * k);
                 for (int j = 0; j < k; j++) d[j] = pb[j];
                 break;
@@ -243,7 +247,7 @@ __device__ void field_expr_fill_core_row(
             if (!is_dummy) rc.add_count(limb, lb);
         }
 
-    // ---- constraint phase ----
+    // ---- witness phase ----
     size_t carry_col = col;
     for (int ci = 0; ci < s.n_cons; ci++) carry_col += (s.cons + 8 * ci)[4];
     for (int ci = 0; ci < s.n_cons; ci++) {
@@ -253,33 +257,33 @@ __device__ void field_expr_fill_core_row(
         const uint32_t carry_min_abs = c[6], carry_bits = c[7];
 
         for (uint32_t io = 0; io < tape_len; io++) {
-            const uint32_t *op = s.lops + 9 * (tape_start + io);
+            const uint32_t *op = s.witness_ops + 9 * (tape_start + io);
             const uint32_t opc = op[0], flag = op[1];
             const uint32_t d = op[2], dl = op[3], ao = op[4], al = op[5], bo = op[6], bl = op[7];
             const int32_t imm = (int32_t)op[8];
             switch (opc) {
-                case LOP_INPUT:
+                case WITNESS_OP_INPUT:
                     for (uint32_t i = 0; i < dl; i++)
                         scratch[d + i] = is_dummy ? 0 : (int32_t)in_limbs[ao * nl + i];
                     break;
-                case LOP_VAR:
+                case WITNESS_OP_VAR:
                     for (uint32_t i = 0; i < dl; i++)
                         scratch[d + i] =
                             (int32_t)((var_canon[ao * k + i / 4] >> ((i % 4) * 8)) & 0xff);
                     break;
-                case LOP_CONST:
+                case WITNESS_OP_CONST:
                     for (uint32_t i = 0; i < dl; i++)
                         scratch[d + i] = (int32_t)s.climbs[ao + i];
                     break;
-                case LOP_ADD:
-                case LOP_SUB:
+                case WITNESS_OP_ADD:
+                case WITNESS_OP_SUB:
                     for (uint32_t i = 0; i < dl; i++) {
                         int32_t a = i < al ? scratch[ao + i] : 0;
                         int32_t b = i < bl ? scratch[bo + i] : 0;
-                        scratch[d + i] = opc == LOP_ADD ? a + b : a - b;
+                        scratch[d + i] = opc == WITNESS_OP_ADD ? a + b : a - b;
                     }
                     break;
-                case LOP_MUL:
+                case WITNESS_OP_MUL:
                     for (int32_t i = (int32_t)dl - 1; i >= 0; i--) {
                         int64_t acc = 0;
                         int32_t lo = i - (int32_t)bl + 1 < 0 ? 0 : i - (int32_t)bl + 1;
@@ -289,15 +293,15 @@ __device__ void field_expr_fill_core_row(
                         scratch[d + i] = (int32_t)acc;
                     }
                     break;
-                case LOP_INTADD:
+                case WITNESS_OP_INTADD:
                     for (uint32_t i = 0; i < dl; i++) scratch[d + i] = scratch[ao + i];
                     scratch[d] += imm;
                     break;
-                case LOP_INTMUL:
+                case WITNESS_OP_INTMUL:
                     for (uint32_t i = 0; i < dl; i++)
                         scratch[d + i] = scratch[ao + i] * imm;
                     break;
-                case LOP_SELECT: {
+                case WITNESS_OP_SELECT: {
                     const uint32_t src = flags[flag] ? ao : bo;
                     const uint32_t sl = flags[flag] ? al : bl;
                     for (uint32_t i = 0; i < dl; i++)

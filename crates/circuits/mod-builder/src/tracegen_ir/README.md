@@ -20,14 +20,14 @@
 │  • lowers expression trees into linear operation tapes      │
 │  • derives Montgomery constants                             │
 │  • calculates quotient and carry bounds                     │
-│  • allocates value slots and per-constraint scratch space   │
+│  • allocates evaluation slots and witness scratch space     │
 └──────────────────────────────┬──────────────────────────────┘
                                │ Result<TracegenIr, Error>
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                        TracegenIr                           │
 │                                                             │
-│  Value tape                         Limb tapes              │
+│  Evaluation tape                    Witness tapes           │
 │  ──────────                         ──────────               │
 │  LoadInput / Constant               Input / Var / Constant  │
 │  Add / Sub / Mul / Div              Add / Sub               │
@@ -59,8 +59,8 @@
 │  One thread per trace row:                                  │
 │                                                             │
 │  1. Decode opcode/inputs                                    │
-│  2. Execute value tape                                      │
-│  3. Execute limb tapes                                      │
+│  2. Execute evaluation tape                                 │
+│  3. Execute witness tapes                                   │
 │  4. Calculate q and carries                                 │
 │  5. Emit range checks                                       │
 │  6. Write trace columns                                     │

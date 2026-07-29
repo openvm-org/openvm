@@ -5,7 +5,7 @@
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 
-use super::{abi::*, ConstraintMeta, LimbOp, LimbOpcode, TracegenIr, ValueOp, ValueOpcode};
+use super::{abi::*, ConstraintMeta, EvalOp, EvalOpcode, TracegenIr, WitnessOp, WitnessOpcode};
 use crate::{ExprBuilder, FieldExpr, SymbolicExpr};
 
 fn biguint_to_u32s(x: &BigUint, k: usize) -> Vec<u32> {
@@ -18,10 +18,10 @@ fn biguint_to_u32s(x: &BigUint, k: usize) -> Vec<u32> {
 struct TracegenCompiler<'a> {
     builder: &'a ExprBuilder,
     k: usize,
-    value_ops: Vec<ValueOp>,
+    eval_ops: Vec<EvalOp>,
     next_slot: usize,
     mont_payload: Vec<u32>,
-    limb_ops: Vec<LimbOp>,
+    witness_ops: Vec<WitnessOp>,
     scratch_top: u32,
     const_limbs_payload: Vec<i32>,
     r: BigUint, // 2^(32K) mod p
@@ -47,8 +47,8 @@ impl<'a> TracegenCompiler<'a> {
         }
     }
 
-    /// Emit value ops computing `node`, returning the slot holding the result.
-    fn emit_value(&mut self, node: &SymbolicExpr) -> u32 {
+    /// Emit evaluation ops computing `node`, returning the slot holding the result.
+    fn emit_eval(&mut self, node: &SymbolicExpr) -> u32 {
         let alloc = |s: &mut Self| {
             let slot = s.next_slot;
             s.next_slot += 1;
@@ -63,8 +63,8 @@ impl<'a> TracegenCompiler<'a> {
                 let val = self.builder.constants[*i].0.clone();
                 let payload = self.push_mont_payload(&val);
                 let dst = alloc(self);
-                self.value_ops.push(ValueOp {
-                    opcode: ValueOpcode::Constant,
+                self.eval_ops.push(EvalOp {
+                    opcode: EvalOpcode::Constant,
                     dst,
                     a: payload,
                     ..Default::default()
@@ -75,16 +75,16 @@ impl<'a> TracegenCompiler<'a> {
             | SymbolicExpr::Sub(l, r2)
             | SymbolicExpr::Mul(l, r2)
             | SymbolicExpr::Div(l, r2) => {
-                let a = self.emit_value(l);
-                let b = self.emit_value(r2);
+                let a = self.emit_eval(l);
+                let b = self.emit_eval(r2);
                 let opcode = match node {
-                    SymbolicExpr::Add(..) => ValueOpcode::Add,
-                    SymbolicExpr::Sub(..) => ValueOpcode::Sub,
-                    SymbolicExpr::Mul(..) => ValueOpcode::Mul,
-                    _ => ValueOpcode::Div,
+                    SymbolicExpr::Add(..) => EvalOpcode::Add,
+                    SymbolicExpr::Sub(..) => EvalOpcode::Sub,
+                    SymbolicExpr::Mul(..) => EvalOpcode::Mul,
+                    _ => EvalOpcode::Div,
                 };
                 let dst = alloc(self);
-                self.value_ops.push(ValueOp {
+                self.eval_ops.push(EvalOp {
                     opcode,
                     dst,
                     a,
@@ -94,16 +94,16 @@ impl<'a> TracegenCompiler<'a> {
                 dst
             }
             SymbolicExpr::IntAdd(l, s) | SymbolicExpr::IntMul(l, s) => {
-                let a = self.emit_value(l);
+                let a = self.emit_eval(l);
                 let imm = self.imm_to_field(*s);
                 let payload = self.push_mont_payload(&imm);
                 let opcode = if matches!(node, SymbolicExpr::IntAdd(..)) {
-                    ValueOpcode::IntAdd
+                    EvalOpcode::IntAdd
                 } else {
-                    ValueOpcode::IntMul
+                    EvalOpcode::IntMul
                 };
                 let dst = alloc(self);
-                self.value_ops.push(ValueOp {
+                self.eval_ops.push(EvalOp {
                     opcode,
                     dst,
                     a,
@@ -113,11 +113,11 @@ impl<'a> TracegenCompiler<'a> {
                 dst
             }
             SymbolicExpr::Select(flag, l, r2) => {
-                let a = self.emit_value(l);
-                let b = self.emit_value(r2);
+                let a = self.emit_eval(l);
+                let b = self.emit_eval(r2);
                 let dst = alloc(self);
-                self.value_ops.push(ValueOp {
-                    opcode: ValueOpcode::Select,
+                self.eval_ops.push(EvalOp {
+                    opcode: EvalOpcode::Select,
                     flag: *flag as u32,
                     dst,
                     a,
@@ -128,8 +128,8 @@ impl<'a> TracegenCompiler<'a> {
         }
     }
 
-    /// Emit limb ops computing `node`; returns (scratch_off, len).
-    fn emit_limb(&mut self, node: &SymbolicExpr) -> (u32, u32) {
+    /// Emit witness ops computing `node`; returns (scratch_off, len).
+    fn emit_witness(&mut self, node: &SymbolicExpr) -> (u32, u32) {
         let num_limbs = self.builder.num_limbs;
         let alloc = |s: &mut Self, len: u32| {
             let off = s.scratch_top;
@@ -139,8 +139,8 @@ impl<'a> TracegenCompiler<'a> {
         match node {
             SymbolicExpr::Input(i) => {
                 let off = alloc(self, num_limbs as u32);
-                self.limb_ops.push(LimbOp {
-                    opcode: LimbOpcode::Input,
+                self.witness_ops.push(WitnessOp {
+                    opcode: WitnessOpcode::Input,
                     dst_off: off,
                     dst_len: num_limbs as u32,
                     a_off: *i as u32,
@@ -150,8 +150,8 @@ impl<'a> TracegenCompiler<'a> {
             }
             SymbolicExpr::Var(i) => {
                 let off = alloc(self, num_limbs as u32);
-                self.limb_ops.push(LimbOp {
-                    opcode: LimbOpcode::Var,
+                self.witness_ops.push(WitnessOp {
+                    opcode: WitnessOpcode::Var,
                     dst_off: off,
                     dst_len: num_limbs as u32,
                     a_off: *i as u32,
@@ -166,8 +166,8 @@ impl<'a> TracegenCompiler<'a> {
                 self.const_limbs_payload
                     .extend(limbs.iter().map(|&x| x as i32));
                 let off = alloc(self, *nl as u32);
-                self.limb_ops.push(LimbOp {
-                    opcode: LimbOpcode::Constant,
+                self.witness_ops.push(WitnessOp {
+                    opcode: WitnessOpcode::Constant,
                     dst_off: off,
                     dst_len: *nl as u32,
                     a_off: payload,
@@ -176,15 +176,15 @@ impl<'a> TracegenCompiler<'a> {
                 (off, *nl as u32)
             }
             SymbolicExpr::Add(l, r) | SymbolicExpr::Sub(l, r) => {
-                let (ao, al) = self.emit_limb(l);
-                let (bo, bl) = self.emit_limb(r);
+                let (ao, al) = self.emit_witness(l);
+                let (bo, bl) = self.emit_witness(r);
                 let len = al.max(bl);
                 let off = alloc(self, len);
-                self.limb_ops.push(LimbOp {
+                self.witness_ops.push(WitnessOp {
                     opcode: if matches!(node, SymbolicExpr::Add(..)) {
-                        LimbOpcode::Add
+                        WitnessOpcode::Add
                     } else {
-                        LimbOpcode::Sub
+                        WitnessOpcode::Sub
                     },
                     dst_off: off,
                     dst_len: len,
@@ -197,12 +197,12 @@ impl<'a> TracegenCompiler<'a> {
                 (off, len)
             }
             SymbolicExpr::Mul(l, r) => {
-                let (ao, al) = self.emit_limb(l);
-                let (bo, bl) = self.emit_limb(r);
+                let (ao, al) = self.emit_witness(l);
+                let (bo, bl) = self.emit_witness(r);
                 let len = al + bl - 1;
                 let off = alloc(self, len);
-                self.limb_ops.push(LimbOp {
-                    opcode: LimbOpcode::Mul,
+                self.witness_ops.push(WitnessOp {
+                    opcode: WitnessOpcode::Mul,
                     dst_off: off,
                     dst_len: len,
                     a_off: ao,
@@ -214,13 +214,13 @@ impl<'a> TracegenCompiler<'a> {
                 (off, len)
             }
             SymbolicExpr::IntAdd(l, s) | SymbolicExpr::IntMul(l, s) => {
-                let (ao, al) = self.emit_limb(l);
+                let (ao, al) = self.emit_witness(l);
                 let off = alloc(self, al);
-                self.limb_ops.push(LimbOp {
+                self.witness_ops.push(WitnessOp {
                     opcode: if matches!(node, SymbolicExpr::IntAdd(..)) {
-                        LimbOpcode::IntAdd
+                        WitnessOpcode::IntAdd
                     } else {
-                        LimbOpcode::IntMul
+                        WitnessOpcode::IntMul
                     },
                     dst_off: off,
                     dst_len: al,
@@ -232,12 +232,12 @@ impl<'a> TracegenCompiler<'a> {
                 (off, al)
             }
             SymbolicExpr::Select(flag, l, r) => {
-                let (ao, al) = self.emit_limb(l);
-                let (bo, bl) = self.emit_limb(r);
+                let (ao, al) = self.emit_witness(l);
+                let (bo, bl) = self.emit_witness(r);
                 let len = al.max(bl);
                 let off = alloc(self, len);
-                self.limb_ops.push(LimbOp {
-                    opcode: LimbOpcode::Select,
+                self.witness_ops.push(WitnessOp {
+                    opcode: WitnessOpcode::Select,
                     flag: *flag as u32,
                     dst_off: off,
                     dst_len: len,
@@ -341,10 +341,10 @@ pub fn compile_tracegen_ir(
     let mut ser = TracegenCompiler {
         builder: b,
         k,
-        value_ops: vec![],
+        eval_ops: vec![],
         next_slot: b.num_input + b.num_variables,
         mont_payload: vec![],
-        limb_ops: vec![],
+        witness_ops: vec![],
         scratch_top: 0,
         const_limbs_payload: vec![],
         r: r.clone(),
@@ -352,18 +352,18 @@ pub fn compile_tracegen_ir(
 
     // Load inputs once into their preassigned slots.
     for i in 0..b.num_input {
-        ser.value_ops.push(ValueOp {
-            opcode: ValueOpcode::LoadInput,
+        ser.eval_ops.push(EvalOp {
+            opcode: EvalOpcode::LoadInput,
             dst: i as u32,
             a: i as u32,
             ..Default::default()
         });
     }
-    // Value phase: compute each variable in order (computes[i] may reference vars < i).
+    // Evaluation phase: compute each variable in order (computes[i] may reference vars < i).
     for (i, compute) in b.computes.iter().enumerate() {
-        let src = ser.emit_value(compute);
-        ser.value_ops.push(ValueOp {
-            opcode: ValueOpcode::SaveVar,
+        let src = ser.emit_eval(compute);
+        ser.eval_ops.push(EvalOp {
+            opcode: EvalOpcode::SaveVar,
             dst: (b.num_input + i) as u32,
             a: i as u32,
             b: src,
@@ -371,7 +371,7 @@ pub fn compile_tracegen_ir(
         });
     }
 
-    // Constraint phase tapes + carry params via data-independent bound propagation.
+    // Witness phase tapes + carry params via data-independent bound propagation.
     use openvm_circuit_primitives::bigint::{
         check_carry_to_zero::get_carry_max_abs_and_bits, OverflowInt,
     };
@@ -400,9 +400,9 @@ pub fn compile_tracegen_ir(
     for (i, constraint) in b.constraints.iter().enumerate() {
         // Constraint tapes execute sequentially, so they can share the same scratch arena.
         ser.scratch_top = 0;
-        let tape_start = ser.limb_ops.len();
-        let (result_off, result_len) = ser.emit_limb(constraint);
-        let tape_len = ser.limb_ops.len() - tape_start;
+        let tape_start = ser.witness_ops.len();
+        let (result_off, result_len) = ser.emit_witness(constraint);
+        let tape_len = ser.witness_ops.len() - tape_start;
         scratch_len = scratch_len.max(ser.scratch_top as usize);
 
         // Bound propagation only (limb values are zeros; bounds are data independent).
@@ -461,9 +461,9 @@ pub fn compile_tracegen_ir(
         num_flags: b.num_flags,
         needs_setup: b.needs_setup(),
         width,
-        num_value_slots: ser.next_slot,
-        value_ops: ser.value_ops,
-        limb_ops: ser.limb_ops,
+        num_eval_slots: ser.next_slot,
+        eval_ops: ser.eval_ops,
+        witness_ops: ser.witness_ops,
         scratch_len,
         constraints,
         p_u32,
