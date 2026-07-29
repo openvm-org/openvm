@@ -68,18 +68,21 @@ mod tests {
         test_vectors
     }
 
-    fn test_keccak256_base(test_vector_file_name: &str, prove: bool) -> Result<()> {
-        let config = Keccak256Rv64Config::default();
-        let elf =
-            build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
-        let openvm_exe = VmExe::from_elf(
+    fn build_program(name: &str, config: &Keccak256Rv64Config) -> Result<VmExe<F>> {
+        let elf = build_example_program_at_path(get_programs_dir!("tests/programs"), name, config)?;
+        Ok(VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Keccak256TranspilerExtension)
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
-        )?;
+        )?)
+    }
+
+    fn test_keccak256_base(test_vector_file_name: &str, prove: bool) -> Result<()> {
+        let config = Keccak256Rv64Config::default();
+        let openvm_exe = build_program("keccak", &config)?;
 
         let test_vectors = parse_test_vectors(test_vector_file_name);
         let mut stdin = StdIn::default();
@@ -112,6 +115,29 @@ mod tests {
     fn test_keccak256_run() -> Result<()> {
         test_keccak256_base("ShortMsgKAT_256.txt", false)?;
         test_keccak256_base("LongMsgKAT_256.txt", false)
+    }
+
+    /// Hashes the same inputs at every misalignment the XORIN instruction's 8-byte word can
+    /// see, and cross-checks one-shot against chunked absorbs. The guest program asserts the
+    /// digests itself, so executing it without a panic is the assertion.
+    #[test]
+    fn test_keccak256_alignment_run() -> Result<()> {
+        let config = Keccak256Rv64Config::default();
+        let openvm_exe = build_program("keccak_alignment", &config)?;
+
+        let executor = VmExecutor::new(config)?;
+        let instance = executor.instance(&openvm_exe)?;
+        #[allow(unused_variables)]
+        let state = instance.execute(StdIn::default())?;
+
+        #[cfg(feature = "rvr")]
+        {
+            let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
+            let naive_state = interpreter_instance.execute(StdIn::default())?;
+            assert_vm_states_equivalent(&state, &naive_state);
+        }
+
+        Ok(())
     }
 
     #[test]
