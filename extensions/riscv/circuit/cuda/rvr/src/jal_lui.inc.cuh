@@ -59,7 +59,7 @@ __global__ void jal_lui_replay_tracegen(
     uint32_t needs_write = instruction.words[6];
     if (instruction.words[0] != expected_opcode || instruction.words[2] != 0 ||
         instruction.words[4] != register_as || instruction.words[5] != 0 ||
-        needs_write > 1 || (rd_ptr & 1) != 0 ||
+        needs_write > 1 || !replay_canonical_register_pointer(rd_ptr) ||
         needs_write != (rd_ptr != 0)) {
         preflight_set_error(error, 184);
         return;

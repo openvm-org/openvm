@@ -58,6 +58,7 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
+#[inline(always)]
 pub(crate) fn checked_register_pointer(pointer: u32) -> Result<u8, PostflightError> {
     if pointer > u8::MAX as u32 || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
         return Err(PostflightError::new(
@@ -65,6 +66,12 @@ pub(crate) fn checked_register_pointer(pointer: u32) -> Result<u8, PostflightErr
         ));
     }
     Ok(pointer as u8)
+}
+
+#[inline(always)]
+pub(crate) fn checked_register_u16_pointer(pointer: u32) -> Result<u32, PostflightError> {
+    checked_register_pointer(pointer)?;
+    Ok(pointer >> 1)
 }
 
 pub(crate) struct ReplayComputation<const NUM_LIMBS: usize, M> {
@@ -533,8 +540,8 @@ pub fn read_rv64_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
 }
 
 #[cfg(test)]
-mod block_pointer_tests {
-    use super::validate_memory_block_byte_ptr;
+mod pointer_tests {
+    use super::{checked_register_u16_pointer, validate_memory_block_byte_ptr};
 
     #[test]
     fn memory_block_pointer_uses_the_eight_byte_equipartition() {
@@ -547,6 +554,20 @@ mod block_pointer_tests {
         for pointer in [2, 4, 6] {
             let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
             assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+        }
+    }
+
+    #[test]
+    fn register_pointer_uses_the_rv64_register_domain() {
+        assert_eq!(checked_register_u16_pointer(0).unwrap(), 0);
+        assert_eq!(checked_register_u16_pointer(31 * 8).unwrap(), 31 * 4);
+
+        for pointer in [2, 32 * 8] {
+            let error = checked_register_u16_pointer(pointer).unwrap_err();
+            assert!(
+                error.to_string().contains("outside the register domain"),
+                "{error}"
+            );
         }
     }
 }

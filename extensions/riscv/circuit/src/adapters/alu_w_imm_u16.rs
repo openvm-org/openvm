@@ -26,8 +26,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, concat_rv64_u16_block,
-    is_canonical_i12, RV64_WORD_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, checked_register_u16_pointer, concat_rv64_u16_block, is_canonical_i12,
+    RV64_WORD_U16_LIMBS, U16_BITS,
 };
 
 /// Adapter columns for RV64 word instructions with an immediate operand.
@@ -184,8 +184,8 @@ impl Rv64BaseAluWImmU16AdapterFiller {
                 "word register-immediate ALU instruction has a non-canonical immediate",
             ));
         }
-        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
-        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
+        let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
         let input = array::from_fn(|i| rs1.value[i]);

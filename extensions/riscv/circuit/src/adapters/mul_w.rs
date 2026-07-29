@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, pack_high_u16, pack_rv64_u16_block,
+    byte_ptr_to_u16_ptr, checked_register_u16_pointer, pack_high_u16, pack_rv64_u16_block,
     rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, ReplayComputation, ReplayResult,
     RV64_PTR_U16_LIMBS,
 };
@@ -200,9 +200,9 @@ impl Rv64MultWAdapterFiller {
         let rs1_ptr = instruction.b.as_canonical_u32();
         let rs2_ptr = instruction.c.as_canonical_u32();
         let rd_ptr = instruction.a.as_canonical_u32();
-        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
-        let rs2_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs2_ptr)?;
-        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
+        let rs2_u16_ptr = checked_register_u16_pointer(rs2_ptr)?;
+        let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
         let rs2 = replay.read_u16(RV64_REGISTER_AS, rs2_u16_ptr)?;

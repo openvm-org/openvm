@@ -51,8 +51,8 @@ __global__ void shift_w_right_arithmetic_imm_replay_tracegen(
     uint32_t shamt = instruction.words[3];
     if (instruction.words[0] != opcode ||
         instruction.words[4] != register_address_space ||
-        instruction.words[5] != immediate_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
-        (rs1_ptr & 1) != 0 || shamt >= RV64_WORD_U16_LIMBS * U16_BITS) {
+        instruction.words[5] != immediate_address_space || rd_ptr == 0 || !replay_canonical_register_pointer(rd_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr) || shamt >= RV64_WORD_U16_LIMBS * U16_BITS) {
         preflight_set_error(error, 84);
         return;
     }

@@ -23,8 +23,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, is_canonical_i12,
-    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes,
+    byte_ptr_to_u16_ptr, checked_register_u16_pointer, is_canonical_i12, rv64_bytes_to_u16_block,
+    rv64_u16_block_to_bytes,
 };
 
 /// Immediate-only byte-limb adapter (single register read + register write). The immediate
@@ -157,8 +157,8 @@ impl Rv64BaseAluImmAdapterFiller {
                 "register-immediate ALU instruction has a non-canonical immediate",
             ));
         }
-        let rs1_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?;
-        let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+        let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
+        let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
         let input = rv64_u16_block_to_bytes(rs1.value);

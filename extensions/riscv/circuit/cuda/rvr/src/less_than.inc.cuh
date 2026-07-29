@@ -58,8 +58,8 @@ __global__ void rv64_less_than_replay_tracegen(
     uint32_t rs2_ptr = instruction.words[3];
     if (instruction.words[0] != expected_opcode ||
         instruction.words[4] != register_address_space ||
-        instruction.words[5] != register_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
-        (rs1_ptr & 1) != 0 || (rs2_ptr & 1) != 0) {
+        instruction.words[5] != register_address_space || rd_ptr == 0 || !replay_canonical_register_pointer(rd_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr) || !replay_canonical_register_pointer(rs2_ptr)) {
         preflight_set_error(error, 124);
         return;
     }

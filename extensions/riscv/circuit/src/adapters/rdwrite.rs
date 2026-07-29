@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use crate::adapters::{byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value};
+use crate::adapters::{byte_ptr_to_u16_ptr, checked_register_u16_pointer};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -249,7 +249,7 @@ fn replay_rd_write<F: PrimeField32>(
     let rd_ptr = instruction.a.as_canonical_u32();
     let immediate = instruction.c.as_canonical_u32();
     let (output, next_pc) = compute(from_pc, immediate);
-    let rd_u16_ptr = checked_byte_ptr_to_u16_ptr_value(rd_ptr)?;
+    let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
     let mut replay = postflight.replay(step);
     if needs_write {
         let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, output)?;

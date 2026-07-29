@@ -59,8 +59,8 @@ __global__ void beq_replay_tracegen(
     uint32_t encoded_imm = instruction.words[3];
     if (instruction.words[0] != expected_opcode ||
         instruction.words[4] != register_address_space ||
-        instruction.words[5] != register_address_space || (rs1_ptr & 1) != 0 ||
-        (rs2_ptr & 1) != 0) {
+        instruction.words[5] != register_address_space || !replay_canonical_register_pointer(rs1_ptr) ||
+        !replay_canonical_register_pointer(rs2_ptr)) {
         preflight_set_error(error, 24);
         return;
     }

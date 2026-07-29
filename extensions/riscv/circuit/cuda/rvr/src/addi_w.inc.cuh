@@ -53,8 +53,8 @@ __global__ void addi_w_replay_tracegen(
     // destination-write clock slot.
     if (instruction.words[0] != addiw_opcode ||
         instruction.words[4] != register_address_space ||
-        instruction.words[5] != immediate_address_space || rd_ptr == 0 || (rd_ptr & 1) != 0 ||
-        (rs1_ptr & 1) != 0) {
+        instruction.words[5] != immediate_address_space || rd_ptr == 0 || !replay_canonical_register_pointer(rd_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr)) {
         preflight_set_error(error, 34);
         return;
     }
