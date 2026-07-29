@@ -180,7 +180,7 @@ jobs:
             fi
           done
 
-      - name: Compile VM CUDA and RVR and run phantom smoke tests
+      - name: Run VM CUDA and RVR phantom integration tests
         if: inputs.mode == 'cuda' && inputs.cuda_group == 'riscv'
         working-directory: crates/vm
         run: |
