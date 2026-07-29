@@ -303,11 +303,12 @@ __global__ void finish_chronology_counts(
     if (num_entries == 0) {
         counts[0] = 0;
         counts[1] = 0;
+        counts[2] = 0;
         if (count_field_metadata) {
-            counts[2] = 0;
             counts[3] = 0;
             counts[4] = 0;
             counts[5] = 0;
+            counts[6] = 0;
         }
         return;
     }
@@ -319,9 +320,14 @@ __global__ void finish_chronology_counts(
                      (uint64_t{1} << 32);
     counts[0] = uint32_t(total);
     counts[1] = uint32_t(total >> 32);
-    if (!count_field_metadata) return;
 
     uint32_t block_pointer_bits = pointer_max_bits - 2;
+    uint64_t non_register_key_begin = uint64_t{1} << block_pointer_bits;
+    counts[2] = uint32_t(
+        chronology_key_lower_bound(sorted_keys, num_entries, non_register_key_begin)
+    );
+    if (!count_field_metadata) return;
+
     uint64_t field_key_begin =
         uint64_t(field_address_space - address_space_offset) << block_pointer_bits;
     uint64_t field_key_end =
@@ -334,10 +340,10 @@ __global__ void finish_chronology_counts(
         chronology_seed_prefix(write_masks, sorted_keys, packed_positions, field_begin);
     uint32_t field_seed_end =
         chronology_seed_prefix(write_masks, sorted_keys, packed_positions, field_end);
-    counts[2] = uint32_t(field_begin);
-    counts[3] = uint32_t(field_end);
-    counts[4] = field_seed_begin;
-    counts[5] = field_seed_end - field_seed_begin;
+    counts[3] = uint32_t(field_begin);
+    counts[4] = uint32_t(field_end);
+    counts[5] = field_seed_begin;
+    counts[6] = field_seed_end - field_seed_begin;
 }
 
 __global__ void scatter_chronology_metadata(
@@ -547,7 +553,6 @@ __global__ void scatter_value_chunks(
     DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<GpuMemoryAddressSpace> address_spaces,
     DeviceBufferView<GpuFieldBlock> field_values,
-    uint32_t register_address_space,
     uint64_t const *sorted_keys,
     size_t sorted_offset,
     size_t num_entries,
@@ -565,7 +570,6 @@ __global__ void scatter_value_chunks(
     }
     uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
     auto const &event = memory[ordinal];
-    if (preflight_address_space(event) == register_address_space) return;
     auto const &config = address_spaces[preflight_address_space(event)];
     if (config.cell_kind == MEMORY_CELL_FIELD32) {
         uint32_t reference = field_reference(event);
@@ -838,6 +842,7 @@ extern "C" int _postflight_memory_chronology_resolve(
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
     DeviceBufferView<GpuFieldBlock> field_values,
     uint32_t register_address_space,
+    uint32_t non_register_begin,
     uint64_t const *sorted_keys,
     uint64_t *workspace,
     uint32_t *predecessors,
@@ -905,19 +910,26 @@ extern "C" int _postflight_memory_chronology_resolve(
         err != cudaSuccess) {
         return err;
     }
-    scatter_value_chunks<<<grid, block, 0, stream>>>(
-        memory,
-        address_spaces,
-        field_values,
-        register_address_space,
-        sorted_keys,
-        0,
-        num_entries,
-        0,
-        chunks,
-        error
-    );
-    if (int err = CHECK_KERNEL(); err) return err;
+    // Register events already contain complete blocks. The sorted key places
+    // their address space first, so value materialization starts after that
+    // prefix while chronology and dirty propagation still scan every event.
+    if (non_register_begin > num_entries) return int(cudaErrorInvalidValue);
+    size_t num_non_register_entries = num_entries - non_register_begin;
+    if (num_non_register_entries != 0) {
+        auto [value_grid, value_block] = kernel_launch_params(num_non_register_entries);
+        scatter_value_chunks<<<value_grid, value_block, 0, stream>>>(
+            memory,
+            address_spaces,
+            field_values,
+            sorted_keys,
+            non_register_begin,
+            num_non_register_entries,
+            0,
+            chunks,
+            error
+        );
+        if (int err = CHECK_KERNEL(); err) return err;
+    }
 
     if (field_end < field_begin || field_end > num_entries ||
         size_t(field_end - field_begin) != field_values.len()) {
@@ -958,7 +970,6 @@ extern "C" int _postflight_memory_chronology_resolve(
             memory,
             address_spaces,
             field_values,
-            register_address_space,
             sorted_keys,
             field_begin,
             num_field_entries,
