@@ -106,11 +106,11 @@ __global__ void modular_is_eq_tracegen(
             slice.fill_zero(0, WIDTH);
             continue;
         }
-        const uint8_t *rec_bytes = d_records + row * rec_stride;
+        const uint8_t *d_rec_bytes = d_records + row * rec_stride;
         const auto &rec = *(const Rv64IsEqualModU16AdapterRecord<NUM_READS, BLOCKS_PER_READ> *)
-                              rec_bytes;
+                              d_rec_bytes;
         const auto &core =
-            *(const ModularIsEqualRecord<READ_LIMBS> *)(rec_bytes + rec_core_offset);
+            *(const ModularIsEqualRecord<READ_LIMBS> *)(d_rec_bytes + rec_core_offset);
 
         // ---- adapter columns (mirror Rv64IsEqualModU16AdapterFiller) ----
 #define ACOL(field) (offsetof(AdapterColsU8, field))
