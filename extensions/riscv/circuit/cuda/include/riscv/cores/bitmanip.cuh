@@ -1,14 +1,16 @@
 #pragma once
 
 #include "primitives/constants.h"
+#include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 
 using namespace riscv;
 
 constexpr size_t BITMANIP_NUM_LIMBS = BLOCK_FE_WIDTH;
 constexpr size_t BITMANIP_NUM_BITS = BITMANIP_NUM_LIMBS * U16_BITS;
-constexpr size_t BITMANIP_REG_OP_COUNT = 22;
-constexpr size_t BITMANIP_IMM_OP_COUNT = 18;
+constexpr size_t BITMANIP_SHADD_OP_COUNT = 7;
+constexpr size_t BITMANIP_REG_OP_COUNT = 15;
+constexpr size_t BITMANIP_IMM_OP_COUNT = 17;
 
 constexpr uint8_t SH1ADD = 0;
 constexpr uint8_t SH2ADD = 1;
@@ -51,15 +53,21 @@ constexpr uint8_t BSETI = 37;
 constexpr uint8_t BINVI = 38;
 constexpr uint8_t BEXTI = 39;
 
-__device__ __forceinline__ bool bitmanip_is_shadd(uint8_t op) {
-    return op == SH1ADD || op == SH2ADD || op == SH3ADD || op == ADD_UW || op == SH1ADD_UW ||
-           op == SH2ADD_UW || op == SH3ADD_UW;
+__device__ __forceinline__ int bitmanip_shadd_flag_pos(uint8_t op) {
+    constexpr uint8_t OPS[BITMANIP_SHADD_OP_COUNT] = {
+        SH1ADD, SH2ADD, SH3ADD, ADD_UW, SH1ADD_UW, SH2ADD_UW, SH3ADD_UW,
+    };
+    for (size_t i = 0; i < BITMANIP_SHADD_OP_COUNT; i++) {
+        if (OPS[i] == op) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 
 __device__ __forceinline__ int bitmanip_reg_flag_pos(uint8_t op) {
     constexpr uint8_t OPS[BITMANIP_REG_OP_COUNT] = {
-        SH1ADD, SH2ADD, SH3ADD, ADD_UW, SH1ADD_UW, SH2ADD_UW, SH3ADD_UW, ANDN, ORN, XNOR, ROL,
-        ROR, ROLW, RORW, OP_MIN, MINU, OP_MAX, MAXU, BCLR, BSET, BINV, BEXT,
+        ANDN, ORN, XNOR, ROL, ROR, ROLW, RORW, OP_MIN, MINU, OP_MAX, MAXU, BCLR, BSET, BINV, BEXT,
     };
     for (size_t i = 0; i < BITMANIP_REG_OP_COUNT; i++) {
         if (OPS[i] == op) {
@@ -71,8 +79,8 @@ __device__ __forceinline__ int bitmanip_reg_flag_pos(uint8_t op) {
 
 __device__ __forceinline__ int bitmanip_imm_flag_pos(uint8_t op) {
     constexpr uint8_t OPS[BITMANIP_IMM_OP_COUNT] = {
-        SLLI_UW, RORI, RORIW, CLZ, CTZ, CLZW, CTZW, CPOP, CPOPW, SEXT_B, SEXT_H, ZEXT_H,
-        ORC_B, REV8, BCLRI, BSETI, BINVI, BEXTI,
+        RORI, RORIW, CLZ, CTZ, CLZW, CTZW, CPOP, CPOPW, SEXT_B, SEXT_H, ZEXT_H, ORC_B,
+        REV8, BCLRI, BSETI, BINVI, BEXTI,
     };
     for (size_t i = 0; i < BITMANIP_IMM_OP_COUNT; i++) {
         if (OPS[i] == op) {
@@ -315,6 +323,180 @@ bitmanip_run_imm(uint8_t local_opcode, uint64_t rs1, uint32_t imm) {
     }
 }
 
+struct BitManipShAddCoreRecord {
+    uint16_t b[BITMANIP_NUM_LIMBS];
+    uint16_t c[BITMANIP_NUM_LIMBS];
+    uint8_t local_opcode;
+};
+
+static_assert(sizeof(BitManipShAddCoreRecord) == 18);
+
+template <typename T> struct BitManipShAddCoreCols {
+    T a[BITMANIP_NUM_LIMBS];
+    T b[BITMANIP_NUM_LIMBS];
+    T c[BITMANIP_NUM_LIMBS];
+    T opcode_flags[BITMANIP_SHADD_OP_COUNT];
+    T bit_shift_carry[BITMANIP_NUM_LIMBS];
+    T bit_shift_aux[BITMANIP_NUM_LIMBS];
+    T add_carry[BITMANIP_NUM_LIMBS + 1];
+};
+
+__device__ __forceinline__ void bitmanip_shadd_shift_uw(
+    uint8_t local_opcode,
+    uint32_t *shift,
+    bool *uw
+) {
+    *shift = 0;
+    *uw = false;
+    switch (local_opcode) {
+    case SH1ADD:
+        *shift = 1;
+        break;
+    case SH2ADD:
+        *shift = 2;
+        break;
+    case SH3ADD:
+        *shift = 3;
+        break;
+    case ADD_UW:
+        *uw = true;
+        break;
+    case SH1ADD_UW:
+        *shift = 1;
+        *uw = true;
+        break;
+    case SH2ADD_UW:
+        *shift = 2;
+        *uw = true;
+        break;
+    case SH3ADD_UW:
+        *shift = 3;
+        *uw = true;
+        break;
+    }
+}
+
+struct BitManipShAddCore {
+    VariableRangeChecker range_checker;
+
+    template <typename T> using Cols = BitManipShAddCoreCols<T>;
+
+    __device__ BitManipShAddCore(VariableRangeChecker rc) : range_checker(rc) {}
+
+    __device__ void fill_trace_row(RowSlice row, BitManipShAddCoreRecord record) {
+        uint64_t b_u64 = bitmanip_limbs_to_u64(record.b);
+        uint64_t c_u64 = bitmanip_limbs_to_u64(record.c);
+        uint64_t a_u64 = bitmanip_run_reg(record.local_opcode, b_u64, c_u64);
+
+        uint16_t a[BITMANIP_NUM_LIMBS];
+        uint8_t opcode_flags[BITMANIP_SHADD_OP_COUNT] = {0};
+        uint16_t bit_shift_carry[BITMANIP_NUM_LIMBS] = {0};
+        uint16_t bit_shift_aux[BITMANIP_NUM_LIMBS] = {0};
+        uint8_t add_carry[BITMANIP_NUM_LIMBS + 1] = {0};
+
+        bitmanip_u64_to_limbs(a_u64, a);
+
+        int flag_pos = bitmanip_shadd_flag_pos(record.local_opcode);
+        if (flag_pos >= 0) {
+            opcode_flags[flag_pos] = 1;
+        }
+
+        uint32_t shift;
+        bool uw;
+        bitmanip_shadd_shift_uw(record.local_opcode, &shift, &uw);
+        uint32_t carry_mask = (1u << shift) - 1;
+        uint32_t aux_mask = (1u << (U16_BITS - shift)) - 1;
+        for (size_t limb = 0; limb < BITMANIP_NUM_LIMBS; limb++) {
+            uint32_t source = (uw && limb >= 2) ? 0 : record.b[limb];
+            bit_shift_aux[limb] = source & aux_mask;
+            bit_shift_carry[limb] = (source >> (U16_BITS - shift)) & carry_mask;
+            range_checker.add_count(bit_shift_carry[limb], shift);
+            range_checker.add_count(bit_shift_aux[limb], U16_BITS - shift);
+        }
+
+        uint64_t shifted =
+            uw ? (static_cast<uint64_t>(static_cast<uint32_t>(b_u64)) << shift)
+               : (b_u64 << shift);
+        uint8_t carry = 0;
+        for (size_t bit = 0; bit < BITMANIP_NUM_BITS; bit++) {
+            if (bit % U16_BITS == 0) {
+                add_carry[bit / U16_BITS] = carry;
+            }
+            uint8_t total = static_cast<uint8_t>(
+                ((shifted >> bit) & 1ull) + ((c_u64 >> bit) & 1ull) + carry
+            );
+            carry = total >> 1;
+        }
+        add_carry[BITMANIP_NUM_LIMBS] = carry;
+
+        COL_WRITE_ARRAY(row, Cols, a, a);
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, opcode_flags, opcode_flags);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_carry, bit_shift_carry);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_aux, bit_shift_aux);
+        COL_WRITE_ARRAY(row, Cols, add_carry, add_carry);
+    }
+};
+
+struct BitManipSlliUwCoreRecord {
+    uint16_t b[BITMANIP_NUM_LIMBS];
+    uint8_t imm;
+};
+
+static_assert(sizeof(BitManipSlliUwCoreRecord) == 10);
+
+template <typename T> struct BitManipSlliUwCoreCols {
+    T a[BITMANIP_NUM_LIMBS];
+    T b[BITMANIP_NUM_LIMBS];
+    T bit_shift_marker[U16_BITS];
+    T limb_shift_marker[BITMANIP_NUM_LIMBS];
+    T bit_shift_carry[BITMANIP_NUM_LIMBS];
+    T bit_shift_aux[BITMANIP_NUM_LIMBS];
+};
+
+struct BitManipSlliUwCore {
+    VariableRangeChecker range_checker;
+
+    template <typename T> using Cols = BitManipSlliUwCoreCols<T>;
+
+    __device__ BitManipSlliUwCore(VariableRangeChecker rc) : range_checker(rc) {}
+
+    __device__ void fill_trace_row(RowSlice row, BitManipSlliUwCoreRecord record) {
+        uint64_t b_u64 = bitmanip_limbs_to_u64(record.b);
+        uint64_t a_u64 = bitmanip_run_imm(SLLI_UW, b_u64, record.imm);
+        uint32_t bit_shift = record.imm % U16_BITS;
+        uint32_t limb_shift = record.imm / U16_BITS;
+
+        uint16_t a[BITMANIP_NUM_LIMBS];
+        uint8_t bit_shift_marker[U16_BITS] = {0};
+        uint8_t limb_shift_marker[BITMANIP_NUM_LIMBS] = {0};
+        uint16_t bit_shift_carry[BITMANIP_NUM_LIMBS] = {0};
+        uint16_t bit_shift_aux[BITMANIP_NUM_LIMBS] = {0};
+
+        bitmanip_u64_to_limbs(a_u64, a);
+        bit_shift_marker[bit_shift] = 1;
+        limb_shift_marker[limb_shift] = 1;
+
+        uint32_t carry_mask = (1u << bit_shift) - 1;
+        uint32_t aux_mask = (1u << (U16_BITS - bit_shift)) - 1;
+        for (size_t limb = 0; limb < BITMANIP_NUM_LIMBS; limb++) {
+            uint32_t source = limb >= 2 ? 0 : record.b[limb];
+            bit_shift_aux[limb] = source & aux_mask;
+            bit_shift_carry[limb] = (source >> (U16_BITS - bit_shift)) & carry_mask;
+            range_checker.add_count(bit_shift_carry[limb], bit_shift);
+            range_checker.add_count(bit_shift_aux[limb], U16_BITS - bit_shift);
+        }
+
+        COL_WRITE_ARRAY(row, Cols, a, a);
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_marker, bit_shift_marker);
+        COL_WRITE_ARRAY(row, Cols, limb_shift_marker, limb_shift_marker);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_carry, bit_shift_carry);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_aux, bit_shift_aux);
+    }
+};
+
 struct BitManipRegCoreRecord {
     uint16_t b[BITMANIP_NUM_LIMBS];
     uint16_t c[BITMANIP_NUM_LIMBS];
@@ -331,7 +513,6 @@ template <typename T> struct BitManipRegCoreCols {
     T b_bits[BITMANIP_NUM_BITS];
     T c_bits[BITMANIP_NUM_BITS];
     T opcode_flags[BITMANIP_REG_OP_COUNT];
-    T add_carry[BITMANIP_NUM_BITS + 1];
     T index_marker[BITMANIP_NUM_BITS];
     T minmax_lt;
     T minmax_diff_marker[BITMANIP_NUM_BITS];
@@ -350,7 +531,6 @@ struct BitManipRegCore {
         uint8_t b_bits[BITMANIP_NUM_BITS];
         uint8_t c_bits[BITMANIP_NUM_BITS];
         uint8_t opcode_flags[BITMANIP_REG_OP_COUNT] = {0};
-        uint8_t add_carry[BITMANIP_NUM_BITS + 1] = {0};
         uint8_t index_marker[BITMANIP_NUM_BITS] = {0};
         uint8_t minmax_diff_marker[BITMANIP_NUM_BITS] = {0};
         uint8_t minmax_lt = 0;
@@ -363,47 +543,6 @@ struct BitManipRegCore {
         int flag_pos = bitmanip_reg_flag_pos(record.local_opcode);
         if (flag_pos >= 0) {
             opcode_flags[flag_pos] = 1;
-        }
-
-        if (bitmanip_is_shadd(record.local_opcode)) {
-            uint32_t shift = 0;
-            bool uw = false;
-            switch (record.local_opcode) {
-            case SH1ADD:
-                shift = 1;
-                break;
-            case SH2ADD:
-                shift = 2;
-                break;
-            case SH3ADD:
-                shift = 3;
-                break;
-            case ADD_UW:
-                uw = true;
-                break;
-            case SH1ADD_UW:
-                shift = 1;
-                uw = true;
-                break;
-            case SH2ADD_UW:
-                shift = 2;
-                uw = true;
-                break;
-            case SH3ADD_UW:
-                shift = 3;
-                uw = true;
-                break;
-            }
-            uint64_t shifted =
-                uw ? (static_cast<uint64_t>(static_cast<uint32_t>(b_u64)) << shift)
-                   : (b_u64 << shift);
-            uint8_t carry = 0;
-            add_carry[0] = 0;
-            for (size_t i = 0; i < BITMANIP_NUM_BITS; i++) {
-                uint8_t total = static_cast<uint8_t>(((shifted >> i) & 1ull) + ((c_u64 >> i) & 1ull) + carry);
-                carry = total >> 1;
-                add_carry[i + 1] = carry;
-            }
         }
 
         if (record.local_opcode == ROL || record.local_opcode == ROR || record.local_opcode == BCLR ||
@@ -432,7 +571,6 @@ struct BitManipRegCore {
         COL_WRITE_ARRAY(row, Cols, b_bits, b_bits);
         COL_WRITE_ARRAY(row, Cols, c_bits, c_bits);
         COL_WRITE_ARRAY(row, Cols, opcode_flags, opcode_flags);
-        COL_WRITE_ARRAY(row, Cols, add_carry, add_carry);
         COL_WRITE_ARRAY(row, Cols, index_marker, index_marker);
         COL_WRITE_VALUE(row, Cols, minmax_lt, minmax_lt);
         COL_WRITE_ARRAY(row, Cols, minmax_diff_marker, minmax_diff_marker);
@@ -487,10 +625,9 @@ struct BitManipImmCore {
             opcode_flags[flag_pos] = 1;
         }
 
-        if (record.local_opcode == SLLI_UW || record.local_opcode == RORI ||
-            record.local_opcode == RORIW || record.local_opcode == BCLRI ||
-            record.local_opcode == BSETI || record.local_opcode == BINVI ||
-            record.local_opcode == BEXTI) {
+        if (record.local_opcode == RORI || record.local_opcode == RORIW ||
+            record.local_opcode == BCLRI || record.local_opcode == BSETI ||
+            record.local_opcode == BINVI || record.local_opcode == BEXTI) {
             index_marker[record.imm] = 1;
         }
 

@@ -8,6 +8,7 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -24,7 +25,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use super::{BITMANIP_NUM_BITS, BITMANIP_NUM_LIMBS};
+use super::{BITMANIP_LIMB_BITS, BITMANIP_NUM_BITS, BITMANIP_NUM_LIMBS};
 
 pub(crate) const BITMANIP_OFFSET: usize = ShAddOpcode::CLASS_OFFSET;
 
@@ -105,17 +106,20 @@ pub(crate) const BINVI: usize =
 pub(crate) const BEXTI: usize =
     local::<{ SingleBitImmOpcode::CLASS_OFFSET }>(SingleBitImmOpcode::BEXTI as usize);
 
+const SHADD_OPS: [usize; SHADD_OP_COUNT] = [
+    SH1ADD, SH2ADD, SH3ADD, ADD_UW, SH1ADD_UW, SH2ADD_UW, SH3ADD_UW,
+];
 const REG_OPS: [usize; REG_OP_COUNT] = [
-    SH1ADD, SH2ADD, SH3ADD, ADD_UW, SH1ADD_UW, SH2ADD_UW, SH3ADD_UW, ANDN, ORN, XNOR, ROL, ROR,
-    ROLW, RORW, MIN, MINU, MAX, MAXU, BCLR, BSET, BINV, BEXT,
+    ANDN, ORN, XNOR, ROL, ROR, ROLW, RORW, MIN, MINU, MAX, MAXU, BCLR, BSET, BINV, BEXT,
 ];
 const IMM_OPS: [usize; IMM_OP_COUNT] = [
-    SLLI_UW, RORI, RORIW, CLZ, CTZ, CLZW, CTZW, CPOP, CPOPW, SEXT_B, SEXT_H, ZEXT_H, ORC_B, REV8,
-    BCLRI, BSETI, BINVI, BEXTI,
+    RORI, RORIW, CLZ, CTZ, CLZW, CTZW, CPOP, CPOPW, SEXT_B, SEXT_H, ZEXT_H, ORC_B, REV8, BCLRI,
+    BSETI, BINVI, BEXTI,
 ];
 
-pub(crate) const REG_OP_COUNT: usize = 22;
-pub(crate) const IMM_OP_COUNT: usize = 18;
+pub(crate) const SHADD_OP_COUNT: usize = 7;
+pub(crate) const REG_OP_COUNT: usize = 15;
+pub(crate) const IMM_OP_COUNT: usize = 17;
 
 fn flag_pos(ops: &[usize], local_opcode: usize) -> usize {
     ops.iter()
@@ -127,8 +131,16 @@ pub(crate) fn is_reg_opcode(local_opcode: usize) -> bool {
     REG_OPS.contains(&local_opcode)
 }
 
+pub(crate) fn is_shadd_opcode(local_opcode: usize) -> bool {
+    SHADD_OPS.contains(&local_opcode)
+}
+
 pub(crate) fn is_imm_opcode(local_opcode: usize) -> bool {
     IMM_OPS.contains(&local_opcode)
+}
+
+pub(crate) fn is_slli_uw_opcode(local_opcode: usize) -> bool {
+    local_opcode == SLLI_UW
 }
 
 pub(crate) fn limbs_to_u64(limbs: &[u16; BITMANIP_NUM_LIMBS]) -> u64 {
@@ -227,6 +239,434 @@ pub(crate) fn run_bitmanip_imm(local_opcode: usize, rs1: u64, imm: u32) -> u64 {
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
+pub struct BitManipShAddCoreCols<T> {
+    pub a: [T; BITMANIP_NUM_LIMBS],
+    pub b: [T; BITMANIP_NUM_LIMBS],
+    pub c: [T; BITMANIP_NUM_LIMBS],
+    pub opcode_flags: [T; SHADD_OP_COUNT],
+    pub bit_shift_carry: [T; BITMANIP_NUM_LIMBS],
+    pub bit_shift_aux: [T; BITMANIP_NUM_LIMBS],
+    pub add_carry: [T; BITMANIP_NUM_LIMBS + 1],
+}
+
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(BitManipShAddCoreCols<u8>)]
+pub struct BitManipShAddCoreAir {
+    pub range_bus: VariableRangeCheckerBus,
+}
+
+impl<F: Field> BaseAir<F> for BitManipShAddCoreAir {
+    fn width(&self) -> usize {
+        BitManipShAddCoreCols::<F>::width()
+    }
+}
+impl<F: Field> BaseAirWithPublicValues<F> for BitManipShAddCoreAir {}
+
+impl<AB, I> VmCoreAir<AB, I> for BitManipShAddCoreAir
+where
+    AB: InteractionBuilder,
+    I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<[[AB::Expr; BITMANIP_NUM_LIMBS]; 2]>,
+    I::Writes: From<[[AB::Expr; BITMANIP_NUM_LIMBS]; 1]>,
+    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
+{
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local_core: &[AB::Var],
+        _from_pc: AB::Var,
+    ) -> AdapterAirContext<AB::Expr, I> {
+        let cols: &BitManipShAddCoreCols<_> = local_core.borrow();
+        let mut is_valid = AB::Expr::ZERO;
+        let mut expected_local_opcode = AB::Expr::ZERO;
+        let mut bit_shift = AB::Expr::ZERO;
+        let mut bit_multiplier = AB::Expr::ZERO;
+        let mut carry_multiplier = AB::Expr::ZERO;
+        let mut uw_flag = AB::Expr::ZERO;
+
+        for (flag, local_opcode) in cols.opcode_flags.iter().zip(SHADD_OPS) {
+            builder.assert_bool(*flag);
+            let flag: AB::Expr = (*flag).into();
+            let (shift, is_uw) = shadd_shift_uw(local_opcode);
+            is_valid += flag.clone();
+            expected_local_opcode += flag.clone() * AB::Expr::from_usize(local_opcode);
+            bit_shift += flag.clone() * AB::Expr::from_usize(shift);
+            bit_multiplier += flag.clone() * AB::Expr::from_usize(1 << shift);
+            carry_multiplier +=
+                flag.clone() * AB::Expr::from_usize(1 << (BITMANIP_LIMB_BITS - shift));
+            uw_flag += flag * if is_uw { AB::Expr::ONE } else { AB::Expr::ZERO };
+        }
+        builder.assert_bool(is_valid.clone());
+
+        builder
+            .when(is_valid.clone())
+            .assert_zero(cols.add_carry[0]);
+        for carry in &cols.add_carry[1..] {
+            let carry: AB::Expr = (*carry).into();
+            builder.assert_zero(is_valid.clone() * carry.clone() * (AB::Expr::ONE - carry));
+        }
+
+        let aux_bits = AB::Expr::from_usize(BITMANIP_LIMB_BITS) - bit_shift.clone();
+        for limb in 0..BITMANIP_NUM_LIMBS {
+            let source_active = if limb < 2 {
+                is_valid.clone()
+            } else {
+                is_valid.clone() - uw_flag.clone()
+            };
+            let source = cols.b[limb] * source_active;
+            builder.assert_eq(
+                source,
+                cols.bit_shift_aux[limb] + cols.bit_shift_carry[limb] * carry_multiplier.clone(),
+            );
+            self.range_bus
+                .send(cols.bit_shift_carry[limb], bit_shift.clone())
+                .eval(builder, is_valid.clone());
+            self.range_bus
+                .send(cols.bit_shift_aux[limb], aux_bits.clone())
+                .eval(builder, is_valid.clone());
+        }
+
+        for limb in 0..BITMANIP_NUM_LIMBS {
+            let carry_in = if limb == 0 {
+                AB::Expr::ZERO
+            } else {
+                cols.bit_shift_carry[limb - 1].into()
+            };
+            let shifted = cols.bit_shift_aux[limb] * bit_multiplier.clone() + carry_in;
+            builder.assert_zero(
+                shifted + cols.c[limb] + cols.add_carry[limb]
+                    - cols.a[limb]
+                    - AB::Expr::from_usize(1 << BITMANIP_LIMB_BITS) * cols.add_carry[limb + 1],
+            );
+        }
+
+        let expected_opcode = expected_local_opcode + AB::Expr::from_usize(BITMANIP_OFFSET);
+
+        AdapterAirContext {
+            to_pc: None,
+            reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
+            writes: [cols.a.map(Into::into)].into(),
+            instruction: MinimalInstruction {
+                is_valid,
+                opcode: expected_opcode,
+            }
+            .into(),
+        }
+    }
+
+    fn start_offset(&self) -> usize {
+        BITMANIP_OFFSET
+    }
+}
+
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct BitManipShAddCoreRecord {
+    pub b: [u16; BITMANIP_NUM_LIMBS],
+    pub c: [u16; BITMANIP_NUM_LIMBS],
+    pub local_opcode: u8,
+}
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct BitManipShAddExecutor<A> {
+    adapter: A,
+}
+
+#[derive(Clone, derive_new::new)]
+pub struct BitManipShAddFiller<A> {
+    adapter: A,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
+}
+
+impl<F, A, RA> PreflightExecutor<F, RA> for BitManipShAddExecutor<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceExecutor<
+            F,
+            ReadData: Into<[[u16; BITMANIP_NUM_LIMBS]; 2]>,
+            WriteData: From<[[u16; BITMANIP_NUM_LIMBS]; 1]>,
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut BitManipShAddCoreRecord),
+    >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("Rv64BShAdd({})", opcode - BITMANIP_OFFSET)
+    }
+
+    fn execute(
+        &self,
+        state: VmStateMut<TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let local_opcode = instruction.opcode.local_opcode_idx(BITMANIP_OFFSET);
+        debug_assert!(is_shadd_opcode(local_opcode));
+
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+        A::start(*state.pc, state.memory, &mut adapter_record);
+        [core_record.b, core_record.c] = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record)
+            .into();
+        core_record.local_opcode = local_opcode as u8;
+
+        let output = run_bitmanip_reg(
+            local_opcode,
+            limbs_to_u64(&core_record.b),
+            limbs_to_u64(&core_record.c),
+        );
+        self.adapter.write(
+            state.memory,
+            instruction,
+            [u64_to_limbs(output)].into(),
+            &mut adapter_record,
+        );
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+}
+
+impl<F, A> TraceFiller<F> for BitManipShAddFiller<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &BitManipShAddCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let b = record.b;
+        let c = record.c;
+        let local_opcode = record.local_opcode as usize;
+        let b_u64 = limbs_to_u64(&b);
+        let c_u64 = limbs_to_u64(&c);
+        let a_u64 = run_bitmanip_reg(local_opcode, b_u64, c_u64);
+        let a = u64_to_limbs(a_u64);
+
+        let core_row: &mut BitManipShAddCoreCols<F> = core_row.borrow_mut();
+        core_row.opcode_flags = [F::ZERO; SHADD_OP_COUNT];
+        core_row.opcode_flags[flag_pos(&SHADD_OPS, local_opcode)] = F::ONE;
+        core_row.a = a.map(F::from_u16);
+        core_row.b = b.map(F::from_u16);
+        core_row.c = c.map(F::from_u16);
+        fill_shadd_aux(core_row, local_opcode, b, c, &self.range_checker_chip);
+    }
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
+pub struct BitManipSlliUwCoreCols<T> {
+    pub a: [T; BITMANIP_NUM_LIMBS],
+    pub b: [T; BITMANIP_NUM_LIMBS],
+    pub bit_shift_marker: [T; BITMANIP_LIMB_BITS],
+    pub limb_shift_marker: [T; BITMANIP_NUM_LIMBS],
+    pub bit_shift_carry: [T; BITMANIP_NUM_LIMBS],
+    pub bit_shift_aux: [T; BITMANIP_NUM_LIMBS],
+}
+
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(BitManipSlliUwCoreCols<u8>)]
+pub struct BitManipSlliUwCoreAir {
+    pub range_bus: VariableRangeCheckerBus,
+}
+
+impl<F: Field> BaseAir<F> for BitManipSlliUwCoreAir {
+    fn width(&self) -> usize {
+        BitManipSlliUwCoreCols::<F>::width()
+    }
+}
+impl<F: Field> BaseAirWithPublicValues<F> for BitManipSlliUwCoreAir {}
+
+impl<AB, I> VmCoreAir<AB, I> for BitManipSlliUwCoreAir
+where
+    AB: InteractionBuilder,
+    I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<[[AB::Expr; BITMANIP_NUM_LIMBS]; 1]>,
+    I::Writes: From<[[AB::Expr; BITMANIP_NUM_LIMBS]; 1]>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
+{
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local_core: &[AB::Var],
+        _from_pc: AB::Var,
+    ) -> AdapterAirContext<AB::Expr, I> {
+        let cols: &BitManipSlliUwCoreCols<_> = local_core.borrow();
+
+        let mut bit_marker_sum = AB::Expr::ZERO;
+        let mut bit_shift = AB::Expr::ZERO;
+        let mut bit_multiplier = AB::Expr::ZERO;
+        let mut carry_multiplier = AB::Expr::ZERO;
+        for bit in 0..BITMANIP_LIMB_BITS {
+            builder.assert_bool(cols.bit_shift_marker[bit]);
+            let marker: AB::Expr = cols.bit_shift_marker[bit].into();
+            bit_marker_sum += marker.clone();
+            bit_shift += AB::Expr::from_usize(bit) * marker.clone();
+            bit_multiplier += AB::Expr::from_usize(1 << bit) * marker.clone();
+            carry_multiplier += AB::Expr::from_usize(1 << (BITMANIP_LIMB_BITS - bit)) * marker;
+        }
+        builder.assert_bool(bit_marker_sum.clone());
+        let is_valid = bit_marker_sum;
+
+        let aux_bits = AB::Expr::from_usize(BITMANIP_LIMB_BITS) - bit_shift.clone();
+        for limb in 0..BITMANIP_NUM_LIMBS {
+            let source = if limb < 2 {
+                cols.b[limb].into()
+            } else {
+                AB::Expr::ZERO
+            };
+            builder.assert_eq(
+                source * is_valid.clone(),
+                cols.bit_shift_aux[limb] + cols.bit_shift_carry[limb] * carry_multiplier.clone(),
+            );
+            self.range_bus
+                .send(cols.bit_shift_carry[limb], bit_shift.clone())
+                .eval(builder, is_valid.clone());
+            self.range_bus
+                .send(cols.bit_shift_aux[limb], aux_bits.clone())
+                .eval(builder, is_valid.clone());
+        }
+
+        let mut limb_marker_sum = AB::Expr::ZERO;
+        let mut limb_shift = AB::Expr::ZERO;
+        for limb_shift_idx in 0..BITMANIP_NUM_LIMBS {
+            builder.assert_bool(cols.limb_shift_marker[limb_shift_idx]);
+            limb_marker_sum += cols.limb_shift_marker[limb_shift_idx].into();
+            limb_shift +=
+                AB::Expr::from_usize(limb_shift_idx) * cols.limb_shift_marker[limb_shift_idx];
+
+            let mut when_limb_shift = builder.when(cols.limb_shift_marker[limb_shift_idx]);
+            for out_limb in 0..BITMANIP_NUM_LIMBS {
+                if out_limb < limb_shift_idx {
+                    when_limb_shift.assert_zero(cols.a[out_limb]);
+                } else {
+                    let src_limb = out_limb - limb_shift_idx;
+                    let carry_in = if src_limb == 0 {
+                        AB::Expr::ZERO
+                    } else {
+                        cols.bit_shift_carry[src_limb - 1].into()
+                    };
+                    when_limb_shift.assert_eq(
+                        cols.a[out_limb],
+                        cols.bit_shift_aux[src_limb] * bit_multiplier.clone() + carry_in,
+                    );
+                }
+            }
+        }
+        builder.assert_eq(limb_marker_sum, is_valid.clone());
+
+        let immediate = limb_shift * AB::Expr::from_usize(BITMANIP_LIMB_BITS) + bit_shift;
+        let expected_opcode = AB::Expr::from_usize(BITMANIP_OFFSET + SLLI_UW);
+
+        AdapterAirContext {
+            to_pc: None,
+            reads: [cols.b.map(Into::into)].into(),
+            writes: [cols.a.map(Into::into)].into(),
+            instruction: ImmInstruction {
+                is_valid,
+                opcode: expected_opcode,
+                immediate,
+            }
+            .into(),
+        }
+    }
+
+    fn start_offset(&self) -> usize {
+        BITMANIP_OFFSET
+    }
+}
+
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct BitManipSlliUwCoreRecord {
+    pub b: [u16; BITMANIP_NUM_LIMBS],
+    pub imm: u8,
+}
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct BitManipSlliUwExecutor<A> {
+    adapter: A,
+}
+
+#[derive(Clone, derive_new::new)]
+pub struct BitManipSlliUwFiller<A> {
+    adapter: A,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
+}
+
+impl<F, A, RA> PreflightExecutor<F, RA> for BitManipSlliUwExecutor<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceExecutor<
+            F,
+            ReadData: Into<[[u16; BITMANIP_NUM_LIMBS]; 1]>,
+            WriteData: From<[[u16; BITMANIP_NUM_LIMBS]; 1]>,
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut BitManipSlliUwCoreRecord),
+    >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("Rv64BSlliUw({})", opcode - BITMANIP_OFFSET)
+    }
+
+    fn execute(
+        &self,
+        state: VmStateMut<TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let local_opcode = instruction.opcode.local_opcode_idx(BITMANIP_OFFSET);
+        debug_assert!(is_slli_uw_opcode(local_opcode));
+        let imm = instruction.c.as_canonical_u32();
+
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+        A::start(*state.pc, state.memory, &mut adapter_record);
+        [core_record.b] = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record)
+            .into();
+        core_record.imm = imm as u8;
+
+        let output = run_bitmanip_imm(local_opcode, limbs_to_u64(&core_record.b), imm);
+        self.adapter.write(
+            state.memory,
+            instruction,
+            [u64_to_limbs(output)].into(),
+            &mut adapter_record,
+        );
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+}
+
+impl<F, A> TraceFiller<F> for BitManipSlliUwFiller<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &BitManipSlliUwCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let b = record.b;
+        let imm = record.imm as u32;
+        let a = u64_to_limbs(run_bitmanip_imm(SLLI_UW, limbs_to_u64(&b), imm));
+
+        let core_row: &mut BitManipSlliUwCoreCols<F> = core_row.borrow_mut();
+        core_row.a = a.map(F::from_u16);
+        core_row.b = b.map(F::from_u16);
+        fill_slli_uw_aux(core_row, b, imm as usize, &self.range_checker_chip);
+    }
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct BitManipRegCoreCols<T> {
     pub a: [T; BITMANIP_NUM_LIMBS],
     pub b: [T; BITMANIP_NUM_LIMBS],
@@ -235,7 +675,6 @@ pub struct BitManipRegCoreCols<T> {
     pub b_bits: [T; BITMANIP_NUM_BITS],
     pub c_bits: [T; BITMANIP_NUM_BITS],
     pub opcode_flags: [T; REG_OP_COUNT],
-    pub add_carry: [T; BITMANIP_NUM_BITS + 1],
     pub index_marker: [T; BITMANIP_NUM_BITS],
     pub minmax_lt: T,
     pub minmax_diff_marker: [T; BITMANIP_NUM_BITS],
@@ -281,11 +720,6 @@ where
         constrain_bits_and_limbs(builder, is_valid.clone(), &cols.c_bits, &cols.c);
 
         let flag = |op| cols.opcode_flags[flag_pos(&REG_OPS, op)];
-        let shadd_valid = [
-            SH1ADD, SH2ADD, SH3ADD, ADD_UW, SH1ADD_UW, SH2ADD_UW, SH3ADD_UW,
-        ]
-        .into_iter()
-        .fold(AB::Expr::ZERO, |acc, op| acc + flag(op));
         let bitwise_valid = [ANDN, ORN, XNOR]
             .into_iter()
             .fold(AB::Expr::ZERO, |acc, op| acc + flag(op));
@@ -303,7 +737,6 @@ where
             .into_iter()
             .fold(AB::Expr::ZERO, |acc, op| acc + flag(op));
 
-        self.eval_shadd(builder, cols, shadd_valid.clone());
         self.eval_bitwise_inv(builder, cols, bitwise_valid);
         self.eval_index_markers(
             builder,
@@ -335,38 +768,6 @@ where
 }
 
 impl BitManipRegCoreAir {
-    fn eval_shadd<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        cols: &BitManipRegCoreCols<AB::Var>,
-        shadd_valid: AB::Expr,
-    ) {
-        builder
-            .when(shadd_valid.clone())
-            .assert_zero(cols.add_carry[0]);
-        for carry in &cols.add_carry[1..] {
-            let carry: AB::Expr = (*carry).into();
-            builder.assert_zero(shadd_valid.clone() * carry.clone() * (AB::Expr::ONE - carry));
-        }
-
-        let flag = |op| cols.opcode_flags[flag_pos(&REG_OPS, op)];
-        for i in 0..BITMANIP_NUM_BITS {
-            let shifted_bit = shifted_rs1_bit::<AB>(&cols.b_bits, i, 1, false) * flag(SH1ADD)
-                + shifted_rs1_bit::<AB>(&cols.b_bits, i, 2, false) * flag(SH2ADD)
-                + shifted_rs1_bit::<AB>(&cols.b_bits, i, 3, false) * flag(SH3ADD)
-                + shifted_rs1_bit::<AB>(&cols.b_bits, i, 0, true) * flag(ADD_UW)
-                + shifted_rs1_bit::<AB>(&cols.b_bits, i, 1, true) * flag(SH1ADD_UW)
-                + shifted_rs1_bit::<AB>(&cols.b_bits, i, 2, true) * flag(SH2ADD_UW)
-                + shifted_rs1_bit::<AB>(&cols.b_bits, i, 3, true) * flag(SH3ADD_UW);
-            builder.assert_zero(
-                shadd_valid.clone()
-                    * (shifted_bit + cols.c_bits[i] + cols.add_carry[i]
-                        - cols.a_bits[i]
-                        - AB::Expr::from_u8(2) * cols.add_carry[i + 1]),
-            );
-        }
-    }
-
     fn eval_bitwise_inv<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -617,13 +1018,6 @@ where
         let core_row: &mut BitManipRegCoreCols<F> = core_row.borrow_mut();
         core_row.opcode_flags = [F::ZERO; REG_OP_COUNT];
         core_row.opcode_flags[flag_pos(&REG_OPS, local_opcode)] = F::ONE;
-        core_row.add_carry = [F::ZERO; BITMANIP_NUM_BITS + 1];
-        if matches!(
-            local_opcode,
-            SH1ADD | SH2ADD | SH3ADD | ADD_UW | SH1ADD_UW | SH2ADD_UW | SH3ADD_UW
-        ) {
-            fill_add_carries(core_row, local_opcode, b_u64, c_u64);
-        }
         core_row.index_marker = [F::ZERO; BITMANIP_NUM_BITS];
         if matches!(local_opcode, ROL | ROR | BCLR | BSET | BINV | BEXT) {
             core_row.index_marker[(c_u64 & 63) as usize] = F::ONE;
@@ -706,7 +1100,7 @@ where
         constrain_bits_and_limbs(builder, is_valid.clone(), &cols.b_bits, &cols.b);
 
         let flag = |op| cols.opcode_flags[flag_pos(&IMM_OPS, op)];
-        let index_valid = [SLLI_UW, RORI, RORIW, BCLRI, BSETI, BINVI, BEXTI]
+        let index_valid = [RORI, RORIW, BCLRI, BSETI, BINVI, BEXTI]
             .into_iter()
             .fold(AB::Expr::ZERO, |acc, op| acc + flag(op));
         let count_valid = [CLZ, CTZ, CLZW, CTZW]
@@ -721,7 +1115,6 @@ where
             .fold(AB::Expr::ZERO, |acc, op| acc + flag(op));
 
         let immediate = self.eval_index_markers(builder, cols, index_valid.clone());
-        self.eval_slli_uw(builder, cols, flag(SLLI_UW));
         self.eval_rori(builder, cols, flag(RORI), flag(RORIW));
         self.eval_count_zeros(builder, cols, count_valid);
         self.eval_cpop(builder, cols, cpop_valid);
@@ -764,23 +1157,6 @@ impl BitManipImmCoreAir {
         }
         builder.assert_eq(marker_sum, index_valid);
         index
-    }
-
-    fn eval_slli_uw<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        cols: &BitManipImmCoreCols<AB::Var>,
-        slli_flag: AB::Var,
-    ) {
-        for i in 0..BITMANIP_NUM_BITS {
-            let mut expected = AB::Expr::ZERO;
-            for s in 0..BITMANIP_NUM_BITS {
-                if i >= s && i - s < 32 {
-                    expected += slli_flag * cols.index_marker[s] * cols.b_bits[i - s];
-                }
-            }
-            builder.assert_zero(slli_flag * cols.a_bits[i] - expected);
-        }
     }
 
     fn eval_rori<AB: InteractionBuilder>(
@@ -1017,10 +1393,7 @@ where
         core_row.opcode_flags = [F::ZERO; IMM_OP_COUNT];
         core_row.opcode_flags[flag_pos(&IMM_OPS, local_opcode)] = F::ONE;
         core_row.index_marker = [F::ZERO; BITMANIP_NUM_BITS];
-        if matches!(
-            local_opcode,
-            SLLI_UW | RORI | RORIW | BCLRI | BSETI | BINVI | BEXTI
-        ) {
+        if matches!(local_opcode, RORI | RORIW | BCLRI | BSETI | BINVI | BEXTI) {
             core_row.index_marker[imm as usize] = F::ONE;
         }
         core_row.count_marker = [F::ZERO; BITMANIP_NUM_BITS + 1];
@@ -1066,29 +1439,25 @@ fn constrain_bits_and_limbs<AB: InteractionBuilder>(
     }
 }
 
-fn shifted_rs1_bit<AB: InteractionBuilder>(
-    bits: &[AB::Var; BITMANIP_NUM_BITS],
-    out_idx: usize,
-    shift: usize,
-    uw: bool,
-) -> AB::Expr {
-    if out_idx >= shift {
-        let in_idx = out_idx - shift;
-        if in_idx < if uw { 32 } else { BITMANIP_NUM_BITS } {
-            bits[in_idx].into()
-        } else {
-            AB::Expr::ZERO
-        }
-    } else {
-        AB::Expr::ZERO
+fn shadd_shift_uw(local_opcode: usize) -> (usize, bool) {
+    match local_opcode {
+        SH1ADD => (1, false),
+        SH2ADD => (2, false),
+        SH3ADD => (3, false),
+        ADD_UW => (0, true),
+        SH1ADD_UW => (1, true),
+        SH2ADD_UW => (2, true),
+        SH3ADD_UW => (3, true),
+        _ => unreachable!("unsupported shadd opcode {local_opcode}"),
     }
 }
 
-fn fill_add_carries<F: PrimeField32>(
-    row: &mut BitManipRegCoreCols<F>,
+fn fill_shadd_aux<F: PrimeField32>(
+    row: &mut BitManipShAddCoreCols<F>,
     local_opcode: usize,
-    rs1: u64,
-    rs2: u64,
+    rs1: [u16; BITMANIP_NUM_LIMBS],
+    rs2: [u16; BITMANIP_NUM_LIMBS],
+    range_checker: &SharedVariableRangeCheckerChip,
 ) {
     let (shift, uw) = match local_opcode {
         SH1ADD => (1, false),
@@ -1100,17 +1469,63 @@ fn fill_add_carries<F: PrimeField32>(
         SH3ADD_UW => (3, true),
         _ => unreachable!(),
     };
+    row.bit_shift_carry = [F::ZERO; BITMANIP_NUM_LIMBS];
+    row.bit_shift_aux = [F::ZERO; BITMANIP_NUM_LIMBS];
+    let carry_mask = (1u32 << shift) - 1;
+    let aux_mask = (1u32 << (BITMANIP_LIMB_BITS - shift)) - 1;
+    for (limb, &rs1_limb) in rs1.iter().enumerate() {
+        let source = if uw && limb >= 2 { 0 } else { rs1_limb as u32 };
+        let aux = source & aux_mask;
+        let carry = (source >> (BITMANIP_LIMB_BITS - shift)) & carry_mask;
+        row.bit_shift_aux[limb] = F::from_u32(aux);
+        row.bit_shift_carry[limb] = F::from_u32(carry);
+        range_checker.add_count(carry, shift);
+        range_checker.add_count(aux, BITMANIP_LIMB_BITS - shift);
+    }
+
     let shifted = if uw {
-        (rs1 as u32 as u64) << shift
+        (limbs_to_u64(&rs1) as u32 as u64) << shift
     } else {
-        rs1.wrapping_shl(shift)
+        limbs_to_u64(&rs1).wrapping_shl(shift as u32)
     };
-    let mut carry = 0u8;
+    let rs2 = limbs_to_u64(&rs2);
+    let mut add_carry = 0u8;
     row.add_carry[0] = F::ZERO;
     for i in 0..BITMANIP_NUM_BITS {
-        let total = ((shifted >> i) & 1) as u8 + ((rs2 >> i) & 1) as u8 + carry;
-        carry = total >> 1;
-        row.add_carry[i + 1] = F::from_u8(carry);
+        if i % BITMANIP_LIMB_BITS == 0 {
+            row.add_carry[i / BITMANIP_LIMB_BITS] = F::from_u8(add_carry);
+        }
+        let total = ((shifted >> i) & 1) as u8 + ((rs2 >> i) & 1) as u8 + add_carry;
+        add_carry = total >> 1;
+    }
+    row.add_carry[BITMANIP_NUM_LIMBS] = F::from_u8(add_carry);
+}
+
+fn fill_slli_uw_aux<F: PrimeField32>(
+    row: &mut BitManipSlliUwCoreCols<F>,
+    rs1: [u16; BITMANIP_NUM_LIMBS],
+    imm: usize,
+    range_checker: &SharedVariableRangeCheckerChip,
+) {
+    let bit_shift = imm % BITMANIP_LIMB_BITS;
+    let limb_shift = imm / BITMANIP_LIMB_BITS;
+    row.bit_shift_marker = [F::ZERO; BITMANIP_LIMB_BITS];
+    row.bit_shift_marker[bit_shift] = F::ONE;
+    row.limb_shift_marker = [F::ZERO; BITMANIP_NUM_LIMBS];
+    row.limb_shift_marker[limb_shift] = F::ONE;
+    row.bit_shift_carry = [F::ZERO; BITMANIP_NUM_LIMBS];
+    row.bit_shift_aux = [F::ZERO; BITMANIP_NUM_LIMBS];
+
+    let carry_mask = (1u32 << bit_shift) - 1;
+    let aux_mask = (1u32 << (BITMANIP_LIMB_BITS - bit_shift)) - 1;
+    for (limb, &rs1_limb) in rs1.iter().enumerate() {
+        let source = if limb >= 2 { 0 } else { rs1_limb as u32 };
+        let aux = source & aux_mask;
+        let carry = (source >> (BITMANIP_LIMB_BITS - bit_shift)) & carry_mask;
+        row.bit_shift_aux[limb] = F::from_u32(aux);
+        row.bit_shift_carry[limb] = F::from_u32(carry);
+        range_checker.add_count(carry, bit_shift);
+        range_checker.add_count(aux, BITMANIP_LIMB_BITS - bit_shift);
     }
 }
 

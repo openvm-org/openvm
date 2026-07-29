@@ -13,14 +13,15 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
     Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64B, Rv64BitManipImmAir,
-    Rv64BitManipImmChipGpu, Rv64BitManipRegAir, Rv64BitManipRegChipGpu, Rv64BitwiseLogicAir,
-    Rv64BitwiseLogicChipGpu, Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChipGpu,
-    Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu,
-    Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir,
-    Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir,
-    Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu, Rv64LessThanImmAir,
-    Rv64LessThanImmChipGpu, Rv64LoadByteAir, Rv64LoadByteChipGpu, Rv64LoadDoublewordAir,
-    Rv64LoadDoublewordChipGpu, Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu,
+    Rv64BitManipImmChipGpu, Rv64BitManipRegAir, Rv64BitManipRegChipGpu, Rv64BitManipShAddAir,
+    Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwAir, Rv64BitManipSlliUwChipGpu,
+    Rv64BitwiseLogicAir, Rv64BitwiseLogicChipGpu, Rv64BitwiseLogicImmAir,
+    Rv64BitwiseLogicImmChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir,
+    Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir,
+    Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
+    Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
+    Rv64LessThanImmAir, Rv64LessThanImmChipGpu, Rv64LoadByteAir, Rv64LoadByteChipGpu,
+    Rv64LoadDoublewordAir, Rv64LoadDoublewordChipGpu, Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu,
     Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordAir,
     Rv64LoadSignExtendHalfwordChipGpu, Rv64LoadSignExtendWordAir, Rv64LoadSignExtendWordChipGpu,
     Rv64LoadWordAir, Rv64LoadWordChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir,
@@ -352,6 +353,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64B> for 
     ) -> Result<(), ChipInventoryError> {
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let range_checker = get_inventory_range_checker(inventory);
+
+        inventory.next_air::<Rv64BitManipShAddAir>()?;
+        let shadd = Rv64BitManipShAddChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(shadd);
+
+        inventory.next_air::<Rv64BitManipSlliUwAir>()?;
+        let slli_uw = Rv64BitManipSlliUwChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(slli_uw);
 
         inventory.next_air::<Rv64BitManipRegAir>()?;
         let reg = Rv64BitManipRegChipGpu::new(range_checker.clone(), timestamp_max_bits);

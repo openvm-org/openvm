@@ -11,6 +11,128 @@
 using namespace riscv;
 using namespace program;
 
+template <typename T> struct BitManipShAddCols {
+    Rv64BaseAluRegU16AdapterCols<T> adapter;
+    BitManipShAddCoreCols<T> core;
+};
+
+struct BitManipShAddRecord {
+    Rv64BaseAluRegU16AdapterRecord adapter;
+    BitManipShAddCoreRecord core;
+};
+
+static_assert(sizeof(BitManipShAddRecord) == 60);
+static_assert(offsetof(BitManipShAddRecord, core) == 40);
+
+__global__ void rv64_bitmanip_shadd_tracegen(
+    Fp *trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<BitManipShAddRecord> records,
+    uint32_t *range_ptr,
+    uint32_t range_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < records.len()) {
+        auto const &rec = records[idx];
+        auto adapter = Rv64BaseAluRegU16Adapter(
+            VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
+        adapter.fill_trace_row(row, rec.adapter);
+        BitManipShAddCore(VariableRangeChecker(range_ptr, range_bins))
+            .fill_trace_row(row.slice_from(COL_INDEX(BitManipShAddCols, core)), rec.core);
+    } else {
+        row.fill_zero(0, width);
+    }
+}
+
+extern "C" int _rv64_bitmanip_shadd_tracegen(
+    Fp *__restrict__ d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<BitManipShAddRecord> d_records,
+    uint32_t *__restrict__ d_range_checker,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(BitManipShAddCols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height, 512);
+
+    rv64_bitmanip_shadd_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+template <typename T> struct BitManipSlliUwCols {
+    Rv64BaseAluImmU16AdapterCols<T> adapter;
+    BitManipSlliUwCoreCols<T> core;
+};
+
+struct BitManipSlliUwRecord {
+    Rv64BaseAluImmU16AdapterRecord adapter;
+    BitManipSlliUwCoreRecord core;
+};
+
+static_assert(sizeof(BitManipSlliUwRecord) == 44);
+static_assert(offsetof(BitManipSlliUwRecord, core) == 32);
+
+__global__ void rv64_bitmanip_slli_uw_tracegen(
+    Fp *trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<BitManipSlliUwRecord> records,
+    uint32_t *range_ptr,
+    uint32_t range_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < records.len()) {
+        auto const &rec = records[idx];
+        auto adapter = Rv64BaseAluImmU16Adapter(
+            VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
+        adapter.fill_trace_row(row, rec.adapter);
+        BitManipSlliUwCore(VariableRangeChecker(range_ptr, range_bins))
+            .fill_trace_row(row.slice_from(COL_INDEX(BitManipSlliUwCols, core)), rec.core);
+    } else {
+        row.fill_zero(0, width);
+    }
+}
+
+extern "C" int _rv64_bitmanip_slli_uw_tracegen(
+    Fp *__restrict__ d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<BitManipSlliUwRecord> d_records,
+    uint32_t *__restrict__ d_range_checker,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(BitManipSlliUwCols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height, 512);
+
+    rv64_bitmanip_slli_uw_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
 template <typename T> struct BitManipRegCols {
     Rv64BaseAluRegU16AdapterCols<T> adapter;
     BitManipRegCoreCols<T> core;

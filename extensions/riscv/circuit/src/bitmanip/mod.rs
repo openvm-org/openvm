@@ -18,6 +18,16 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
+pub type Rv64BitManipShAddAir = VmAirWrapper<Rv64BaseAluRegU16AdapterAir, BitManipShAddCoreAir>;
+pub type Rv64BitManipShAddExecutor = BitManipShAddExecutor<Rv64BaseAluRegU16AdapterExecutor>;
+pub type Rv64BitManipShAddChip<F> =
+    VmChipWrapper<F, BitManipShAddFiller<Rv64BaseAluRegU16AdapterFiller>>;
+
+pub type Rv64BitManipSlliUwAir = VmAirWrapper<Rv64BaseAluImmU16AdapterAir, BitManipSlliUwCoreAir>;
+pub type Rv64BitManipSlliUwExecutor = BitManipSlliUwExecutor<Rv64BaseAluImmU16AdapterExecutor>;
+pub type Rv64BitManipSlliUwChip<F> =
+    VmChipWrapper<F, BitManipSlliUwFiller<Rv64BaseAluImmU16AdapterFiller>>;
+
 pub type Rv64BitManipRegAir = VmAirWrapper<Rv64BaseAluRegU16AdapterAir, BitManipRegCoreAir>;
 pub type Rv64BitManipRegExecutor = BitManipRegExecutor<Rv64BaseAluRegU16AdapterExecutor>;
 pub type Rv64BitManipRegChip<F> =

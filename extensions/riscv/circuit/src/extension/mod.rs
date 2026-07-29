@@ -182,6 +182,8 @@ pub enum Rv64MExecutor {
 /// RISC-V 64-bit Bit-Manipulation Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Rv64BExecutor {
+    BitManipShAdd(Rv64BitManipShAddExecutor),
+    BitManipSlliUw(Rv64BitManipSlliUwExecutor),
     BitManipReg(Rv64BitManipRegExecutor),
     BitManipImm(Rv64BitManipImmExecutor),
 }
@@ -1366,9 +1368,9 @@ impl VmExecutionExtension for Rv64B {
         &self,
         inventory: &mut ExecutorInventoryBuilder<Rv64BExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let reg = Rv64BitManipRegExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+        let shadd = Rv64BitManipShAddExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
         inventory.add_executor(
-            reg,
+            shadd,
             [
                 ShAddOpcode::SH1ADD.global_opcode(),
                 ShAddOpcode::SH2ADD.global_opcode(),
@@ -1377,6 +1379,16 @@ impl VmExecutionExtension for Rv64B {
                 ShAddOpcode::SH1ADD_UW.global_opcode(),
                 ShAddOpcode::SH2ADD_UW.global_opcode(),
                 ShAddOpcode::SH3ADD_UW.global_opcode(),
+            ],
+        )?;
+
+        let slli_uw = Rv64BitManipSlliUwExecutor::new(Rv64BaseAluImmU16AdapterExecutor);
+        inventory.add_executor(slli_uw, [SlliUwOpcode::SLLI_UW.global_opcode()])?;
+
+        let reg = Rv64BitManipRegExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+        inventory.add_executor(
+            reg,
+            [
                 BitwiseInvOpcode::ANDN.global_opcode(),
                 BitwiseInvOpcode::ORN.global_opcode(),
                 BitwiseInvOpcode::XNOR.global_opcode(),
@@ -1399,7 +1411,6 @@ impl VmExecutionExtension for Rv64B {
         inventory.add_executor(
             imm,
             [
-                SlliUwOpcode::SLLI_UW.global_opcode(),
                 RotateImmOpcode::RORI.global_opcode(),
                 RotateWImmOpcode::RORIW.global_opcode(),
                 CountZerosOpcode::CLZ.global_opcode(),
@@ -1432,6 +1443,19 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64B {
             memory_bridge,
         } = inventory.system().port();
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_bus = inventory.range_checker().bus;
+
+        let shadd = Rv64BitManipShAddAir::new(
+            Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipShAddCoreAir::new(range_bus),
+        );
+        inventory.add_air(shadd);
+
+        let slli_uw = Rv64BitManipSlliUwAir::new(
+            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipSlliUwCoreAir::new(range_bus),
+        );
+        inventory.add_air(slli_uw);
 
         let reg = Rv64BitManipRegAir::new(
             Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
@@ -1464,7 +1488,21 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let mem_helper = SharedMemoryHelper::new(range_checker, timestamp_max_bits);
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+
+        inventory.next_air::<Rv64BitManipShAddAir>()?;
+        let shadd = Rv64BitManipShAddChip::new(
+            BitManipShAddFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shadd);
+
+        inventory.next_air::<Rv64BitManipSlliUwAir>()?;
+        let slli_uw = Rv64BitManipSlliUwChip::new(
+            BitManipSlliUwFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(slli_uw);
 
         inventory.next_air::<Rv64BitManipRegAir>()?;
         let reg = Rv64BitManipRegChip::new(
