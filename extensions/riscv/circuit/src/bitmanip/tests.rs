@@ -17,9 +17,11 @@ use {
         Rv64BitManipSlliUwChipGpu,
     },
     openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    std::sync::Arc,
 };
 
 use super::{
@@ -406,11 +408,17 @@ type GpuImmHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_shadd_harness(tester: &GpuChipTestBuilder) -> GpuShAddHarness {
+    // The CPU chip only regenerates the trace for comparison against the GPU
+    // trace; its range-checker counts must be discarded (the GPU kernel already
+    // adds them), so give it a dummy chip rather than the hybrid mirror.
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
     let (air, executor, cpu_chip) = create_shadd_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         tester.dummy_memory_helper(),
-        tester.cpu_range_checker(),
+        dummy_range_checker_chip,
     );
     let gpu_chip =
         Rv64BitManipShAddChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
@@ -419,11 +427,14 @@ fn create_cuda_shadd_harness(tester: &GpuChipTestBuilder) -> GpuShAddHarness {
 
 #[cfg(feature = "cuda")]
 fn create_cuda_slli_uw_harness(tester: &GpuChipTestBuilder) -> GpuSlliUwHarness {
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
     let (air, executor, cpu_chip) = create_slli_uw_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         tester.dummy_memory_helper(),
-        tester.cpu_range_checker(),
+        dummy_range_checker_chip,
     );
     let gpu_chip =
         Rv64BitManipSlliUwChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
