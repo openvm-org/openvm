@@ -63,8 +63,26 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     features: impl IntoIterator<Item = S> + Clone,
     init_config: &impl InitFileGenerator,
 ) -> Result<Elf> {
+    build_example_program_at_path_with_features_and_rustc_flags::<S, &str>(
+        manifest_dir,
+        example_name,
+        features,
+        [],
+        init_config,
+    )
+}
+
+pub fn build_example_program_at_path_with_features_and_rustc_flags<S: AsRef<str>, R: AsRef<str>>(
+    manifest_dir: PathBuf,
+    example_name: &str,
+    features: impl IntoIterator<Item = S> + Clone,
+    rustc_flags: impl IntoIterator<Item = R>,
+    init_config: &impl InitFileGenerator,
+) -> Result<Elf> {
     let pkg = get_package(&manifest_dir);
-    let guest_opts = GuestOptions::default().with_features(features.clone());
+    let guest_opts = GuestOptions::default()
+        .with_features(features.clone())
+        .with_rustc_flags(rustc_flags);
     let features = features
         .into_iter()
         .map(|x| x.as_ref().to_string())

@@ -10,7 +10,7 @@ pub mod process_instruction;
 #[cfg(test)]
 mod test_helpers;
 
-pub use process_instruction::process_instruction;
+pub use process_instruction::{is_bitmanip_instruction, process_instruction};
 
 /// A trait for objects which do something with RISC-V instructions (e.g. execute them or print a
 /// disassembly string).
@@ -115,4 +115,91 @@ pub trait InstructionProcessor {
     fn process_divuw(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
     fn process_remw(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
     fn process_remuw(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+
+    // Zba (address generation)
+    fn process_add_uw(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_sh1add(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_sh2add(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_sh3add(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_sh1add_uw(
+        &mut self,
+        dec_insn: instruction_formats::RType,
+    ) -> Self::InstructionResult;
+    fn process_sh2add_uw(
+        &mut self,
+        dec_insn: instruction_formats::RType,
+    ) -> Self::InstructionResult;
+    fn process_sh3add_uw(
+        &mut self,
+        dec_insn: instruction_formats::RType,
+    ) -> Self::InstructionResult;
+    fn process_slli_uw(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
+
+    // Zbb: logical with negate
+    fn process_andn(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_orn(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_xnor(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+
+    // Zbb: counts. These are unary (rd, rs1); the sub-operation is encoded in the
+    // rs2/shamt field of an I-type word, so the `imm` field carries the full funct12.
+    fn process_clz(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_ctz(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_cpop(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_clzw(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_ctzw(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_cpopw(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+
+    // Zbb: min/max
+    fn process_min(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_minu(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_max(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_maxu(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+
+    // Zbb: sign/zero extension (unary; zext.h is R-type with rs2 = 0)
+    fn process_sext_b(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_sext_h(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_zext_h(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+
+    // Zbb: rotates
+    fn process_rol(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_ror(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_rori(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
+    fn process_rolw(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_rorw(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_roriw(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
+
+    // Zbb: byte ops (unary)
+    fn process_orc_b(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+    fn process_rev8(&mut self, dec_insn: instruction_formats::IType) -> Self::InstructionResult;
+
+    // Zbs (single-bit)
+    fn process_bclr(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_bset(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_binv(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_bext(&mut self, dec_insn: instruction_formats::RType) -> Self::InstructionResult;
+    fn process_bclri(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
+    fn process_bseti(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
+    fn process_binvi(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
+    fn process_bexti(
+        &mut self,
+        dec_insn: instruction_formats::ITypeShamt,
+    ) -> Self::InstructionResult;
 }

@@ -68,6 +68,7 @@ pub struct SdkVmConfig {
     pub system: SdkSystemConfig,
     pub rv64i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
+    pub rv64b: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
 
@@ -188,6 +189,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.io.is_some() {
             transpiler = transpiler.with_extension(Rv64IoTranspilerExtension);
         }
+        if self.rv64b.is_some() {
+            transpiler = transpiler.with_extension(Rv64BTranspilerExtension);
+        }
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
@@ -270,6 +274,7 @@ impl SdkVmConfig {
         let system = config.system.config.clone();
         let rv64i = config.rv64i.map(|_| Rv64I);
         let io = config.io.map(|_| Rv64Io);
+        let rv64b = config.rv64b.map(|_| Rv64B);
         let keccak = config.keccak.map(|_| Keccak256);
         let sha2 = config.sha2.map(|_| Sha2);
         let rv64m = config.rv64m;
@@ -284,6 +289,7 @@ impl SdkVmConfig {
             system,
             rv64i,
             io,
+            rv64b,
             keccak,
             sha2,
             rv64m,
@@ -313,6 +319,8 @@ pub struct SdkVmConfigInner {
     pub rv64i: Option<Rv64I>,
     #[extension(executor = "Rv64IoExecutor")]
     pub io: Option<Rv64Io>,
+    #[extension(executor = "Rv64BExecutor")]
+    pub rv64b: Option<Rv64B>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha2Executor")]
@@ -401,6 +409,9 @@ where
         if let Some(io) = &config.io {
             VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, io, inventory)?;
         }
+        if let Some(rv64b) = &config.rv64b {
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, rv64b, inventory)?;
+        }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
@@ -470,6 +481,9 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         }
         if let Some(io) = &config.io {
             VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
+        }
+        if let Some(rv64b) = &config.rv64b {
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv64b, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
@@ -575,6 +589,12 @@ impl From<Rv64Io> for UnitStruct {
     }
 }
 
+impl From<Rv64B> for UnitStruct {
+    fn from(_: Rv64B) -> Self {
+        UnitStruct {}
+    }
+}
+
 impl From<Keccak256> for UnitStruct {
     fn from(_: Keccak256) -> Self {
         UnitStruct {}
@@ -594,6 +614,7 @@ struct SdkVmConfigWithDefaultDeser {
 
     pub rv64i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
+    pub rv64b: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
 
@@ -613,6 +634,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             system: config.system,
             rv64i: config.rv64i,
             io: config.io,
+            rv64b: config.rv64b,
             keccak: config.keccak,
             sha2: config.sha2,
             rv64m: config.rv64m,

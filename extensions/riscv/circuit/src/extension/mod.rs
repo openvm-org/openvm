@@ -23,19 +23,21 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-    ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BitwiseInvOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, ByteUnaryOpcode, CountZerosOpcode, CountZerosWOpcode,
+    CpopOpcode, CpopWOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MinMaxOpcode, MulHOpcode, MulOpcode, MulWOpcode, RotateImmOpcode, RotateOpcode,
+    RotateWImmOpcode, RotateWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom, ShAddOpcode, ShiftImmOpcode, ShiftOpcode,
+    ShiftWImmOpcode, ShiftWOpcode, SingleBitImmOpcode, SingleBitOpcode, SlliUwOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_riscv::{
-    Rv64IExtension, Rv64IoExtension, Rv64IoRuntimeHooks, Rv64MExtension, Rv64PhantomExtension,
-    Rv64PhantomRuntimeHooks,
+    Rv64BExtension, Rv64IExtension, Rv64IoExtension, Rv64IoRuntimeHooks, Rv64MExtension,
+    Rv64PhantomExtension, Rv64PhantomRuntimeHooks,
 };
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
@@ -73,6 +75,10 @@ pub struct Rv64M {
     #[serde(default = "default_range_tuple_checker_sizes")]
     pub range_tuple_checker_sizes: [u32; 2],
 }
+
+/// RISC-V 64-bit bit-manipulation extension (Zba + Zbb + Zbs).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct Rv64B;
 
 impl Default for Rv64M {
     fn default() -> Self {
@@ -114,6 +120,13 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64Io {
 impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(Rv64MExtension::new());
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Rv64B {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(Rv64BExtension::new());
     }
 }
 
@@ -164,6 +177,18 @@ pub enum Rv64MExecutor {
     MultiplicationHigh(Rv64MulHExecutor),
     DivRem(Rv64DivRemExecutor),
     DivRemW(Rv64DivRemWExecutor),
+}
+
+/// RISC-V 64-bit Bit-Manipulation Instruction Executors
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+pub enum Rv64BExecutor {
+    BitManipShAdd(Rv64BitManipShAddExecutor),
+    BitManipSlliUw(Rv64BitManipSlliUwExecutor),
+    BitManipReg(Rv64BitManipRegExecutor),
+    BitManipImm(Rv64BitManipImmExecutor),
+    BitManipBitwiseInv(Rv64BitManipBitwiseInvExecutor),
+    BitManipMinMax(Rv64BitManipMinMaxExecutor),
+    BitManipByteUnary(Rv64BitManipByteUnaryExecutor),
 }
 
 /// RISC-V 64-bit Io Instruction Executors
@@ -1334,6 +1359,256 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(divrem_w);
+
+        Ok(())
+    }
+}
+
+impl VmExecutionExtension for Rv64B {
+    type Executor = Rv64BExecutor;
+
+    fn extend_execution(
+        &self,
+        inventory: &mut ExecutorInventoryBuilder<Rv64BExecutor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let shadd = Rv64BitManipShAddExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+        inventory.add_executor(
+            shadd,
+            [
+                ShAddOpcode::SH1ADD.global_opcode(),
+                ShAddOpcode::SH2ADD.global_opcode(),
+                ShAddOpcode::SH3ADD.global_opcode(),
+                ShAddOpcode::ADD_UW.global_opcode(),
+                ShAddOpcode::SH1ADD_UW.global_opcode(),
+                ShAddOpcode::SH2ADD_UW.global_opcode(),
+                ShAddOpcode::SH3ADD_UW.global_opcode(),
+            ],
+        )?;
+
+        let slli_uw = Rv64BitManipSlliUwExecutor::new(Rv64BaseAluImmU16AdapterExecutor);
+        inventory.add_executor(slli_uw, [SlliUwOpcode::SLLI_UW.global_opcode()])?;
+
+        let reg = Rv64BitManipRegExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+        inventory.add_executor(
+            reg,
+            [
+                RotateOpcode::ROL.global_opcode(),
+                RotateOpcode::ROR.global_opcode(),
+                RotateWOpcode::ROLW.global_opcode(),
+                RotateWOpcode::RORW.global_opcode(),
+                SingleBitOpcode::BCLR.global_opcode(),
+                SingleBitOpcode::BSET.global_opcode(),
+                SingleBitOpcode::BINV.global_opcode(),
+                SingleBitOpcode::BEXT.global_opcode(),
+            ],
+        )?;
+
+        let imm = Rv64BitManipImmExecutor::new(Rv64BaseAluImmU16AdapterExecutor);
+        inventory.add_executor(
+            imm,
+            [
+                RotateImmOpcode::RORI.global_opcode(),
+                RotateWImmOpcode::RORIW.global_opcode(),
+                CountZerosOpcode::CLZ.global_opcode(),
+                CountZerosOpcode::CTZ.global_opcode(),
+                CountZerosWOpcode::CLZW.global_opcode(),
+                CountZerosWOpcode::CTZW.global_opcode(),
+                CpopOpcode::CPOP.global_opcode(),
+                CpopWOpcode::CPOPW.global_opcode(),
+                SingleBitImmOpcode::BCLRI.global_opcode(),
+                SingleBitImmOpcode::BSETI.global_opcode(),
+                SingleBitImmOpcode::BINVI.global_opcode(),
+                SingleBitImmOpcode::BEXTI.global_opcode(),
+            ],
+        )?;
+
+        // NOTE: executor registration order must match the AIR/chip order in
+        // `VmCircuitExtension` / `VmProverExtension` (chips pair with
+        // executors positionally).
+        let bitwise_inv = Rv64BitManipBitwiseInvExecutor::new(Rv64BaseAluRegAdapterExecutor);
+        inventory.add_executor(
+            bitwise_inv,
+            [
+                BitwiseInvOpcode::ANDN.global_opcode(),
+                BitwiseInvOpcode::ORN.global_opcode(),
+                BitwiseInvOpcode::XNOR.global_opcode(),
+            ],
+        )?;
+
+        let min_max = Rv64BitManipMinMaxExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+        inventory.add_executor(
+            min_max,
+            [
+                MinMaxOpcode::MIN.global_opcode(),
+                MinMaxOpcode::MINU.global_opcode(),
+                MinMaxOpcode::MAX.global_opcode(),
+                MinMaxOpcode::MAXU.global_opcode(),
+            ],
+        )?;
+
+        let byte_unary = Rv64BitManipByteUnaryExecutor::new(Rv64BaseAluImmAdapterExecutor::new());
+        inventory.add_executor(
+            byte_unary,
+            [
+                ByteUnaryOpcode::SEXT_B.global_opcode(),
+                ByteUnaryOpcode::SEXT_H.global_opcode(),
+                ByteUnaryOpcode::ZEXT_H.global_opcode(),
+                ByteUnaryOpcode::ORC_B.global_opcode(),
+                ByteUnaryOpcode::REV8.global_opcode(),
+            ],
+        )?;
+
+        Ok(())
+    }
+}
+
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64B {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = inventory.system().port();
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_bus = inventory.range_checker().bus;
+
+        let bitwise_lu = {
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+
+        let shadd = Rv64BitManipShAddAir::new(
+            Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipShAddCoreAir::new(range_bus),
+        );
+        inventory.add_air(shadd);
+
+        let slli_uw = Rv64BitManipSlliUwAir::new(
+            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipSlliUwCoreAir::new(range_bus),
+        );
+        inventory.add_air(slli_uw);
+
+        let reg = Rv64BitManipRegAir::new(
+            Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipRegCoreAir::new(),
+        );
+        inventory.add_air(reg);
+
+        let imm = Rv64BitManipImmAir::new(
+            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipImmCoreAir::new(),
+        );
+        inventory.add_air(imm);
+
+        let bitwise_inv = Rv64BitManipBitwiseInvAir::new(
+            Rv64BaseAluRegAdapterAir::new(exec_bridge, memory_bridge),
+            BitManipBitwiseInvCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(bitwise_inv);
+
+        let min_max = Rv64BitManipMinMaxAir::new(
+            Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipMinMaxCoreAir::new(range_bus),
+        );
+        inventory.add_air(min_max);
+
+        let byte_unary = Rv64BitManipByteUnaryAir::new(
+            Rv64BaseAluImmAdapterAir::new(exec_bridge, memory_bridge),
+            BitManipByteUnaryCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(byte_unary);
+
+        Ok(())
+    }
+}
+
+impl<E, SC, RA> VmProverExtension<E, RA, Rv64B> for Rv64ImCpuProverExt
+where
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: VmField,
+    SC::EF: Ord,
+{
+    fn extend_prover(
+        &self,
+        _: &Rv64B,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+
+        inventory.next_air::<Rv64BitManipShAddAir>()?;
+        let shadd = Rv64BitManipShAddChip::new(
+            BitManipShAddFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shadd);
+
+        inventory.next_air::<Rv64BitManipSlliUwAir>()?;
+        let slli_uw = Rv64BitManipSlliUwChip::new(
+            BitManipSlliUwFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(slli_uw);
+
+        inventory.next_air::<Rv64BitManipRegAir>()?;
+        let reg = Rv64BitManipRegChip::new(
+            BitManipRegFiller::new(Rv64BaseAluRegU16AdapterFiller::new()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(reg);
+
+        inventory.next_air::<Rv64BitManipImmAir>()?;
+        let imm = Rv64BitManipImmChip::new(
+            BitManipImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(imm);
+
+        inventory.next_air::<Rv64BitManipBitwiseInvAir>()?;
+        let bitwise_inv = Rv64BitManipBitwiseInvChip::new(
+            BitManipBitwiseInvFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_lu.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(bitwise_inv);
+
+        inventory.next_air::<Rv64BitManipMinMaxAir>()?;
+        let min_max = Rv64BitManipMinMaxChip::new(
+            BitManipMinMaxFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(min_max);
+
+        inventory.next_air::<Rv64BitManipByteUnaryAir>()?;
+        let byte_unary = Rv64BitManipByteUnaryChip::new(
+            BitManipByteUnaryFiller::new(Rv64BaseAluImmAdapterFiller, bitwise_lu),
+            mem_helper,
+        );
+        inventory.add_executor_chip(byte_unary);
 
         Ok(())
     }

@@ -1282,6 +1282,10 @@ impl CProject {
         }
         if self.native_debug_info {
             args.push("DEBUG=-g -fno-omit-frame-pointer".to_string());
+        } else {
+            // Avoid leaking unrelated environment variables such as
+            // DEBUG=release into the generated C compiler flags.
+            args.push("DEBUG=".to_string());
         }
         if self.sanitize {
             args.push("SANITIZERS=-fsanitize=undefined,bounds -fsanitize-trap=all".to_string());
