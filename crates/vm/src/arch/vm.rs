@@ -857,13 +857,14 @@ where
     {
         let program_len = exe.program.num_defined_instructions();
 
-        let (mut constant_trace_heights, air_names, widths, interactions, need_rot): (
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-        ) = self
+        let (
+            mut constant_trace_heights,
+            air_names,
+            widths,
+            interactions,
+            need_rot,
+            constraint_eval_buffers,
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = self
             .pk
             .per_air
             .iter()
@@ -873,12 +874,14 @@ where
                 let width = pk.vk.params.width.total_width();
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
                 let need_rot = pk.vk.params.need_rot;
+                let constraint_eval_buffer = E::PB::constraint_eval_buffer_size(pk);
                 (
                     constant_trace_height,
                     air_names,
                     width,
                     num_interactions,
                     need_rot,
+                    constraint_eval_buffer,
                 )
             })
             .multiunzip();
@@ -913,6 +916,7 @@ where
                 widths: &widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
+                constraint_eval_buffers: &constraint_eval_buffers,
                 segmentation_limits: SegmentationLimits {
                     max_trace_height_bits: log_stacked_height,
                     max_memory: self.config().as_ref().segmentation_max_memory,

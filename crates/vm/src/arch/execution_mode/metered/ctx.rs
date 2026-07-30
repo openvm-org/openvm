@@ -33,6 +33,7 @@ pub struct MeteredCtxInputs<'a> {
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
     pub need_rot: &'a [bool],
+    pub constraint_eval_buffers: &'a [usize],
     pub segmentation_limits: SegmentationLimits,
 }
 
@@ -60,6 +61,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             inputs.widths.to_vec(),
             inputs.interactions.to_vec(),
             inputs.need_rot.to_vec(),
+            inputs.constraint_eval_buffers.to_vec(),
             inputs.segmentation_limits,
             memory_config,
         );
