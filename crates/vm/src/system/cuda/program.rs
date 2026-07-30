@@ -124,11 +124,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
         let d_freqs = words
             .to_device_on(&self.device_ctx)
             .expect("failed to copy exec frequencies to device");
-        h_freqs.set_dirty_len(off + bytes);
-        h_freqs
-            .record_last_use(&self.device_ctx.stream)
-            .expect("failed to record last use of pinned buffer");
-        drop(h_freqs);
+        pinned::give_back(h_freqs, off + bytes);
         unsafe {
             crate::cuda_abi::program::fill_frequencies(
                 &d_freqs,

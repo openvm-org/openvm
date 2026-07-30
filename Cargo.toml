@@ -143,12 +143,12 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
 
 # OpenVM
 openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
@@ -353,12 +353,3 @@ ignored = [
 # Crates opt in with `[lints] workspace = true`.
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
-
-# halo2-gpu pins openvm-cuda-{builder,common} to stark-backend's develop-v2.1.0 branch, which
-# Cargo treats as a distinct source from our `main` deps — clashing on the crates'
-# `links = "cuda-common"` value. Patch them so the whole graph unifies on a
-# single `links = "cuda-common"` package. A `[patch]` cannot point back at the same URL it
-# patches, so the `www.` host alias (same repo, distinct source to Cargo) is used here.
-[patch."https://github.com/openvm-org/stark-backend.git"]
-openvm-cuda-builder = { git = "https://www.github.com/openvm-org/stark-backend.git", branch = "main" }
-openvm-cuda-common = { git = "https://www.github.com/openvm-org/stark-backend.git", branch = "main" }

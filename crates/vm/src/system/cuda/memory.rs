@@ -308,9 +308,7 @@ impl MemoryInventoryGPU {
                 * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
             let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
-            h_in.set_dirty_len(dirty_len);
-            h_in.record_last_use(&self.device_ctx.stream).unwrap();
-            drop(h_in);
+            pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
