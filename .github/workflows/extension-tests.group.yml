@@ -115,6 +115,8 @@ jobs:
               test_threads=(--test-threads=32)
               if [[ "$extension" == "algebra" ]]; then
                 test_threads=(--test-threads=4)
+              elif [[ "$extension" == "riscv" ]]; then
+                test_threads=(--test-threads=16)
               fi
 
               case "${{ inputs.mode }}" in
