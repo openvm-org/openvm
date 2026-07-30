@@ -3,6 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv/cores/less_than.cuh"
 
 using namespace riscv;
 
@@ -494,6 +495,159 @@ struct BitManipSlliUwCore {
         COL_WRITE_ARRAY(row, Cols, limb_shift_marker, limb_shift_marker);
         COL_WRITE_ARRAY(row, Cols, bit_shift_carry, bit_shift_carry);
         COL_WRITE_ARRAY(row, Cols, bit_shift_aux, bit_shift_aux);
+    }
+};
+
+struct BitManipBitwiseInvCoreRecord {
+    uint8_t b[RV64_REGISTER_NUM_LIMBS];
+    uint8_t c[RV64_REGISTER_NUM_LIMBS];
+    uint8_t local_opcode;
+};
+
+static_assert(sizeof(BitManipBitwiseInvCoreRecord) == 17);
+
+template <typename T> struct BitManipBitwiseInvCoreCols {
+    T a[RV64_REGISTER_NUM_LIMBS];
+    T b[RV64_REGISTER_NUM_LIMBS];
+    T c[RV64_REGISTER_NUM_LIMBS];
+    T opcode_andn_flag;
+    T opcode_orn_flag;
+    T opcode_xnor_flag;
+};
+
+struct BitManipBitwiseInvCore {
+    BitwiseOperationLookup bitwise_lookup;
+
+    template <typename T> using Cols = BitManipBitwiseInvCoreCols<T>;
+
+    __device__ BitManipBitwiseInvCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
+
+    __device__ void fill_trace_row(RowSlice row, BitManipBitwiseInvCoreRecord record) {
+        uint8_t a[RV64_REGISTER_NUM_LIMBS];
+
+#pragma unroll
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+            switch (record.local_opcode) {
+            case ANDN:
+                a[i] = record.b[i] & ~record.c[i];
+                break;
+            case ORN:
+                a[i] = record.b[i] | ~record.c[i];
+                break;
+            case XNOR:
+                a[i] = ~(record.b[i] ^ record.c[i]);
+                break;
+            default:
+                a[i] = 0;
+            }
+            // The second lookup input is ~c for ANDN/ORN and c for XNOR,
+            // matching the AIR's send_xor operands.
+            if (record.local_opcode == XNOR) {
+                bitwise_lookup.add_xor(record.b[i], record.c[i]);
+            } else {
+                bitwise_lookup.add_xor(record.b[i], 0xff - record.c[i]);
+            }
+        }
+
+        COL_WRITE_ARRAY(row, Cols, a, a);
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_VALUE(row, Cols, opcode_andn_flag, record.local_opcode == ANDN);
+        COL_WRITE_VALUE(row, Cols, opcode_orn_flag, record.local_opcode == ORN);
+        COL_WRITE_VALUE(row, Cols, opcode_xnor_flag, record.local_opcode == XNOR);
+    }
+};
+
+struct BitManipMinMaxCoreRecord {
+    uint16_t b[BITMANIP_NUM_LIMBS];
+    uint16_t c[BITMANIP_NUM_LIMBS];
+    uint8_t local_opcode;
+};
+
+static_assert(sizeof(BitManipMinMaxCoreRecord) == 18);
+
+template <typename T> struct BitManipMinMaxCoreCols {
+    T b[BITMANIP_NUM_LIMBS];
+    T c[BITMANIP_NUM_LIMBS];
+    T cmp_result;
+    T pick_b;
+    T opcode_min_flag;
+    T opcode_minu_flag;
+    T opcode_max_flag;
+    T opcode_maxu_flag;
+    T b_msb_f;
+    T c_msb_f;
+    T diff_marker[BITMANIP_NUM_LIMBS];
+    T diff_val;
+};
+
+struct BitManipMinMaxCore {
+    VariableRangeChecker range_checker;
+
+    template <typename T> using Cols = BitManipMinMaxCoreCols<T>;
+
+    __device__ BitManipMinMaxCore(VariableRangeChecker rc) : range_checker(rc) {}
+
+    __device__ void fill_trace_row(RowSlice row, BitManipMinMaxCoreRecord record) {
+        bool is_signed = record.local_opcode == OP_MIN || record.local_opcode == OP_MAX;
+        bool is_min = record.local_opcode == OP_MIN || record.local_opcode == MINU;
+        LessThanResult result =
+            run_less_than<BITMANIP_NUM_LIMBS, U16_BITS>(is_signed, record.b, record.c);
+        bool cmp_result = result.cmp_result;
+        size_t diff_idx = result.diff_idx;
+        bool b_sign = result.x_sign;
+        bool c_sign = result.y_sign;
+
+        uint32_t b_raw_msb = record.b[BITMANIP_NUM_LIMBS - 1];
+        uint32_t c_raw_msb = record.c[BITMANIP_NUM_LIMBS - 1];
+
+        uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << U16_BITS) - b_raw_msb)) : b_raw_msb;
+        uint32_t c_msb_f = c_sign ? (Fp::P - ((1u << U16_BITS) - c_raw_msb)) : c_raw_msb;
+
+        // Shift signed MSBs into the same [0, 2^U16_BITS) range as unsigned MSBs.
+        uint32_t b_msb_range = b_sign
+                                   ? (b_raw_msb - (1u << (U16_BITS - 1)))
+                                   : (b_raw_msb + ((is_signed ? 1u : 0u) << (U16_BITS - 1)));
+        uint32_t c_msb_range = c_sign
+                                   ? (c_raw_msb - (1u << (U16_BITS - 1)))
+                                   : (c_raw_msb + ((is_signed ? 1u : 0u) << (U16_BITS - 1)));
+
+        uint32_t diff_val = 0;
+        if (diff_idx == BITMANIP_NUM_LIMBS) {
+            diff_val = 0;
+        } else if (diff_idx == (BITMANIP_NUM_LIMBS - 1) && is_signed) {
+            Fp fp_diff = cmp_result ? (Fp(c_msb_f) - Fp(b_msb_f)) : (Fp(b_msb_f) - Fp(c_msb_f));
+            diff_val = fp_diff.asUInt32();
+        } else if (cmp_result) {
+            diff_val = uint32_t(record.c[diff_idx] - record.b[diff_idx]);
+        } else {
+            diff_val = uint32_t(record.b[diff_idx] - record.c[diff_idx]);
+        }
+
+        range_checker.add_count(b_msb_range, U16_BITS);
+        range_checker.add_count(c_msb_range, U16_BITS);
+
+        uint16_t diff_marker[BITMANIP_NUM_LIMBS] = {0};
+        if (diff_idx != BITMANIP_NUM_LIMBS) {
+            // Range-check diff_val - 1 to prove the first differing limb is non-zero.
+            range_checker.add_count(diff_val - 1, U16_BITS);
+            diff_marker[diff_idx] = 1;
+        }
+
+        bool pick_b = is_min ? cmp_result : !cmp_result;
+
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_VALUE(row, Cols, cmp_result, cmp_result);
+        COL_WRITE_VALUE(row, Cols, pick_b, pick_b);
+        COL_WRITE_VALUE(row, Cols, opcode_min_flag, record.local_opcode == OP_MIN);
+        COL_WRITE_VALUE(row, Cols, opcode_minu_flag, record.local_opcode == MINU);
+        COL_WRITE_VALUE(row, Cols, opcode_max_flag, record.local_opcode == OP_MAX);
+        COL_WRITE_VALUE(row, Cols, opcode_maxu_flag, record.local_opcode == MAXU);
+        COL_WRITE_VALUE(row, Cols, b_msb_f, b_msb_f);
+        COL_WRITE_VALUE(row, Cols, c_msb_f, c_msb_f);
+        COL_WRITE_ARRAY(row, Cols, diff_marker, diff_marker);
+        COL_WRITE_VALUE(row, Cols, diff_val, diff_val);
     }
 };
 

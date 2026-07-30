@@ -14,10 +14,11 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
     core::{
-        is_imm_opcode, is_reg_opcode, is_shadd_opcode, is_slli_uw_opcode, run_bitmanip_imm,
-        run_bitmanip_reg, BITMANIP_OFFSET, SLLI_UW,
+        is_bitwise_inv_opcode, is_imm_opcode, is_min_max_opcode, is_reg_opcode, is_shadd_opcode,
+        is_slli_uw_opcode, run_bitmanip_imm, run_bitmanip_reg, BITMANIP_OFFSET, SLLI_UW,
     },
-    BitManipImmExecutor, BitManipRegExecutor, BitManipShAddExecutor, BitManipSlliUwExecutor,
+    BitManipBitwiseInvExecutor, BitManipImmExecutor, BitManipMinMaxExecutor, BitManipRegExecutor,
+    BitManipShAddExecutor, BitManipSlliUwExecutor,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -536,6 +537,137 @@ unsafe fn execute_reg_e2_impl<CTX: MeteredExecutionCtxTrait>(
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_reg_e12_impl::<CTX>(&pre_compute.data, exec_state);
 }
+
+// The bitwise-inv and min-max executors run the same register-register
+// interpretation as the generic reg executor (the handlers dispatch on the
+// local opcode stored in the precompute); only the accepted opcode set and the
+// preflight record format differ.
+macro_rules! impl_reg_shaped_interpreter {
+    ($executor:ident, $is_opcode:ident) => {
+        impl<A> $executor<A> {
+            #[inline(always)]
+            fn pre_compute_impl<F: PrimeField32>(
+                &self,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut BitManipRegPreCompute,
+            ) -> Result<(), StaticProgramError> {
+                let Instruction {
+                    opcode,
+                    a,
+                    b,
+                    c,
+                    d,
+                    e,
+                    ..
+                } = inst;
+                if d.as_canonical_u32() != RV64_REGISTER_AS
+                    || e.as_canonical_u32() != RV64_REGISTER_AS
+                {
+                    return Err(StaticProgramError::InvalidInstruction(pc));
+                }
+                let local_opcode = opcode.local_opcode_idx(BITMANIP_OFFSET);
+                if !$is_opcode(local_opcode) {
+                    return Err(StaticProgramError::InvalidInstruction(pc));
+                }
+                *data = BitManipRegPreCompute {
+                    rs2_ptr: c.as_canonical_u32() as u8,
+                    rd_ptr: a.as_canonical_u32() as u8,
+                    rs1_ptr: b.as_canonical_u32() as u8,
+                    local_opcode: local_opcode as u8,
+                };
+                Ok(())
+            }
+        }
+
+        impl<F, A> InterpreterExecutor<F> for $executor<A>
+        where
+            F: PrimeField32,
+        {
+            #[inline(always)]
+            fn pre_compute_size(&self) -> usize {
+                size_of::<BitManipRegPreCompute>()
+            }
+
+            #[cfg(not(feature = "tco"))]
+            fn pre_compute<Ctx>(
+                &self,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
+            where
+                Ctx: ExecutionCtxTrait,
+            {
+                let data: &mut BitManipRegPreCompute = data.borrow_mut();
+                self.pre_compute_impl(pc, inst, data)?;
+                Ok(execute_reg_e1_handler)
+            }
+
+            #[cfg(feature = "tco")]
+            fn handler<Ctx>(
+                &self,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<Handler<Ctx>, StaticProgramError>
+            where
+                Ctx: ExecutionCtxTrait,
+            {
+                let data: &mut BitManipRegPreCompute = data.borrow_mut();
+                self.pre_compute_impl(pc, inst, data)?;
+                Ok(execute_reg_e1_handler)
+            }
+        }
+
+        impl<F, A> InterpreterMeteredExecutor<F> for $executor<A>
+        where
+            F: PrimeField32,
+        {
+            #[inline(always)]
+            fn metered_pre_compute_size(&self) -> usize {
+                size_of::<E2PreCompute<BitManipRegPreCompute>>()
+            }
+
+            #[cfg(not(feature = "tco"))]
+            fn metered_pre_compute<Ctx>(
+                &self,
+                chip_idx: usize,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
+            where
+                Ctx: MeteredExecutionCtxTrait,
+            {
+                let data: &mut E2PreCompute<BitManipRegPreCompute> = data.borrow_mut();
+                data.chip_idx = chip_idx as u32;
+                self.pre_compute_impl(pc, inst, &mut data.data)?;
+                Ok(execute_reg_e2_handler)
+            }
+
+            #[cfg(feature = "tco")]
+            fn metered_handler<Ctx>(
+                &self,
+                chip_idx: usize,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<Handler<Ctx>, StaticProgramError>
+            where
+                Ctx: MeteredExecutionCtxTrait,
+            {
+                let data: &mut E2PreCompute<BitManipRegPreCompute> = data.borrow_mut();
+                data.chip_idx = chip_idx as u32;
+                self.pre_compute_impl(pc, inst, &mut data.data)?;
+                Ok(execute_reg_e2_handler)
+            }
+        }
+    };
+}
+
+impl_reg_shaped_interpreter!(BitManipBitwiseInvExecutor, is_bitwise_inv_opcode);
+impl_reg_shaped_interpreter!(BitManipMinMaxExecutor, is_min_max_opcode);
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]

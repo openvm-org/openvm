@@ -2,13 +2,19 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use crate::adapters::{
     Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor, Rv64BaseAluImmU16AdapterFiller,
+    Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterFiller,
     Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller,
     U16_BITS,
 };
 
+mod bitwise_inv;
 mod core;
 mod execution;
+mod min_max;
 pub use core::*;
+
+pub use bitwise_inv::*;
+pub use min_max::*;
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -37,6 +43,17 @@ pub type Rv64BitManipImmAir = VmAirWrapper<Rv64BaseAluImmU16AdapterAir, BitManip
 pub type Rv64BitManipImmExecutor = BitManipImmExecutor<Rv64BaseAluImmU16AdapterExecutor>;
 pub type Rv64BitManipImmChip<F> =
     VmChipWrapper<F, BitManipImmFiller<Rv64BaseAluImmU16AdapterFiller>>;
+
+pub type Rv64BitManipBitwiseInvAir =
+    VmAirWrapper<Rv64BaseAluRegAdapterAir, BitManipBitwiseInvCoreAir>;
+pub type Rv64BitManipBitwiseInvExecutor = BitManipBitwiseInvExecutor<Rv64BaseAluRegAdapterExecutor>;
+pub type Rv64BitManipBitwiseInvChip<F> =
+    VmChipWrapper<F, BitManipBitwiseInvFiller<Rv64BaseAluRegAdapterFiller>>;
+
+pub type Rv64BitManipMinMaxAir = VmAirWrapper<Rv64BaseAluRegU16AdapterAir, BitManipMinMaxCoreAir>;
+pub type Rv64BitManipMinMaxExecutor = BitManipMinMaxExecutor<Rv64BaseAluRegU16AdapterExecutor>;
+pub type Rv64BitManipMinMaxChip<F> =
+    VmChipWrapper<F, BitManipMinMaxFiller<Rv64BaseAluRegU16AdapterFiller>>;
 
 pub(crate) const BITMANIP_NUM_LIMBS: usize = BLOCK_FE_WIDTH;
 pub(crate) const BITMANIP_LIMB_BITS: usize = U16_BITS;

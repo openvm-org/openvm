@@ -186,6 +186,8 @@ pub enum Rv64BExecutor {
     BitManipSlliUw(Rv64BitManipSlliUwExecutor),
     BitManipReg(Rv64BitManipRegExecutor),
     BitManipImm(Rv64BitManipImmExecutor),
+    BitManipBitwiseInv(Rv64BitManipBitwiseInvExecutor),
+    BitManipMinMax(Rv64BitManipMinMaxExecutor),
 }
 
 /// RISC-V 64-bit Io Instruction Executors
@@ -1389,17 +1391,10 @@ impl VmExecutionExtension for Rv64B {
         inventory.add_executor(
             reg,
             [
-                BitwiseInvOpcode::ANDN.global_opcode(),
-                BitwiseInvOpcode::ORN.global_opcode(),
-                BitwiseInvOpcode::XNOR.global_opcode(),
                 RotateOpcode::ROL.global_opcode(),
                 RotateOpcode::ROR.global_opcode(),
                 RotateWOpcode::ROLW.global_opcode(),
                 RotateWOpcode::RORW.global_opcode(),
-                MinMaxOpcode::MIN.global_opcode(),
-                MinMaxOpcode::MINU.global_opcode(),
-                MinMaxOpcode::MAX.global_opcode(),
-                MinMaxOpcode::MAXU.global_opcode(),
                 SingleBitOpcode::BCLR.global_opcode(),
                 SingleBitOpcode::BSET.global_opcode(),
                 SingleBitOpcode::BINV.global_opcode(),
@@ -1431,6 +1426,30 @@ impl VmExecutionExtension for Rv64B {
             ],
         )?;
 
+        // NOTE: executor registration order must match the AIR/chip order in
+        // `VmCircuitExtension` / `VmProverExtension` (chips pair with
+        // executors positionally).
+        let bitwise_inv = Rv64BitManipBitwiseInvExecutor::new(Rv64BaseAluRegAdapterExecutor);
+        inventory.add_executor(
+            bitwise_inv,
+            [
+                BitwiseInvOpcode::ANDN.global_opcode(),
+                BitwiseInvOpcode::ORN.global_opcode(),
+                BitwiseInvOpcode::XNOR.global_opcode(),
+            ],
+        )?;
+
+        let min_max = Rv64BitManipMinMaxExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+        inventory.add_executor(
+            min_max,
+            [
+                MinMaxOpcode::MIN.global_opcode(),
+                MinMaxOpcode::MINU.global_opcode(),
+                MinMaxOpcode::MAX.global_opcode(),
+                MinMaxOpcode::MAXU.global_opcode(),
+            ],
+        )?;
+
         Ok(())
     }
 }
@@ -1444,6 +1463,18 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64B {
         } = inventory.system().port();
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_bus = inventory.range_checker().bus;
+
+        let bitwise_lu = {
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
 
         let shadd = Rv64BitManipShAddAir::new(
             Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
@@ -1469,6 +1500,18 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64B {
         );
         inventory.add_air(imm);
 
+        let bitwise_inv = Rv64BitManipBitwiseInvAir::new(
+            Rv64BaseAluRegAdapterAir::new(exec_bridge, memory_bridge),
+            BitManipBitwiseInvCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(bitwise_inv);
+
+        let min_max = Rv64BitManipMinMaxAir::new(
+            Rv64BaseAluRegU16AdapterAir::new(exec_bridge, memory_bridge),
+            BitManipMinMaxCoreAir::new(range_bus),
+        );
+        inventory.add_air(min_max);
+
         Ok(())
     }
 }
@@ -1489,6 +1532,20 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
 
         inventory.next_air::<Rv64BitManipShAddAir>()?;
         let shadd = Rv64BitManipShAddChip::new(
@@ -1514,9 +1571,23 @@ where
         inventory.next_air::<Rv64BitManipImmAir>()?;
         let imm = Rv64BitManipImmChip::new(
             BitManipImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new()),
-            mem_helper,
+            mem_helper.clone(),
         );
         inventory.add_executor_chip(imm);
+
+        inventory.next_air::<Rv64BitManipBitwiseInvAir>()?;
+        let bitwise_inv = Rv64BitManipBitwiseInvChip::new(
+            BitManipBitwiseInvFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_lu),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(bitwise_inv);
+
+        inventory.next_air::<Rv64BitManipMinMaxAir>()?;
+        let min_max = Rv64BitManipMinMaxChip::new(
+            BitManipMinMaxFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker),
+            mem_helper,
+        );
+        inventory.add_executor_chip(min_max);
 
         Ok(())
     }

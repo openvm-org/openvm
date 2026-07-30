@@ -974,6 +974,83 @@ pub mod bitwise_logic_cuda {
     }
 }
 
+pub mod bitmanip_bitwise_inv_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_bitmanip_bitwise_inv_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_bitmanip_bitwise_inv_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod bitmanip_min_max_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_bitmanip_min_max_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_bitmanip_min_max_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
 pub mod bitmanip_shadd_cuda {
     use super::*;
 

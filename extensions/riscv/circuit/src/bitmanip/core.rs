@@ -131,6 +131,14 @@ pub(crate) fn is_reg_opcode(local_opcode: usize) -> bool {
     REG_OPS.contains(&local_opcode)
 }
 
+pub(crate) fn is_bitwise_inv_opcode(local_opcode: usize) -> bool {
+    matches!(local_opcode, ANDN | ORN | XNOR)
+}
+
+pub(crate) fn is_min_max_opcode(local_opcode: usize) -> bool {
+    matches!(local_opcode, MIN | MINU | MAX | MAXU)
+}
+
 pub(crate) fn is_shadd_opcode(local_opcode: usize) -> bool {
     SHADD_OPS.contains(&local_opcode)
 }

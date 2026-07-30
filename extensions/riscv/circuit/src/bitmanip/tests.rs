@@ -1,43 +1,60 @@
+use std::sync::Arc;
+
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
+};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::{Rv64BaseAluImmU16AdapterRecord, Rv64BaseAluRegU16AdapterRecord},
-        Rv64BitManipImmChipGpu, Rv64BitManipRegChipGpu, Rv64BitManipShAddChipGpu,
-        Rv64BitManipSlliUwChipGpu,
+        adapters::{
+            Rv64BaseAluImmU16AdapterRecord, Rv64BaseAluRegAdapterRecord,
+            Rv64BaseAluRegU16AdapterRecord,
+        },
+        Rv64BitManipBitwiseInvChipGpu, Rv64BitManipImmChipGpu, Rv64BitManipMinMaxChipGpu,
+        Rv64BitManipRegChipGpu, Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwChipGpu,
     },
     openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{
+            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
         EmptyAdapterCoreLayout,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
-    std::sync::Arc,
 };
 
 use super::{
-    core::*, Rv64BitManipImmAir, Rv64BitManipImmChip, Rv64BitManipImmExecutor, Rv64BitManipRegAir,
-    Rv64BitManipRegChip, Rv64BitManipRegExecutor, Rv64BitManipShAddAir, Rv64BitManipShAddChip,
+    core::*, Rv64BitManipBitwiseInvAir, Rv64BitManipBitwiseInvChip, Rv64BitManipBitwiseInvExecutor,
+    Rv64BitManipImmAir, Rv64BitManipImmChip, Rv64BitManipImmExecutor, Rv64BitManipMinMaxAir,
+    Rv64BitManipMinMaxChip, Rv64BitManipMinMaxExecutor, Rv64BitManipRegAir, Rv64BitManipRegChip,
+    Rv64BitManipRegExecutor, Rv64BitManipShAddAir, Rv64BitManipShAddChip,
     Rv64BitManipShAddExecutor, Rv64BitManipSlliUwAir, Rv64BitManipSlliUwChip,
     Rv64BitManipSlliUwExecutor,
 };
 use crate::{
     adapters::{
         Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
-        Rv64BaseAluImmU16AdapterFiller, Rv64BaseAluRegU16AdapterAir,
-        Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
+        Rv64BaseAluImmU16AdapterFiller, Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor,
+        Rv64BaseAluRegAdapterFiller, Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
+        Rv64BaseAluRegU16AdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     test_utils::rv64_rand_write_register_or_imm,
-    BitManipImmCoreAir, BitManipImmFiller, BitManipRegCoreAir, BitManipRegFiller,
+    BitManipBitwiseInvCoreAir, BitManipBitwiseInvFiller, BitManipImmCoreAir, BitManipImmFiller,
+    BitManipMinMaxCoreAir, BitManipMinMaxFiller, BitManipRegCoreAir, BitManipRegFiller,
     BitManipSlliUwCoreAir, BitManipSlliUwFiller,
 };
 
@@ -58,22 +75,35 @@ const SLLI_UW_CASES: [(usize, u64, u32); 4] = [
     (SLLI_UW, 0xffff_ffff_8000_0001, 37),
     (SLLI_UW, 0x0000_0000_dead_beef, 63),
 ];
-const REG_CASES: [(usize, u64, u64); REG_OP_COUNT] = [
-    (ANDN, 0x55aa_0ff0_f00f_aa55, 0x0f0f_f0f0_3333_cccc),
-    (ORN, 0x55aa_0ff0_f00f_aa55, 0x0f0f_f0f0_3333_cccc),
-    (XNOR, 0x55aa_0ff0_f00f_aa55, 0x0f0f_f0f0_3333_cccc),
+const REG_CASES: [(usize, u64, u64); 8] = [
     (ROL, 0x0123_4567_89ab_cdef, 13),
     (ROR, 0x0123_4567_89ab_cdef, 45),
     (ROLW, 0x89ab_cdef, 7),
     (RORW, 0x89ab_cdef, 11),
-    (MIN, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
-    (MINU, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
-    (MAX, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
-    (MAXU, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
     (BCLR, 0xffff_ffff_ffff_ffff, 63),
     (BSET, 0, 37),
     (BINV, 0x1000, 12),
     (BEXT, 0x8000_0000_0000_0000, 63),
+];
+const BITWISE_INV_CASES: [(usize, u64, u64); 5] = [
+    (ANDN, 0x55aa_0ff0_f00f_aa55, 0x0f0f_f0f0_3333_cccc),
+    (ORN, 0x55aa_0ff0_f00f_aa55, 0x0f0f_f0f0_3333_cccc),
+    (XNOR, 0x55aa_0ff0_f00f_aa55, 0x0f0f_f0f0_3333_cccc),
+    (ANDN, 0, 0),
+    (XNOR, u64::MAX, u64::MAX),
+];
+const MIN_MAX_CASES: [(usize, u64, u64); 8] = [
+    (MIN, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
+    (MINU, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
+    (MAX, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
+    (MAXU, 0xffff_ffff_ffff_ff00, 0x7fff_ffff_ffff_ffff),
+    // Equal operands (no differing limb).
+    (MIN, 0x0123_4567_89ab_cdef, 0x0123_4567_89ab_cdef),
+    // Signed boundary: i64::MIN vs zero.
+    (MAX, 0x8000_0000_0000_0000, 0),
+    (MINU, 0x8000_0000_0000_0000, 0),
+    // Difference only in the lowest limb.
+    (MAXU, 0xffff_ffff_ffff_ffff, 0xffff_ffff_ffff_fffe),
 ];
 const IMM_CASES: [(usize, u64, u32); IMM_OP_COUNT] = [
     (RORI, 0x0123_4567_89ab_cdef, 45),
@@ -107,6 +137,18 @@ type SlliUwHarness = TestChipHarness<
 >;
 type ImmHarness =
     TestChipHarness<F, Rv64BitManipImmExecutor, Rv64BitManipImmAir, Rv64BitManipImmChip<F>>;
+type BitwiseInvHarness = TestChipHarness<
+    F,
+    Rv64BitManipBitwiseInvExecutor,
+    Rv64BitManipBitwiseInvAir,
+    Rv64BitManipBitwiseInvChip<F>,
+>;
+type MinMaxHarness = TestChipHarness<
+    F,
+    Rv64BitManipMinMaxExecutor,
+    Rv64BitManipMinMaxAir,
+    Rv64BitManipMinMaxChip<F>,
+>;
 
 fn create_shadd_harness_fields(
     memory_bridge: MemoryBridge,
@@ -230,6 +272,83 @@ fn create_imm_harness(tester: &VmChipTestBuilder<F>) -> ImmHarness {
         tester.memory_helper(),
     );
     ImmHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
+
+fn create_bitwise_inv_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    memory_helper: SharedMemoryHelper<F>,
+    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+) -> (
+    Rv64BitManipBitwiseInvAir,
+    Rv64BitManipBitwiseInvExecutor,
+    Rv64BitManipBitwiseInvChip<F>,
+) {
+    let air = Rv64BitManipBitwiseInvAir::new(
+        Rv64BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
+        BitManipBitwiseInvCoreAir::new(bitwise_chip.bus()),
+    );
+    let executor = Rv64BitManipBitwiseInvExecutor::new(Rv64BaseAluRegAdapterExecutor::new());
+    let chip = Rv64BitManipBitwiseInvChip::new(
+        BitManipBitwiseInvFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_chip),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_bitwise_inv_harness(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    BitwiseInvHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let (air, executor, chip) = create_bitwise_inv_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.memory_helper(),
+        bitwise_chip.clone(),
+    );
+    let harness = BitwiseInvHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    (harness, (bitwise_chip.air, bitwise_chip))
+}
+
+fn create_min_max_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    memory_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+) -> (
+    Rv64BitManipMinMaxAir,
+    Rv64BitManipMinMaxExecutor,
+    Rv64BitManipMinMaxChip<F>,
+) {
+    let air = Rv64BitManipMinMaxAir::new(
+        Rv64BaseAluRegU16AdapterAir::new(execution_bridge, memory_bridge),
+        BitManipMinMaxCoreAir::new(range_checker.bus()),
+    );
+    let executor = Rv64BitManipMinMaxExecutor::new(Rv64BaseAluRegU16AdapterExecutor);
+    let chip = Rv64BitManipMinMaxChip::new(
+        BitManipMinMaxFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_min_max_harness(tester: &VmChipTestBuilder<F>) -> MinMaxHarness {
+    let (air, executor, chip) = create_min_max_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.memory_helper(),
+        tester.range_checker(),
+    );
+    MinMaxHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 fn execute_reg<RA: Arena, E: PreflightExecutor<F, RA>>(
@@ -370,6 +489,54 @@ fn rv64_bitmanip_imm_chip_smoke() {
     tester.simple_test().expect("verification failed");
 }
 
+#[test]
+fn rv64_bitmanip_bitwise_inv_chip_smoke() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_bitwise_inv_harness(&tester);
+
+    for (local_opcode, rs1, rs2) in BITWISE_INV_CASES {
+        execute_reg(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            local_opcode,
+            rs1,
+            rs2,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("verification failed");
+}
+
+#[test]
+fn rv64_bitmanip_min_max_chip_smoke() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut harness = create_min_max_harness(&tester);
+
+    for (local_opcode, rs1, rs2) in MIN_MAX_CASES {
+        execute_reg(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            local_opcode,
+            rs1,
+            rs2,
+        );
+    }
+
+    let tester = tester.build().load(harness).finalize();
+    tester.simple_test().expect("verification failed");
+}
+
 #[cfg(feature = "cuda")]
 type GpuRegHarness = GpuTestChipHarness<
     F,
@@ -377,6 +544,24 @@ type GpuRegHarness = GpuTestChipHarness<
     Rv64BitManipRegAir,
     Rv64BitManipRegChipGpu,
     Rv64BitManipRegChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+type GpuBitwiseInvHarness = GpuTestChipHarness<
+    F,
+    Rv64BitManipBitwiseInvExecutor,
+    Rv64BitManipBitwiseInvAir,
+    Rv64BitManipBitwiseInvChipGpu,
+    Rv64BitManipBitwiseInvChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+type GpuMinMaxHarness = GpuTestChipHarness<
+    F,
+    Rv64BitManipMinMaxExecutor,
+    Rv64BitManipMinMaxAir,
+    Rv64BitManipMinMaxChipGpu,
+    Rv64BitManipMinMaxChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -464,6 +649,43 @@ fn create_cuda_imm_harness(tester: &GpuChipTestBuilder) -> GpuImmHarness {
 }
 
 #[cfg(feature = "cuda")]
+fn create_cuda_bitwise_inv_harness(tester: &GpuChipTestBuilder) -> GpuBitwiseInvHarness {
+    // The CPU chip only regenerates the trace for comparison; its lookup
+    // requests must be discarded (the GPU kernel already adds them).
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        default_bitwise_lookup_bus(),
+    ));
+    let (air, executor, cpu_chip) = create_bitwise_inv_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.dummy_memory_helper(),
+        dummy_bitwise_chip,
+    );
+    let gpu_chip = Rv64BitManipBitwiseInvChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_min_max_harness(tester: &GpuChipTestBuilder) -> GpuMinMaxHarness {
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
+    let (air, executor, cpu_chip) = create_min_max_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.dummy_memory_helper(),
+        dummy_range_checker_chip,
+    );
+    let gpu_chip =
+        Rv64BitManipMinMaxChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_bitmanip_shadd_tracegen() {
     let mut rng = create_seeded_rng();
@@ -531,6 +753,85 @@ fn test_cuda_bitmanip_slli_uw_tracegen() {
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_bitmanip_bitwise_inv_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut harness = create_cuda_bitwise_inv_harness(&tester);
+
+    for (local_opcode, rs1, rs2) in BITWISE_INV_CASES {
+        execute_reg(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            local_opcode,
+            rs1,
+            rs2,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv64BaseAluRegAdapterRecord,
+        &'a mut BitManipBitwiseInvCoreRecord,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_bitmanip_min_max_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_cuda_min_max_harness(&tester);
+
+    for (local_opcode, rs1, rs2) in MIN_MAX_CASES {
+        execute_reg(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            local_opcode,
+            rs1,
+            rs2,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv64BaseAluRegU16AdapterRecord,
+        &'a mut BitManipMinMaxCoreRecord,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
         );
 
     tester
