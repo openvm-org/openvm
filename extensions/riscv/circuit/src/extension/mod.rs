@@ -188,6 +188,7 @@ pub enum Rv64BExecutor {
     BitManipImm(Rv64BitManipImmExecutor),
     BitManipBitwiseInv(Rv64BitManipBitwiseInvExecutor),
     BitManipMinMax(Rv64BitManipMinMaxExecutor),
+    BitManipByteUnary(Rv64BitManipByteUnaryExecutor),
 }
 
 /// RISC-V 64-bit Io Instruction Executors
@@ -1414,11 +1415,6 @@ impl VmExecutionExtension for Rv64B {
                 CountZerosWOpcode::CTZW.global_opcode(),
                 CpopOpcode::CPOP.global_opcode(),
                 CpopWOpcode::CPOPW.global_opcode(),
-                ByteUnaryOpcode::SEXT_B.global_opcode(),
-                ByteUnaryOpcode::SEXT_H.global_opcode(),
-                ByteUnaryOpcode::ZEXT_H.global_opcode(),
-                ByteUnaryOpcode::ORC_B.global_opcode(),
-                ByteUnaryOpcode::REV8.global_opcode(),
                 SingleBitImmOpcode::BCLRI.global_opcode(),
                 SingleBitImmOpcode::BSETI.global_opcode(),
                 SingleBitImmOpcode::BINVI.global_opcode(),
@@ -1447,6 +1443,18 @@ impl VmExecutionExtension for Rv64B {
                 MinMaxOpcode::MINU.global_opcode(),
                 MinMaxOpcode::MAX.global_opcode(),
                 MinMaxOpcode::MAXU.global_opcode(),
+            ],
+        )?;
+
+        let byte_unary = Rv64BitManipByteUnaryExecutor::new(Rv64BaseAluImmAdapterExecutor::new());
+        inventory.add_executor(
+            byte_unary,
+            [
+                ByteUnaryOpcode::SEXT_B.global_opcode(),
+                ByteUnaryOpcode::SEXT_H.global_opcode(),
+                ByteUnaryOpcode::ZEXT_H.global_opcode(),
+                ByteUnaryOpcode::ORC_B.global_opcode(),
+                ByteUnaryOpcode::REV8.global_opcode(),
             ],
         )?;
 
@@ -1511,6 +1519,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64B {
             BitManipMinMaxCoreAir::new(range_bus),
         );
         inventory.add_air(min_max);
+
+        let byte_unary = Rv64BitManipByteUnaryAir::new(
+            Rv64BaseAluImmAdapterAir::new(exec_bridge, memory_bridge),
+            BitManipByteUnaryCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(byte_unary);
 
         Ok(())
     }
@@ -1577,7 +1591,7 @@ where
 
         inventory.next_air::<Rv64BitManipBitwiseInvAir>()?;
         let bitwise_inv = Rv64BitManipBitwiseInvChip::new(
-            BitManipBitwiseInvFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_lu),
+            BitManipBitwiseInvFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_lu.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(bitwise_inv);
@@ -1585,9 +1599,16 @@ where
         inventory.next_air::<Rv64BitManipMinMaxAir>()?;
         let min_max = Rv64BitManipMinMaxChip::new(
             BitManipMinMaxFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker),
-            mem_helper,
+            mem_helper.clone(),
         );
         inventory.add_executor_chip(min_max);
+
+        inventory.next_air::<Rv64BitManipByteUnaryAir>()?;
+        let byte_unary = Rv64BitManipByteUnaryChip::new(
+            BitManipByteUnaryFiller::new(Rv64BaseAluImmAdapterFiller, bitwise_lu),
+            mem_helper,
+        );
+        inventory.add_executor_chip(byte_unary);
 
         Ok(())
     }

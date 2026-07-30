@@ -13,9 +13,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
     Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64B,
-    Rv64BitManipBitwiseInvAir, Rv64BitManipBitwiseInvChipGpu, Rv64BitManipImmAir,
-    Rv64BitManipImmChipGpu, Rv64BitManipMinMaxAir, Rv64BitManipMinMaxChipGpu, Rv64BitManipRegAir,
-    Rv64BitManipRegChipGpu, Rv64BitManipShAddAir, Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwAir,
+    Rv64BitManipBitwiseInvAir, Rv64BitManipBitwiseInvChipGpu, Rv64BitManipByteUnaryAir,
+    Rv64BitManipByteUnaryChipGpu, Rv64BitManipImmAir, Rv64BitManipImmChipGpu,
+    Rv64BitManipMinMaxAir, Rv64BitManipMinMaxChipGpu, Rv64BitManipRegAir, Rv64BitManipRegChipGpu,
+    Rv64BitManipShAddAir, Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwAir,
     Rv64BitManipSlliUwChipGpu, Rv64BitwiseLogicAir, Rv64BitwiseLogicChipGpu,
     Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu,
     Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu,
@@ -384,6 +385,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64B> for 
         inventory.next_air::<Rv64BitManipMinMaxAir>()?;
         let min_max = Rv64BitManipMinMaxChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(min_max);
+
+        inventory.next_air::<Rv64BitManipByteUnaryAir>()?;
+        let byte_unary = Rv64BitManipByteUnaryChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(byte_unary);
 
         Ok(())
     }

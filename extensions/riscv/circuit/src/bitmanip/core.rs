@@ -139,6 +139,10 @@ pub(crate) fn is_min_max_opcode(local_opcode: usize) -> bool {
     matches!(local_opcode, MIN | MINU | MAX | MAXU)
 }
 
+pub(crate) fn is_byte_unary_opcode(local_opcode: usize) -> bool {
+    matches!(local_opcode, SEXT_B | SEXT_H | ZEXT_H | ORC_B | REV8)
+}
+
 pub(crate) fn is_shadd_opcode(local_opcode: usize) -> bool {
     SHADD_OPS.contains(&local_opcode)
 }

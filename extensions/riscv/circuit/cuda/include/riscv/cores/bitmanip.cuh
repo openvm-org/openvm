@@ -558,6 +558,71 @@ struct BitManipBitwiseInvCore {
     }
 };
 
+struct BitManipByteUnaryCoreRecord {
+    uint8_t b[RV64_REGISTER_NUM_LIMBS];
+    uint8_t local_opcode;
+};
+
+static_assert(sizeof(BitManipByteUnaryCoreRecord) == 9);
+
+template <typename T> struct BitManipByteUnaryCoreCols {
+    T b[RV64_REGISTER_NUM_LIMBS];
+    T nz[RV64_REGISTER_NUM_LIMBS];
+    T inv[RV64_REGISTER_NUM_LIMBS];
+    T sext_bit;
+    T sext_low;
+    T opcode_sext_b_flag;
+    T opcode_sext_h_flag;
+    T opcode_zext_h_flag;
+    T opcode_orc_b_flag;
+    T opcode_rev8_flag;
+};
+
+struct BitManipByteUnaryCore {
+    BitwiseOperationLookup bitwise_lookup;
+
+    template <typename T> using Cols = BitManipByteUnaryCoreCols<T>;
+
+    __device__ BitManipByteUnaryCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
+
+    __device__ void fill_trace_row(RowSlice row, BitManipByteUnaryCoreRecord record) {
+        bool is_orc_b = record.local_opcode == ORC_B;
+
+#pragma unroll
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS / 2; i++) {
+            bitwise_lookup.add_range(record.b[2 * i], record.b[2 * i + 1]);
+        }
+
+        uint32_t sext_bit = 0;
+        uint32_t sext_low = 0;
+        if (record.local_opcode == SEXT_B) {
+            sext_bit = record.b[0] >> 7;
+            sext_low = record.b[0] & 0x7f;
+        } else if (record.local_opcode == SEXT_H) {
+            sext_bit = record.b[1] >> 7;
+            sext_low = record.b[1] & 0x7f;
+        }
+        if (record.local_opcode == SEXT_B || record.local_opcode == SEXT_H) {
+            bitwise_lookup.add_range(2 * sext_low, 0);
+        }
+
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+#pragma unroll
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+            bool nz = is_orc_b && record.b[i] != 0;
+            COL_WRITE_VALUE(row, Cols, nz[i], nz);
+            COL_WRITE_VALUE(row, Cols, inv[i], nz ? inv(Fp(record.b[i])) : Fp(0u));
+        }
+        COL_WRITE_VALUE(row, Cols, sext_bit, sext_bit);
+        COL_WRITE_VALUE(row, Cols, sext_low, sext_low);
+        COL_WRITE_VALUE(row, Cols, opcode_sext_b_flag, record.local_opcode == SEXT_B);
+        COL_WRITE_VALUE(row, Cols, opcode_sext_h_flag, record.local_opcode == SEXT_H);
+        COL_WRITE_VALUE(row, Cols, opcode_zext_h_flag, record.local_opcode == ZEXT_H);
+        COL_WRITE_VALUE(row, Cols, opcode_orc_b_flag, is_orc_b);
+        COL_WRITE_VALUE(row, Cols, opcode_rev8_flag, record.local_opcode == REV8);
+    }
+};
+
 struct BitManipMinMaxCoreRecord {
     uint16_t b[BITMANIP_NUM_LIMBS];
     uint16_t c[BITMANIP_NUM_LIMBS];

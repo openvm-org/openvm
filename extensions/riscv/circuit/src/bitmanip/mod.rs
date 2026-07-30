@@ -1,6 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use crate::adapters::{
+    Rv64BaseAluImmAdapterAir, Rv64BaseAluImmAdapterExecutor, Rv64BaseAluImmAdapterFiller,
     Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor, Rv64BaseAluImmU16AdapterFiller,
     Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterFiller,
     Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller,
@@ -8,12 +9,14 @@ use crate::adapters::{
 };
 
 mod bitwise_inv;
+mod byte_unary;
 mod core;
 mod execution;
 mod min_max;
 pub use core::*;
 
 pub use bitwise_inv::*;
+pub use byte_unary::*;
 pub use min_max::*;
 
 #[cfg(feature = "cuda")]
@@ -54,6 +57,12 @@ pub type Rv64BitManipMinMaxAir = VmAirWrapper<Rv64BaseAluRegU16AdapterAir, BitMa
 pub type Rv64BitManipMinMaxExecutor = BitManipMinMaxExecutor<Rv64BaseAluRegU16AdapterExecutor>;
 pub type Rv64BitManipMinMaxChip<F> =
     VmChipWrapper<F, BitManipMinMaxFiller<Rv64BaseAluRegU16AdapterFiller>>;
+
+pub type Rv64BitManipByteUnaryAir =
+    VmAirWrapper<Rv64BaseAluImmAdapterAir, BitManipByteUnaryCoreAir>;
+pub type Rv64BitManipByteUnaryExecutor = BitManipByteUnaryExecutor<Rv64BaseAluImmAdapterExecutor>;
+pub type Rv64BitManipByteUnaryChip<F> =
+    VmChipWrapper<F, BitManipByteUnaryFiller<Rv64BaseAluImmAdapterFiller>>;
 
 pub(crate) const BITMANIP_NUM_LIMBS: usize = BLOCK_FE_WIDTH;
 pub(crate) const BITMANIP_LIMB_BITS: usize = U16_BITS;

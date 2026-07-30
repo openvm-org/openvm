@@ -21,12 +21,13 @@ use rand::rngs::StdRng;
 use {
     crate::{
         adapters::{
-            Rv64BaseAluImmU16AdapterRecord, Rv64BaseAluRegAdapterRecord,
-            Rv64BaseAluRegU16AdapterRecord,
+            Rv64BaseAluImmAdapterRecord, Rv64BaseAluImmU16AdapterRecord,
+            Rv64BaseAluRegAdapterRecord, Rv64BaseAluRegU16AdapterRecord,
         },
-        BitManipBitwiseInvCoreRecord, BitManipMinMaxCoreRecord, Rv64BitManipBitwiseInvChipGpu,
-        Rv64BitManipImmChipGpu, Rv64BitManipMinMaxChipGpu, Rv64BitManipRegChipGpu,
-        Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwChipGpu,
+        BitManipBitwiseInvCoreRecord, BitManipByteUnaryCoreRecord, BitManipMinMaxCoreRecord,
+        Rv64BitManipBitwiseInvChipGpu, Rv64BitManipByteUnaryChipGpu, Rv64BitManipImmChipGpu,
+        Rv64BitManipMinMaxChipGpu, Rv64BitManipRegChipGpu, Rv64BitManipShAddChipGpu,
+        Rv64BitManipSlliUwChipGpu,
     },
     openvm_circuit::arch::{
         testing::{
@@ -40,6 +41,7 @@ use {
 
 use super::{
     core::*, Rv64BitManipBitwiseInvAir, Rv64BitManipBitwiseInvChip, Rv64BitManipBitwiseInvExecutor,
+    Rv64BitManipByteUnaryAir, Rv64BitManipByteUnaryChip, Rv64BitManipByteUnaryExecutor,
     Rv64BitManipImmAir, Rv64BitManipImmChip, Rv64BitManipImmExecutor, Rv64BitManipMinMaxAir,
     Rv64BitManipMinMaxChip, Rv64BitManipMinMaxExecutor, Rv64BitManipRegAir, Rv64BitManipRegChip,
     Rv64BitManipRegExecutor, Rv64BitManipShAddAir, Rv64BitManipShAddChip,
@@ -48,15 +50,17 @@ use super::{
 };
 use crate::{
     adapters::{
+        Rv64BaseAluImmAdapterAir, Rv64BaseAluImmAdapterExecutor, Rv64BaseAluImmAdapterFiller,
         Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
         Rv64BaseAluImmU16AdapterFiller, Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor,
         Rv64BaseAluRegAdapterFiller, Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
         Rv64BaseAluRegU16AdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     test_utils::rv64_rand_write_register_or_imm,
-    BitManipBitwiseInvCoreAir, BitManipBitwiseInvFiller, BitManipImmCoreAir, BitManipImmFiller,
-    BitManipMinMaxCoreAir, BitManipMinMaxFiller, BitManipRegCoreAir, BitManipRegFiller,
-    BitManipSlliUwCoreAir, BitManipSlliUwFiller,
+    BitManipBitwiseInvCoreAir, BitManipBitwiseInvFiller, BitManipByteUnaryCoreAir,
+    BitManipByteUnaryFiller, BitManipImmCoreAir, BitManipImmFiller, BitManipMinMaxCoreAir,
+    BitManipMinMaxFiller, BitManipRegCoreAir, BitManipRegFiller, BitManipSlliUwCoreAir,
+    BitManipSlliUwFiller,
 };
 
 type F = BabyBear;
@@ -106,7 +110,7 @@ const MIN_MAX_CASES: [(usize, u64, u64); 8] = [
     // Difference only in the lowest limb.
     (MAXU, 0xffff_ffff_ffff_ffff, 0xffff_ffff_ffff_fffe),
 ];
-const IMM_CASES: [(usize, u64, u32); IMM_OP_COUNT] = [
+const IMM_CASES: [(usize, u64, u32); 12] = [
     (RORI, 0x0123_4567_89ab_cdef, 45),
     (RORIW, 0x0000_0000_89ab_cdef, 21),
     (CLZ, 0x0000_8000_0000_0000, 0),
@@ -115,15 +119,22 @@ const IMM_CASES: [(usize, u64, u32); IMM_OP_COUNT] = [
     (CTZW, 0x0000_0000_8000_0000, 0),
     (CPOP, 0xf0f0_f0f0_1234_5678, 0),
     (CPOPW, 0xffff_0000_1234_5678, 0),
-    (SEXT_B, 0x80, 0),
-    (SEXT_H, 0x8001, 0),
-    (ZEXT_H, 0xffff_ffff_ffff_8001, 0),
-    (ORC_B, 0x0001_0200_0004_0000, 0),
-    (REV8, 0x0123_4567_89ab_cdef, 0),
     (BCLRI, 0xffff_ffff_ffff_ffff, 47),
     (BSETI, 0, 48),
     (BINVI, 0x1000, 12),
     (BEXTI, 0x8000_0000_0000_0000, 63),
+];
+const BYTE_UNARY_CASES: [(usize, u64, u32); 8] = [
+    // Sign bit set and clear for both extension widths.
+    (SEXT_B, 0x80, 0),
+    (SEXT_B, 0x7f, 0),
+    (SEXT_H, 0x8001, 0),
+    (SEXT_H, 0x1234, 0),
+    (ZEXT_H, 0xffff_ffff_ffff_8001, 0),
+    (ORC_B, 0x0001_0200_0004_0000, 0),
+    // All-zero input: every nz witness is zero.
+    (ORC_B, 0, 0),
+    (REV8, 0x0123_4567_89ab_cdef, 0),
 ];
 
 type RegHarness =
@@ -149,6 +160,12 @@ type MinMaxHarness = TestChipHarness<
     Rv64BitManipMinMaxExecutor,
     Rv64BitManipMinMaxAir,
     Rv64BitManipMinMaxChip<F>,
+>;
+type ByteUnaryHarness = TestChipHarness<
+    F,
+    Rv64BitManipByteUnaryExecutor,
+    Rv64BitManipByteUnaryAir,
+    Rv64BitManipByteUnaryChip<F>,
 >;
 
 fn create_shadd_harness_fields(
@@ -352,6 +369,51 @@ fn create_min_max_harness(tester: &VmChipTestBuilder<F>) -> MinMaxHarness {
     MinMaxHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
+fn create_byte_unary_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    memory_helper: SharedMemoryHelper<F>,
+    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+) -> (
+    Rv64BitManipByteUnaryAir,
+    Rv64BitManipByteUnaryExecutor,
+    Rv64BitManipByteUnaryChip<F>,
+) {
+    let air = Rv64BitManipByteUnaryAir::new(
+        Rv64BaseAluImmAdapterAir::new(execution_bridge, memory_bridge),
+        BitManipByteUnaryCoreAir::new(bitwise_chip.bus()),
+    );
+    let executor = Rv64BitManipByteUnaryExecutor::new(Rv64BaseAluImmAdapterExecutor::new());
+    let chip = Rv64BitManipByteUnaryChip::new(
+        BitManipByteUnaryFiller::new(Rv64BaseAluImmAdapterFiller, bitwise_chip),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_byte_unary_harness(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    ByteUnaryHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let (air, executor, chip) = create_byte_unary_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.memory_helper(),
+        bitwise_chip.clone(),
+    );
+    let harness = ByteUnaryHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    (harness, (bitwise_chip.air, bitwise_chip))
+}
+
 fn execute_reg<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
@@ -491,6 +553,32 @@ fn rv64_bitmanip_imm_chip_smoke() {
 }
 
 #[test]
+fn rv64_bitmanip_byte_unary_chip_smoke() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_byte_unary_harness(&tester);
+
+    for (local_opcode, rs1, imm) in BYTE_UNARY_CASES {
+        execute_imm(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            local_opcode,
+            rs1,
+            imm,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("verification failed");
+}
+
+#[test]
 fn rv64_bitmanip_bitwise_inv_chip_smoke() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -564,6 +652,76 @@ type GpuMinMaxHarness = GpuTestChipHarness<
     Rv64BitManipMinMaxChipGpu,
     Rv64BitManipMinMaxChip<F>,
 >;
+
+#[cfg(feature = "cuda")]
+type GpuByteUnaryHarness = GpuTestChipHarness<
+    F,
+    Rv64BitManipByteUnaryExecutor,
+    Rv64BitManipByteUnaryAir,
+    Rv64BitManipByteUnaryChipGpu,
+    Rv64BitManipByteUnaryChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_byte_unary_harness(tester: &GpuChipTestBuilder) -> GpuByteUnaryHarness {
+    // The CPU chip only regenerates the trace for comparison; its lookup
+    // requests must be discarded (the GPU kernel already adds them).
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        default_bitwise_lookup_bus(),
+    ));
+    let (air, executor, cpu_chip) = create_byte_unary_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.dummy_memory_helper(),
+        dummy_bitwise_chip,
+    );
+    let gpu_chip = Rv64BitManipByteUnaryChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_bitmanip_byte_unary_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut harness = create_cuda_byte_unary_harness(&tester);
+
+    for (local_opcode, rs1, imm) in BYTE_UNARY_CASES {
+        execute_imm(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            local_opcode,
+            rs1,
+            imm,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv64BaseAluImmAdapterRecord,
+        &'a mut BitManipByteUnaryCoreRecord,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluImmAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
 
 #[cfg(feature = "cuda")]
 type GpuShAddHarness = GpuTestChipHarness<
