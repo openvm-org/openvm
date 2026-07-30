@@ -40,6 +40,7 @@ use openvm_stark_sdk::{
     },
     p3_baby_bear::BabyBear,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     chip_traits::{
@@ -90,7 +91,7 @@ impl GraphCell {
 
 /// IR opcodes. Each op writes a statically-known slice of the advice + range
 /// tapes when executed.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Halo2Opcode {
     // -- gate ops --
     /// One constant advice cell; single [`GraphCell::Const`] operand.
@@ -236,6 +237,8 @@ pub struct NodeMeta {
     /// Absolute advice offset of each operand (`UNMATERIALIZED` for
     /// [`GraphCell::Const`] operands).
     pub arg_offsets: Vec<usize>,
+    /// Dataflow depth: `1 + max(level of operand nodes)`, 0 for source nodes.
+    pub level: u32,
 }
 
 /// Transcript sponge/buffer state, mirroring `TranscriptChip`.
@@ -262,8 +265,6 @@ pub struct Halo2IRBuilder {
     ctx_offset: usize,
     /// Next node's `lookup_offset` (range write cursor).
     lookup_offset: usize,
-    /// Dataflow depth per node; 0 for source nodes.
-    levels: Vec<u32>,
     /// Mirrors `Context::zero_cell`.
     zero_cell: Option<GraphCell>,
     /// Mirrors `BabyBearChip::const_cache` (keyed by canonical u64).
@@ -297,7 +298,6 @@ impl Halo2IRBuilder {
             lookup_bits,
             ctx_offset: 0,
             lookup_offset: 0,
-            levels: Vec::new(),
             zero_cell: None,
             bb_const_cache: HashMap::new(),
             transcript_bb_constant_cache: HashMap::new(),
@@ -320,11 +320,6 @@ impl Halo2IRBuilder {
         self.lookup_bits
     }
 
-    /// Dataflow depth of each node (0 for source nodes), indexed by [`NodeId`].
-    pub fn node_levels(&self) -> &[u32] {
-        &self.levels
-    }
-
     /// Emits a node and deduces its [`NodeMeta`] by replaying the op against the
     /// current cache state. Returns the node id and the **absolute** context-tape
     /// offset of each logical output ([`UNMATERIALIZED`] for constants that hit a
@@ -337,37 +332,49 @@ impl Halo2IRBuilder {
     ) -> (NodeId, Vec<usize>) {
         debug_assert_eq!(operands.len(), opcode.num_operands());
         let id = NodeId::try_from(self.nodes.len()).expect("node count exceeds NodeId range");
-        let level = operands
-            .iter()
-            .filter_map(|cell| match cell {
-                GraphCell::Cell(node, _, _) => Some(self.levels[*node as usize] + 1),
-                GraphCell::Const(_) => None,
-            })
-            .max()
-            .unwrap_or(0);
-        self.levels.push(level);
 
         // Tape shape depends only on constant operand values, bit bounds,
         // lookup_bits, and cache state — a nonzero dummy stands in for cell values.
-        let args: Vec<Fr> = operands
-            .iter()
-            .map(|cell| match cell {
-                GraphCell::Cell(..) => Fr::ONE,
-                GraphCell::Const(value) => *value,
-            })
-            .collect();
-        let bits: Vec<u16> = operands.iter().map(|cell| cell.bits() as u16).collect();
-        let gate_cache = if let Some(cell) = self.zero_cell {
-            [(Fr::ZERO, bb_wire(cell, 0))].into()
-        } else {
-            HashMap::new()
+        let mut level = 0u32;
+        let mut args: Vec<Fr> = Vec::with_capacity(operands.len());
+        let mut bits: Vec<u16> = Vec::with_capacity(operands.len());
+        let mut arg_offsets: Vec<usize> = Vec::with_capacity(operands.len());
+        for cell in &operands {
+            match cell {
+                GraphCell::Cell(node, offset, _) => {
+                    level = level.max(self.node_meta[*node as usize].level + 1);
+                    args.push(Fr::ONE);
+                    arg_offsets.push(*offset);
+                }
+                GraphCell::Const(value) => {
+                    args.push(*value);
+                    arg_offsets.push(UNMATERIALIZED);
+                }
+            }
+            bits.push(cell.bits() as u16);
+        }
+
+        let meta = match cache {
+            ConstCacheType::Transcript => derive_opcode_metadata(
+                &opcode,
+                &args,
+                &bits,
+                self.lookup_bits,
+                self.transcript_bb_constant_cache.keys(),
+            ),
+            ConstCacheType::BabyBear => derive_opcode_metadata(
+                &opcode,
+                &args,
+                &bits,
+                self.lookup_bits,
+                self.bb_const_cache.keys(),
+            ),
+            // `Context::load_zero` is the only gate-level constant cache.
+            ConstCacheType::Gate => {
+                let zero = self.zero_cell.map(|_| Fr::ZERO);
+                derive_opcode_metadata(&opcode, &args, &bits, self.lookup_bits, zero.iter())
+            }
         };
-        let cache = match cache {
-            ConstCacheType::Transcript => &self.transcript_bb_constant_cache,
-            ConstCacheType::BabyBear => &self.bb_const_cache,
-            ConstCacheType::Gate => &gate_cache,
-        };
-        let meta = derive_opcode_metadata(&opcode, &args, &bits, self.lookup_bits, cache.keys());
 
         let ctx_offset = self.ctx_offset;
         let output_offsets: Vec<usize> = meta
@@ -381,13 +388,6 @@ impl Halo2IRBuilder {
                 }
             })
             .collect();
-        let arg_offsets = operands
-            .iter()
-            .map(|cell| match cell {
-                GraphCell::Cell(_, offset, _) => *offset,
-                GraphCell::Const(_) => UNMATERIALIZED,
-            })
-            .collect();
         self.node_meta.push(NodeMeta {
             ctx_len: meta.ctx_len,
             ctx_offset,
@@ -395,6 +395,7 @@ impl Halo2IRBuilder {
             lookup_offset: self.lookup_offset,
             constant_skip_inds: meta.constant_skip_inds,
             arg_offsets,
+            level,
         });
         self.ctx_offset += meta.ctx_len;
         self.lookup_offset += meta.lookups_len;
@@ -599,11 +600,12 @@ impl Halo2IRBuilder {
         )
     }
 
-    // --- graph statistics ---
+    // --- graph statistics (dev diagnostics only) ---
 
+    #[cfg(test)]
     pub fn stats(&self) -> IrStats {
         let mut level_widths: Vec<usize> = Vec::new();
-        for &level in &self.levels {
+        for level in self.node_meta.iter().map(|meta| meta.level) {
             let level = level as usize;
             if level >= level_widths.len() {
                 level_widths.resize(level + 1, 0);
@@ -630,6 +632,7 @@ impl Halo2IRBuilder {
 }
 
 /// Structural statistics of the generated IR graph.
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub struct IrStats {
     pub num_nodes: usize,
@@ -646,6 +649,7 @@ pub struct IrStats {
     pub level_widths: Vec<usize>,
 }
 
+#[cfg(test)]
 impl core::fmt::Display for IrStats {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "nodes: {}", self.num_nodes)?;
@@ -1328,7 +1332,6 @@ mod tests {
         println!("ctx cells: {}", builder.total_ctx_len());
         println!("lookup cells: {}", builder.total_lookups_len());
         assert!(stats.num_nodes > 0);
-        assert_eq!(builder.nodes.len(), builder.levels.len());
         assert_eq!(builder.nodes.len(), builder.node_meta.len());
     }
 }
