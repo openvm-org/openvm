@@ -115,10 +115,14 @@ pub struct EvmProof {
 #[cfg(feature = "evm-prove")]
 #[derive(Debug, thiserror::Error)]
 pub enum EvmProofConversionError {
-    #[error("Invalid length of instances: expected at least 3, got {0}")]
+    #[error("Invalid length of instances: expected more than {}, got {0}", NUM_BN254_ACCUMULATOR + 2)]
     InvalidLengthInstances(usize),
-    #[error("Invalid length of user public values")]
-    InvalidUserPublicValuesLength,
+    #[error("Accumulator length {0} is not a multiple of {BN254_BYTES}")]
+    InvalidAccumulatorLength(usize),
+    #[error("Value is not a canonical Bn254 scalar")]
+    NonCanonicalScalar,
+    #[error(transparent)]
+    NonCanonicalCommit(#[from] openvm_continuations::CommitBytesError),
 }
 
 #[cfg(feature = "evm-prove")]
@@ -152,9 +156,9 @@ impl EvmProof {
     }
 
     #[cfg(feature = "evm-verify")]
-    pub fn fallback_calldata(&self) -> Vec<u8> {
-        let raw: openvm_static_verifier::keygen::RawEvmProof = self.clone().into();
-        encode_raw_evm_proof_calldata(&raw)
+    pub fn fallback_calldata(&self) -> Result<Vec<u8>, EvmProofConversionError> {
+        let raw: openvm_static_verifier::keygen::RawEvmProof = self.clone().try_into()?;
+        Ok(encode_raw_evm_proof_calldata(&raw))
     }
 }
 
@@ -185,16 +189,18 @@ pub fn encode_raw_evm_proof_calldata(
 /// - `instances[13]`: app_vm_commit (Fr)
 /// - `instances[14..]`: user public values (each byte as Fr)
 #[cfg(feature = "evm-prove")]
-impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
-    fn from(raw: openvm_static_verifier::keygen::RawEvmProof) -> Self {
+impl TryFrom<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
+    type Error = EvmProofConversionError;
+
+    fn try_from(raw: openvm_static_verifier::keygen::RawEvmProof) -> Result<Self, Self::Error> {
         use openvm_continuations::CommitBytes;
 
         let openvm_static_verifier::keygen::RawEvmProof { instances, proof } = raw;
-        assert!(
-            instances.len() > NUM_BN254_ACCUMULATOR + 2,
-            "RawEvmProof instances must have at least {} elements (accumulator + exe commit + vk commit)",
-            NUM_BN254_ACCUMULATOR + 2
-        );
+        if instances.len() <= NUM_BN254_ACCUMULATOR + 2 {
+            return Err(EvmProofConversionError::InvalidLengthInstances(
+                instances.len(),
+            ));
+        }
 
         // instances[0..12] are the KZG accumulator
         let accumulator = instances[0..NUM_BN254_ACCUMULATOR]
@@ -224,11 +230,11 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
             .collect::<Vec<u8>>();
 
         let app_commit = AppExecutionCommit {
-            app_exe_commit: CommitBytes::new(app_exe_bytes),
-            app_vm_commit: CommitBytes::new(app_vm_bytes),
+            app_exe_commit: CommitBytes::try_new(app_exe_bytes)?,
+            app_vm_commit: CommitBytes::try_new(app_vm_bytes)?,
         };
 
-        Self {
+        Ok(Self {
             version: format!("v{OPENVM_VERSION}"),
             app_commit,
             user_public_values,
@@ -236,15 +242,22 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
                 accumulator: evm_accumulator,
                 proof,
             },
-        }
+        })
     }
 }
 
-/// Convert `EvmProof` → `RawEvmProof`.
+/// Convert `EvmProof` → `RawEvmProof`. Fallible because `evm_proof` may be untrusted.
 #[cfg(feature = "evm-prove")]
-impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
-    fn from(evm_proof: EvmProof) -> Self {
+impl TryFrom<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
+    type Error = EvmProofConversionError;
+
+    fn try_from(evm_proof: EvmProof) -> Result<Self, Self::Error> {
         use openvm_static_verifier::Fr;
+
+        fn to_fr(le_bytes: &[u8; 32]) -> Result<Fr, EvmProofConversionError> {
+            Option::from(Fr::from_bytes(le_bytes))
+                .ok_or(EvmProofConversionError::NonCanonicalScalar)
+        }
 
         let EvmProof {
             app_commit,
@@ -255,6 +268,12 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
 
         let ProofData { accumulator, proof } = proof_data;
 
+        if !accumulator.len().is_multiple_of(BN254_BYTES) {
+            return Err(EvmProofConversionError::InvalidAccumulatorLength(
+                accumulator.len(),
+            ));
+        }
+
         // Reverse each 32-byte chunk from big-endian (EVM) to little-endian (Fr)
         let mut reversed_accumulator = Vec::with_capacity(accumulator.len());
         accumulator
@@ -264,32 +283,33 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         // CommitBytes is big-endian; Fr::from_bytes expects little-endian
         let mut app_exe_bytes = *app_commit.app_exe_commit.as_slice();
         app_exe_bytes.reverse();
-        let app_exe_fr = Fr::from_bytes(&app_exe_bytes).unwrap();
+        let app_exe_fr = to_fr(&app_exe_bytes)?;
 
         let mut app_vm_bytes = *app_commit.app_vm_commit.as_slice();
         app_vm_bytes.reverse();
-        let app_vm_fr = Fr::from_bytes(&app_vm_bytes).unwrap();
+        let app_vm_fr = to_fr(&app_vm_bytes)?;
 
         let user_pvs_frs: Vec<Fr> = user_public_values
             .into_iter()
             .map(|byte| {
                 let mut bytes = [0u8; 32];
                 bytes[0] = byte;
-                Fr::from_bytes(&bytes).unwrap()
+                to_fr(&bytes)
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         // Reconstruct instances: accumulator + commits + user PVs
         let mut instances = Vec::new();
         for chunk in reversed_accumulator.chunks(BN254_BYTES) {
+            // Length checked above, so every chunk is full-width.
             let c: [u8; 32] = chunk.try_into().unwrap();
-            instances.push(Fr::from_bytes(&c).unwrap());
+            instances.push(to_fr(&c)?);
         }
         instances.push(app_exe_fr);
         instances.push(app_vm_fr);
         instances.extend(user_pvs_frs);
 
-        openvm_static_verifier::keygen::RawEvmProof { instances, proof }
+        Ok(openvm_static_verifier::keygen::RawEvmProof { instances, proof })
     }
 }
 

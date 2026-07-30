@@ -13,16 +13,28 @@ pub const COMMIT_NUM_BYTES: usize = 32;
 /// an unsigned integer in base `F::MODULUS`. Each commit can be converted to a Bn254 using the
 /// trivial identification as natural numbers or into a `u32` digest by decomposing the big integer
 /// base-`F::MODULUS`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Encode, Decode)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Encode)]
 pub struct CommitBytes([u8; COMMIT_NUM_BYTES]);
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum CommitBytesError {
+    #[error("non-canonical CommitBytes for BabyBear digest")]
+    NonCanonical,
+}
+
 impl CommitBytes {
+    /// Use this rather than [`CommitBytes::new`] for bytes from an untrusted source.
+    pub fn try_new(bytes: [u8; COMMIT_NUM_BYTES]) -> Result<Self, CommitBytesError> {
+        if u32_digest_to_bytes(&bytes_to_u32_digest(&bytes)) == bytes {
+            Ok(Self(bytes))
+        } else {
+            Err(CommitBytesError::NonCanonical)
+        }
+    }
+
+    /// Panics if `bytes` is non-canonical.
     pub fn new(bytes: [u8; COMMIT_NUM_BYTES]) -> Self {
-        assert!(
-            u32_digest_to_bytes(&bytes_to_u32_digest(&bytes)) == bytes,
-            "non-canonical CommitBytes for BabyBear digest"
-        );
-        Self(bytes)
+        Self::try_new(bytes).expect("non-canonical CommitBytes for BabyBear digest")
     }
 
     pub fn as_slice(&self) -> &[u8; COMMIT_NUM_BYTES] {
@@ -146,7 +158,15 @@ impl<'de> Deserialize<'de> for CommitBytes {
             .map_err(serde::de::Error::custom)?
             .try_into()
             .map_err(|_| serde::de::Error::custom("expected 32 bytes"))?;
-        Ok(CommitBytes::new(bytes))
+        CommitBytes::try_new(bytes).map_err(serde::de::Error::custom)
+    }
+}
+
+// Hand-written so that decoding goes through `try_new` instead of bypassing the canonicity check.
+impl Decode for CommitBytes {
+    fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let bytes = <[u8; COMMIT_NUM_BYTES]>::decode(reader)?;
+        CommitBytes::try_new(bytes).map_err(std::io::Error::other)
     }
 }
 
@@ -192,5 +212,49 @@ mod bn254 {
         let start = COMMIT_NUM_BYTES - bytes.len();
         ret[start..].copy_from_slice(&bytes);
         ret
+    }
+}
+
+/// Untrusted input paths must reject non-canonical bytes as errors rather than panicking.
+#[cfg(test)]
+mod tests {
+    use serde::de::IntoDeserializer;
+
+    use super::*;
+
+    /// Largest canonical digest, i.e. `F::MODULUS^8 - 1`.
+    fn max_canonical() -> [u8; COMMIT_NUM_BYTES] {
+        u32_digest_to_bytes(&[F::ORDER_U32 - 1; DIGEST_SIZE])
+    }
+
+    #[test]
+    fn try_new_canonicity() {
+        assert!(CommitBytes::try_new([0u8; COMMIT_NUM_BYTES]).is_ok());
+        assert!(CommitBytes::try_new(max_canonical()).is_ok());
+        assert_eq!(
+            CommitBytes::try_new([0xff; COMMIT_NUM_BYTES]),
+            Err(CommitBytesError::NonCanonical)
+        );
+    }
+
+    #[test]
+    fn deserialize_rejects_non_canonical() {
+        let hex = format!("0x{}", hex::encode([0xffu8; COMMIT_NUM_BYTES]));
+        let de: serde::de::value::StrDeserializer<serde::de::value::Error> =
+            hex.as_str().into_deserializer();
+        assert!(CommitBytes::deserialize(de).is_err());
+    }
+
+    #[test]
+    fn decode_rejects_non_canonical() {
+        let encoded = [0xffu8; COMMIT_NUM_BYTES];
+        assert!(CommitBytes::decode(&mut encoded.as_slice()).is_err());
+    }
+
+    #[test]
+    fn encode_decode_roundtrip() {
+        let commit = CommitBytes::try_new(max_canonical()).unwrap();
+        let bytes = commit.encode_to_vec().unwrap();
+        assert_eq!(CommitBytes::decode_from_bytes(&bytes).unwrap(), commit);
     }
 }
