@@ -162,7 +162,7 @@ fn constrain_base_baby_bear_decomposition(
     })
 }
 
-fn decompose_bn254_to_base_baby_bear_digits(
+pub(crate) fn decompose_bn254_to_base_baby_bear_digits(
     ctx: &mut Context<Fr>,
     baby_bear: &BabyBearChip,
     packed: AssignedValue<Fr>,

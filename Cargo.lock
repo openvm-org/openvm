@@ -5604,6 +5604,7 @@ dependencies = [
  "openvm-continuations",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
+ "openvm-cuda-common",
  "openvm-recursion-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",

@@ -187,8 +187,9 @@ pub trait TranscriptInst: BabyBearExt4Inst {
     /// Asserts that the proof-of-work `witness` passes with `bits` leading zero bits.
     fn check_witness(&mut self, bits: usize, witness: &ReducedBabyBearWire<Self::F>);
 
-    /// unfortunately we need this to keep vk the same
-    /// because transcript BabyBear chip has a cache that's not the same
+    /// Load a reduced constant through `TranscriptChip`'s baby-bear constant
+    /// cache, which is distinct from `BabyBearChip::const_cache`. This split
+    /// is preserved to keep the verifying key unchanged.
     fn transcript_load_reduced_constant(&mut self, value: BabyBear)
         -> ReducedBabyBearWire<Self::F>;
 }
