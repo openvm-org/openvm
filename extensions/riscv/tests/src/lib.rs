@@ -187,6 +187,10 @@ mod tests {
         let mut words = (1..32)
             .map(|rd| addi_word(rd, rd as i32 * 37 - 997))
             .collect::<Vec<_>>();
+        // Re-seed minu's rs2 (x10) with zero: constant propagation then folds
+        // the operand to a literal 0 in the generated C, which used to trip
+        // -Werror=tautological-unsigned-zero-compare in the rvr backend.
+        words.push(addi_word(10, 0));
         words.extend_from_slice(BITMANIP_GOLDEN_WORDS);
 
         let mut instructions = Transpiler::<F>::default()

@@ -172,10 +172,13 @@ fn reg_expr(op: BitManipOp, lhs: &str, rhs: &str) -> String {
         BitManipOp::Ror => format!("rv64b_ror64({lhs}, {rhs})"),
         BitManipOp::RolW => format!("rv64b_sext32(rv64b_rol32((uint32_t){lhs}, {rhs}))"),
         BitManipOp::RorW => format!("rv64b_sext32(rv64b_ror32((uint32_t){lhs}, {rhs}))"),
-        BitManipOp::Min => format!("((int64_t){lhs} < (int64_t){rhs} ? {lhs} : {rhs})"),
-        BitManipOp::MinU => format!("({lhs} < {rhs} ? {lhs} : {rhs})"),
-        BitManipOp::Max => format!("((int64_t){lhs} > (int64_t){rhs} ? {lhs} : {rhs})"),
-        BitManipOp::MaxU => format!("({lhs} > {rhs} ? {lhs} : {rhs})"),
+        // Helper calls rather than inline ternaries: constant propagation can
+        // fold an operand to 0, and an inline unsigned `< 0` comparison trips
+        // -Werror=tautological-unsigned-zero-compare in the generated C.
+        BitManipOp::Min => format!("rv64b_min64({lhs}, {rhs})"),
+        BitManipOp::MinU => format!("rv64b_minu64({lhs}, {rhs})"),
+        BitManipOp::Max => format!("rv64b_max64({lhs}, {rhs})"),
+        BitManipOp::MaxU => format!("rv64b_maxu64({lhs}, {rhs})"),
         BitManipOp::Bclr => format!("{lhs} & ~(1ull << ({rhs} & 0x3full))"),
         BitManipOp::Bset => format!("{lhs} | (1ull << ({rhs} & 0x3full))"),
         BitManipOp::Binv => format!("{lhs} ^ (1ull << ({rhs} & 0x3full))"),

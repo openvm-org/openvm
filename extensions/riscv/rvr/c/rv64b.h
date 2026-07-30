@@ -15,6 +15,25 @@ static __attribute__((always_inline)) inline uint64_t rv64b_sext32(uint32_t valu
   return (uint64_t)(int64_t)(int32_t)value;
 }
 
+// Function boundaries keep the generated call sites free of operand-shape
+// warnings (e.g. -Wtautological-unsigned-zero-compare when constant
+// propagation folds an operand to 0).
+static __attribute__((always_inline)) inline uint64_t rv64b_min64(uint64_t lhs, uint64_t rhs) {
+  return (int64_t)lhs < (int64_t)rhs ? lhs : rhs;
+}
+
+static __attribute__((always_inline)) inline uint64_t rv64b_minu64(uint64_t lhs, uint64_t rhs) {
+  return lhs < rhs ? lhs : rhs;
+}
+
+static __attribute__((always_inline)) inline uint64_t rv64b_max64(uint64_t lhs, uint64_t rhs) {
+  return (int64_t)lhs > (int64_t)rhs ? lhs : rhs;
+}
+
+static __attribute__((always_inline)) inline uint64_t rv64b_maxu64(uint64_t lhs, uint64_t rhs) {
+  return lhs > rhs ? lhs : rhs;
+}
+
 static __attribute__((always_inline)) inline uint64_t rv64b_rol64(uint64_t value,
                                                                   uint64_t shift) {
   uint32_t amount = (uint32_t)shift & 0x3fu;
