@@ -53,6 +53,7 @@ impl StaticVerifierCircuit {
 
 /// High-level proving key that owns a [`StaticVerifierCircuit`], [`Halo2ProvingPinning`], and
 /// [`StaticVerifierShape`].
+#[derive(Clone)]
 pub struct StaticVerifierProvingKey {
     pub circuit: StaticVerifierCircuit,
     pub pinning: Halo2ProvingPinning,
@@ -213,7 +214,7 @@ impl StaticVerifierProvingKey {
             FusedColumnBuilder::new(n, num_advice_columns, break_points, lookup_col_indices);
 
         let mut executor = GraphExecutor::new(&self.graph_program, state);
-        executor.reset();
+        executor.state.reset();
         info_span!("populate_inputs").in_scope(|| {
             load_proof_wire(&mut executor, proof, &self.circuit.log_heights_per_air);
         });

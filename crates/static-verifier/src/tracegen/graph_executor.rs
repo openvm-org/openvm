@@ -93,7 +93,7 @@ unsafe impl Sync for TapePtr {}
 /// Serialized alongside the proving key; on decode a fresh
 /// [`GraphExecutorState`] is paired with it (via [`GraphExecutor::new`]) to
 /// replay the populate trace without re-recording it.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct GraphProgram {
     advice_cells: usize,
     lookup_cells: usize,
@@ -145,8 +145,8 @@ pub struct GraphExecutorState {
 /// implementing [`PopulateInputs`] so `load_proof_wire` can stream witnesses
 /// into the tape and driving [`Self::run`] for the compute phase.
 pub struct GraphExecutor<'a> {
-    program: &'a GraphProgram,
-    state: &'a mut GraphExecutorState,
+    pub program: &'a GraphProgram,
+    pub state: &'a mut GraphExecutorState,
 }
 
 impl GraphProgram {
@@ -390,11 +390,6 @@ impl<'a> GraphExecutor<'a> {
 
     pub fn program(&self) -> &GraphProgram {
         self.program
-    }
-
-    /// See [`GraphExecutorState::reset`].
-    pub fn reset(&mut self) {
-        self.state.reset();
     }
 
     /// See [`GraphExecutorState::advice`].

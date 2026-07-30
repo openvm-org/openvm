@@ -15,9 +15,6 @@ Implements the same `chip_traits` trait set as `Halo2Backend`, but each
 method call records a `Halo2GraphNode` instead of assigning halo2 cells.
 Every node writes a statically-known slice of the advice and range tapes.
 
-To keep replay stateless (so nodes can run in parallel), the builder
-mirrors chip host-side bookkeeping exactly:
-
 - `max_bits` tracking and explicit `BBReduce` nodes for pre-op reduces.
 - Constant caches (`Context::load_zero`, `BabyBearChip::const_cache`,
   `TranscriptChip`'s own baby-bear cache). Atomic ops (`BBDiv`, `ExtMul`,
@@ -38,9 +35,12 @@ implementation. Two implementations share the same op logic:
 - `CalculateOffsetsTape` — build-time. Records values + output offsets to
   derive `OpcodeMeta` (ctx/lookup lengths, output offsets, constant-skip
   indices); carries a constant cache seeded with the builder's warm set.
+   - We use this to derive the node metadata that is necessary to keep this impl byte for byte
+   - this means adding some extra tracking info for constants that may or may not be written onto the advice tape due to constant caching in the circuit vk construction (TODO: make this better if vk can be changed)  
 - `WitnessTape` — runtime. Streams values into caller-provided buffers
   via raw pointer bumps. Stateless: `constant_skip_inds` precomputed at
   build time tells it exactly which `load_constant` calls write a cell.
+   - this is optimized to run as fast as possible
 
 Gate, range, and BabyBear primitives are provided methods on
 `ReplayTape`, so one set of implementations serves both build-time
@@ -48,11 +48,13 @@ metadata derivation and runtime replay.
 
 ### `graph_executor.rs` — parallel interpreter
 
-Lowering (`GraphExecutor::new`) flattens the IR into a flat
+Lowering (`GraphProgram::lower`) flattens the IR into a flat
 `Vec<GraphCoreInst>` over a single tape laid out as
-`[advice | lookups | consts]`. Fixed-column constants are dedup'd into
-the trailing region, so every operand — cell, constant, or input — is a
-single tape offset.
+`[advice | lookups | consts]`. 
+
+The Executor is split into two components: `GraphProgram` and `GraphExecutorState`. The former contains the constants/instructions/metadata needed for the executor to run, that's not mutable, while the latter contains the mutable components. This is so that `GraphProgram` can be part of the `pk`. 
+
+`GraphExecutor` borrows both, the former immutably and the latter mutably.
 
 Execution runs in two phases:
 
