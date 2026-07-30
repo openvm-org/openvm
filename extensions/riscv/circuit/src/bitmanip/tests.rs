@@ -24,8 +24,9 @@ use {
             Rv64BaseAluImmU16AdapterRecord, Rv64BaseAluRegAdapterRecord,
             Rv64BaseAluRegU16AdapterRecord,
         },
-        Rv64BitManipBitwiseInvChipGpu, Rv64BitManipImmChipGpu, Rv64BitManipMinMaxChipGpu,
-        Rv64BitManipRegChipGpu, Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwChipGpu,
+        BitManipBitwiseInvCoreRecord, BitManipMinMaxCoreRecord, Rv64BitManipBitwiseInvChipGpu,
+        Rv64BitManipImmChipGpu, Rv64BitManipMinMaxChipGpu, Rv64BitManipRegChipGpu,
+        Rv64BitManipShAddChipGpu, Rv64BitManipSlliUwChipGpu,
     },
     openvm_circuit::arch::{
         testing::{
