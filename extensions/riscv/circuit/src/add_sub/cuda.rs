@@ -1,19 +1,25 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use derive_new::new;
 use openvm_circuit::{
-    arch::{DenseRecordArena, BLOCK_FE_WIDTH},
+    arch::{
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        BLOCK_FE_WIDTH,
+    },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::{AddSubCoreCols, AddSubCoreRecord};
+use super::AddSubCoreCols;
 use crate::{
-    adapters::{Rv64BaseAluRegU16AdapterCols, Rv64BaseAluRegU16AdapterRecord, U16_BITS},
-    cuda_abi::add_sub_cuda::tracegen,
+    adapters::{Rv64BaseAluRegU16AdapterCols, U16_BITS},
+    cuda_abi::add_sub_cuda,
 };
 
 #[derive(new)]
@@ -22,38 +28,57 @@ pub struct Rv64AddSubChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluRegU16AdapterRecord,
-            AddSubCoreRecord<BLOCK_FE_WIDTH>,
-        )>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+impl Rv64AddSubChipGpu {
+    pub fn generate_proving_ctx_from_postflight(
+        &self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let add_range = replay_plan.opcode_range(BaseAluOpcode::ADD.global_opcode());
+        let sub_range = replay_plan.opcode_range(BaseAluOpcode::SUB.global_opcode());
+        let num_steps = add_range
+            .len()
+            .checked_add(sub_range.len())
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(
+                    "add/sub replay row count overflow".to_string(),
+                )
+            })?;
+        if num_steps == 0 {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64BaseAluRegU16AdapterCols::<F>::width()
             + AddSubCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
-        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-
         unsafe {
-            tracegen(
+            add_sub_cuda::replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
-                &d_records,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                add_range.start,
+                add_range.len(),
+                sub_range.start,
+                sub_range.len(),
+                transcript.error_ptr(),
+                BaseAluOpcode::ADD.global_opcode().as_usize() as u32,
+                BaseAluOpcode::SUB.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
-            )
-            .unwrap();
+            )?;
         }
-
-        AirProvingContext::simple_no_pis(d_trace)
+        Ok(AirProvingContext::simple_no_pis(d_trace))
     }
 }

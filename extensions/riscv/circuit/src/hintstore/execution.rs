@@ -18,7 +18,7 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{validate_hint_buffer_num_words, Rv64HintStoreExecutor};
-use crate::adapters::rv64_bytes_to_u32;
+use crate::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -74,6 +74,16 @@ impl<F> InterpreterExecutor<F> for Rv64HintStoreExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if opcode == HINT_STORED.global_opcode().as_usize() {
+            String::from("HINT_STORED")
+        } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
+            String::from("HINT_BUFFER")
+        } else {
+            unreachable!("unsupported opcode: {opcode}")
+        }
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<HintStorePreCompute>()
@@ -159,9 +169,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     let pc = exec_state.pc();
     let mem_ptr_limbs =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = rv64_bytes_to_u32(mem_ptr_limbs);
+    let mem_ptr = validate_memory_block_byte_ptr(pc, rv64_bytes_to_u32(mem_ptr_limbs))?;
 
     let num_words = if IS_HINT_STORED {
+        exec_state.ctx.advance_timestamp(1);
         1u64
     } else {
         let num_words_limbs = exec_state
@@ -177,6 +188,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     }
 
     for word_index in 0..num_words {
+        if word_index != 0 {
+            exec_state.ctx.advance_timestamp(2);
+        }
         let mut data = [0; RV64_REGISTER_NUM_LIMBS];
         exec_state.streams.hint_stream.copy_to_slice(&mut data);
         exec_state.vm_write_bytes(

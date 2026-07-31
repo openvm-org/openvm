@@ -26,12 +26,12 @@ __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
                                                   uint64_t buffer_ptr,
                                                   uint64_t input_ptr,
                                                   uint64_t len) {
-  if (unlikely(len > KECCAK_RATE_BYTES)) {
+  if (unlikely(len > KECCAK_RATE_BYTES || (len & (WORD_SIZE - 1)) != 0)) {
     return false;
   }
-  /* len is at most 136, so this is at most 17. uint32_t matches the range
-   * helper. */
-  uint32_t num_words = (uint32_t)((len + WORD_SIZE - 1) / WORD_SIZE);
+  /* The AIR operates on complete u64 words. Reject a partial final word before
+   * mutation so serial execution and replay have the same semantics. */
+  uint32_t num_words = (uint32_t)(len / WORD_SIZE);
   if (unlikely(num_words == 0)) {
     return true;
   }

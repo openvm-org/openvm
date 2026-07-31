@@ -78,8 +78,8 @@ jobs:
           # list of all unique features across workspace generated using:
           # cargo metadata --format-version=1 --no-deps | jq -r '.packages[].features | to_entries[] | .key' | sort -u | tr '\n' ' ' && echo ""
           # (exclude mimalloc since it conflicts with jemalloc)
-          # cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils" -- -D warnings
-          cargo clippy --all-targets --all --tests --features "bls12_381 bn254 default entrypoint export-intrinsics export-libm function-span getrandom-unsupported halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime std test-utils" -- -D warnings
+          # cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime rvr static-verifier std test-utils" -- -D warnings
+          cargo clippy --all-targets --all --tests --features "bls12_381 bn254 default entrypoint export-intrinsics export-libm function-span getrandom-unsupported halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime rvr std test-utils" -- -D warnings
           # cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
           cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
       - name: Run fmt, clippy for guest
@@ -195,8 +195,8 @@ jobs:
       - name: Run clippy
         run: |
           # includes GPU specific features cuda and touchemall
-          # cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs cuda default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils touchemall" -- -D warnings
-          cargo clippy --all-targets --all --tests --features "bls12_381 bn254 cuda default entrypoint export-intrinsics export-libm function-span getrandom-unsupported halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime std test-utils touchemall" -- -D warnings
+          # cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs cuda default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime rvr static-verifier std test-utils touchemall" -- -D warnings
+          cargo clippy --all-targets --all --tests --features "bls12_381 bn254 cuda default entrypoint export-intrinsics export-libm function-span getrandom-unsupported halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime rvr std test-utils touchemall" -- -D warnings
       # TODO: re-enable after stark-backend Fp() default constructor is __host__ __device__
       # - name: Run clang-tidy
       #   run: |

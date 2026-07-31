@@ -12,43 +12,15 @@
 using namespace riscv;
 using namespace program;
 
-struct LoadRecord {
-    // The block containing the effective address followed by the second block, which is all-zero
-    // unless the access crosses a block boundary.
-    uint16_t read_data[2][BLOCK_FE_WIDTH];
-};
-
-struct LoadByteRecord {
-    uint16_t read_data[BLOCK_FE_WIDTH];
-};
-
-struct Rv64LoadRecord {
-    Rv64LoadMultiByteAdapterRecord adapter;
-    LoadRecord core;
-};
-
-struct Rv64LoadByteRecord {
-    Rv64LoadByteAdapterRecord adapter;
-    LoadByteRecord core;
-};
-
-static_assert(sizeof(Rv64LoadMultiByteAdapterRecord) == 44);
-static_assert(sizeof(LoadRecord) == 16);
-static_assert(sizeof(Rv64LoadRecord) == 60);
-static_assert(offsetof(LoadRecord, read_data) == 0);
-static_assert(offsetof(Rv64LoadRecord, core) == 44);
-static_assert(sizeof(Rv64LoadByteAdapterRecord) == 40);
-static_assert(sizeof(LoadByteRecord) == 8);
-static_assert(sizeof(Rv64LoadByteRecord) == 48);
-static_assert(offsetof(Rv64LoadByteRecord, core) == 40);
-
 static __device__ __forceinline__ uint16_t load_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
 }
 
-static __device__ __forceinline__ uint16_t
-load_read_full_cell(LoadRecord const &record, uint32_t cell) {
-    return record.read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
+static __device__ __forceinline__ uint16_t load_read_full_cell(
+    uint16_t const (&read_data)[2][BLOCK_FE_WIDTH],
+    uint32_t cell
+) {
+    return read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
 }
 
 template <typename T, size_t WIDTH_BYTES> struct LoadWidthCoreCols {
@@ -73,10 +45,14 @@ template <size_t WIDTH_BYTES> struct LoadWidthCore {
     __device__ LoadWidthCore(BitwiseOperationLookup bitwise_lookup)
         : bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&read_data)[2][BLOCK_FE_WIDTH],
+        uint8_t shift
+    ) {
         Encoder encoder = shift_encoder();
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
-        row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
+        row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &read_data[0][0]);
 
         // On odd shifts, slot `j` holds the low byte of overlapped cell `j`. The high bytes are
         // derived in the AIR and only range checked here.
@@ -84,7 +60,7 @@ template <size_t WIDTH_BYTES> struct LoadWidthCore {
         uint16_t overlap_hi_bytes[NUM_OVERLAP_CELLS] = {};
         if (shift & 1) {
             for (size_t j = 0; j < NUM_OVERLAP_CELLS; j++) {
-                uint16_t cell = load_read_full_cell(record, (shift >> 1) + j);
+                uint16_t cell = load_read_full_cell(read_data, (shift >> 1) + j);
                 overlap_lo_bytes[j] = load_byte_from_cell(cell, 0);
                 overlap_hi_bytes[j] = load_byte_from_cell(cell, 1);
             }

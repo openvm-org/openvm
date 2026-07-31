@@ -1,12 +1,6 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
-        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
-    },
-    system::memory::MemoryAuxColsFactory,
-};
+use openvm_circuit::arch::{AdapterAirContext, VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
@@ -17,16 +11,13 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADB;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
-use crate::{
-    adapters::{
-        shift_encoder, u16_cell_byte, LoadByteInstruction, Rv64LoadByteAdapterFiller,
-        Rv64LoadByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
-    },
-    load::LoadByteRecord,
+use crate::adapters::{
+    shift_encoder, LoadByteInstruction, Rv64LoadByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH,
+    RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
 };
 
 /// Handles signed byte loads by decomposing the selected u16 cell and sign-extending the chosen
@@ -183,11 +174,11 @@ where
 
 #[derive(Clone)]
 pub struct LoadSignExtendByteFiller<A = Rv64LoadByteAdapterFiller> {
-    adapter: A,
+    pub(super) adapter: A,
     pub offset: usize,
-    encoder: Encoder,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    range_checker_chip: SharedVariableRangeCheckerChip,
+    pub(super) encoder: Encoder,
+    pub(super) bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    pub(super) range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A> LoadSignExtendByteFiller<A> {
@@ -204,44 +195,5 @@ impl<A> LoadSignExtendByteFiller<A> {
             bitwise_lookup_chip,
             range_checker_chip,
         }
-    }
-}
-
-impl<F> TraceFiller<F> for LoadSignExtendByteFiller<Rv64LoadByteAdapterFiller>
-where
-    F: PrimeField32,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // LoadSignExtendByteCoreCols::width() elements.
-        let (mut adapter_row, mut core_row) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64LoadByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
-        };
-        let adapter_record: &Rv64LoadByteAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let shift = adapter_record.shift_amount();
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY: core_row contains a valid LoadByteRecord written by the executor during trace
-        // generation.
-        let record: &LoadByteRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
-        let core_row: &mut LoadSignExtendByteCoreCols<F> = core_row.borrow_mut();
-
-        let read_cell = read_data[shift / 2];
-        let read_cell_bytes = [u16_cell_byte(read_cell, 0), u16_cell_byte(read_cell, 1)];
-        self.bitwise_lookup_chip
-            .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
-        core_row.read_cell_lo_byte = F::from_u16(read_cell_bytes[0]);
-
-        let byte = read_cell_bytes[shift % 2];
-        let sign_bit = byte & RV64_BYTE_SIGN_BIT;
-        self.range_checker_chip
-            .add_count((byte - sign_bit) as u32, RV64_BYTE_BITS - 1);
-        core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
-        core_row.read_data = read_data.map(F::from_u16);
-        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
-        core_row.selector = (*pt).map(F::from_u32);
     }
 }

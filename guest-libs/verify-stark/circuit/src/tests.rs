@@ -20,7 +20,7 @@ use openvm_continuations::{
     SC,
 };
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
-use openvm_riscv_circuit::{Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
+use openvm_riscv_circuit::{Rv64IConfig, Rv64ImConfig, Rv64ImCpuBuilder};
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
@@ -32,7 +32,8 @@ use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security,
         baby_bear_poseidon2::{
-            default_duplex_sponge_recorder, poseidon2_compress_with_capacity, DIGEST_SIZE, F,
+            default_duplex_sponge_recorder, poseidon2_compress_with_capacity,
+            BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
         },
         internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
         root_params_with_100_bits_security,
@@ -56,12 +57,13 @@ cfg_if::cfg_if! {
     } else {
         use openvm_continuations::prover::InnerCpuProver as InnerProver;
         use openvm_cpu_backend::CpuBackend;
-        use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
         use crate::prover::DeferredVerifyCpuProver as DeferredVerifyProver;
         type Engine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
         type PB = CpuBackend<SC>;
     }
 }
+
+type AppEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
 
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
@@ -97,8 +99,10 @@ fn run_leaf_aggregation(
     )?;
     let input = (1u64 << log_fib_input).to_le_bytes().to_vec();
 
-    let engine = Engine::new(app_params_with_100_bits_security(21));
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;
+    // This test targets recursive verification. GPU app preflight is covered by
+    // extension and SDK tests, so build the input app proof through the generic CPU path.
+    let engine = AppEngine::new(app_params_with_100_bits_security(21));
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImCpuBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;

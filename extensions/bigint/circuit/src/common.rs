@@ -1,7 +1,8 @@
 use openvm_circuit::{
-    arch::{ExecutionCtxTrait, VmExecState, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionCtxTrait, ExecutionError, VmExecState, MEMORY_BLOCK_BYTES},
     system::memory::online::GuestMemory,
 };
+use openvm_riscv_circuit::adapters::validate_memory_block_byte_ptr;
 
 use crate::{
     INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U32_LIMBS, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
@@ -14,14 +15,15 @@ pub fn read_int256<CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
     addr_space: u32,
     ptr: u32,
-) -> [u8; INT256_NUM_U8_LIMBS] {
+) -> Result<[u8; INT256_NUM_U8_LIMBS], ExecutionError> {
+    validate_memory_block_byte_ptr(exec_state.pc(), ptr)?;
     let mut result = [0u8; INT256_NUM_U8_LIMBS];
     for i in 0..INT256_NUM_MEMORY_BLOCKS {
         let block: [u8; MEMORY_BLOCK_BYTES] =
             exec_state.vm_read_bytes(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32);
         result[i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES].copy_from_slice(&block);
     }
-    result
+    Ok(result)
 }
 
 /// Write a 256-bit integer as 4 separate 8-byte block writes.
@@ -31,7 +33,8 @@ pub fn write_int256<CTX: ExecutionCtxTrait>(
     addr_space: u32,
     ptr: u32,
     data: &[u8; INT256_NUM_U8_LIMBS],
-) {
+) -> Result<(), ExecutionError> {
+    validate_memory_block_byte_ptr(exec_state.pc(), ptr)?;
     for i in 0..INT256_NUM_MEMORY_BLOCKS {
         let block: [u8; MEMORY_BLOCK_BYTES] = data
             [i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES]
@@ -39,6 +42,7 @@ pub fn write_int256<CTX: ExecutionCtxTrait>(
             .unwrap();
         exec_state.vm_write_bytes(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32, &block);
     }
+    Ok(())
 }
 
 #[inline(always)]

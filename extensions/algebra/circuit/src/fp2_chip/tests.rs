@@ -1,5 +1,5 @@
 use std::str::FromStr;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::sync::Arc;
 
 use derive_new::new;
@@ -7,8 +7,11 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    testing::{
+        memory::{gen_pointer, gen_register_pointer},
+        TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder,
+    },
+    MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 use openvm_instructions::{
@@ -30,6 +33,7 @@ use crate::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_executor, get_fp2_muldiv_air,
         get_fp2_muldiv_chip, get_fp2_muldiv_executor, Fp2Air, Fp2Chip, Fp2Executor,
     },
+    trace::generate_field_expression_trace_from_postflight,
     FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
@@ -55,7 +59,6 @@ fn create_addsub_test_chips<const BLOCKS: usize>(
     let executor = get_fp2_addsub_executor(
         config.clone(),
         tester.range_checker().bus().range_max_bits,
-        tester.address_bits(),
         offset,
     );
     let chip = get_fp2_addsub_chip(
@@ -64,7 +67,21 @@ fn create_addsub_test_chips<const BLOCKS: usize>(
         tester.range_checker(),
         tester.address_bits(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    let address_bits = tester.address_bits();
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                chip,
+                postflight,
+                offset,
+                address_bits,
+            )
+        },
+    )
 }
 
 fn create_muldiv_test_chips<const BLOCKS: usize>(
@@ -83,7 +100,6 @@ fn create_muldiv_test_chips<const BLOCKS: usize>(
     let executor = get_fp2_muldiv_executor(
         config.clone(),
         tester.range_checker().bus().range_max_bits,
-        tester.address_bits(),
         offset,
     );
     let chip = get_fp2_muldiv_chip(
@@ -92,23 +108,34 @@ fn create_muldiv_test_chips<const BLOCKS: usize>(
         tester.range_checker(),
         tester.address_bits(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    let address_bits = tester.address_bits();
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        move |chip, postflight| {
+            generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                chip,
+                postflight,
+                offset,
+                address_bits,
+            )
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
+fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut Fp2Executor<BLOCKS>,
-    arena: &mut RA,
+    preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     modulus: &BigUint,
     is_setup: bool,
     is_addsub: bool,
     offset: usize,
-) where
-    RA: Arena,
-    Fp2Executor<BLOCKS>: PreflightExecutor<F, RA>,
-{
+) {
     let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
         (
             modulus.clone(),
@@ -148,9 +175,12 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
     let ptr_as = RV64_REGISTER_AS as usize;
     let data_as = RV64_MEMORY_AS as usize;
 
-    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mut rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    while rs2_ptr == rs1_ptr {
+        rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    }
+    let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let a_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
@@ -223,7 +253,7 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
         ptr_as as isize,
         data_as as isize,
     );
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 }
 
 #[derive(new)]
@@ -293,10 +323,10 @@ fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
     };
 
     for i in 0..test_config.num_ops {
-        set_and_execute_fp2::<BLOCKS, NUM_LIMBS, _>(
+        set_and_execute_fp2::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             &test_config.modulus,
             i == 0,
@@ -313,14 +343,12 @@ fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 mod cuda_tests {
-    use openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        DenseRecordArena,
+    use openvm_circuit::arch::testing::{
+        default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     };
-    use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip};
-    use openvm_cuda_backend::GpuBackend;
+    use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
     use test_case::test_case;
 
     use super::*;
@@ -347,12 +375,7 @@ mod cuda_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_fp2_addsub_executor(
-            config.clone(),
-            range_bus.range_max_bits,
-            tester.address_bits(),
-            offset,
-        );
+        let executor = get_fp2_addsub_executor(config.clone(), range_bus.range_max_bits, offset);
 
         let cpu_chip = get_fp2_addsub_chip(
             config.clone(),
@@ -360,7 +383,7 @@ mod cuda_tests {
             dummy_range_checker_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(
+        let hybrid_chip = HybridFp2Chip::new_with_replay(
             get_fp2_addsub_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -368,9 +391,25 @@ mod cuda_tests {
                 tester.address_bits(),
             ),
             tester.range_checker().device_ctx.clone(),
+            offset,
+            tester.range_checker(),
         );
 
+        let address_bits = tester.address_bits();
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                        chip,
+                        postflight,
+                        offset,
+                        address_bits,
+                    )
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            )
     }
 
     fn create_muldiv_cuda_test_harness<const BLOCKS: usize>(
@@ -391,12 +430,7 @@ mod cuda_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_fp2_muldiv_executor(
-            config.clone(),
-            range_bus.range_max_bits,
-            tester.address_bits(),
-            offset,
-        );
+        let executor = get_fp2_muldiv_executor(config.clone(), range_bus.range_max_bits, offset);
 
         let cpu_chip = get_fp2_muldiv_chip(
             config.clone(),
@@ -404,7 +438,7 @@ mod cuda_tests {
             dummy_range_checker_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(
+        let hybrid_chip = HybridFp2Chip::new_with_replay(
             get_fp2_muldiv_chip(
                 config,
                 tester.cpu_memory_helper(),
@@ -412,9 +446,25 @@ mod cuda_tests {
                 tester.address_bits(),
             ),
             tester.range_checker().device_ctx.clone(),
+            offset,
+            tester.range_checker(),
         );
 
+        let address_bits = tester.address_bits();
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight::<_, BLOCKS>(
+                        chip,
+                        postflight,
+                        offset,
+                        address_bits,
+                    )
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            )
     }
 
     #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
@@ -465,11 +515,7 @@ mod cuda_tests {
     50),
     create_muldiv_cuda_test_harness::<FP2_BLOCKS_48>
 )]
-    fn run_cuda_test_with_config<
-        const BLOCKS: usize,
-        const NUM_LIMBS: usize,
-        C: Chip<DenseRecordArena, GpuBackend>,
-    >(
+    fn run_cuda_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize, C>(
         test_config: TestConfig<BLOCKS, NUM_LIMBS>,
         create_cuda_test_harness: impl Fn(
             &GpuChipTestBuilder,
@@ -477,8 +523,6 @@ mod cuda_tests {
             usize,
         ) -> GpuHarness<BLOCKS, C>,
     ) {
-        use crate::AlgebraRecord;
-
         let mut rng = create_seeded_rng();
 
         let mut tester = GpuChipTestBuilder::default();
@@ -492,10 +536,10 @@ mod cuda_tests {
 
         let mut harness = create_cuda_test_harness(&tester, config, offset);
         for i in 0..test_config.num_ops {
-            set_and_execute_fp2::<BLOCKS, NUM_LIMBS, DenseRecordArena>(
+            set_and_execute_fp2::<BLOCKS, NUM_LIMBS>(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.dense_arena,
+                &mut harness.preflight,
                 &mut rng,
                 &test_config.modulus,
                 i == 0,
@@ -503,14 +547,6 @@ mod cuda_tests {
                 offset,
             );
         }
-
-        harness
-            .dense_arena
-            .get_record_seeker::<AlgebraRecord<2, BLOCKS>, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                harness.executor.get_record_layout::<F>(),
-            );
 
         tester
             .build()

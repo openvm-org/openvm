@@ -21,13 +21,12 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, LOADWU};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{load_width_for_opcode, LoadExecutor};
 use crate::adapters::{
-    rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    checked_rv64_memory_address, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
     DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
@@ -39,7 +38,7 @@ struct LoadPreCompute {
     b: u8,
 }
 
-impl<A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> LoadExecutor<A, LOAD_WIDTH, NUM_BLOCKS> {
+impl<const LOAD_WIDTH: usize> LoadExecutor<LOAD_WIDTH> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -100,11 +99,17 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor<F>
-    for LoadExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
+impl<F, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadExecutor<LOAD_WIDTH>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<LoadPreCompute>()
@@ -139,8 +144,7 @@ where
     }
 }
 
-impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterMeteredExecutor<F>
-    for LoadExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
+impl<F, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F> for LoadExecutor<LOAD_WIDTH>
 where
     F: PrimeField32,
 {
@@ -192,13 +196,18 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
-    let addr = rv64_address_add_imm(rs1_val, pre_compute.imm_extended);
-    debug_assert!(addr <= (MEM_SIZE - OP::WIDTH) as u64);
-    let ptr_val = addr as u32;
+    let ptr_val = checked_rv64_memory_address(pc, rs1_val, pre_compute.imm_extended, OP::WIDTH)?;
     let write_data = OP::read(exec_state, ptr_val);
+    if OP::WIDTH != BYTE_ACCESS_WIDTH
+        && ptr_val as usize % DOUBLEWORD_ACCESS_WIDTH + OP::WIDTH <= DOUBLEWORD_ACCESS_WIDTH
+    {
+        exec_state.ctx.advance_timestamp(1);
+    }
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
+    } else {
+        exec_state.ctx.advance_timestamp(1);
     }
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 

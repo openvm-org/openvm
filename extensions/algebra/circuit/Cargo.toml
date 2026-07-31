@@ -45,14 +45,19 @@ halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true, features = ["__private_bench"] }
 
 [dev-dependencies]
+rvr-state = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-riscv-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 test-case = { workspace = true }
 
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
+
 [features]
 default = []
+test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-riscv-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",
@@ -60,10 +65,12 @@ rvr = [
     "openvm-riscv-circuit/rvr",
 ]
 cuda = [
+    "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
+    "openvm-mod-circuit-builder/cuda",
     "openvm-riscv-circuit/cuda",
 ]
 touchemall = [

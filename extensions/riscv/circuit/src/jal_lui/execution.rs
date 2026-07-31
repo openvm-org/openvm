@@ -19,7 +19,7 @@ struct JalLuiPreCompute {
     a: u8,
 }
 
-impl<A> Rv64JalLuiExecutor<A> {
+impl Rv64JalLuiExecutor {
     /// Return (IS_JAL, ENABLED)
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -53,10 +53,17 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F> InterpreterExecutor<F> for Rv64JalLuiExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64JalLuiOpcode::from_usize(opcode - Rv64JalLuiOpcode::CLASS_OFFSET)
+        )
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<JalLuiPreCompute>()
@@ -90,7 +97,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor
 where
     F: PrimeField32,
 {
@@ -143,6 +150,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_JAL: bool, const ENA
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(a as u32), &rd);
+    } else {
+        exec_state.ctx.advance_timestamp(1);
     }
     exec_state.set_pc(pc);
 }

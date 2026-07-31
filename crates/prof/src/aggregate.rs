@@ -24,6 +24,9 @@ pub struct AggregateMetrics {
     pub total_proof_time: MdTableCell,
     /// In seconds (infinite parallelism)
     pub total_par_proof_time: MdTableCell,
+    /// Per-group infinite-parallel proof time in seconds
+    #[serde(skip)]
+    pub par_by_group: HashMap<String, MdTableCell>,
     /// Per-group bounded parallel proof time in seconds
     #[serde(skip)]
     pub bounded_par_by_group: HashMap<String, MdTableCell>,
@@ -99,7 +102,9 @@ impl GroupedMetrics {
         for (labels, metrics) in db.flat_dict.iter() {
             let group_name = labels.get(group_label_name);
             if let Some(group_name) = group_name {
-                let group_entry = by_group.entry(group_name.to_string()).or_default();
+                let group_entry = by_group
+                    .entry(canonical_group_name(group_name).to_string())
+                    .or_default();
                 let mut labels = labels.clone();
                 labels.remove(group_label_name);
                 for metric in metrics {
@@ -123,20 +128,28 @@ impl GroupedMetrics {
         })
     }
 
-    /// Validates that pure, metered, and preflight instruction counts all match each other
+    /// Validates that execution-mode instruction counts all match each other.
     fn validate_instruction_counts(group_summaries: &HashMap<MetricName, Stats>) {
-        let pure_insns = group_summaries.get(EXECUTE_PURE_INSNS_LABEL);
-        let metered_insns = group_summaries.get(EXECUTE_METERED_INSNS_LABEL);
-        let preflight_insns = group_summaries.get(EXECUTE_PREFLIGHT_INSNS_LABEL);
-
-        if let (Some(pure_insns), Some(preflight_insns)) = (pure_insns, preflight_insns) {
-            assert_eq!(pure_insns.sum.val as u64, preflight_insns.sum.val as u64);
-        }
-        if let (Some(pure_insns), Some(metered_insns)) = (pure_insns, metered_insns) {
-            assert_eq!(pure_insns.sum.val as u64, metered_insns.sum.val as u64);
-        }
-        if let (Some(metered_insns), Some(preflight_insns)) = (metered_insns, preflight_insns) {
-            assert_eq!(metered_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        let available = [
+            EXECUTE_PURE_INSNS_LABEL,
+            EXECUTE_METERED_INSNS_LABEL,
+            EXECUTE_METERED_COST_INSNS_LABEL,
+            EXECUTE_PREFLIGHT_INSNS_LABEL,
+        ]
+        .into_iter()
+        .filter_map(|name| {
+            group_summaries
+                .get(name)
+                .map(|stats| (name, stats.sum.val as u64))
+        });
+        let mut available = available.peekable();
+        if let Some((expected_name, expected)) = available.next() {
+            for (name, actual) in available {
+                assert_eq!(
+                    actual, expected,
+                    "instruction count mismatch between {expected_name} and {name}"
+                );
+            }
         }
     }
 
@@ -145,7 +158,7 @@ impl GroupedMetrics {
             .by_group
             .iter()
             .map(|(group_name, metrics)| {
-                let group_summaries: HashMap<MetricName, Stats> = metrics
+                let mut group_summaries: HashMap<MetricName, Stats> = metrics
                     .iter()
                     .map(|(metric_name, metrics)| {
                         let mut summary = Stats::new();
@@ -163,6 +176,19 @@ impl GroupedMetrics {
                     })
                     .collect();
 
+                let preflight_rate = group_summaries
+                    .get(EXECUTE_PREFLIGHT_INSNS_LABEL)
+                    .zip(group_summaries.get(EXECUTE_PREFLIGHT_TIME_LABEL))
+                    .and_then(|(insns, time)| {
+                        (time.sum.val > 0.0).then_some(insns.sum.val / time.sum.val / 1000.0)
+                    });
+                if let (Some(rate), Some(summary)) = (
+                    preflight_rate,
+                    group_summaries.get_mut(EXECUTE_PREFLIGHT_INSN_MI_S_LABEL),
+                ) {
+                    summary.avg.val = rate;
+                }
+
                 if !group_name.contains("keygen") {
                     Self::validate_instruction_counts(&group_summaries);
                 }
@@ -174,12 +200,17 @@ impl GroupedMetrics {
             by_group,
             ..Default::default()
         };
-        metrics.compute_total();
+        metrics.par_by_group = self
+            .compute_bounded_par_times(usize::MAX, &metrics.by_group)
+            .into_iter()
+            .map(|(k, v)| (k, MdTableCell::new(v, Some(0.0))))
+            .collect();
         metrics.bounded_par_by_group = self
             .compute_bounded_par_times(num_parallel, &metrics.by_group)
             .into_iter()
             .map(|(k, v)| (k, MdTableCell::new(v, Some(0.0))))
             .collect();
+        metrics.compute_total();
 
         metrics
     }
@@ -211,9 +242,23 @@ impl GroupedMetrics {
                 }
             }
 
-            // Schedule proofs in parallel
-            if let Some(proof_times) = metrics.get(PROOF_TIME_LABEL) {
-                let times_s: Vec<f64> = proof_times.iter().map(|(ms, _)| ms / 1000.0).collect();
+            if metrics.contains_key(PROOF_TIME_LABEL) {
+                // Application segments are produced by one serial preflight driver.
+                // Recursion proofs are independent tasks, so their complete proof
+                // durations, including preflight, remain parallelizable.
+                let (proof_times_ms, serial_preflight_ms) = if is_app_proof_group(group_name) {
+                    parallel_proof_times_ms(metrics)
+                } else {
+                    (
+                        metrics[PROOF_TIME_LABEL]
+                            .iter()
+                            .map(|(value, _)| *value)
+                            .collect(),
+                        0.0,
+                    )
+                };
+                group_time += serial_preflight_ms / 1000.0;
+                let times_s: Vec<f64> = proof_times_ms.into_iter().map(|ms| ms / 1000.0).collect();
                 group_time += schedule_parallel(&times_s, num_parallel);
             }
 
@@ -230,11 +275,83 @@ fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
         return 0.0;
     }
 
-    let mut slot_times = vec![0.0_f64; num_parallel];
+    let mut slot_times = vec![0.0_f64; num_parallel.min(proof_times.len())];
     for (i, duration) in proof_times.iter().enumerate() {
-        slot_times[i % num_parallel] += duration;
+        let slot = i % slot_times.len();
+        slot_times[slot] += duration;
     }
     slot_times.iter().cloned().fold(0.0_f64, f64::max)
+}
+
+fn validated_segment_proof_times<'a>(
+    proof_times: &'a [(f64, Labels)],
+    preflight_times: &'a [(f64, Labels)],
+) -> Vec<(&'a str, f64)> {
+    let mut preflight_by_segment = HashMap::with_capacity(preflight_times.len());
+    for (value, labels) in preflight_times {
+        let segment = labels
+            .get("segment")
+            .expect("preflight execution metric is missing its segment label");
+        assert!(
+            preflight_by_segment.insert(segment, *value).is_none(),
+            "duplicate preflight execution metric for segment {segment}"
+        );
+    }
+
+    let mut paired = Vec::with_capacity(proof_times.len());
+    for (proof_time, labels) in proof_times {
+        let segment = labels
+            .get("segment")
+            .expect("total proof metric is missing its segment label");
+        let preflight_time = preflight_by_segment.remove(segment).unwrap_or_else(|| {
+            panic!("total proof segment {segment} has no preflight execution metric")
+        });
+        assert!(
+            preflight_time <= *proof_time,
+            "preflight execution exceeds total proof time for segment {segment}"
+        );
+        paired.push((segment, proof_time - preflight_time));
+    }
+    assert!(
+        preflight_by_segment.is_empty(),
+        "preflight execution metric has no matching total proof segment"
+    );
+    paired
+}
+
+/// Returns parallelizable proof time per segment and the preflight time that
+/// must remain serial. Samples are paired by their existing segment label.
+fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
+    let proof_times = metrics
+        .get(PROOF_TIME_LABEL)
+        .expect("proof times must exist before parallel projection");
+    let unadjusted = || (proof_times.iter().map(|(value, _)| *value).collect(), 0.0);
+    let Some(preflight_times) = metrics.get(EXECUTE_PREFLIGHT_TIME_LABEL) else {
+        return unadjusted();
+    };
+    let proof_times_are_segmented = proof_times
+        .iter()
+        .any(|(_, labels)| labels.get("segment").is_some());
+    let preflight_times_are_segmented = preflight_times
+        .iter()
+        .any(|(_, labels)| labels.get("segment").is_some());
+    if !proof_times_are_segmented && !preflight_times_are_segmented {
+        return unadjusted();
+    }
+
+    let mut paired = validated_segment_proof_times(proof_times, preflight_times);
+    paired.sort_unstable_by(
+        |(a, _), (b, _)| match (a.parse::<u64>(), b.parse::<u64>()) {
+            (Ok(a), Ok(b)) => a.cmp(&b),
+            _ => a.cmp(b),
+        },
+    );
+
+    let serial_preflight_ms = preflight_times.iter().map(|(value, _)| value).sum();
+    (
+        paired.into_iter().map(|(_, value)| value).collect(),
+        serial_preflight_ms,
+    )
 }
 
 fn is_app_proof_group(name: &str) -> bool {
@@ -243,6 +360,19 @@ fn is_app_proof_group(name: &str) -> bool {
         && name != "halo2_outer"
         && name != "halo2_wrapper"
         && !name.starts_with("internal")
+}
+
+fn projection_diff_is_compatible(
+    current: &HashMap<String, HashMap<MetricName, Stats>>,
+    previous: &HashMap<String, HashMap<MetricName, Stats>>,
+    group_name: &str,
+) -> bool {
+    let has_preflight = |groups: &HashMap<String, HashMap<MetricName, Stats>>| {
+        groups
+            .get(group_name)
+            .is_some_and(|metrics| metrics.contains_key(EXECUTE_PREFLIGHT_TIME_LABEL))
+    };
+    has_preflight(current) == has_preflight(previous)
 }
 
 // A hacky way to order the groups for display.
@@ -263,6 +393,7 @@ impl AggregateMetrics {
     pub fn compute_total(&mut self) {
         let mut total_proof_time = MdTableCell::new(0.0, Some(0.0));
         let mut total_par_proof_time = MdTableCell::new(0.0, Some(0.0));
+        let mut parallel_projection_diff_is_compatible = true;
         for (group_name, metrics) in &self.by_group {
             let stats = metrics.get(PROOF_TIME_LABEL);
             let execute_metered_stats = metrics.get(EXECUTE_METERED_TIME_LABEL);
@@ -274,15 +405,23 @@ impl AggregateMetrics {
                 panic!("Missing proof time statistics for group '{group_name}'")
             });
             let mut sum = stats.sum;
-            let mut max = stats.max;
+            let projected_parallel = self.par_by_group.get(group_name);
+            if projected_parallel.is_some_and(|parallel| parallel.diff.is_none()) {
+                parallel_projection_diff_is_compatible = false;
+            }
+            let mut max = projected_parallel.copied().unwrap_or(stats.max);
             // convert ms to s
             sum.val /= 1000.0;
-            max.val /= 1000.0;
+            if projected_parallel.is_none() {
+                max.val /= 1000.0;
+            }
             if let Some(diff) = &mut sum.diff {
                 *diff /= 1000.0;
             }
-            if let Some(diff) = &mut max.diff {
-                *diff /= 1000.0;
+            if projected_parallel.is_none() {
+                if let Some(diff) = &mut max.diff {
+                    *diff /= 1000.0;
+                }
             }
             if !group_name.contains("keygen") {
                 // Proving time in keygen group is dummy and not part of total.
@@ -307,39 +446,50 @@ impl AggregateMetrics {
                         // directly Count is 1, so avg = sum = max = min =
                         // value
                         total_proof_time.val += execute_metered_stats.avg.val / 1000.0;
-                        total_par_proof_time.val += execute_metered_stats.avg.val / 1000.0;
+                        if projected_parallel.is_none() {
+                            total_par_proof_time.val += execute_metered_stats.avg.val / 1000.0;
+                        }
                         if let Some(diff) = execute_metered_stats.avg.diff {
                             *total_proof_time
                                 .diff
                                 .as_mut()
                                 .expect("total_proof_time.diff should be initialized") +=
                                 diff / 1000.0;
-                            *total_par_proof_time
-                                .diff
-                                .as_mut()
-                                .expect("total_par_proof_time.diff should be initialized") +=
-                                diff / 1000.0;
+                            if projected_parallel.is_none() {
+                                *total_par_proof_time
+                                    .diff
+                                    .as_mut()
+                                    .expect("total_par_proof_time.diff should be initialized") +=
+                                    diff / 1000.0;
+                            }
                         }
                     }
 
                     if let Some(execute_pure_stats) = execute_pure_stats {
                         total_proof_time.val += execute_pure_stats.avg.val / 1000.0;
-                        total_par_proof_time.val += execute_pure_stats.avg.val / 1000.0;
+                        if projected_parallel.is_none() {
+                            total_par_proof_time.val += execute_pure_stats.avg.val / 1000.0;
+                        }
                         if let Some(diff) = execute_pure_stats.avg.diff {
                             *total_proof_time
                                 .diff
                                 .as_mut()
                                 .expect("total_proof_time.diff should be initialized") +=
                                 diff / 1000.0;
-                            *total_par_proof_time
-                                .diff
-                                .as_mut()
-                                .expect("total_par_proof_time.diff should be initialized") +=
-                                diff / 1000.0;
+                            if projected_parallel.is_none() {
+                                *total_par_proof_time
+                                    .diff
+                                    .as_mut()
+                                    .expect("total_par_proof_time.diff should be initialized") +=
+                                    diff / 1000.0;
+                            }
                         }
                     }
                 }
             }
+        }
+        if !parallel_projection_diff_is_compatible {
+            total_par_proof_time.diff = None;
         }
         self.total_proof_time = total_proof_time;
         self.total_par_proof_time = total_par_proof_time;
@@ -356,8 +506,21 @@ impl AggregateMetrics {
             }
         }
         for (group_name, bounded) in self.bounded_par_by_group.iter_mut() {
-            if let Some(prev_bounded) = prev.bounded_par_by_group.get(group_name) {
-                bounded.diff = Some(bounded.val - prev_bounded.val);
+            if projection_diff_is_compatible(&self.by_group, &prev.by_group, group_name) {
+                if let Some(prev_bounded) = prev.bounded_par_by_group.get(group_name) {
+                    bounded.diff = Some(bounded.val - prev_bounded.val);
+                }
+            } else {
+                bounded.diff = None;
+            }
+        }
+        for (group_name, parallel) in self.par_by_group.iter_mut() {
+            if projection_diff_is_compatible(&self.by_group, &prev.by_group, group_name) {
+                if let Some(prev_parallel) = prev.par_by_group.get(group_name) {
+                    parallel.diff = Some(parallel.val - prev_parallel.val);
+                }
+            } else {
+                parallel.diff = None;
             }
         }
         self.compute_total();
@@ -560,34 +723,47 @@ impl AggregateMetrics {
                 panic!("Missing proof time statistics for group '{group_name}'")
             });
             let mut sum = stats.sum;
-            let mut max = stats.max;
+            let projected_parallel = self.par_by_group.get(&group_name);
+            let mut max = projected_parallel.copied().unwrap_or(stats.max);
             // convert ms to s
             sum.val /= 1000.0;
-            max.val /= 1000.0;
+            if projected_parallel.is_none() {
+                max.val /= 1000.0;
+            }
             if let Some(diff) = &mut sum.diff {
                 *diff /= 1000.0;
             }
-            if let Some(diff) = &mut max.diff {
-                *diff /= 1000.0;
+            if projected_parallel.is_none() {
+                if let Some(diff) = &mut max.diff {
+                    *diff /= 1000.0;
+                }
             }
             // Add serial execution time for app_proof groups
             if is_app_proof_group(&group_name) {
                 if let Some(metered) = summaries.get(EXECUTE_METERED_TIME_LABEL) {
                     sum.val += metered.avg.val / 1000.0;
-                    max.val += metered.avg.val / 1000.0;
+                    if projected_parallel.is_none() {
+                        max.val += metered.avg.val / 1000.0;
+                    }
                 }
                 if let Some(pure) = summaries.get(EXECUTE_PURE_TIME_LABEL) {
                     sum.val += pure.avg.val / 1000.0;
-                    max.val += pure.avg.val / 1000.0;
+                    if projected_parallel.is_none() {
+                        max.val += pure.avg.val / 1000.0;
+                    }
                 }
             }
             rows.push((group_name, sum, max));
         }
-        let mut total_bounded = MdTableCell::new(0.0, None);
+        let mut total_bounded = MdTableCell::new(0.0, Some(0.0));
         for cell in self.bounded_par_by_group.values() {
             total_bounded.val += cell.val;
             if let Some(diff) = cell.diff {
-                *total_bounded.diff.get_or_insert(0.0) += diff;
+                if let Some(total) = total_bounded.diff.as_mut() {
+                    *total += diff;
+                }
+            } else {
+                total_bounded.diff = None;
             }
         }
         writeln!(
@@ -653,6 +829,7 @@ pub const MAIN_CELLS_USED_LABEL: &str = "main_cells_used";
 pub const TOTAL_CELLS_USED_LABEL: &str = "total_cells_used";
 pub const EXECUTE_PURE_INSNS_LABEL: &str = "execute_pure_insns";
 pub const EXECUTE_METERED_INSNS_LABEL: &str = "execute_metered_insns";
+pub const EXECUTE_METERED_COST_INSNS_LABEL: &str = "execute_metered_cost_insns";
 pub const EXECUTE_PREFLIGHT_INSNS_LABEL: &str = "execute_preflight_insns";
 pub const EXECUTE_PURE_TIME_LABEL: &str = "execute_pure_time_ms";
 pub const EXECUTE_PURE_INSN_MI_S_LABEL: &str = "execute_pure_insn_mi/s";
@@ -660,10 +837,22 @@ pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
+pub const EXECUTE_PREFLIGHT_INTERVALS_LABEL: &str = "execute_preflight_intervals";
+pub const EXECUTE_PREFLIGHT_REPLAY_VALUES_LABEL: &str = "execute_preflight_replay_values";
+pub const EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL: &str = "execute_preflight_transcript_bytes";
 pub const COMPILE_PURE_TIME_LABEL: &str = "compile_pure_time_ms";
 pub const COMPILE_METERED_TIME_LABEL: &str = "compile_metered_time_ms";
 pub const COMPILE_METERED_SEGMENT_TIME_LABEL: &str = "compile_metered_segment_time_ms";
 pub const COMPILE_METERED_COST_TIME_LABEL: &str = "compile_metered_cost_time_ms";
+pub const COMPILE_PREFLIGHT_TIME_LABEL: &str = "compile_preflight_time_ms";
+pub const PREPARE_PREFLIGHT_TIME_LABEL: &str = "prepare_preflight_time_ms";
+pub const UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL: &str = "upload_preflight_program_time_ms";
+pub const APP_PROVE_TIME_LABEL: &str = "app_prove_time_ms";
+pub const POSTFLIGHT_TIME_LABEL: &str = "postflight_time_ms";
+pub const POSTFLIGHT_REPLAY_COUNT_TIME_LABEL: &str = "postflight_replay_count_time_ms";
+pub const POSTFLIGHT_REPLAY_EMIT_TIME_LABEL: &str = "postflight_replay_emit_time_ms";
+pub const POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL: &str = "postflight_memory_chronology_time_ms";
+pub const POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL: &str = "postflight_program_index_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
 pub const SET_INITIAL_MEMORY_TIME_LABEL: &str = "set_initial_memory_time_ms";
@@ -675,6 +864,22 @@ pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_
 pub const HALO2_VERIFIER_K_LABEL: &str = "halo2_verifier_k";
 pub const HALO2_WRAPPER_K_LABEL: &str = "halo2_wrapper_k";
 
+fn canonical_group_name(name: &str) -> &str {
+    if [
+        "reth.prove_app.block_",
+        "reth.prove_app_rvr.block_",
+        "reth.prove_root.block_",
+        "reth.prove_evm.block_",
+    ]
+    .iter()
+    .any(|prefix| name.starts_with(prefix))
+    {
+        "app_proof"
+    } else {
+        name
+    }
+}
+
 pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
@@ -683,17 +888,24 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     COMPILE_METERED_TIME_LABEL,
     COMPILE_METERED_SEGMENT_TIME_LABEL,
     COMPILE_METERED_COST_TIME_LABEL,
+    COMPILE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PURE_TIME_LABEL,
     EXECUTE_PURE_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSNS_LABEL,
+    EXECUTE_METERED_COST_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
+    SET_INITIAL_MEMORY_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
+    POSTFLIGHT_TIME_LABEL,
+    POSTFLIGHT_REPLAY_COUNT_TIME_LABEL,
+    POSTFLIGHT_REPLAY_EMIT_TIME_LABEL,
+    POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL,
+    POSTFLIGHT_PROGRAM_INDEX_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
-    SET_INITIAL_MEMORY_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,
     MERKLE_FIN_TIME_LABEL,
@@ -711,3 +923,303 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     HALO2_VERIFIER_K_LABEL,
     HALO2_WRAPPER_K_LABEL,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_reth_app_groups_use_the_canonical_name() {
+        for group in [
+            "reth.prove_app.block_23992138",
+            "reth.prove_app_rvr.block_23992138",
+            "reth.prove_root.block_23992138",
+            "reth.prove_evm.block_23992138",
+        ] {
+            assert_eq!(canonical_group_name(group), "app_proof");
+        }
+        assert_eq!(canonical_group_name("root"), "root");
+        assert_eq!(canonical_group_name("internal_0"), "internal_0");
+    }
+
+    fn labels(segment: Option<usize>) -> Labels {
+        Labels(
+            segment
+                .map(|segment| vec![("segment".to_string(), segment.to_string())])
+                .unwrap_or_default(),
+        )
+    }
+
+    fn grouped(metrics: MetricsByName) -> GroupedMetrics {
+        GroupedMetrics {
+            by_group: HashMap::from([("app".to_string(), metrics)]),
+            ungrouped: HashMap::new(),
+        }
+    }
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+    }
+
+    fn preflight_timing_metrics() -> MetricsByName {
+        HashMap::from([
+            (
+                PROOF_TIME_LABEL.to_string(),
+                vec![
+                    (80.0, labels(Some(2))),
+                    (100.0, labels(Some(0))),
+                    (120.0, labels(Some(1))),
+                ],
+            ),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![
+                    (20.0, labels(Some(1))),
+                    (30.0, labels(Some(2))),
+                    (10.0, labels(Some(0))),
+                ],
+            ),
+            (
+                EXECUTE_METERED_TIME_LABEL.to_string(),
+                vec![(50.0, labels(None))],
+            ),
+        ])
+    }
+
+    #[test]
+    fn preflight_execution_remains_serial_in_parallel_projections() {
+        let metrics = preflight_timing_metrics();
+
+        let aggregate = grouped(metrics).aggregate(2);
+
+        // Sequential: 50 ms metered + 300 ms segment totals.
+        assert_close(aggregate.total_proof_time.val, 0.35);
+        // Infinite parallel: 50 ms metered + 60 ms preflight execution +
+        // max(90, 100, 50) ms remaining segment work.
+        assert_close(aggregate.total_par_proof_time.val, 0.21);
+        // Two provers: 50 ms metered + 60 ms preflight execution +
+        // max(90 + 50, 100) ms remaining segment work.
+        assert_close(aggregate.bounded_par_by_group["app"].val, 0.25);
+        assert_eq!(
+            aggregate.by_group["app"][EXECUTE_PREFLIGHT_TIME_LABEL]
+                .sum
+                .val,
+            60.0
+        );
+    }
+
+    #[test]
+    fn unsegmented_proofs_keep_their_recorded_duration() {
+        let metrics = HashMap::from([
+            (PROOF_TIME_LABEL.to_string(), vec![(100.0, labels(None))]),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![(10.0, labels(None))],
+            ),
+        ]);
+
+        let (proof_times, serial_preflight) = parallel_proof_times_ms(&metrics);
+
+        assert_eq!(proof_times, [100.0]);
+        assert_eq!(serial_preflight, 0.0);
+    }
+
+    #[test]
+    fn recursion_preflight_remains_part_of_each_parallel_proof() {
+        let indexed_labels = |idx: usize| Labels(vec![("idx".to_string(), idx.to_string())]);
+        let metrics = HashMap::from([
+            (
+                PROOF_TIME_LABEL.to_string(),
+                vec![
+                    (100.0, indexed_labels(0)),
+                    (120.0, indexed_labels(1)),
+                    (80.0, indexed_labels(2)),
+                ],
+            ),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![
+                    (10.0, indexed_labels(0)),
+                    (20.0, indexed_labels(1)),
+                    (30.0, indexed_labels(2)),
+                ],
+            ),
+        ]);
+        let grouped = GroupedMetrics {
+            by_group: HashMap::from([("leaf".to_string(), metrics)]),
+            ungrouped: HashMap::new(),
+        };
+
+        let aggregate = grouped.aggregate(2);
+
+        assert_close(aggregate.total_proof_time.val, 0.3);
+        assert_close(aggregate.total_par_proof_time.val, 0.12);
+        assert_close(aggregate.bounded_par_by_group["leaf"].val, 0.18);
+    }
+
+    #[test]
+    fn preflight_throughput_uses_total_instructions_and_time() {
+        let metrics = HashMap::from([
+            (
+                EXECUTE_PREFLIGHT_INSNS_LABEL.to_string(),
+                vec![
+                    (1_000_000.0, labels(Some(0))),
+                    (1_000_000.0, labels(Some(1))),
+                ],
+            ),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![(1.0, labels(Some(0))), (9.0, labels(Some(1)))],
+            ),
+            (
+                EXECUTE_PREFLIGHT_INSN_MI_S_LABEL.to_string(),
+                vec![
+                    (1_000.0, labels(Some(0))),
+                    (1_000_000.0 / 9_000.0, labels(Some(1))),
+                ],
+            ),
+        ]);
+
+        let aggregate = grouped(metrics).aggregate(1);
+        let throughput = &aggregate.by_group["app"][EXECUTE_PREFLIGHT_INSN_MI_S_LABEL];
+
+        assert_close(throughput.avg.val, 200.0);
+        assert_close(throughput.max.val, 1_000.0);
+        assert_close(throughput.min.val, 1_000_000.0 / 9_000.0);
+    }
+
+    #[test]
+    fn report_orders_frontend_phases_without_overlapping_wrappers() {
+        let one = |segment| vec![(1.0, labels(segment))];
+        let metrics = HashMap::from([
+            (PROOF_TIME_LABEL.to_string(), one(Some(0))),
+            (COMPILE_PREFLIGHT_TIME_LABEL.to_string(), one(None)),
+            (PREPARE_PREFLIGHT_TIME_LABEL.to_string(), one(None)),
+            (UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL.to_string(), one(None)),
+            (APP_PROVE_TIME_LABEL.to_string(), one(None)),
+            (EXECUTE_METERED_TIME_LABEL.to_string(), one(None)),
+            (SET_INITIAL_MEMORY_TIME_LABEL.to_string(), one(Some(0))),
+            (EXECUTE_PREFLIGHT_TIME_LABEL.to_string(), one(Some(0))),
+            (EXECUTE_PREFLIGHT_INTERVALS_LABEL.to_string(), one(None)),
+            (EXECUTE_PREFLIGHT_REPLAY_VALUES_LABEL.to_string(), one(None)),
+            (
+                EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL.to_string(),
+                one(None),
+            ),
+            (POSTFLIGHT_TIME_LABEL.to_string(), one(Some(0))),
+            (
+                POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL.to_string(),
+                one(Some(0)),
+            ),
+            (TRACE_GEN_TIME_LABEL.to_string(), one(Some(0))),
+            (PROVE_EXCL_TRACE_TIME_LABEL.to_string(), one(Some(0))),
+        ]);
+        let aggregate = grouped(metrics).aggregate(1);
+        let mut markdown = Vec::new();
+
+        aggregate
+            .write_markdown(&mut markdown, AGGREGATED_METRIC_NAMES, 1)
+            .unwrap();
+        let markdown = String::from_utf8(markdown).unwrap();
+
+        let ordered = [
+            COMPILE_PREFLIGHT_TIME_LABEL,
+            EXECUTE_METERED_TIME_LABEL,
+            SET_INITIAL_MEMORY_TIME_LABEL,
+            EXECUTE_PREFLIGHT_TIME_LABEL,
+            POSTFLIGHT_TIME_LABEL,
+            POSTFLIGHT_MEMORY_CHRONOLOGY_TIME_LABEL,
+            TRACE_GEN_TIME_LABEL,
+            PROVE_EXCL_TRACE_TIME_LABEL,
+        ];
+        let mut previous = 0;
+        for metric in ordered {
+            let position = markdown
+                .find(metric)
+                .unwrap_or_else(|| panic!("{metric} is missing from the report"));
+            assert!(position >= previous, "{metric} is out of pipeline order");
+            previous = position;
+        }
+        for metric in [
+            PREPARE_PREFLIGHT_TIME_LABEL,
+            UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
+            APP_PROVE_TIME_LABEL,
+            EXECUTE_PREFLIGHT_INTERVALS_LABEL,
+            EXECUTE_PREFLIGHT_REPLAY_VALUES_LABEL,
+            EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
+        ] {
+            assert!(
+                !markdown.contains(metric),
+                "{metric} should remain raw data instead of a summary row"
+            );
+        }
+    }
+
+    #[test]
+    fn preflight_parallel_diffs_require_matching_baseline_metrics() {
+        let mut legacy_metrics = preflight_timing_metrics();
+        legacy_metrics.remove(EXECUTE_PREFLIGHT_TIME_LABEL);
+        let legacy = grouped(legacy_metrics).aggregate(2);
+        let mut current = grouped(preflight_timing_metrics()).aggregate(2);
+
+        current.set_diff(&legacy);
+
+        assert_eq!(current.total_proof_time.diff, Some(0.0));
+        assert_eq!(
+            current.by_group["app"][PROOF_TIME_LABEL].sum.diff,
+            Some(0.0)
+        );
+        assert_eq!(current.par_by_group["app"].diff, None);
+        assert_eq!(current.bounded_par_by_group["app"].diff, None);
+        assert_eq!(current.total_par_proof_time.diff, None);
+    }
+
+    #[test]
+    fn all_available_execution_counts_match() {
+        let metrics = HashMap::from([
+            (
+                EXECUTE_PURE_INSNS_LABEL.to_string(),
+                vec![(100.0, labels(None))],
+            ),
+            (
+                EXECUTE_METERED_INSNS_LABEL.to_string(),
+                vec![(100.0, labels(None))],
+            ),
+            (
+                EXECUTE_METERED_COST_INSNS_LABEL.to_string(),
+                vec![(100.0, labels(None))],
+            ),
+            (
+                EXECUTE_PREFLIGHT_INSNS_LABEL.to_string(),
+                vec![(40.0, labels(Some(0))), (60.0, labels(Some(1)))],
+            ),
+        ]);
+
+        let aggregate = grouped(metrics).aggregate(2);
+        assert_eq!(
+            aggregate.by_group["app"][EXECUTE_PREFLIGHT_INSNS_LABEL]
+                .sum
+                .val,
+            100.0
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "instruction count mismatch between execute_pure_insns and execute_preflight_insns"
+    )]
+    fn mismatched_execution_counts_are_rejected() {
+        let metrics = HashMap::from([
+            (
+                EXECUTE_PURE_INSNS_LABEL.to_string(),
+                vec![(100.0, labels(None))],
+            ),
+            (
+                EXECUTE_PREFLIGHT_INSNS_LABEL.to_string(),
+                vec![(99.0, labels(None))],
+            ),
+        ]);
+
+        grouped(metrics).aggregate(2);
+    }
+}

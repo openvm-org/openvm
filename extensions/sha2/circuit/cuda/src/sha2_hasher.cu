@@ -1,7 +1,6 @@
 #define SHA2_DEFINE_DEVICE_CONSTANTS
 
 #include "block_hasher/columns.cuh"
-#include "block_hasher/record.cuh"
 #include "block_hasher/variant.cuh"
 #include "fp.h"
 #include "launcher.cuh"
@@ -15,27 +14,6 @@
 using namespace riscv;
 using namespace sha2;
 using openvm::U16_BITS;
-
-// === Utility helpers for SHA-2 block hasher ===
-template <typename V>
-__device__ __forceinline__ typename V::Word word_from_bytes_be(const uint8_t *bytes) {
-    typename V::Word acc = 0;
-#pragma unroll
-    for (int i = 0; i < static_cast<int>(V::WORD_U8S); i++) {
-        acc = (acc << 8) | static_cast<typename V::Word>(bytes[i]);
-    }
-    return acc;
-}
-
-template <typename V>
-__device__ __forceinline__ typename V::Word word_from_bytes_le(const uint8_t *bytes) {
-    typename V::Word acc = 0;
-#pragma unroll
-    for (int i = static_cast<int>(V::WORD_U8S) - 1; i >= 0; i--) {
-        acc = (acc << 8) | static_cast<typename V::Word>(bytes[i]);
-    }
-    return acc;
-}
 
 template <typename V>
 __device__ __forceinline__ uint32_t word_to_u16_limb(typename V::Word w, int limb) {
@@ -534,59 +512,6 @@ struct Sha2ScratchLayout {
     static constexpr size_t WORDS_PER_BLOCK = V::ROWS_PER_BLOCK * WORDS_PER_ROW;
 };
 
-// Phase 1: compute SHA-2 rounds, store per-row state snapshots to scratch
-template <typename V>
-__global__ void sha2_first_pass_phase1(
-    typename V::Word *__restrict__ d_scratch,
-    uint8_t *records, size_t num_records, size_t *record_offsets,
-    uint32_t total_num_blocks, typename V::Word *prev_hashes
-) {
-    uint32_t block_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (block_idx >= total_num_blocks || block_idx >= num_records) return;
-
-    using SL = Sha2ScratchLayout<V>;
-    typename V::Word *scratch = d_scratch + static_cast<size_t>(block_idx) * SL::WORDS_PER_BLOCK;
-
-    Sha2BlockRecordMut<V> record(records + record_offsets[block_idx]);
-    const typename V::Word *prev_hash = prev_hashes + block_idx * V::HASH_WORDS;
-
-    typename V::Word w_buf[V::BLOCK_WORDS] = {};
-#pragma unroll
-    for (int i = 0; i < static_cast<int>(V::BLOCK_WORDS); i++)
-        w_buf[i] = word_from_bytes_be<V>(record.message_bytes + i * V::WORD_U8S);
-
-    typename V::Word a = prev_hash[0], b = prev_hash[1], c = prev_hash[2], d = prev_hash[3];
-    typename V::Word e = prev_hash[4], f = prev_hash[5], g = prev_hash[6], h = prev_hash[7];
-
-    for (uint32_t row_in_block = 0; row_in_block < V::ROWS_PER_BLOCK; row_in_block++) {
-        // Snapshot state and w_buf before processing this row
-        typename V::Word *row_scratch = scratch + row_in_block * SL::WORDS_PER_ROW;
-        row_scratch[0] = a; row_scratch[1] = b; row_scratch[2] = c; row_scratch[3] = d;
-        row_scratch[4] = e; row_scratch[5] = f; row_scratch[6] = g; row_scratch[7] = h;
-        for (uint32_t i = 0; i < V::BLOCK_WORDS; i++)
-            row_scratch[SHA2_SCRATCH_STATE + i] = w_buf[i];
-
-        if (row_in_block < V::ROUND_ROWS) {
-            for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
-                uint32_t t = row_in_block * V::ROUNDS_PER_ROW + j;
-                typename V::Word w_val;
-                if (t < V::BLOCK_WORDS) {
-                    w_val = w_buf[t & (V::BLOCK_WORDS - 1)];
-                } else {
-                    w_val = sha2::small_sig1<V>(w_buf[(t - 2) & (V::BLOCK_WORDS - 1)]) +
-                            w_buf[(t - 7) & (V::BLOCK_WORDS - 1)] +
-                            sha2::small_sig0<V>(w_buf[(t - 15) & (V::BLOCK_WORDS - 1)]) +
-                            w_buf[(t - 16) & (V::BLOCK_WORDS - 1)];
-                    w_buf[t & (V::BLOCK_WORDS - 1)] = w_val;
-                }
-                typename V::Word t1 = h + sha2::big_sig1<V>(e) + sha2::ch<V>(e, f, g) + V::K(t) + w_val;
-                typename V::Word t2 = sha2::big_sig0<V>(a) + sha2::maj<V>(a, b, c);
-                h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
-            }
-        }
-    }
-}
-
 // Phase 2: write trace columns from scratch (1 thread per row, coalesced writes)
 template <typename V>
 __global__ void sha2_first_pass_phase2(
@@ -843,32 +768,6 @@ __global__ void sha2_first_pass_phase3(
 }
 
 template <typename V>
-__global__ void sha2_hash_computation(
-    uint8_t *records,
-    size_t num_records,
-    size_t *record_offsets,
-    typename V::Word *prev_hashes,
-    uint32_t total_num_blocks
-) {
-    uint32_t block_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (block_idx >= total_num_blocks) {
-        return;
-    }
-
-    if (block_idx >= num_records) {
-        return;
-    }
-
-    uint32_t offset = record_offsets[block_idx];
-    Sha2BlockRecordMut<V> record(records + offset);
-#pragma unroll
-    for (int i = 0; i < static_cast<int>(V::HASH_WORDS); i++) {
-        const uint8_t *ptr = record.prev_state + i * V::WORD_U8S;
-        prev_hashes[block_idx * V::HASH_WORDS + i] = word_from_bytes_le<V>(ptr);
-    }
-}
-
-template <typename V>
 __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t rows_used) {
     uint32_t row_idx = rows_used;
     uint32_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
@@ -990,73 +889,6 @@ __global__ void sha2_fill_wraparound(Fp *trace, size_t trace_height) {
 // ===== HOST LAUNCHER FUNCTIONS =====
 
 template <typename V>
-int launch_sha2_hash_computation(
-    uint8_t *d_records,
-    size_t num_records,
-    size_t *d_record_offsets,
-    typename V::Word *d_prev_hashes,
-    uint32_t total_num_blocks,
-    cudaStream_t stream
-) {
-    auto [grid_size, block_size] = kernel_launch_params(num_records, 256);
-
-    sha2_hash_computation<V><<<grid_size, block_size, 0, stream>>>(
-        d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks
-    );
-
-    return CHECK_KERNEL();
-}
-
-template <typename V>
-int launch_sha2_first_pass_tracegen(
-    Fp *d_trace,
-    size_t trace_height,
-    uint8_t *d_records,
-    size_t num_records,
-    size_t *d_record_offsets,
-    uint32_t total_num_blocks,
-    typename V::Word *d_prev_hashes,
-    uint32_t *d_bitwise_lookup,
-    typename V::Word *d_scratch,
-    size_t scratch_words,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    cudaStream_t stream
-) {
-    using SL = Sha2ScratchLayout<V>;
-    if (scratch_words < static_cast<size_t>(total_num_blocks) * SL::WORDS_PER_BLOCK) {
-        return cudaErrorInvalidValue;
-    }
-
-    // Phase 1: compute SHA-2 rounds, snapshot state before each row
-    {
-        auto [grid_size, block_size] = kernel_launch_params(total_num_blocks, 256);
-        sha2_first_pass_phase1<V><<<grid_size, block_size, 0, stream>>>(
-            d_scratch, d_records, num_records, d_record_offsets, total_num_blocks, d_prev_hashes);
-        if (int r = CHECK_KERNEL()) return r;
-    }
-
-    // Phase 2: write trace with coalesced stores (1 thread per row)
-    {
-        size_t rows_used = static_cast<size_t>(total_num_blocks) * V::ROWS_PER_BLOCK;
-        auto [grid_size, block_size] = kernel_launch_params(rows_used, 256);
-        sha2_first_pass_phase2<V><<<grid_size, block_size, 0, stream>>>(
-            d_trace, trace_height, total_num_blocks, num_records,
-            d_prev_hashes, d_scratch, d_bitwise_lookup,
-            d_range_checker, range_checker_num_bins);
-        if (int r = CHECK_KERNEL()) return r;
-    }
-
-    // Phase 3: cross-row dependencies (same logic as original second loop)
-    {
-        auto [grid_size, block_size] = kernel_launch_params(total_num_blocks, 256);
-        sha2_first_pass_phase3<V><<<grid_size, block_size, 0, stream>>>(
-            d_trace, trace_height, total_num_blocks, num_records);
-        return CHECK_KERNEL();
-    }
-}
-
-template <typename V>
 int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used, cudaStream_t stream) {
     size_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
     auto [grid_size, block_size] = kernel_launch_params(total_blocks, 256);
@@ -1089,83 +921,8 @@ int launch_sha2_fill_invalid_rows(
     return CHECK_KERNEL();
 }
 
-// Explicit instantiations for SHA-256 and SHA-512
+// Explicit instantiations for SHA-256 and SHA-512.
 extern "C" {
-int launch_sha256_hash_computation(
-    uint8_t *d_records,
-    size_t num_records,
-    size_t *d_record_offsets,
-    uint32_t *d_prev_hashes,
-    uint32_t total_num_blocks,
-    cudaStream_t stream
-) {
-    return launch_sha2_hash_computation<Sha256Variant>(
-        d_records,
-        num_records,
-        d_record_offsets,
-        reinterpret_cast<uint32_t *>(d_prev_hashes),
-        total_num_blocks,
-        stream
-    );
-}
-
-int launch_sha512_hash_computation(
-    uint8_t *d_records,
-    size_t num_records,
-    size_t *d_record_offsets,
-    uint64_t *d_prev_hashes,
-    uint32_t total_num_blocks,
-    cudaStream_t stream
-) {
-    return launch_sha2_hash_computation<Sha512Variant>(
-        d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks, stream
-    );
-}
-
-int launch_sha256_first_pass_tracegen(
-    Fp *d_trace,
-    size_t trace_height,
-    uint8_t *d_records,
-    size_t num_records,
-    size_t *d_record_offsets,
-    uint32_t total_num_blocks,
-    uint32_t *d_prev_hashes,
-    uint32_t *d_bitwise_lookup,
-    uint32_t *d_scratch,
-    size_t scratch_words,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    cudaStream_t stream
-) {
-    return launch_sha2_first_pass_tracegen<Sha256Variant>(
-        d_trace, trace_height, d_records, num_records, d_record_offsets,
-        total_num_blocks, d_prev_hashes, d_bitwise_lookup,
-        d_scratch, scratch_words, d_range_checker, range_checker_num_bins, stream
-    );
-}
-
-int launch_sha512_first_pass_tracegen(
-    Fp *d_trace,
-    size_t trace_height,
-    uint8_t *d_records,
-    size_t num_records,
-    size_t *d_record_offsets,
-    uint32_t total_num_blocks,
-    uint64_t *d_prev_hashes,
-    uint32_t *d_bitwise_lookup,
-    uint64_t *d_scratch,
-    size_t scratch_words,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    cudaStream_t stream
-) {
-    return launch_sha2_first_pass_tracegen<Sha512Variant>(
-        d_trace, trace_height, d_records, num_records, d_record_offsets,
-        total_num_blocks, d_prev_hashes, d_bitwise_lookup,
-        d_scratch, scratch_words, d_range_checker, range_checker_num_bins, stream
-    );
-}
-
 int launch_sha256_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used, cudaStream_t stream) {
     return launch_sha2_second_pass_dependencies<Sha256Variant>(d_trace, trace_height, rows_used, stream);
 }

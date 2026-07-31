@@ -1,7 +1,13 @@
+use std::any::Any;
+
 use openvm_circuit::{
     arch::{
-        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        cuda::postflight::{
+            GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+        },
+        prepare_gpu_postflight, to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError,
+        GenerationError, PostflightTracegen, PreflightOutput, VirtualMachine, VmBuilder,
+        VmChipComplex, VmProverExtension,
     },
     system::cuda::{
         extensions::{
@@ -11,9 +17,28 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_riscv_circuit::Rv64ImGpuProverExt;
+#[cfg(feature = "rvr")]
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_instructions::{program::Program, LocalOpcode};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_riscv_circuit::preflight::PreflightReplayProgram;
+#[cfg(feature = "rvr")]
+use openvm_riscv_circuit::preflight::{
+    PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+};
+use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_sha2_air::{Sha256Config, Sha512Config};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
+use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use {
+    openvm_circuit::arch::{rvr::PreflightExecution, MemoryConfig},
+    openvm_cuda_common::stream::GpuDeviceCtx,
+    openvm_stark_backend::p3_field::PrimeField32,
+};
 
 use super::*;
 use crate::{
@@ -23,11 +48,229 @@ use crate::{
 
 pub struct Sha2GpuProverExt;
 
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for Sha2GpuProverExt {
+/// Concrete immutable-history replay composition for RV64 plus the two SHA-2 opcodes.
+///
+/// A SHA instruction has two trace producers: the main AIR owns execution and
+/// memory interactions, while the block-hasher AIR owns compression. Both must
+/// be visited in the VM's existing reverse inventory walk.
+pub struct Sha2PreflightGpuTracegen<'a> {
+    program: &'a GpuPostflightProgram,
+    transcript: &'a GpuPostflightTranscript,
+    replay_plan: &'a GpuPostflightPlan,
+    pending_sha256_main: bool,
+    pending_sha256_block: bool,
+    pending_sha512_main: bool,
+    pending_sha512_block: bool,
+}
+
+impl<'a> Sha2PreflightGpuTracegen<'a> {
+    #[doc(hidden)]
+    pub fn extension_opcodes() -> [u32; 2] {
+        [
+            Rv64Sha2Opcode::SHA256.global_opcode().as_usize() as u32,
+            Rv64Sha2Opcode::SHA512.global_opcode().as_usize() as u32,
+        ]
+    }
+
+    #[doc(hidden)]
+    #[cfg(feature = "rvr")]
+    pub fn register_postflight_access_schedules(
+        registry: &mut PostflightAccessRegistry,
+    ) -> Result<(), GpuPostflightError> {
+        for (opcode, input_blocks, state_blocks) in [
+            (Rv64Sha2Opcode::SHA256, 8, 4),
+            (Rv64Sha2Opcode::SHA512, 16, 8),
+        ] {
+            registry.register(
+                opcode.global_opcode().as_usize() as u32,
+                PostflightAccessSchedule {
+                    register_operands: &[1, 2, 3],
+                    zero_operand_mask: (1 << 6) | (1 << 7),
+                    register_as_operand: 4,
+                    memory_as_operand: 5,
+                    spans: &[
+                        PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 2, input_blocks),
+                        PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, state_blocks),
+                        PostflightAccessSpan::write_fixed_from_replay_values(
+                            RV64_MEMORY_AS,
+                            0,
+                            state_blocks,
+                        ),
+                    ],
+                },
+            )?;
+        }
+        Ok(())
+    }
+
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+    pub fn upload_postflight_program<F: PrimeField32>(
+        program: &Program<F>,
+        memory_config: &MemoryConfig,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Result<PreflightReplayProgram, GpuPostflightError> {
+        let mut registry = PostflightAccessRegistry::default();
+        Self::register_postflight_access_schedules(&mut registry)?;
+        PreflightReplayProgram::upload_with_postflight_access_registry(
+            program,
+            memory_config,
+            &registry,
+            device_ctx,
+        )
+    }
+
+    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+    pub fn postflight<VB>(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+        program: &PreflightReplayProgram,
+        execution: &PreflightExecution,
+        num_insns: u32,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>
+    where
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
+    {
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
+    }
+
+    pub fn new(
+        program: &'a GpuPostflightProgram,
+        transcript: &'a GpuPostflightTranscript,
+        replay_plan: &'a GpuPostflightPlan,
+    ) -> Self {
+        let has_sha256 = !replay_plan
+            .opcode_range(Rv64Sha2Opcode::SHA256.global_opcode())
+            .is_empty();
+        let has_sha512 = !replay_plan
+            .opcode_range(Rv64Sha2Opcode::SHA512.global_opcode())
+            .is_empty();
+        Self {
+            program,
+            transcript,
+            replay_plan,
+            pending_sha256_main: has_sha256,
+            pending_sha256_block: has_sha256,
+            pending_sha512_main: has_sha512,
+            pending_sha512_block: has_sha512,
+        }
+    }
+
+    /// Returns `Some` only for a SHA-owned producer, allowing RV64 to handle
+    /// every other chip in the same reverse inventory walk.
+    pub fn generate_for_chip(
+        &mut self,
+        chip: &dyn Any,
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
+        if let Some(chip) = chip.downcast_ref::<Sha2MainChipGpu<Sha256Config>>() {
+            let ctx = chip.generate_proving_ctx_from_postflight(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            )?;
+            self.pending_sha256_main = false;
+            return Ok(Some(ctx));
+        }
+        if let Some(chip) = chip.downcast_ref::<Sha2BlockHasherChipGpu<Sha256Config>>() {
+            let ctx = chip.generate_proving_ctx_from_postflight(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            )?;
+            self.pending_sha256_block = false;
+            return Ok(Some(ctx));
+        }
+        if let Some(chip) = chip.downcast_ref::<Sha2MainChipGpu<Sha512Config>>() {
+            let ctx = chip.generate_proving_ctx_from_postflight(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            )?;
+            self.pending_sha512_main = false;
+            return Ok(Some(ctx));
+        }
+        if let Some(chip) = chip.downcast_ref::<Sha2BlockHasherChipGpu<Sha512Config>>() {
+            let ctx = chip.generate_proving_ctx_from_postflight(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            )?;
+            self.pending_sha512_block = false;
+            return Ok(Some(ctx));
+        }
+        Ok(None)
+    }
+
+    pub fn finish(self) -> Result<(), GpuPostflightError> {
+        let mut missing = Vec::new();
+        if self.pending_sha256_main {
+            missing.push("Sha256Main");
+        }
+        if self.pending_sha256_block {
+            missing.push("Sha256BlockHasher");
+        }
+        if self.pending_sha512_main {
+            missing.push("Sha512Main");
+        }
+        if self.pending_sha512_block {
+            missing.push("Sha512BlockHasher");
+        }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(GpuPostflightError::InvalidTranscript(format!(
+                "SHA-2 preflight GPU tracegen did not visit producers {missing:?}"
+            )))
+        }
+    }
+
+    /// Generates one complete RV64+SHA-2 segment and verifies that every
+    /// executed opcode reached all of its concrete trace producers.
+    pub fn generate_proving_ctx<VB>(
+        self,
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError>
+    where
+        VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
+    {
+        let extension_opcodes = Self::extension_opcodes();
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            &extension_opcodes,
+        )
+        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        vm.generate_preflight_proving_ctx(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            (self, rv64),
+            |(tracegen, rv64), chip| {
+                if let Some(ctx) = tracegen
+                    .generate_for_chip(chip)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
+                {
+                    Ok(ctx)
+                } else {
+                    rv64.generate_for_chip(chip)
+                        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+                }
+            },
+            |(tracegen, rv64)| {
+                tracegen
+                    .finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+                rv64.finish()
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
+    }
+}
+
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Sha2> for Sha2GpuProverExt {
     fn extend_prover(
         &self,
         _: &Sha2,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -37,17 +280,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         // SHA-256
         inventory.next_air::<Sha2BlockHasherVmAir<Sha256Config>>()?;
-        let sha256_shared_records = Arc::new(Mutex::new(None));
         let sha256_block_gpu = Sha2BlockHasherChipGpu::<Sha256Config>::new(
-            sha256_shared_records.clone(),
             bitwise_gpu.clone(),
             range_checker_gpu.clone(),
+            byte_ptr_max_bits as u32,
         );
-        inventory.add_periphery_chip(sha256_block_gpu);
+        inventory.add_periphery_chip_with_height(sha256_block_gpu, None);
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
-            sha256_shared_records,
             range_checker_gpu.clone(),
             byte_ptr_max_bits as u32,
             timestamp_max_bits as u32,
@@ -56,17 +297,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         // SHA-512 (also covers SHA-384 constraints)
         inventory.next_air::<Sha2BlockHasherVmAir<Sha512Config>>()?;
-        let sha512_shared_records = Arc::new(Mutex::new(None));
         let sha512_block_gpu = Sha2BlockHasherChipGpu::<Sha512Config>::new(
-            sha512_shared_records.clone(),
             bitwise_gpu.clone(),
             range_checker_gpu.clone(),
+            byte_ptr_max_bits as u32,
         );
-        inventory.add_periphery_chip(sha512_block_gpu);
+        inventory.add_periphery_chip_with_height(sha512_block_gpu, None);
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
-            sha512_shared_records,
             range_checker_gpu,
             byte_ptr_max_bits as u32,
             timestamp_max_bits as u32,
@@ -79,12 +318,34 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
 pub struct Sha2Rv64GpuBuilder;
 
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Sha2Rv64GpuBuilder {
+    type Prepared = GpuPostflightProgram;
+
+    fn prepare_postflight(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        program: &Program<BabyBear>,
+    ) -> Result<Self::Prepared, GenerationError> {
+        prepare_gpu_postflight(vm, program)
+    }
+
+    fn generate_proving_ctx(
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
+        _host_program: &Program<BabyBear>,
+        program: &Self::Prepared,
+        output: &PreflightOutput,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
+        let (transcript, replay_plan) = vm
+            .postflight_history(program, output)
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        Sha2PreflightGpuTracegen::new(program, &transcript, &replay_plan).generate_proving_ctx(vm)
+    }
+}
+
 type E = GpuBabyBearPoseidon2Engine;
 
 impl VmBuilder<E> for Sha2Rv64GpuBuilder {
     type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -92,12 +353,7 @@ impl VmBuilder<E> for Sha2Rv64GpuBuilder {
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
-        VmChipComplex<
-            <E as StarkEngine>::SC,
-            Self::RecordArena,
-            <E as StarkEngine>::PB,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<<E as StarkEngine>::SC, <E as StarkEngine>::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
@@ -107,10 +363,13 @@ impl VmBuilder<E> for Sha2Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, &config.sha2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Sha2GpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
     }
 }
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests;

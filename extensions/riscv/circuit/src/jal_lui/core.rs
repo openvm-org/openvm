@@ -1,16 +1,12 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     LocalOpcode,
 };
@@ -23,13 +19,12 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, rv64_u32_to_u16_block, Rv64CondRdWriteAdapterExecutor,
-    Rv64CondRdWriteAdapterFiller, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS,
-    U16_BITS,
+    ptr_to_u16_limbs, rv64_u32_to_u16_block, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS,
+    RV_J_TYPE_IMM_BITS, U16_BITS,
 };
 
-const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
-const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
+pub(super) const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
+pub(super) const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -165,117 +160,12 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalLuiCoreRecord {
-    pub imm: u32,
-    pub rd_data: [u16; BLOCK_FE_WIDTH],
-    pub is_jal: bool,
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalLuiExecutor<A = Rv64CondRdWriteAdapterExecutor> {
-    pub adapter: A,
-}
+pub struct Rv64JalLuiExecutor;
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
-    adapter: A,
+pub struct Rv64JalLuiFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalLuiExecutor<A>
-where
-    F: PrimeField32,
-    A: 'static + for<'a> AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64JalLuiCoreRecord),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64JalLuiOpcode::from_usize(opcode - Rv64JalLuiOpcode::CLASS_OFFSET)
-        )
-    }
-
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let &Instruction { opcode, c: imm, .. } = instruction;
-
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let is_jal = opcode.local_opcode_idx(Rv64JalLuiOpcode::CLASS_OFFSET) == JAL as usize;
-        let signed_imm = get_signed_imm(is_jal, imm);
-
-        let (to_pc, rd_data) = run_jal_lui(is_jal, *state.pc, signed_imm);
-
-        core_record.imm = imm.as_canonical_u32();
-        core_record.rd_data = rd_data;
-        core_record.is_jal = is_jal;
-
-        self.adapter
-            .write(state.memory, instruction, rd_data, &mut adapter_record);
-
-        *state.pc = to_pc;
-
-        Ok(())
-    }
-}
-
-impl<F, A> TraceFiller<F> for Rv64JalLuiFiller<A>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64JalLuiCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64JalLuiCoreRecord written by the executor
-        // during trace generation
-        let record: &Rv64JalLuiCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
-
-        let rd_lo = record.rd_data[0];
-        let rd_hi = record.rd_data[1];
-
-        self.range_checker_chip.add_count(rd_lo as u32, U16_BITS);
-        self.range_checker_chip.add_count(rd_hi as u32, U16_BITS);
-        let is_sign_extend = (rd_hi >> (U16_BITS - 1)) & 1;
-        let sign_check = 2u32 * (rd_hi as u32) - (is_sign_extend as u32) * (1 << U16_BITS);
-        self.range_checker_chip.add_count(sign_check, U16_BITS);
-
-        let imm_low_4 = if record.is_jal {
-            0u8
-        } else {
-            (record.imm & 0xf) as u8
-        };
-        if !record.is_jal {
-            self.range_checker_chip
-                .add_count(imm_low_4 as u32, LUI_IMM_LOW_BITS);
-        }
-
-        if record.is_jal {
-            self.range_checker_chip
-                .add_count((rd_hi as u32) << PC_HIGH_U16_SHIFT, U16_BITS);
-        }
-
-        core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
-        core_row.is_lui = F::from_bool(!record.is_jal);
-        core_row.is_jal = F::from_bool(record.is_jal);
-        core_row.imm_low_4 = F::from_u8(imm_low_4);
-        core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
-        core_row.imm = F::from_u32(record.imm);
-    }
 }
 
 // returns the canonical signed representation of the immediate

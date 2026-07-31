@@ -4,7 +4,6 @@ use std::{
     rc::Rc,
 };
 
-use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -17,9 +16,7 @@ use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldExpressionProgram,
 };
-use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
-};
+use openvm_riscv_adapters::{Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller};
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -64,27 +61,20 @@ pub fn ec_add_ne_program(
 }
 
 /// `BLOCKS` is the number of memory blocks needed to represent one input or output point.
-// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
+// Preflight executes this transition with fast native arithmetic.
 #[derive(Clone)]
 pub struct EcAddNeExecutor<const BLOCKS: usize> {
-    pub(crate) inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    pub(crate) cached_field_type: Option<FieldType>,
+    pub(crate) inner: FieldExpressionExecutor,
 }
 
 impl<const BLOCKS: usize> EcAddNeExecutor<BLOCKS> {
-    pub fn new(
-        inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
-    ) -> Self {
-        let cached_field_type = get_field_type(inner.program().prime());
-        Self {
-            inner,
-            cached_field_type,
-        }
+    pub fn new(inner: FieldExpressionExecutor) -> Self {
+        Self { inner }
     }
 }
 
 impl<const BLOCKS: usize> Deref for EcAddNeExecutor<BLOCKS> {
-    type Target = FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>;
+    type Target = FieldExpressionExecutor;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -128,12 +118,10 @@ pub fn get_ec_addne_air<const BLOCKS: usize>(
 pub fn get_ec_addne_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_max_bits: usize,
-    pointer_max_bits: usize,
     offset: usize,
 ) -> EcAddNeExecutor<BLOCKS> {
     let (program, local_opcode_idx) = gen_base_program(config, range_max_bits);
     EcAddNeExecutor::new(FieldExpressionExecutor::new(
-        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
         program,
         offset,
         local_opcode_idx,
@@ -153,7 +141,7 @@ pub fn get_ec_addne_chip<F, const BLOCKS: usize>(
     let expr = FieldExpr::new(program, range_bus);
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             vec![],

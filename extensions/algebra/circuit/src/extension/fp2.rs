@@ -3,17 +3,19 @@ use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
-        VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_riscv_circuit::adapters::U16_BITS;
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
+};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_algebra::Fp2RvrExtension;
 #[cfg(feature = "rvr")]
@@ -27,6 +29,7 @@ use crate::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_executor, get_fp2_muldiv_air,
         get_fp2_muldiv_chip, get_fp2_muldiv_executor, Fp2Air, Fp2Executor,
     },
+    trace::generate_field_expression_trace_from_postflight,
     AlgebraCpuProverExt, ModularExtension, FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_48,
 };
@@ -79,7 +82,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
     }
 }
 
-#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
     Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32>), // Fp2AddSub
@@ -96,7 +99,6 @@ impl VmExecutionExtension for Fp2Extension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -108,12 +110,7 @@ impl VmExecutionExtension for Fp2Extension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addsub = get_fp2_addsub_executor(
-                    config.clone(),
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let addsub = get_fp2_addsub_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv64_32(addsub),
@@ -121,8 +118,7 @@ impl VmExecutionExtension for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv =
-                    get_fp2_muldiv_executor(config, U16_BITS, byte_ptr_max_bits, start_offset);
+                let muldiv = get_fp2_muldiv_executor(config, U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv64_32(muldiv),
@@ -135,12 +131,7 @@ impl VmExecutionExtension for Fp2Extension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addsub = get_fp2_addsub_executor(
-                    config.clone(),
-                    U16_BITS,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let addsub = get_fp2_addsub_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv64_48(addsub),
@@ -148,8 +139,7 @@ impl VmExecutionExtension for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv =
-                    get_fp2_muldiv_executor(config, U16_BITS, byte_ptr_max_bits, start_offset);
+                let muldiv = get_fp2_muldiv_executor(config, U16_BITS, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv64_48(muldiv),
@@ -243,26 +233,26 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, E, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
+impl<SC, E> VmProverExtension<E, Fp2Extension> for AlgebraCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &Fp2Extension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        for (_, modulus) in extension.supported_moduli.iter() {
+        for (i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
+            let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -278,7 +268,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addsub);
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_32>>()?;
                 let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_32>(
@@ -287,7 +285,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(muldiv);
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -302,7 +308,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addsub);
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_48>>()?;
                 let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_48>(
@@ -311,7 +325,15 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(muldiv);
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
+                    generate_field_expression_trace_from_postflight(
+                        chip,
+                        postflight,
+                        start_offset,
+                        byte_ptr_max_bits,
+                    )
+                    .map(AirProvingContext::simple_no_pis)
+                });
             } else {
                 panic!("Modulus too large");
             }

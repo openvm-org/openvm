@@ -30,5 +30,10 @@ rvr = [
     "openvm-algebra-circuit/rvr",
     "openvm-ecc-circuit/rvr",
 ]
-cuda = ["openvm-algebra-circuit/cuda", "openvm-ecc-circuit/cuda"]
+cuda = [
+    "openvm-algebra-circuit/cuda",
+    "openvm-algebra-circuit/test-utils",
+    "openvm-ecc-circuit/cuda",
+    "openvm-ecc-circuit/test-utils",
+]
 touchemall = ["cuda", "openvm-algebra-circuit/touchemall", "openvm-ecc-circuit/touchemall"]

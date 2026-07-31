@@ -1,13 +1,14 @@
-use std::{io::Write, path::PathBuf};
+use std::{collections::HashMap, io::Write, path::PathBuf};
 
 use eyre::Result;
 use itertools::Itertools;
 
 use crate::{
     aggregate::{
-        AggregateMetrics, EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_INSNS_LABEL,
-        EXECUTE_PREFLIGHT_TIME_LABEL, MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL,
-        PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
+        AggregateMetrics, Stats, EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_INSNS_LABEL,
+        EXECUTE_PREFLIGHT_TIME_LABEL, MAIN_CELLS_USED_LABEL, POSTFLIGHT_TIME_LABEL,
+        PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, SET_INITIAL_MEMORY_TIME_LABEL,
+        TRACE_GEN_TIME_LABEL,
     },
     types::MdTableCell,
 };
@@ -203,6 +204,25 @@ impl SingleSummaryMetrics {
     }
 }
 
+fn fallback_proof_time(
+    stats: &HashMap<String, Stats>,
+    value: impl Fn(&Stats) -> f64,
+) -> MdTableCell {
+    let total = [
+        EXECUTE_METERED_TIME_LABEL,
+        SET_INITIAL_MEMORY_TIME_LABEL,
+        EXECUTE_PREFLIGHT_TIME_LABEL,
+        POSTFLIGHT_TIME_LABEL,
+        TRACE_GEN_TIME_LABEL,
+        PROVE_EXCL_TRACE_TIME_LABEL,
+    ]
+    .into_iter()
+    .filter_map(|name| stats.get(name))
+    .map(value)
+    .sum();
+    MdTableCell::new(total, None)
+}
+
 impl AggregateMetrics {
     pub fn has_cells_used_metrics(&self) -> bool {
         self.by_group
@@ -216,55 +236,12 @@ impl AggregateMetrics {
         let proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
             proof_stats.sum
         } else {
-            // Note: execute_metered is outside any segment scope, so it should have sum = max = avg
-            let execute_metered = stats
-                .get(EXECUTE_METERED_TIME_LABEL)
-                .map(|s| s.sum.val)
-                .unwrap_or(0.0);
-            let execute_preflight = stats
-                .get(EXECUTE_PREFLIGHT_TIME_LABEL)
-                .map(|s| s.sum.val)
-                .unwrap_or(0.0);
-            // If total_proof_time_ms is not available, compute it from components
-            let trace_gen = stats
-                .get(TRACE_GEN_TIME_LABEL)
-                .map(|s| s.sum.val)
-                .unwrap_or(0.0);
-            let stark_prove = stats
-                .get(PROVE_EXCL_TRACE_TIME_LABEL)
-                .map(|s| s.sum.val)
-                .unwrap_or(0.0);
-            println!("{execute_metered} {execute_preflight} {trace_gen} {stark_prove}");
-            MdTableCell::new(
-                execute_metered + execute_preflight + trace_gen + stark_prove,
-                None,
-            )
+            fallback_proof_time(stats, |stats| stats.sum.val)
         };
-        println!("{}", self.total_proof_time.val);
         let par_proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
             proof_stats.max
         } else {
-            // Use the same computation for max
-            let execute_metered = stats
-                .get(EXECUTE_METERED_TIME_LABEL)
-                .map(|s| s.max.val)
-                .unwrap_or(0.0);
-            let execute_preflight = stats
-                .get(EXECUTE_PREFLIGHT_TIME_LABEL)
-                .map(|s| s.max.val)
-                .unwrap_or(0.0);
-            let trace_gen = stats
-                .get(TRACE_GEN_TIME_LABEL)
-                .map(|s| s.max.val)
-                .unwrap_or(0.0);
-            let stark_prove = stats
-                .get(PROVE_EXCL_TRACE_TIME_LABEL)
-                .map(|s| s.max.val)
-                .unwrap_or(0.0);
-            MdTableCell::new(
-                execute_metered + execute_preflight + trace_gen + stark_prove,
-                None,
-            )
+            fallback_proof_time(stats, |stats| stats.max.val)
         };
         let cells_used = stats
             .get(MAIN_CELLS_USED_LABEL)
@@ -308,5 +285,38 @@ impl AggregateMetrics {
                 halo2_wrapper,
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stats(value: f64) -> Stats {
+        let mut stats = Stats::new();
+        stats.push(value);
+        stats.finalize();
+        stats
+    }
+
+    #[test]
+    fn summary_fallback_includes_each_frontend_phase() {
+        let phase_stats = HashMap::from([
+            (EXECUTE_METERED_TIME_LABEL.to_string(), stats(1.0)),
+            (SET_INITIAL_MEMORY_TIME_LABEL.to_string(), stats(2.0)),
+            (EXECUTE_PREFLIGHT_TIME_LABEL.to_string(), stats(3.0)),
+            (POSTFLIGHT_TIME_LABEL.to_string(), stats(4.0)),
+            (TRACE_GEN_TIME_LABEL.to_string(), stats(5.0)),
+            (PROVE_EXCL_TRACE_TIME_LABEL.to_string(), stats(6.0)),
+        ]);
+        let aggregate = AggregateMetrics {
+            by_group: HashMap::from([("app_proof".to_string(), phase_stats)]),
+            ..Default::default()
+        };
+
+        let summary = aggregate.get_single_summary("app_proof").unwrap();
+
+        assert_eq!(summary.proof_time_ms.val, 21.0);
+        assert_eq!(summary.par_proof_time_ms.val, 21.0);
     }
 }

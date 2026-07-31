@@ -2,8 +2,8 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        testing::{memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -25,20 +25,18 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64BranchAdapterRecord, BranchEqualCoreRecord, Rv64BranchEqualChipGpu},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64BranchEqualChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
-use super::{core::run_eq, BranchEqualCoreCols, Rv64BranchEqualChip};
+use super::{
+    core::run_eq, trace::generate_trace_from_postflight, BranchEqualCoreCols, Rv64BranchEqualChip,
+};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64BranchAdapterAir, Rv64BranchAdapterExecutor,
-        Rv64BranchAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
+        rv64_bytes_to_u16_block, Rv64BranchAdapterAir, RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
     test_utils::rv64_marker_bytes_to_u16_marker,
@@ -64,19 +62,8 @@ fn create_harness_fields(
         Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = Rv64BranchEqualExecutor::new(
-        Rv64BranchAdapterExecutor,
-        BranchEqualOpcode::CLASS_OFFSET,
-        DEFAULT_PC_STEP,
-    );
-    let chip = Rv64BranchEqualChip::new(
-        BranchEqualFiller::new(
-            Rv64BranchAdapterFiller,
-            BranchEqualOpcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
-        ),
-        memory_helper,
-    );
+    let executor = Rv64BranchEqualExecutor::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
+    let chip = Rv64BranchEqualChip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), memory_helper);
     (air, executor, chip)
 }
 
@@ -86,14 +73,20 @@ fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
         tester.execution_bridge(),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
     a: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -108,15 +101,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
 
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mut rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    while rs2 == rs1 {
+        rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    }
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
     let initial_pc = rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(
         executor,
-        arena,
+        preflight,
         &Instruction::from_isize(
             opcode.global_opcode(),
             rs1 as isize,
@@ -158,7 +154,7 @@ fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -195,7 +191,7 @@ fn run_negative_branch_eq_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(a),
@@ -334,7 +330,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         BranchEqualOpcode::BEQ,
         Some(x),
@@ -345,7 +341,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         BranchEqualOpcode::BNE,
         Some(x),
@@ -391,7 +387,7 @@ fn run_ne_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64BranchEqualExecutor,
@@ -400,7 +396,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64BranchEqualChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -409,9 +405,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
     let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BranchEqualOpcode::BEQ, 100)]
 #[test_case(BranchEqualOpcode::BNE, 100)]
 fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
@@ -424,7 +426,7 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -432,18 +434,6 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BranchAdapterRecord,
-        &'a mut BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new(),
-        );
 
     tester
         .build()

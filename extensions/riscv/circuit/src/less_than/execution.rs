@@ -24,7 +24,7 @@ struct LessThanPreCompute {
     b: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -63,11 +63,15 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for LessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for LessThanExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", LessThanOpcode::from_usize(opcode - self.offset))
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<LessThanPreCompute>()
@@ -102,8 +106,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for LessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for LessThanExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {

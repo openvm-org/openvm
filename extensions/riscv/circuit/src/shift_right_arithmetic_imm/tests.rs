@@ -13,30 +13,21 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluImmU16AdapterRecord, Rv64ShiftRightArithmeticImmChipGpu,
-        ShiftRightArithmeticImmCoreRecord,
-    },
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64ShiftRightArithmeticImmChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
 use super::{
-    Rv64ShiftRightArithmeticImmAir, Rv64ShiftRightArithmeticImmChip,
-    Rv64ShiftRightArithmeticImmExecutor, ShiftRightArithmeticImmCoreAir,
-    ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmFiller,
+    trace::generate_trace_from_postflight, Rv64ShiftRightArithmeticImmAir,
+    Rv64ShiftRightArithmeticImmChip, Rv64ShiftRightArithmeticImmExecutor,
+    ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmFiller,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
-        Rv64BaseAluImmU16AdapterFiller, U16_BITS,
-    },
+    adapters::{Rv64BaseAluImmU16AdapterAir, U16_BITS},
     test_utils::rv64_rand_write_register_or_imm,
 };
 
@@ -54,15 +45,12 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        ShiftImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftRightArithmeticImmChip::new(
-        ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        ShiftRightArithmeticImmFiller::new(range_checker),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, 32)
+    Harness::with_capacity(executor, air, chip, 32, generate_trace_from_postflight)
 }
 
 #[test]
@@ -81,7 +69,7 @@ fn rv64_shift_right_arithmetic_immediate_boundaries() {
                 ShiftImmOpcode::SRAI.global_opcode().as_usize(),
                 &mut rng,
             );
-            tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+            tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
             let expected = ((source as i64) >> shamt) as u64;
             assert_eq!(
@@ -112,7 +100,7 @@ fn rv64_shift_right_arithmetic_immediate_marker_negative() {
         ShiftImmOpcode::SRAI.global_opcode().as_usize(),
         &mut rng,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
@@ -133,7 +121,7 @@ fn rv64_shift_right_arithmetic_immediate_marker_negative() {
         .expect_err("altered shift marker should fail");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64ShiftRightArithmeticImmExecutor,
@@ -142,7 +130,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64ShiftRightArithmeticImmChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_checker = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -151,22 +139,24 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        ShiftImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64ShiftRightArithmeticImmChip::new(
-        ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        ShiftRightArithmeticImmFiller::new(range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64ShiftRightArithmeticImmChipGpu::new(
         tester.range_checker(),
         tester.timestamp_max_bits(),
     );
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 32)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 32).with_trace_generators(
+        generate_trace_from_postflight,
+        |chip, program, transcript, plan| {
+            chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+        },
+    )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_shift_right_arithmetic_immediate_boundaries_tracegen() {
     let mut rng = create_seeded_rng();
@@ -190,24 +180,8 @@ fn test_cuda_shift_right_arithmetic_immediate_boundaries_tracegen() {
             ShiftImmOpcode::SRAI.global_opcode().as_usize(),
             &mut rng,
         );
-        tester.execute(
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &instruction,
-        );
+        tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluImmU16AdapterRecord,
-        &'a mut ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()
@@ -223,29 +197,20 @@ mod word {
     use openvm_riscv_transpiler::ShiftWImmOpcode;
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
-        crate::{
-            adapters::{Rv64BaseAluWImmU16AdapterRecord, RV64_WORD_U16_LIMBS, U16_BITS},
-            Rv64ShiftWRightArithmeticImmChipGpu, ShiftRightArithmeticImmCoreRecord,
-        },
-        openvm_circuit::arch::{
-            testing::{GpuChipTestBuilder, GpuTestChipHarness},
-            EmptyAdapterCoreLayout,
-        },
+        crate::Rv64ShiftWRightArithmeticImmChipGpu,
+        openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
         openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
         std::sync::Arc,
     };
 
     use crate::{
-        adapters::{
-            Rv64BaseAluWImmU16AdapterAir, Rv64BaseAluWImmU16AdapterExecutor,
-            Rv64BaseAluWImmU16AdapterFiller,
-        },
+        adapters::Rv64BaseAluWImmU16AdapterAir,
         shift_right_arithmetic_imm::{
-            Rv64ShiftWRightArithmeticImmAir, Rv64ShiftWRightArithmeticImmChip,
-            Rv64ShiftWRightArithmeticImmExecutor, ShiftRightArithmeticImmCoreAir,
-            ShiftRightArithmeticImmFiller,
+            trace::generate_word_trace_from_postflight, Rv64ShiftWRightArithmeticImmAir,
+            Rv64ShiftWRightArithmeticImmChip, Rv64ShiftWRightArithmeticImmExecutor,
+            ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmFiller,
         },
         test_utils::rv64_rand_write_register_or_imm,
     };
@@ -268,18 +233,12 @@ mod word {
             ),
             ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(
-            Rv64BaseAluWImmU16AdapterExecutor,
-            ShiftWImmOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
         let chip = Rv64ShiftWRightArithmeticImmChip::new(
-            ShiftRightArithmeticImmFiller::new(
-                Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker,
-            ),
+            ShiftRightArithmeticImmFiller::new(range_checker),
             tester.memory_helper(),
         );
-        Harness::with_capacity(executor, air, chip, 16)
+        Harness::with_capacity(executor, air, chip, 16, generate_word_trace_from_postflight)
     }
 
     #[test]
@@ -298,7 +257,7 @@ mod word {
                     ShiftWImmOpcode::SRAIW.global_opcode().as_usize(),
                     &mut rng,
                 );
-                tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+                tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
                 let expected = ((source as u32 as i32) >> shamt) as i64 as u64;
                 assert_eq!(
@@ -323,7 +282,7 @@ mod word {
     //  Ensure GPU tracegen is equivalent to CPU tracegen.
     // ////////////////////////////////////////////////////////////////////////////////////
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     type GpuHarness = GpuTestChipHarness<
         F,
         Rv64ShiftWRightArithmeticImmExecutor,
@@ -332,7 +291,7 @@ mod word {
         Rv64ShiftWRightArithmeticImmChip<F>,
     >;
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -345,15 +304,9 @@ mod word {
             ),
             ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(
-            Rv64BaseAluWImmU16AdapterExecutor,
-            ShiftWImmOpcode::CLASS_OFFSET,
-        );
+        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
         let cpu_chip = Rv64ShiftWRightArithmeticImmChip::new(
-            ShiftRightArithmeticImmFiller::new(
-                Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker,
-            ),
+            ShiftRightArithmeticImmFiller::new(range_checker),
             tester.dummy_memory_helper(),
         );
         let gpu_chip = Rv64ShiftWRightArithmeticImmChipGpu::new(
@@ -362,9 +315,15 @@ mod word {
         );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8)
+            .with_trace_generators(
+                generate_word_trace_from_postflight,
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            )
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_cuda_shift_w_right_arithmetic_immediate_tracegen() {
         let mut rng = create_seeded_rng();
@@ -386,24 +345,8 @@ mod word {
                 ShiftWImmOpcode::SRAIW.global_opcode().as_usize(),
                 &mut rng,
             );
-            tester.execute(
-                &mut harness.executor,
-                &mut harness.dense_arena,
-                &instruction,
-            );
+            tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
         }
-
-        type Record<'a> = (
-            &'a mut Rv64BaseAluWImmU16AdapterRecord,
-            &'a mut ShiftRightArithmeticImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
-        );
-        harness
-            .dense_arena
-            .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv64BaseAluWImmU16AdapterExecutor>::new(),
-            );
 
         tester
             .build()

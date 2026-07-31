@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
@@ -26,10 +26,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller,
+        RV64_BYTE_BITS,
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadWordCoreAir, LoadWordFiller,
@@ -38,11 +39,8 @@ use crate::{
     load_sign_extend::common::load_sign_extend_write_data,
     test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
-#[cfg(feature = "cuda")]
-use crate::{
-    load::Rv64LoadWordChipGpu,
-    test_utils::memory::{dummy_range_checker, transfer_load_records},
-};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::{load::Rv64LoadWordChipGpu, test_utils::memory::dummy_range_checker};
 
 type WordHarness = TestChipHarness<F, Rv64LoadWordExecutor, Rv64LoadWordAir, Rv64LoadWordChip<F>>;
 
@@ -69,10 +67,7 @@ fn create_word_harness(
         ),
         LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64LoadWordExecutor::new(
-        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64LoadWordChip::<F>::new(
         LoadWordFiller::new(
             Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -82,7 +77,13 @@ fn create_word_harness(
         tester.memory_helper(),
     );
     (
-        WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        WordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -95,7 +96,7 @@ fn positive_loadwu_shift4_test() {
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADWU,
         Some([4, 0, 0, 0, 0, 0, 0, 0]),
@@ -121,7 +122,7 @@ fn rand_load_word_test() {
         set_and_execute_load(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             LOADWU,
             None,
@@ -187,7 +188,7 @@ fn assert_pranked_load_word_fails(prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LOADWU,
         None,
@@ -222,7 +223,7 @@ fn negative_split_opcode_role_test() {
     assert_pranked_load_word_fails(|core| core.selector[0] += F::ONE);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuWordHarness = GpuTestChipHarness<
     F,
     Rv64LoadWordExecutor,
@@ -231,7 +232,7 @@ type GpuWordHarness = GpuTestChipHarness<
     Rv64LoadWordChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -246,10 +247,7 @@ fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
         ),
         LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64LoadWordExecutor::new(
-        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LoadWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64LoadWordChip::<F>::new(
         LoadWordFiller::new(
             Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -266,9 +264,15 @@ fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_load_word_tracegen() {
     let mut rng = create_seeded_rng();
@@ -280,7 +284,7 @@ fn test_cuda_rand_load_word_tracegen() {
         set_and_execute_load(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             LOADWU,
             None,
@@ -289,7 +293,6 @@ fn test_cuda_rand_load_word_tracegen() {
             Some(RV64_MEMORY_AS as usize),
         );
     }
-    transfer_load_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

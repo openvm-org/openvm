@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -25,25 +25,20 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluRegAdapterRecord, BitwiseLogicCoreRecord, Rv64BitwiseLogicChipGpu,
-    },
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::Rv64BitwiseLogicChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
 use super::{
-    core::run_bitwise_logic, BitwiseLogicCoreAir, Rv64BitwiseLogicChip, Rv64BitwiseLogicExecutor,
+    core::run_bitwise_logic, trace::generate_trace_from_postflight, BitwiseLogicCoreAir,
+    Rv64BitwiseLogicChip, Rv64BitwiseLogicExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterFiller,
-        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64BaseAluRegAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     bitwise_logic::BitwiseLogicCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
     BitwiseLogicFiller, Rv64BitwiseLogicAir,
@@ -68,14 +63,8 @@ fn create_harness_fields(
         Rv64BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
         BitwiseLogicCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BitwiseLogicExecutor::new(
-        Rv64BaseAluRegAdapterExecutor::new(),
-        BaseAluOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64BitwiseLogicChip::new(
-        BitwiseLogicFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_chip),
-        memory_helper,
-    );
+    let executor = Rv64BitwiseLogicExecutor::new(BaseAluOpcode::CLASS_OFFSET);
+    let chip = Rv64BitwiseLogicChip::new(BitwiseLogicFiller::new(bitwise_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -99,16 +88,22 @@ fn create_harness(
         bitwise_chip.clone(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -119,7 +114,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let a = run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c)
         .map(F::from_u8);
@@ -154,7 +149,7 @@ fn rand_rv64_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -193,7 +188,7 @@ fn run_negative_bitwise_logic_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),
@@ -306,7 +301,7 @@ fn run_and_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64BitwiseLogicExecutor,
@@ -315,7 +310,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64BitwiseLogicChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -335,9 +330,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BaseAluOpcode::XOR, 100)]
 #[test_case(BaseAluOpcode::OR, 100)]
 #[test_case(BaseAluOpcode::AND, 100)]
@@ -351,26 +352,13 @@ fn test_cuda_rand_bitwise_logic_tracegen(opcode: BaseAluOpcode, num_ops: usize) 
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluRegAdapterRecord,
-        &'a mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegAdapterExecutor>::new(),
-        );
 
     tester
         .build()

@@ -51,7 +51,7 @@ impl<MEM> VmState<MEM> {
     }
 
     #[inline(always)]
-    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, MEM, RA> {
+    pub fn into_mut<'a, CTX>(&'a mut self, ctx: &'a mut CTX) -> VmStateMut<'a, MEM, CTX> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,
@@ -162,7 +162,10 @@ where
     #[inline(always)]
     pub fn vm_read_bytes<const N: usize>(&mut self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
         self.ctx.on_memory_operation(addr_space, byte_ptr, N as u32);
-        self.host_read_bytes(addr_space, byte_ptr)
+        let value = self.host_read_bytes(addr_space, byte_ptr);
+        self.ctx
+            .on_memory_read(&self.vm_state.memory, addr_space, byte_ptr, N as u32);
+        value
     }
 
     /// Runtime byte write: `byte_ptr` is a raw byte offset.
@@ -174,7 +177,10 @@ where
         data: &[u8; N],
     ) {
         self.ctx.on_memory_operation(addr_space, byte_ptr, N as u32);
-        self.host_write_bytes(addr_space, byte_ptr, data)
+        self.ctx
+            .on_memory_write_start(&self.vm_state.memory, addr_space, byte_ptr, N as u32);
+        self.host_write_bytes(addr_space, byte_ptr, data);
+        self.ctx.on_memory_write_end(&self.vm_state.memory);
     }
 
     /// Runtime cell read: `ptr` is an AS-native pointer.
@@ -186,7 +192,14 @@ where
         ptr: u32,
     ) -> [T; N] {
         self.ctx.on_memory_operation(addr_space, ptr, N as u32);
-        self.host_read(addr_space, ptr)
+        let value = self.host_read(addr_space, ptr);
+        self.ctx.on_memory_read(
+            &self.vm_state.memory,
+            addr_space,
+            ptr * size_of::<T>() as u32,
+            (N * size_of::<T>()) as u32,
+        );
+        value
     }
 
     /// Runtime cell write: `ptr` is an AS-native pointer.
@@ -198,7 +211,14 @@ where
         data: &[T; N],
     ) {
         self.ctx.on_memory_operation(addr_space, ptr, N as u32);
-        self.host_write(addr_space, ptr, data)
+        self.ctx.on_memory_write_start(
+            &self.vm_state.memory,
+            addr_space,
+            ptr * size_of::<T>() as u32,
+            (N * size_of::<T>()) as u32,
+        );
+        self.host_write(addr_space, ptr, data);
+        self.ctx.on_memory_write_end(&self.vm_state.memory);
     }
 
     #[inline(always)]
@@ -209,6 +229,12 @@ where
         len: usize,
     ) -> &[T] {
         self.ctx.on_memory_operation(addr_space, ptr, len as u32);
+        self.ctx.on_memory_read(
+            &self.vm_state.memory,
+            addr_space,
+            ptr * size_of::<T>() as u32,
+            (len * size_of::<T>()) as u32,
+        );
         self.host_read_slice(addr_space, ptr, len)
     }
 
