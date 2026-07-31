@@ -334,7 +334,7 @@ mod tests {
         instr: &dyn ExtInstr,
         ffi_name: &str,
         remaining_slots: u32,
-        replay_values: usize,
+        expected_replay_values: usize,
     ) {
         assert!(instr.supports_preflight());
         let mut ctx = TestEmitCtx::default();
@@ -365,7 +365,7 @@ mod tests {
             .iter()
             .filter(|operation| operation.starts_with("replay_value(peek_mem_u64("))
             .collect::<Vec<_>>();
-        assert_eq!(replay_values.len(), replay_values);
+        assert_eq!(replay_values.len(), expected_replay_values);
         for (index, operation) in replay_values.into_iter().enumerate() {
             assert!(operation.contains(&format!("+ {}ull", index * size_of::<u64>())));
         }
