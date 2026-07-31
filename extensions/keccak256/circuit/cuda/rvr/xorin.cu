@@ -255,9 +255,6 @@ __global__ void xorin_replay_tracegen(
     XORIN_WRITE(instruction.buffer_reg_ptr, buffer_reg_ptr);
     XORIN_WRITE(instruction.input_reg_ptr, input_reg_ptr);
     XORIN_WRITE(instruction.len_reg_ptr, len_reg_ptr);
-    XORIN_WRITE(instruction.buffer_ptr, buffer_ptr);
-    XORIN_WRITE(instruction.input_ptr, input_ptr);
-    XORIN_WRITE(instruction.len, len);
     XORIN_WRITE(instruction.start_timestamp, from.timestamp);
     uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
     uint16_t input_ptr_limbs[RV64_PTR_U16_LIMBS];
@@ -265,7 +262,6 @@ __global__ void xorin_replay_tracegen(
     ptr_to_u16_limbs(input_ptr_limbs, input_ptr);
     XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
     XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, input_ptr_limbs);
-    XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(len));
 
     for (uint32_t i = 0; i < keccak256::KECCAK_RATE_MEM_OPS; i++) {
         XORIN_WRITE(sponge.is_padding_bytes[i], i >= num_blocks);

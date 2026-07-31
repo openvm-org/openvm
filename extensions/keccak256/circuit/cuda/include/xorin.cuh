@@ -16,14 +16,10 @@ struct XorinInstructionCols {
     T buffer_reg_ptr;
     T input_reg_ptr;
     T len_reg_ptr;
-    T buffer_ptr;
     // Low 32 bits of [buffer_reg_ptr:8]_1 as u16 cells.
     T buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
-    T input_ptr;
     // Low 32 bits of [input_reg_ptr:8]_1 as u16 cells.
     T input_ptr_limbs[RV64_PTR_U16_LIMBS];
-    T len;
-    T len_limb;
     T start_timestamp;
 };
 
