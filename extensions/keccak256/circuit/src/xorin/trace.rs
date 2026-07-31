@@ -59,12 +59,8 @@ impl XorinVmFiller {
         trace_row.instruction.buffer_reg_ptr = F::from_u32(input.rd_ptr);
         trace_row.instruction.input_reg_ptr = F::from_u32(input.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(input.rs2_ptr);
-        trace_row.instruction.buffer_ptr = F::from_u32(input.buffer);
         trace_row.instruction.buffer_ptr_limbs = ptr_to_field_u16_limbs(input.buffer);
-        trace_row.instruction.input_ptr = F::from_u32(input.input);
         trace_row.instruction.input_ptr_limbs = ptr_to_field_u16_limbs(input.input);
-        trace_row.instruction.len = F::from_u32(input.len);
-        trace_row.instruction.len_limb = F::from_u8(input.len as u8);
         trace_row.instruction.start_timestamp = F::from_u32(input.timestamp);
 
         for i in 0..(input.len as usize / MEMORY_BLOCK_BYTES) {

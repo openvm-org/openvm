@@ -107,13 +107,13 @@ impl XorinVmAir {
         ];
 
         let mut timestamp_change = AB::Expr::from_u32(3);
-        let mut not_padding_sum = AB::Expr::ZERO;
+        let mut num_used_blocks = AB::Expr::ZERO;
         let is_padding_bytes = local.sponge.is_padding_bytes;
 
         // Check that is_padding_bytes is of the form 0...01...1
         for (i, &is_padding) in is_padding_bytes.iter().enumerate() {
             builder.assert_bool(is_padding);
-            not_padding_sum += not(is_padding);
+            num_used_blocks += not(is_padding);
             if i > 0 {
                 builder
                     .when(is_enabled)
@@ -122,11 +122,6 @@ impl XorinVmAir {
             // Each 8-byte memory block has 3 ops (buffer read + input read + buffer write).
             timestamp_change += AB::Expr::from_u32(3) * not(is_padding);
         }
-
-        not_padding_sum *= AB::Expr::from_usize(MEMORY_BLOCK_BYTES);
-        builder
-            .when(is_enabled)
-            .assert_eq(not_padding_sum, instruction.len);
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -150,7 +145,8 @@ impl XorinVmAir {
             expand_to_rv64_block(&instruction.buffer_ptr_limbs);
         let input_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
             expand_to_rv64_block(&instruction.input_ptr_limbs);
-        let len_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&[instruction.len_limb]);
+        let len_in_bytes = num_used_blocks * AB::Expr::from_usize(MEMORY_BLOCK_BYTES);
+        let len_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&[len_in_bytes]);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
@@ -185,17 +181,6 @@ impl XorinVmAir {
                 .eval(builder, is_enabled);
         }
 
-        builder.assert_eq(
-            instruction.buffer_ptr,
-            u16_limbs_to_ptr(&instruction.buffer_ptr_limbs),
-        );
-        builder.assert_eq(
-            instruction.input_ptr,
-            u16_limbs_to_ptr(&instruction.input_ptr_limbs),
-        );
-
-        builder.assert_eq(instruction.len, instruction.len_limb);
-
         timestamp
     }
 
@@ -212,6 +197,9 @@ impl XorinVmAir {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
 
+        let buffer_ptr = u16_limbs_to_ptr(&local.instruction.buffer_ptr_limbs);
+        let input_ptr = u16_limbs_to_ptr(&local.instruction.input_ptr_limbs);
+
         // Constrain read of buffer bytes
         // Timestamp increases by <= (136/8) = 17
         for (i, (input, mem_aux)) in izip!(
@@ -223,7 +211,7 @@ impl XorinVmAir {
         )
         .enumerate()
         {
-            let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
+            let ptr = buffer_ptr.clone() + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
             let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
 
@@ -259,7 +247,7 @@ impl XorinVmAir {
         )
         .enumerate()
         {
-            let ptr = local.instruction.input_ptr + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
+            let ptr = input_ptr.clone() + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
             let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
 
@@ -327,6 +315,7 @@ impl XorinVmAir {
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
+        let buffer_ptr = u16_limbs_to_ptr(&local.instruction.buffer_ptr_limbs);
 
         // Constrain write of buffer bytes
         // Each block is written back to the address its buffer read came from,
@@ -346,7 +335,7 @@ impl XorinVmAir {
         {
             let is_padding = local.sponge.is_padding_bytes[i];
             let should_write = is_enabled * not(is_padding);
-            let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
+            let ptr = buffer_ptr.clone() + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
 
             let prev_data = pack_u8_block::<AB>(&std::array::from_fn(|j| prev[j].into()));
             let data = pack_u8_block::<AB>(&std::array::from_fn(|j| output[j].into()));
