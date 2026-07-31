@@ -294,7 +294,7 @@ impl ExtInstr for Rv64IInstr {
                     CfgJumpKind::Jump
                 },
                 link_dst: *link_dst,
-                link_write: true,
+                has_link_write_slot: true,
                 target: *target,
             }),
             Self::JumpIndirect {
@@ -310,7 +310,7 @@ impl ExtInstr for Rv64IInstr {
                     CfgJumpKind::Jump
                 },
                 link_dst: *link_dst,
-                link_write: true,
+                has_link_write_slot: true,
                 base_value: if *base == ZERO {
                     CfgOperand::ReadConst {
                         source: *base,

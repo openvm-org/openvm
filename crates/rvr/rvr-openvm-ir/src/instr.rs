@@ -144,18 +144,18 @@ pub enum CfgTerm {
     Jump {
         kind: CfgJumpKind,
         link_dst: Option<Variable>,
-        /// Whether execution reserves a destination-write slot even when
-        /// `link_dst` is disabled.
-        link_write: bool,
+        /// Whether the instruction has a link-write timestamp slot.
+        /// `link_dst` is `None` when that write is disabled, such as JAL x0.
+        has_link_write_slot: bool,
         target: u64,
     },
     /// Jump to a target computed from an operand and signed offset.
     JumpIndirect {
         kind: CfgJumpKind,
         link_dst: Option<Variable>,
-        /// Whether execution reserves a destination-write slot even when
-        /// `link_dst` is disabled.
-        link_write: bool,
+        /// Whether the instruction has a link-write timestamp slot.
+        /// `link_dst` is `None` when that write is disabled, such as JALR x0.
+        has_link_write_slot: bool,
         base_value: CfgOperand,
         offset: i32,
         target_mask: u64,

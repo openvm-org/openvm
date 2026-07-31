@@ -1282,7 +1282,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        link_write: false,
+                        has_link_write_slot: false,
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
@@ -1336,7 +1336,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        link_write: false,
+                        has_link_write_slot: false,
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
@@ -1377,7 +1377,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        link_write: false,
+                        has_link_write_slot: false,
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
