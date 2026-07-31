@@ -964,8 +964,20 @@ pub struct GpuPostflightTranscript {
 }
 
 impl GpuPostflightTranscript {
+    /// Reads the shared replay error after synchronizing prior work on its stream.
     pub fn error_code(&self) -> Result<u32, MemCopyError> {
         Ok(self.error.to_host_on(&self.device_ctx)?[0])
+    }
+
+    /// Reads the shared replay error, falling back to an explicit fence if the copy fails.
+    pub(crate) fn finish_replay(&self) -> Result<u32, GpuPostflightError> {
+        match self.error_code() {
+            Ok(error) => Ok(error),
+            Err(error) => {
+                self.synchronize()?;
+                Err(error.into())
+            }
+        }
     }
 
     #[cfg(feature = "perf-metrics")]

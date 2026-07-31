@@ -189,7 +189,6 @@ pub(crate) fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const 
         output_start += range.len();
     }
     debug_assert_eq!(output_start, num_rows);
-    transcript.synchronize()?;
     let error = transcript.error_code()?;
     if error != 0 {
         return Err(GpuPostflightError::InvalidTranscript(format!(

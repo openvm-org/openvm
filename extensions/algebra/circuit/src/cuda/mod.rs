@@ -200,7 +200,6 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
                 device_ctx.stream.as_raw(),
             )?;
         }
-        transcript.synchronize()?;
         let error = transcript.error_code()?;
         if error != 0 {
             return Err(GpuPostflightError::InvalidTranscript(format!(

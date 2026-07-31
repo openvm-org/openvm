@@ -393,7 +393,6 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
                 device_ctx.stream.as_raw(),
             )?;
         }
-        transcript.synchronize()?;
         let error = transcript.error_code()?;
         if error != 0 {
             return Err(GpuPostflightError::InvalidTranscript(format!(

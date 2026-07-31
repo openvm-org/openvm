@@ -190,9 +190,6 @@ impl DeferralOutputChipGpu {
                 device_ctx.stream.as_raw(),
             )?;
         }
-        // CUDA owns these compact replay views only until the queued kernels
-        // complete. They never survive trace generation into proving.
-        transcript.synchronize()?;
         drop(d_calls);
         let replay_error = transcript.error_code()?;
         if replay_error != 0 {

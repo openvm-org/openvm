@@ -135,7 +135,6 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
                 device_ctx.stream.as_raw(),
             )?;
         }
-        transcript.synchronize()?;
         let error = transcript.error_code()?;
         if error != 0 {
             return Err(GpuPostflightError::InvalidTranscript(format!(

@@ -162,10 +162,7 @@ impl DeferralPoseidon2ChipGpu {
                 }
                 offset += producer.expected_records;
             }
-            self.device_ctx
-                .stream
-                .synchronize()
-                .map_err(|error| error.to_string())?;
+            // Buffer drops enqueue stream-ordered frees after these copies.
             drop(producers);
             (records, counts)
         };

@@ -1677,11 +1677,10 @@ where
             );
 
             // Every system and extension kernel above uses raw views borrowed from
-            // `transcript` and `replay_plan`. Synchronize the common stream even
-            // when trace generation failed, so this safe API never returns while
-            // those owners are still in use.
-            let replay_sync = transcript.synchronize();
-            if replay_sync.is_ok() {
+            // `transcript` and `replay_plan`. The error read fences their common
+            // stream, with an explicit synchronization fallback if that copy fails.
+            let replay_error = transcript.finish_replay();
+            if replay_error.is_ok() {
                 // The boundary trace kernel has completed on this stream. Its
                 // merged input records are not part of the proving context;
                 // the trace and Poseidon2 outputs own separate buffers.
@@ -1691,13 +1690,10 @@ where
                     .boundary
                     .release_records();
             }
-            let replay_sync =
-                replay_sync.map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
+            let replay_error =
+                replay_error.map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
             let ctx = ctx?;
-            replay_sync?;
-            let replay_error = transcript
-                .error_code()
-                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+            let replay_error = replay_error?;
             if replay_error != 0 {
                 return Err(GenerationError::ExtensionTracegen(format!(
                     "preflight GPU trace generation rejected transcript with code {replay_error}"
