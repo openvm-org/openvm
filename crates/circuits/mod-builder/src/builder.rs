@@ -325,6 +325,13 @@ impl FieldExpressionProgram {
         self.builder.needs_setup()
     }
 
+    pub(crate) fn setup_inputs_are_valid(&self, inputs: &[BigUint]) -> bool {
+        inputs.first() == Some(self.prime())
+            && inputs
+                .get(1..)
+                .is_some_and(|inputs| inputs.starts_with(self.setup_values()))
+    }
+
     pub(crate) fn width(&self) -> usize {
         self.builder.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
@@ -338,11 +345,7 @@ impl FieldExpressionProgram {
         {
             let is_setup = self.needs_setup() && flags.iter().all(|&x| !x);
             if is_setup {
-                assert_eq!(inputs[0], self.builder.prime);
-                assert!(inputs.len() > self.setup_values.len());
-                for (expected, actual) in self.setup_values.iter().zip(inputs.iter().skip(1)) {
-                    assert_eq!(expected, actual);
-                }
+                assert!(self.setup_inputs_are_valid(inputs));
             }
         }
         self.builder.execute(inputs, flags)

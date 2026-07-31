@@ -14,7 +14,10 @@ use openvm_circuit_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits, OverflowInt,
 };
 
-use crate::{FieldExpr, FieldExpressionFiller, FieldExpressionTraceError, SymbolicExpr};
+use crate::{
+    core_chip::is_valid_opcode_flag_layout, FieldExpr, FieldExpressionFiller,
+    FieldExpressionTraceError, SymbolicExpr,
+};
 
 const NO_FLAG: u32 = u32::MAX;
 
@@ -819,22 +822,7 @@ fn normalize_opcode_metadata(
     local_opcodes: &[usize],
     opcode_flags: &[usize],
 ) -> Result<Vec<OpcodeMetadata>, FieldExpressionTraceError> {
-    let valid_shape = if needs_setup {
-        !local_opcodes.is_empty() && opcode_flags.len() + 1 == local_opcodes.len()
-    } else {
-        local_opcodes.len() == 1 && opcode_flags.is_empty() && num_flags == 0
-    };
-    if !valid_shape
-        || local_opcodes
-            .iter()
-            .enumerate()
-            .any(|(index, opcode)| local_opcodes[..index].contains(opcode))
-        || opcode_flags.iter().any(|flag| *flag >= num_flags)
-        || opcode_flags
-            .iter()
-            .enumerate()
-            .any(|(index, flag)| opcode_flags[..index].contains(flag))
-    {
+    if !is_valid_opcode_flag_layout(needs_setup, num_flags, local_opcodes, opcode_flags) {
         return Err(FieldExpressionTraceError::InvalidFlagLayout);
     }
 

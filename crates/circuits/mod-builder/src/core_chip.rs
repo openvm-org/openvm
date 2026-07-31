@@ -31,6 +31,30 @@ fn normalize_opcode_flags(
     opcode_flag_idx
 }
 
+pub(crate) fn is_valid_opcode_flag_layout(
+    needs_setup: bool,
+    num_flags: usize,
+    local_opcodes: &[usize],
+    opcode_flags: &[usize],
+) -> bool {
+    let valid_shape = if needs_setup {
+        !local_opcodes.is_empty() && opcode_flags.len() + 1 == local_opcodes.len()
+    } else {
+        local_opcodes.len() == 1 && opcode_flags.is_empty() && num_flags == 0
+    };
+    let local_opcodes_are_unique = local_opcodes
+        .iter()
+        .enumerate()
+        .all(|(index, opcode)| !local_opcodes[..index].contains(opcode));
+    let opcode_flags_are_valid = opcode_flags.iter().all(|&flag| flag < num_flags)
+        && opcode_flags
+            .iter()
+            .enumerate()
+            .all(|(index, flag)| !opcode_flags[..index].contains(flag));
+
+    valid_shape && local_opcodes_are_unique && opcode_flags_are_valid
+}
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -358,19 +382,12 @@ fn run_field_expression_checked(
 
     let mut flags = vec![];
     if program.needs_setup() {
-        if local_opcode_flags.len() != opcode_flag_idx.len() + 1
-            || opcode_flag_idx
-                .iter()
-                .any(|&index| index >= program.num_flags())
-            || opcode_flag_idx
-                .iter()
-                .enumerate()
-                .any(|(i, index)| opcode_flag_idx[..i].contains(index))
-            || local_opcode_flags
-                .iter()
-                .enumerate()
-                .any(|(i, opcode)| local_opcode_flags[..i].contains(opcode))
-        {
+        if !is_valid_opcode_flag_layout(
+            true,
+            program.num_flags(),
+            local_opcode_flags,
+            opcode_flag_idx,
+        ) {
             return Err(FieldExpressionTraceError::InvalidFlagLayout);
         }
         flags = vec![false; program.num_flags()];
@@ -394,15 +411,7 @@ fn run_field_expression_checked(
     }
 
     let is_setup = program.needs_setup() && flags.iter().all(|&flag| !flag);
-    if is_setup
-        && (inputs.first() != Some(program.prime())
-            || inputs.len() <= program.setup_values().len()
-            || program
-                .setup_values()
-                .iter()
-                .zip(inputs.iter().skip(1))
-                .any(|(expected, actual)| expected != actual))
-    {
+    if is_setup && !program.setup_inputs_are_valid(&inputs) {
         return Err(FieldExpressionTraceError::InvalidSetupInput);
     }
     let vars = program.execute(&inputs, &flags);
