@@ -125,7 +125,7 @@ jobs:
             extra_args=()
             if [[ "${{ inputs.mode }}" == "cuda" ]]; then
               if [[ "$crate" == "pairing" ]]; then
-                extra_args=(--features=bn254,bls12_381,rvr)
+                extra_args=(--features=bn254,bls12_381)
               elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
                 extra_args=(--run-ignored=all)
               fi
@@ -142,6 +142,9 @@ jobs:
             pushd "$test_dir"
             if [[ "${{ inputs.mode }}" == "cuda" ]]; then
               CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast --features=cuda "${extra_args[@]}" --no-tests=pass --test-threads=1
+              if [[ "$crate" == "pairing" ]]; then
+                CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast --features=cuda,bn254,bls12_381,rvr --test rvr_checkpoint --no-tests=pass --test-threads=1
+              fi
             else
               cargo nextest run --cargo-profile=fast "${extra_args[@]}" --no-tests=pass --test-threads=1
             fi
