@@ -118,7 +118,7 @@ const _: () = {
 fn memory_cell_kind(layout: MemoryCellType) -> GpuMemoryCellKind {
     match layout {
         MemoryCellType::U16 => GpuMemoryCellKind::U16,
-        MemoryCellType::F { size: 4 } => GpuMemoryCellKind::Field32,
+        MemoryCellType::FIELD32 => GpuMemoryCellKind::Field32,
         _ => GpuMemoryCellKind::Unsupported,
     }
 }

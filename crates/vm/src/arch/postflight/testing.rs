@@ -35,7 +35,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                         event.timestamp,
                     );
                 }
-                MemoryCellType::F { size: 4 } => {
+                MemoryCellType::FIELD32 => {
                     let value = self.field_value(event_index);
                     let previous = self.previous_field32(event_index);
                     chip.send(
@@ -98,7 +98,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                         self.previous_u16(event_index),
                     );
                 },
-                MemoryCellType::F { size: 4 } => unsafe {
+                MemoryCellType::FIELD32 => unsafe {
                     memory.tracing_memory().data.write::<F, BLOCK_FE_WIDTH>(
                         event.address_space(),
                         event.pointer,
@@ -116,7 +116,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             let value = match self.memory_config.addr_spaces[event.address_space() as usize].layout
             {
                 MemoryCellType::U16 => event.value.map(F::from_u16),
-                MemoryCellType::F { size: 4 } => self.field_value(event_index),
+                MemoryCellType::FIELD32 => self.field_value(event_index),
                 _ => unreachable!("postflight validates every accessed memory layout"),
             };
             memory.write_block(

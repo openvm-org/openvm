@@ -121,7 +121,7 @@ impl PreflightCtx {
             MemoryCellType::U16 => unsafe {
                 memory.read::<u16, BLOCK_FE_WIDTH>(address_space, pointer)
             },
-            MemoryCellType::F { size: 4 } => {
+            MemoryCellType::FIELD32 => {
                 let values = unsafe { read_canonical_field_block(memory, address_space, pointer) };
                 let reference = if initial {
                     let index = log.field_initial_values.len();

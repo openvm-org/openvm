@@ -400,10 +400,13 @@ pub enum MemoryCellType {
 }
 
 impl MemoryCellType {
-    pub fn field32() -> Self {
-        Self::F {
-            size: size_of::<u32>() as u8,
-        }
+    /// Field cells encoded canonically as 32-bit words in memory history.
+    pub const FIELD32: Self = Self::F {
+        size: size_of::<u32>() as u8,
+    };
+
+    pub const fn field32() -> Self {
+        Self::FIELD32
     }
 }
 

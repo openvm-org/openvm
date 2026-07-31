@@ -253,7 +253,7 @@ fn validate_memory_block(
         })?;
     if !matches!(
         address_space_config.layout,
-        MemoryCellType::U16 | MemoryCellType::F { size: 4 }
+        MemoryCellType::U16 | MemoryCellType::FIELD32
     ) {
         return Err(PostflightError::new(format!(
             "address space {address_space} must use u16 or field32 cells"
@@ -343,7 +343,7 @@ pub(super) fn memory_index<F: PrimeField32>(
         let layout = validate_memory_block(seed.address_space, seed.pointer, config)?;
         match layout {
             MemoryCellType::U16 => {}
-            MemoryCellType::F { size: 4 } => {
+            MemoryCellType::FIELD32 => {
                 validate_field_reference(
                     seed.initial_value,
                     field_seed_cursor,
@@ -380,7 +380,7 @@ pub(super) fn memory_index<F: PrimeField32>(
         let layout = validate_memory_block(address_space, event.pointer, config)?;
         match layout {
             MemoryCellType::U16 => {}
-            MemoryCellType::F { size: 4 } => {
+            MemoryCellType::FIELD32 => {
                 validate_field_reference(
                     event.value,
                     field_event_cursor,
@@ -463,7 +463,7 @@ pub(super) fn memory_index<F: PrimeField32>(
             let event = history.memory.accesses[event_index as usize];
             let values = match config.addr_spaces[event.address_space() as usize].layout {
                 MemoryCellType::U16 => event.value.map(F::from_u16),
-                MemoryCellType::F { size: 4 } => decode_field_block::<F>(
+                MemoryCellType::FIELD32 => decode_field_block::<F>(
                     history.memory.field_values[field_reference(event.value)],
                 ),
                 _ => unreachable!("memory layouts were validated above"),

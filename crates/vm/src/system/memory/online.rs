@@ -679,7 +679,7 @@ impl TracingMemory {
                     u16::from_le_bytes([value[offset], value[offset + 1]])
                 })
             }
-            MemoryCellType::F { size: 4 } => {
+            MemoryCellType::FIELD32 => {
                 debug_assert_eq!(value.len(), BLOCK_FE_WIDTH * size_of::<u32>());
                 let field = PreflightFieldBlock {
                     values: from_fn(|lane| {
@@ -714,7 +714,7 @@ impl TracingMemory {
                     u16::from_le_bytes([initial_value[offset], initial_value[offset + 1]])
                 })
             }
-            MemoryCellType::F { size: 4 } => {
+            MemoryCellType::FIELD32 => {
                 debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH * size_of::<u32>());
                 let field = PreflightFieldBlock {
                     values: from_fn(|lane| {
@@ -1133,11 +1133,11 @@ mod tests {
                 },
                 AddressSpaceHostConfig {
                     num_cells: VM_DIGEST_WIDTH << height,
-                    layout: MemoryCellType::F { size: 4 },
+                    layout: MemoryCellType::FIELD32,
                 },
                 AddressSpaceHostConfig {
                     num_cells: VM_DIGEST_WIDTH << height,
-                    layout: MemoryCellType::F { size: 4 },
+                    layout: MemoryCellType::FIELD32,
                 },
             ],
             ptr_bits_from_address_height(height),

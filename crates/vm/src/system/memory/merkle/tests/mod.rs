@@ -227,11 +227,11 @@ fn random_test(
             },
             AddressSpaceHostConfig {
                 num_cells: VM_DIGEST_WIDTH << height,
-                layout: MemoryCellType::F { size: 4 },
+                layout: MemoryCellType::FIELD32,
             },
             AddressSpaceHostConfig {
                 num_cells: VM_DIGEST_WIDTH << height,
-                layout: MemoryCellType::F { size: 4 },
+                layout: MemoryCellType::FIELD32,
             },
         ],
         ptr_bits_from_address_height(height),
@@ -316,11 +316,11 @@ fn expand_test_no_accesses() {
             },
             AddressSpaceHostConfig {
                 num_cells: VM_DIGEST_WIDTH << height,
-                layout: MemoryCellType::F { size: 4 },
+                layout: MemoryCellType::FIELD32,
             },
             AddressSpaceHostConfig {
                 num_cells: VM_DIGEST_WIDTH << height,
-                layout: MemoryCellType::F { size: 4 },
+                layout: MemoryCellType::FIELD32,
             },
         ],
         ptr_bits_from_address_height(height),
@@ -366,11 +366,11 @@ fn expand_test_negative() {
             },
             AddressSpaceHostConfig {
                 num_cells: VM_DIGEST_WIDTH << height,
-                layout: MemoryCellType::F { size: 4 },
+                layout: MemoryCellType::FIELD32,
             },
             AddressSpaceHostConfig {
                 num_cells: VM_DIGEST_WIDTH << height,
-                layout: MemoryCellType::F { size: 4 },
+                layout: MemoryCellType::FIELD32,
             },
         ],
         ptr_bits_from_address_height(height),

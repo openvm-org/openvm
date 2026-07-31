@@ -1327,7 +1327,7 @@ mod tests {
                 let cell_bytes = match space.layout {
                     MemoryCellType::Null | MemoryCellType::U8 => 1,
                     MemoryCellType::U16 => 2,
-                    MemoryCellType::U32 | MemoryCellType::F { size: 4 } => 4,
+                    MemoryCellType::U32 | MemoryCellType::FIELD32 => 4,
                     MemoryCellType::F { size } => size as usize,
                 };
                 vec![0u8; space.num_cells * cell_bytes]
