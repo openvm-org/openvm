@@ -62,7 +62,9 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
         )
         .unwrap_err();
     assert!(
-        invalid.to_string().contains("invalid access span"),
+        invalid
+            .to_string()
+            .contains("span base references a missing register operand"),
         "{invalid}"
     );
 
@@ -76,7 +78,9 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
         )
         .unwrap_err();
     assert!(
-        invalid_mask.to_string().contains("invalid operand layout"),
+        invalid_mask
+            .to_string()
+            .contains("zero-operand mask may only reference instruction operands a..g"),
         "{invalid_mask}"
     );
     let oversized = PostflightAccessRegistry::default()
@@ -97,7 +101,8 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
         &collision,
         &device_ctx,
     )
-    .unwrap_err();
+    .err()
+    .expect("native and extension opcode collision should fail");
     assert!(collision.to_string().contains("both native"), "{collision}");
 }
 

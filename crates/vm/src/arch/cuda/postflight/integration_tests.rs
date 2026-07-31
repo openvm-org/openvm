@@ -535,7 +535,10 @@ fn gpu_program_rejects_memory_configs_outside_the_compact_key_abi() {
 
     let ordinary = MemoryConfig::default();
     let uploaded = GpuPostflightProgram::upload(&program, &ordinary, &device_ctx).unwrap();
-    assert_eq!(uploaded.cell_pointer_max_bits(), 31);
+    assert_eq!(
+        uploaded.cell_pointer_max_bits(),
+        ordinary.pointer_max_bits as u32
+    );
 
     for pointer_max_bits in [1, 33] {
         let config = MemoryConfig {
