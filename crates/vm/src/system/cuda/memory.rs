@@ -31,7 +31,11 @@ use super::{
     merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU,
 };
-use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
+use crate::{
+    arch::cuda::postflight::{GpuPostflightError, GpuPostflightTranscript},
+    cuda_abi::inventory,
+    system::memory::online::LinearMemory,
+};
 
 /// Chunk size for the parallel pack into the upload staging buffer.
 const UPLOAD_PACK_CHUNK: usize = 8 << 20;
@@ -312,6 +316,23 @@ impl MemoryInventoryGPU {
         }
     }
 
+    #[instrument(name = "generate_proving_ctxs_from_device", skip_all)]
+    pub(super) fn generate_proving_ctxs_from_transcript(
+        &mut self,
+        transcript: &GpuPostflightTranscript,
+    ) -> Result<Vec<AirProvingContext<GpuBackend>>, GpuPostflightError> {
+        let (touched_memory, in_num_records) = transcript.touched_blocks_on(&self.device_ctx)?;
+        // SAFETY: the transcript owns this typed allocation on the context
+        // validated above and remains borrowed until this method returns.
+        Ok(unsafe {
+            self.generate_proving_ctxs_from_device_inner(
+                touched_memory.view(),
+                in_num_records,
+                None,
+            )
+        })
+    }
+
     /// Consumes the initialized prefix of sorted unique RVR touched blocks
     /// directly on device. The caller retains ownership of the backing buffer
     /// until this method returns.
@@ -343,11 +364,11 @@ impl MemoryInventoryGPU {
             .expect("touched-memory byte length overflow");
         assert_eq!(
             touched_memory.size, expected_bytes,
-            "RVR touched-block view must be its exact initialized prefix"
+            "touched-block view must be its exact initialized prefix"
         );
         assert!(
             in_num_records == 0 || !touched_memory.ptr.is_null(),
-            "nonempty RVR touched-block view has a null pointer"
+            "nonempty touched-block view has a null pointer"
         );
         let mem = MemTracker::start("generate mem proving ctxs");
         // Exact merkle trace rows: one initial row per touched-spanning node, one final

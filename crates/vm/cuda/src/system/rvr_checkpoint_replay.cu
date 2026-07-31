@@ -70,10 +70,12 @@ struct RvrCheckpointOpcodeBases {
 
 static_assert(sizeof(RvrCheckpointOpcodeBases) == 24 * sizeof(uint32_t));
 
+static constexpr uint32_t RVR_REPLAY_REGISTER_OPERANDS = 3;
+
 struct RvrReplayAccessSchedule {
     uint32_t first_span;
     uint32_t num_spans;
-    uint8_t register_operands[3];
+    uint8_t register_operands[RVR_REPLAY_REGISTER_OPERANDS];
     uint8_t num_register_reads;
     uint8_t effect;
     uint8_t effect_operand;

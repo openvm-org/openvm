@@ -109,12 +109,6 @@ pub(crate) fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const 
             "unsupported VecHeap replay shape ({NUM_READS}, {BLOCKS})"
         )));
     }
-    let expected_size = 24 + 12 * NUM_READS + 12 * NUM_READS * BLOCKS + 20 * BLOCKS;
-    if size_of::<VecHeapTraceInput<NUM_READS, BLOCKS>>() != expected_size {
-        return Err(GpuPostflightError::InvalidTranscript(
-            "VecHeap replay projection ABI size mismatch".to_string(),
-        ));
-    }
     if local_opcodes
         .iter()
         .enumerate()

@@ -90,14 +90,9 @@ impl SystemChipInventoryGPU {
             self.connector.generate_proving_ctx()
         };
 
-        // SAFETY: transcript owns the validated initialized prefix and remains
-        // borrowed until this synchronous memory-inventory call returns.
-        let memory_ctxs = unsafe {
-            self.memory_inventory.generate_proving_ctxs_from_device(
-                transcript.touched_blocks(),
-                transcript.num_touched_blocks(),
-            )
-        };
+        let memory_ctxs = self
+            .memory_inventory
+            .generate_proving_ctxs_from_transcript(transcript)?;
         Ok([program_ctx, connector_ctx]
             .into_iter()
             .chain(memory_ctxs)

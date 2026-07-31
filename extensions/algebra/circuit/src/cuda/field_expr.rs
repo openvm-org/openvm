@@ -32,6 +32,66 @@ fn supports_device_modulus(modulus: &BigUint) -> bool {
     get_field_type(modulus).is_some()
 }
 
+fn validate_launch_config(
+    launch: cuda_abi::FieldExprReplayLaunchConfig,
+    aux_words_per_thread: usize,
+    max_scratch_words: usize,
+) -> Result<cuda_abi::FieldExprReplayLaunchConfig, GpuPostflightError> {
+    let expected_active_threads = launch
+        .grid_blocks
+        .checked_mul(launch.block_threads)
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch thread count overflow".to_string(),
+            )
+        })?;
+    let expected_scratch_words = expected_active_threads
+        .checked_mul(aux_words_per_thread)
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch scratch size overflow".to_string(),
+            )
+        })?;
+    let scratch_bytes = launch
+        .scratch_words
+        .checked_mul(size_of::<u32>())
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch scratch byte size overflow".to_string(),
+            )
+        })?;
+    let local_bytes = launch
+        .active_threads
+        .checked_mul(launch.local_bytes_per_thread)
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch local-memory size overflow".to_string(),
+            )
+        })?;
+    if launch.grid_blocks == 0
+        || launch.block_threads == 0
+        || launch.active_threads != expected_active_threads
+        || launch.scratch_words == 0
+        || launch.scratch_words != expected_scratch_words
+        || launch.scratch_words > max_scratch_words
+        || scratch_bytes > MAX_FIELD_EXPR_SCRATCH_BYTES
+        || launch.local_bytes_per_thread > MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD
+        || local_bytes > MAX_FIELD_EXPR_LOCAL_BYTES
+    {
+        return Err(GpuPostflightError::InvalidTranscript(format!(
+            "invalid field-expression launch: grid={}, block={}, active={}, scratch={} words/{} bytes, local={} bytes/thread/{} bytes total",
+            launch.grid_blocks,
+            launch.block_threads,
+            launch.active_threads,
+            launch.scratch_words,
+            scratch_bytes,
+            launch.local_bytes_per_thread,
+            local_bytes,
+        )));
+    }
+    Ok(launch)
+}
+
 pub struct FieldExprReplayChip<const NUM_READS: usize, const BLOCKS: usize> {
     mode: FieldExprReplayMode<NUM_READS, BLOCKS>,
 }
@@ -305,65 +365,17 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         let delta = DeviceBuffer::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
         let max_scratch_words = MAX_FIELD_EXPR_SCRATCH_BYTES / size_of::<u32>();
-        let launch = unsafe {
-            cuda_abi::field_expr_replay_launch_config::<NUM_READS, BLOCKS>(
-                height,
-                self.aux_words_per_thread,
-                max_scratch_words,
-            )?
-        };
-        let expected_active_threads = launch
-            .grid_blocks
-            .checked_mul(launch.block_threads)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
-                    "field-expression launch thread count overflow".to_string(),
-                )
-            })?;
-        let expected_scratch_words = expected_active_threads
-            .checked_mul(self.aux_words_per_thread)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
-                    "field-expression launch scratch size overflow".to_string(),
-                )
-            })?;
-        let scratch_bytes = launch
-            .scratch_words
-            .checked_mul(size_of::<u32>())
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
-                    "field-expression launch scratch byte size overflow".to_string(),
-                )
-            })?;
-        let local_bytes = launch
-            .active_threads
-            .checked_mul(launch.local_bytes_per_thread)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
-                    "field-expression launch local-memory size overflow".to_string(),
-                )
-            })?;
-        if launch.grid_blocks == 0
-            || launch.block_threads == 0
-            || launch.active_threads != expected_active_threads
-            || launch.scratch_words == 0
-            || launch.scratch_words != expected_scratch_words
-            || launch.scratch_words > max_scratch_words
-            || scratch_bytes > MAX_FIELD_EXPR_SCRATCH_BYTES
-            || launch.local_bytes_per_thread > MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD
-            || local_bytes > MAX_FIELD_EXPR_LOCAL_BYTES
-        {
-            return Err(GpuPostflightError::InvalidTranscript(format!(
-                "invalid field-expression launch: grid={}, block={}, active={}, scratch={} words/{} bytes, local={} bytes/thread/{} bytes total",
-                launch.grid_blocks,
-                launch.block_threads,
-                launch.active_threads,
-                launch.scratch_words,
-                scratch_bytes,
-                launch.local_bytes_per_thread,
-                local_bytes,
-            )));
-        }
+        let launch = validate_launch_config(
+            unsafe {
+                cuda_abi::field_expr_replay_launch_config::<NUM_READS, BLOCKS>(
+                    height,
+                    self.aux_words_per_thread,
+                    max_scratch_words,
+                )?
+            },
+            self.aux_words_per_thread,
+            max_scratch_words,
+        )?;
         let scratch = DeviceBuffer::<u32>::with_capacity_on(launch.scratch_words, device_ctx);
         unsafe {
             cuda_abi::field_expr_replay_tracegen(

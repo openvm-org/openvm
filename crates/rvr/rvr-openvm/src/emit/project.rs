@@ -636,6 +636,36 @@ impl CProject {
             .unwrap_or(TraceChipIndex::NoChip)
     }
 
+    fn validate_preflight_support(blocks: &[Block]) -> io::Result<()> {
+        for block in blocks {
+            for instruction in &block.instructions {
+                if !instruction.instr.supports_preflight() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "instruction {} at {:#x} does not support RVR preflight",
+                            instruction.instr.opname(),
+                            instruction.pc
+                        ),
+                    ));
+                }
+            }
+            if let Terminator::Instruction { node, .. } = &block.terminator {
+                if !node.supports_preflight() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "instruction {} at {:#x} does not support RVR preflight",
+                            node.opname(),
+                            block.terminator_pc
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Write all C project files.
     pub fn write_all(
         &self,
@@ -657,32 +687,7 @@ impl CProject {
             ));
         }
         if self.execution_kind == RvrExecutionKind::Preflight {
-            for block in blocks {
-                for instruction in &block.instructions {
-                    if !instruction.instr.supports_preflight() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!(
-                                "instruction {} at {:#x} does not support RVR preflight",
-                                instruction.instr.opname(),
-                                instruction.pc
-                            ),
-                        ));
-                    }
-                }
-                if let Terminator::Instruction { node, .. } = &block.terminator {
-                    if !node.supports_preflight() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!(
-                                "instruction {} at {:#x} does not support RVR preflight",
-                                node.opname(),
-                                block.terminator_pc
-                            ),
-                        ));
-                    }
-                }
-            }
+            Self::validate_preflight_support(blocks)?;
         }
         self.validate_block_abi()?;
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);

@@ -279,26 +279,47 @@ impl PreflightBuffers {
         timestamp_max_bits: usize,
         dirty_pages: &PreflightDirtyPages,
     ) -> Result<(PreflightTranscript, u32, u32), String> {
+        let (checkpoint_len, replay_value_len) =
+            self.validate_ffi_state(ffi, timestamp_max_bits, dirty_pages)?;
+
+        // SAFETY: the generated logger initialized exactly these prefixes and
+        // the returned lengths were checked against the original capacities.
+        unsafe {
+            self.checkpoints.set_len(checkpoint_len);
+            self.replay_values.set_len(replay_value_len);
+        }
+        validate_checkpoints(
+            &self.checkpoints,
+            ffi.timestamp,
+            ffi.retired,
+            replay_value_len,
+            self.limits.checkpoint_interval,
+            ffi.last_checkpoint_retired,
+        )?;
+
+        Ok((
+            PreflightTranscript {
+                checkpoints: self.checkpoints,
+                replay_values: self.replay_values,
+            },
+            ffi.timestamp,
+            ffi.retired,
+        ))
+    }
+
+    fn validate_ffi_state(
+        &self,
+        ffi: &PreflightTranscriptState,
+        timestamp_max_bits: usize,
+        dirty_pages: &PreflightDirtyPages,
+    ) -> Result<(usize, usize), String> {
         if ffi.error != 0 {
             return Err(format!(
                 "generated preflight logger failed with code {}",
                 ffi.error
             ));
         }
-        if ffi.checkpoint_log != self.checkpoints.as_mut_ptr()
-            || ffi.replay_value_log != self.replay_values.as_mut_ptr()
-            || ffi.checkpoint_log_cap != self.limits.max_checkpoints_u64
-            || ffi.replay_value_log_cap != self.limits.max_replay_values
-            || ffi.checkpoint_interval != self.limits.checkpoint_interval
-            || ffi.instruction_limit != self.limits.max_instructions
-            || ffi.memory_dirty_pages != dirty_pages.memory.as_ptr().cast_mut()
-            || ffi.public_values_dirty_pages != dirty_pages.public_values.as_ptr().cast_mut()
-            || ffi.memory_dirty_page_words != dirty_pages.memory.len() as u64
-            || ffi.public_values_dirty_page_words != dirty_pages.public_values.len() as u64
-            || ffi.padding != 0
-        {
-            return Err("generated preflight logger changed its input ABI".to_string());
-        }
+        self.validate_preserved_ffi_inputs(ffi, dirty_pages)?;
 
         let checkpoint_len = usize::try_from(ffi.checkpoint_log_len)
             .map_err(|_| "preflight checkpoint length exceeds usize".to_string())?;
@@ -331,29 +352,35 @@ impl PreflightBuffers {
             ));
         }
 
-        // SAFETY: the generated logger initialized exactly these prefixes and
-        // the returned lengths were checked against the original capacities.
-        unsafe {
-            self.checkpoints.set_len(checkpoint_len);
-            self.replay_values.set_len(replay_value_len);
-        }
-        validate_checkpoints(
-            &self.checkpoints,
-            ffi.timestamp,
-            ffi.retired,
-            replay_value_len,
-            self.limits.checkpoint_interval,
-            ffi.last_checkpoint_retired,
-        )?;
+        Ok((checkpoint_len, replay_value_len))
+    }
 
-        Ok((
-            PreflightTranscript {
-                checkpoints: self.checkpoints,
-                replay_values: self.replay_values,
-            },
-            ffi.timestamp,
-            ffi.retired,
-        ))
+    fn validate_preserved_ffi_inputs(
+        &self,
+        ffi: &PreflightTranscriptState,
+        dirty_pages: &PreflightDirtyPages,
+    ) -> Result<(), String> {
+        if ffi.checkpoint_log != self.checkpoints.as_ptr().cast_mut()
+            || ffi.replay_value_log != self.replay_values.as_ptr().cast_mut()
+            || ffi.checkpoint_log_cap != self.limits.max_checkpoints_u64
+            || ffi.replay_value_log_cap != self.limits.max_replay_values
+        {
+            return Err("generated preflight logger changed its transcript buffers".to_string());
+        }
+        if ffi.memory_dirty_pages != dirty_pages.memory.as_ptr().cast_mut()
+            || ffi.public_values_dirty_pages != dirty_pages.public_values.as_ptr().cast_mut()
+            || ffi.memory_dirty_page_words != dirty_pages.memory.len() as u64
+            || ffi.public_values_dirty_page_words != dirty_pages.public_values.len() as u64
+        {
+            return Err("generated preflight logger changed its dirty-page buffers".to_string());
+        }
+        if ffi.checkpoint_interval != self.limits.checkpoint_interval
+            || ffi.instruction_limit != self.limits.max_instructions
+            || ffi.padding != 0
+        {
+            return Err("generated preflight logger changed its execution limits".to_string());
+        }
+        Ok(())
     }
 }
 

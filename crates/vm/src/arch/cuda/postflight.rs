@@ -6,7 +6,9 @@
 //! an optional producer in `arch::rvr::cuda`; this layer does not depend on it.
 
 use std::{
+    collections::BTreeMap,
     mem::{align_of, offset_of, size_of},
+    ops::Range,
     sync::Arc,
 };
 
@@ -42,11 +44,14 @@ mod testing;
 #[cfg(all(test, feature = "rvr"))]
 pub(crate) use testing::{build_memory_chronology_for_test, empty_chronology_counts_for_test};
 
+/// Number of `u32` fields in a replay instruction: global opcode followed by operands `a..g`.
+pub(crate) const POSTFLIGHT_INSTRUCTION_FIELDS: usize = 8;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct GpuReplayInstruction {
     /// Global opcode followed by the seven canonical instruction operands.
-    pub words: [u32; 8],
+    pub words: [u32; POSTFLIGHT_INSTRUCTION_FIELDS],
 }
 
 /// Location of one executed instruction and the first timed memory event in
@@ -225,6 +230,59 @@ pub struct GpuPostflightProgram {
     identity: Arc<()>,
 }
 
+fn validated_history_write_masks(
+    history: &PreflightHistory,
+    memory_config: &MemoryConfig,
+) -> Result<Vec<u8>, GpuPostflightError> {
+    if history.program.is_empty() {
+        return Err(GpuPostflightError::InvalidTranscript(
+            "preflight history must contain a final program sentinel".to_string(),
+        ));
+    }
+    if history.memory.accesses.len() >= (1usize << 31) {
+        return Err(GpuPostflightError::InvalidTranscript(
+            "preflight memory log exceeds packed predecessor indexes".to_string(),
+        ));
+    }
+
+    let mut write_masks = Vec::with_capacity(history.memory.accesses.len());
+    let mut field_cursor = 0usize;
+    for event in &history.memory.accesses {
+        let address_space = event.address_space() as usize;
+        let layout = memory_config
+            .addr_spaces
+            .get(address_space)
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(format!(
+                    "memory event uses unknown address space {address_space}"
+                ))
+            })?
+            .layout;
+        write_masks.push(if event.is_write() { u8::MAX } else { 0 });
+        if layout == MemoryCellType::field32() {
+            let reference =
+                usize::try_from(u32::from(event.value[0]) | (u32::from(event.value[1]) << 16))
+                    .unwrap();
+            if event.value[2] != 0
+                || event.value[3] != 0
+                || reference != field_cursor
+                || reference >= history.memory.field_values.len()
+            {
+                return Err(GpuPostflightError::InvalidTranscript(
+                    "field memory events must use dense ordered sidecar references".to_string(),
+                ));
+            }
+            field_cursor += 1;
+        }
+    }
+    if field_cursor != history.memory.field_values.len() {
+        return Err(GpuPostflightError::InvalidTranscript(
+            "field sidecar contains unreferenced values".to_string(),
+        ));
+    }
+    Ok(write_masks)
+}
+
 impl GpuPostflightProgram {
     /// Uploads the immutable program metadata used by history-driven
     /// postflight and trace generation.
@@ -341,58 +399,10 @@ impl GpuPostflightProgram {
         boundary: ConnectorBoundary,
         initial_memory_images: &[DeviceBufferView],
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        if history.program.is_empty() {
-            return Err(GpuPostflightError::InvalidTranscript(
-                "preflight history must contain a final program sentinel".to_string(),
-            ));
-        }
-        if history.memory.accesses.len() >= (1usize << 31) {
-            return Err(GpuPostflightError::InvalidTranscript(
-                "preflight memory log exceeds packed predecessor indexes".to_string(),
-            ));
-        }
-
-        let mut write_masks = Vec::with_capacity(history.memory.accesses.len());
-        let field_values = &history.memory.field_values;
-        let mut field_cursor = 0usize;
-        for event in &history.memory.accesses {
-            let address_space = event.address_space() as usize;
-            let layout = self
-                .memory_config
-                .addr_spaces
-                .get(address_space)
-                .ok_or_else(|| {
-                    GpuPostflightError::InvalidTranscript(format!(
-                        "memory event uses unknown address space {address_space}"
-                    ))
-                })?
-                .layout;
-            write_masks.push(if event.is_write() { u8::MAX } else { 0 });
-            if layout == MemoryCellType::field32() {
-                let reference =
-                    usize::try_from(u32::from(event.value[0]) | (u32::from(event.value[1]) << 16))
-                        .unwrap();
-                if event.value[2] != 0
-                    || event.value[3] != 0
-                    || reference != field_cursor
-                    || reference >= field_values.len()
-                {
-                    return Err(GpuPostflightError::InvalidTranscript(
-                        "field memory events must use dense ordered sidecar references".to_string(),
-                    ));
-                }
-                field_cursor += 1;
-            }
-        }
-        if field_cursor != field_values.len() {
-            return Err(GpuPostflightError::InvalidTranscript(
-                "field sidecar contains unreferenced values".to_string(),
-            ));
-        }
-
+        let write_masks = validated_history_write_masks(history, &self.memory_config)?;
         let program_log = upload(&history.program, &self.device_ctx)?;
         let memory_log = upload(&history.memory.accesses, &self.device_ctx)?;
-        let field_values = upload(field_values, &self.device_ctx)?;
+        let field_values = upload(&history.memory.field_values, &self.device_ctx)?;
         let write_masks = upload(&write_masks, &self.device_ctx)?;
         let error = [0u32].to_device_on(&self.device_ctx)?;
         self.index_device_history(
@@ -561,6 +571,64 @@ struct GpuMemoryIndex {
     num_touched_blocks: usize,
 }
 
+struct GpuChronologyCounts {
+    num_seeds: usize,
+    num_touched: usize,
+    non_register_begin: u32,
+    field_begin: u32,
+    field_end: u32,
+    field_seed_base: u32,
+    num_field_seeds: usize,
+}
+
+impl GpuChronologyCounts {
+    fn validated(
+        counts: &[u32],
+        num_entries: usize,
+        num_field_values: usize,
+    ) -> Result<Self, GpuPostflightError> {
+        let [num_seeds, num_touched, non_register_begin, field_counts @ ..] = counts else {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "GPU memory chronology returned an invalid count shape".to_string(),
+            ));
+        };
+        let (field_begin, field_end, field_seed_base, num_field_seeds) = match field_counts {
+            [] if num_field_values == 0 => (0, 0, 0, 0),
+            [field_begin, field_end, field_seed_base, num_field_seeds] if num_field_values != 0 => {
+                (*field_begin, *field_end, *field_seed_base, *num_field_seeds)
+            }
+            _ => {
+                return Err(GpuPostflightError::InvalidTranscript(
+                    "GPU memory chronology returned an invalid field-count shape".to_string(),
+                ));
+            }
+        };
+        let counts = Self {
+            num_seeds: *num_seeds as usize,
+            num_touched: *num_touched as usize,
+            non_register_begin: *non_register_begin,
+            field_begin,
+            field_end,
+            field_seed_base,
+            num_field_seeds: num_field_seeds as usize,
+        };
+        if counts.num_seeds > num_entries
+            || counts.num_touched > num_entries
+            || counts.non_register_begin as usize > num_entries
+            || counts.field_end < counts.field_begin
+            || counts.field_end as usize > num_entries
+            || (counts.field_end - counts.field_begin) as usize != num_field_values
+            || counts.field_seed_base as usize > counts.num_seeds
+            || counts.num_field_seeds > counts.num_seeds - counts.field_seed_base as usize
+        {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "GPU memory chronology produced invalid counts".to_string(),
+            ));
+        }
+        Ok(counts)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_gpu_memory_chronology(
     memory: &DeviceBuffer<PreflightMemoryEvent>,
@@ -649,39 +717,16 @@ fn build_gpu_memory_chronology(
     }
     let counts = device_counts.to_host_on(device_ctx)?;
     drop(device_counts);
-    let (num_seeds, num_touched, non_register_begin) = (counts[0], counts[1], counts[2]);
-    let (field_begin, field_end, field_seed_base, num_field_seeds) = if let [_, _, _, field_begin, field_end, field_seed_base, num_field_seeds] =
-        counts.as_slice()
-    {
-        (*field_begin, *field_end, *field_seed_base, *num_field_seeds)
-    } else {
-        (0, 0, 0, 0)
-    };
     let sort_error = error.to_host_on(device_ctx)?[0];
     if sort_error != 0 {
         return Err(GpuPostflightError::InvalidTranscript(format!(
             "GPU memory chronology rejected history with code {sort_error}"
         )));
     }
-    let num_seeds = num_seeds as usize;
-    let num_touched = num_touched as usize;
-    let num_field_seeds = num_field_seeds as usize;
-    if num_seeds > num_entries
-        || num_touched > num_entries
-        || non_register_begin as usize > num_entries
-        || field_end < field_begin
-        || field_end as usize > num_entries
-        || (field_end - field_begin) as usize != field_values.len()
-        || field_seed_base as usize > num_seeds
-        || num_field_seeds > num_seeds - field_seed_base as usize
-    {
-        return Err(GpuPostflightError::InvalidTranscript(
-            "GPU memory chronology produced invalid counts".to_string(),
-        ));
-    }
-    let seeds = gpu_buffer::<PreflightInitialWrite>(num_seeds, device_ctx);
-    let field_seeds = gpu_buffer::<PreflightFieldBlock>(num_field_seeds, device_ctx);
-    let touched_blocks = gpu_buffer::<TouchedBlock<BabyBear>>(num_touched, device_ctx);
+    let counts = GpuChronologyCounts::validated(&counts, num_entries, field_values.len())?;
+    let seeds = gpu_buffer::<PreflightInitialWrite>(counts.num_seeds, device_ctx);
+    let field_seeds = gpu_buffer::<PreflightFieldBlock>(counts.num_field_seeds, device_ctx);
+    let touched_blocks = gpu_buffer::<TouchedBlock<BabyBear>>(counts.num_touched, device_ctx);
     unsafe {
         postflight::memory_chronology_resolve(
             memory.view(),
@@ -690,15 +735,15 @@ fn build_gpu_memory_chronology(
             initial_memory.view(),
             field_values.view(),
             RV64_REGISTER_AS,
-            non_register_begin,
+            counts.non_register_begin,
             &sorted_keys,
             &workspace,
             &predecessors,
             seeds.view(),
             field_seeds.view(),
-            field_begin,
-            field_end,
-            field_seed_base,
+            counts.field_begin,
+            counts.field_end,
+            counts.field_seed_base,
             touched_blocks.view(),
             &temp_storage,
             temp_bytes,
@@ -722,7 +767,7 @@ fn build_gpu_memory_chronology(
         GpuMemoryIndex {
             predecessors,
             touched_blocks,
-            num_touched_blocks: num_touched,
+            num_touched_blocks: counts.num_touched,
         },
     ))
 }
@@ -796,16 +841,14 @@ impl GpuPostflightTranscript {
     }
 
     /// Sorted unique final state of every block touched by a timed memory
-    /// event. The view is the initialized prefix of the retained capacity.
-    pub fn touched_blocks(&self) -> DeviceBufferView {
-        DeviceBufferView {
-            ptr: self.touched_blocks.as_raw_ptr(),
-            size: self.num_touched_blocks * size_of::<TouchedBlock<BabyBear>>(),
-        }
-    }
-
-    pub const fn num_touched_blocks(&self) -> usize {
-        self.num_touched_blocks
+    /// event, together with the initialized prefix length.
+    pub(crate) fn touched_blocks_on(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Result<(&DeviceBuffer<TouchedBlock<BabyBear>>, usize), GpuPostflightError> {
+        ensure_same_context(&self.device_ctx, device_ctx)?;
+        debug_assert!(self.num_touched_blocks <= self.touched_blocks.len());
+        Ok((&self.touched_blocks, self.num_touched_blocks))
     }
 
     pub fn error_ptr(&self) -> *mut u32 {
@@ -817,13 +860,49 @@ impl GpuPostflightTranscript {
 pub struct GpuPostflightPlan {
     steps: DeviceBuffer<GpuReplayStep>,
     program_frequencies: DeviceBuffer<u32>,
-    opcode_ranges: std::collections::BTreeMap<u32, std::ops::Range<usize>>,
+    opcode_ranges: BTreeMap<u32, Range<usize>>,
     from_state: ExecutionState<u32>,
     to_state: ExecutionState<u32>,
     exit_code: Option<u32>,
     device_ctx: GpuDeviceCtx,
     program_identity: Arc<()>,
     segment_identity: Arc<()>,
+}
+
+fn validated_opcode_ranges(
+    active_opcodes: &[u32],
+    ranges: &[u32],
+    num_steps: usize,
+) -> Result<BTreeMap<u32, Range<usize>>, GpuPostflightError> {
+    let expected_range_values = active_opcodes.len().checked_mul(2).ok_or_else(|| {
+        GpuPostflightError::InvalidTranscript("GPU opcode range count overflow".to_string())
+    })?;
+    if ranges.len() != expected_range_values {
+        return Err(GpuPostflightError::InvalidTranscript(
+            "GPU opcode range count does not match active opcodes".to_string(),
+        ));
+    }
+    let mut opcode_ranges = BTreeMap::new();
+    let mut covered = 0usize;
+    for (&opcode, range) in active_opcodes.iter().zip(ranges.chunks_exact(2)) {
+        let start = range[0] as usize;
+        let end = range[1] as usize;
+        if start != covered || start > end || end > num_steps {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "GPU opcode ranges do not form a complete partition".to_string(),
+            ));
+        }
+        if start != end {
+            opcode_ranges.insert(opcode, start..end);
+        }
+        covered = end;
+    }
+    if covered != num_steps {
+        return Err(GpuPostflightError::InvalidTranscript(
+            "GPU opcode ranges do not cover every execution step".to_string(),
+        ));
+    }
+    Ok(opcode_ranges)
 }
 
 impl GpuPostflightPlan {
@@ -899,26 +978,7 @@ impl GpuPostflightPlan {
                 "GPU postflight rejected transcript with code {error}"
             )));
         }
-        let mut opcode_ranges = std::collections::BTreeMap::new();
-        let mut covered = 0usize;
-        for (&opcode, range) in program.active_opcodes.iter().zip(ranges.chunks_exact(2)) {
-            let start = range[0] as usize;
-            let end = range[1] as usize;
-            if start != covered || start > end || end > num_steps {
-                return Err(GpuPostflightError::InvalidTranscript(
-                    "GPU opcode ranges do not form a complete partition".to_string(),
-                ));
-            }
-            if start != end {
-                opcode_ranges.insert(opcode, start..end);
-            }
-            covered = end;
-        }
-        if covered != num_steps {
-            return Err(GpuPostflightError::InvalidTranscript(
-                "GPU opcode ranges do not cover every execution step".to_string(),
-            ));
-        }
+        let opcode_ranges = validated_opcode_ranges(&program.active_opcodes, &ranges, num_steps)?;
         Ok(Self {
             steps: steps_out,
             program_frequencies,
@@ -953,7 +1013,7 @@ impl GpuPostflightPlan {
         (self.from_state, self.to_state, self.exit_code)
     }
 
-    pub fn opcode_range(&self, opcode: VmOpcode) -> std::ops::Range<usize> {
+    pub fn opcode_range(&self, opcode: VmOpcode) -> Range<usize> {
         u32::try_from(opcode.as_usize())
             .ok()
             .and_then(|opcode| self.opcode_ranges.get(&opcode).cloned())

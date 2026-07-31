@@ -283,6 +283,42 @@ fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
     slot_times.iter().cloned().fold(0.0_f64, f64::max)
 }
 
+fn validated_segment_proof_times<'a>(
+    proof_times: &'a [(f64, Labels)],
+    preflight_times: &'a [(f64, Labels)],
+) -> Vec<(&'a str, f64)> {
+    let mut preflight_by_segment = HashMap::with_capacity(preflight_times.len());
+    for (value, labels) in preflight_times {
+        let segment = labels
+            .get("segment")
+            .expect("preflight execution metric is missing its segment label");
+        assert!(
+            preflight_by_segment.insert(segment, *value).is_none(),
+            "duplicate preflight execution metric for segment {segment}"
+        );
+    }
+
+    let mut paired = Vec::with_capacity(proof_times.len());
+    for (proof_time, labels) in proof_times {
+        let segment = labels
+            .get("segment")
+            .expect("total proof metric is missing its segment label");
+        let preflight_time = preflight_by_segment.remove(segment).unwrap_or_else(|| {
+            panic!("total proof segment {segment} has no preflight execution metric")
+        });
+        assert!(
+            preflight_time <= *proof_time,
+            "preflight execution exceeds total proof time for segment {segment}"
+        );
+        paired.push((segment, proof_time - preflight_time));
+    }
+    assert!(
+        preflight_by_segment.is_empty(),
+        "preflight execution metric has no matching total proof segment"
+    );
+    paired
+}
+
 /// Returns parallelizable proof time per segment and the preflight time that
 /// must remain serial. Samples are paired by their existing segment label.
 fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
@@ -303,37 +339,7 @@ fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
         return unadjusted();
     }
 
-    let mut preflight_by_segment = HashMap::with_capacity(preflight_times.len());
-    for (value, labels) in preflight_times {
-        let segment = labels
-            .get("segment")
-            .expect("preflight execution metric is missing its segment label");
-        assert!(
-            preflight_by_segment
-                .insert(segment.to_string(), *value)
-                .is_none(),
-            "duplicate preflight execution metric for segment {segment}"
-        );
-    }
-
-    let mut paired = Vec::with_capacity(proof_times.len());
-    for (proof_time, labels) in proof_times {
-        let segment = labels
-            .get("segment")
-            .expect("total proof metric is missing its segment label");
-        let preflight_time = preflight_by_segment.remove(segment).unwrap_or_else(|| {
-            panic!("total proof segment {segment} has no preflight execution metric")
-        });
-        assert!(
-            preflight_time <= *proof_time,
-            "preflight execution exceeds total proof time for segment {segment}"
-        );
-        paired.push((segment.to_string(), proof_time - preflight_time));
-    }
-    assert!(
-        preflight_by_segment.is_empty(),
-        "preflight execution metric has no matching total proof segment"
-    );
+    let mut paired = validated_segment_proof_times(proof_times, preflight_times);
     paired.sort_unstable_by(
         |(a, _), (b, _)| match (a.parse::<u64>(), b.parse::<u64>()) {
             (Ok(a), Ok(b)) => a.cmp(&b),
