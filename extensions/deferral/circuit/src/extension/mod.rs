@@ -5,15 +5,19 @@ use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
         ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
-        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
-        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+    utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, VmConfig};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -21,7 +25,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::{
     Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_deferral::{DeferralRuntimeHooks, DeferralRvrExtension};
 #[cfg(feature = "rvr")]
@@ -32,9 +36,8 @@ use serde::{Deserialize, Serialize};
 use crate::runtime::{make_deferral_compress, make_deferral_hash};
 use crate::{
     call::{
-        DeferralCallAdapterAir, DeferralCallAdapterExecutor, DeferralCallAdapterFiller,
-        DeferralCallAir, DeferralCallChip, DeferralCallCoreAir, DeferralCallCoreFiller,
-        DeferralCallExecutor,
+        DeferralCallAdapterAir, DeferralCallAdapterFiller, DeferralCallAir, DeferralCallChip,
+        DeferralCallCoreAir, DeferralCallCoreFiller, DeferralCallExecutor,
     },
     count::{DeferralCircuitCountAir, DeferralCircuitCountBus, DeferralCircuitCountChip},
     output::{DeferralOutputAir, DeferralOutputChip, DeferralOutputExecutor, DeferralOutputFiller},
@@ -49,6 +52,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
+        pub use self::cuda::DeferralPreflightGpuTracegen;
         pub use self::cuda::Rv64DeferralGpuBuilder as Rv64DeferralBuilder;
 
     } else {
@@ -86,7 +90,7 @@ impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
     }
 }
 
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum DeferralExecutor {
     Call(DeferralCallExecutor),
     Output(DeferralOutputExecutor),
@@ -99,7 +103,7 @@ impl VmExecutionExtension for DeferralExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<DeferralExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let call = DeferralCallExecutor::new(DeferralCallAdapterExecutor, self.fns.clone());
+        let call = DeferralCallExecutor::new(self.fns.clone());
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
 
         inventory.add_executor(
@@ -166,18 +170,17 @@ where
 
 pub struct DeferralCpuProverExt;
 
-impl<SC, E, RA> VmProverExtension<E, RA, DeferralExtension> for DeferralCpuProverExt
+impl<SC, E> VmProverExtension<E, DeferralExtension> for DeferralCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &DeferralExtension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -192,7 +195,9 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx())
+                });
                 chip
             }
         };
@@ -200,33 +205,51 @@ where
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
         inventory.next_air::<DeferralCircuitCountAir>()?;
-        inventory.add_periphery_chip(count_chip.clone());
+        inventory.add_periphery_chip_with_height_and_tracegen(
+            count_chip.clone(),
+            Some(next_power_of_two_or_zero(extension.fns.len())),
+            |chip, _| Ok(chip.generate_proving_ctx()),
+        );
 
         inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
-        inventory.add_periphery_chip(poseidon2_chip.clone());
+        inventory.add_periphery_chip_with_tracegen(poseidon2_chip.clone(), |chip, _| {
+            Ok(chip.generate_proving_ctx())
+        });
 
         inventory.next_air::<DeferralCallAir>()?;
-        inventory.add_executor_chip(DeferralCallChip::new(
-            DeferralCallCoreFiller::new(
-                DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
-                count_chip.clone(),
-                poseidon2_chip.clone(),
-                bitwise_lu.clone(),
-                address_bits,
+        inventory.add_executor_chip_with_tracegen(
+            DeferralCallChip::new(
+                DeferralCallCoreFiller::new(
+                    DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
+                    count_chip.clone(),
+                    poseidon2_chip.clone(),
+                    bitwise_lu.clone(),
+                    address_bits,
+                ),
+                mem_helper.clone(),
             ),
-            mem_helper.clone(),
-        ));
+            |chip, postflight| {
+                crate::call::generate_trace_from_postflight(chip, postflight)
+                    .map(AirProvingContext::simple_no_pis)
+            },
+        );
 
         inventory.next_air::<DeferralOutputAir>()?;
-        inventory.add_executor_chip(DeferralOutputChip::new(
-            DeferralOutputFiller::new(
-                count_chip.clone(),
-                poseidon2_chip.clone(),
-                bitwise_lu,
-                address_bits,
+        inventory.add_executor_chip_with_tracegen(
+            DeferralOutputChip::new(
+                DeferralOutputFiller::new(
+                    count_chip.clone(),
+                    poseidon2_chip.clone(),
+                    bitwise_lu,
+                    address_bits,
+                ),
+                mem_helper,
             ),
-            mem_helper,
-        ));
+            |chip, postflight| {
+                crate::output::generate_trace_from_postflight(chip, postflight)
+                    .map(AirProvingContext::simple_no_pis)
+            },
+        );
 
         Ok(())
     }
@@ -263,17 +286,13 @@ where
 {
     type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -281,10 +300,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(
             &DeferralCpuProverExt,
             &config.deferral,
             inventory,

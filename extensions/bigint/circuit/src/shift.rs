@@ -18,23 +18,19 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluU16AdapterExecutor, Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Executor,
-    INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Executor, INT256_NUM_U64_LIMBS,
+    INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64ShiftLogical256Executor {
-    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
-        Self(openvm_riscv_circuit::ShiftLogicalExecutor::new(
-            adapter, offset,
-        ))
+    pub fn new() -> Self {
+        Self
     }
 }
 
 impl Rv64ShiftRightArithmetic256Executor {
-    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
-        Self(openvm_riscv_circuit::ShiftRightArithmeticExecutor::new(
-            adapter, offset,
-        ))
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -59,6 +55,13 @@ macro_rules! dispatch {
 macro_rules! impl_shift256_executor {
     ($executor:ty, $is_right_arithmetic:expr) => {
         impl<F: PrimeField32> InterpreterExecutor<F> for $executor {
+            fn get_opcode_name(&self, opcode: usize) -> String {
+                format!(
+                    "{:?}",
+                    ShiftOpcode::from_usize(opcode - Rv64Shift256Opcode::CLASS_OFFSET)
+                )
+            }
+
             fn pre_compute_size(&self) -> usize {
                 size_of::<ShiftPreCompute>()
             }
@@ -178,19 +181,20 @@ impl_shift256_executor!(Rv64ShiftRightArithmetic256Executor, true);
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &ShiftPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let rs1_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr))?;
     let rd = OP::compute(rs1, rs2);
-    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd);
+    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd)?;
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[create_handler]
@@ -198,10 +202,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
 unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &ShiftPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
-    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -209,14 +213,14 @@ unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
 unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<ShiftPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftPreCompute>>())
             .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state)
 }
 
 trait ShiftOp {

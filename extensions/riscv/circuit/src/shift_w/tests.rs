@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, PreflightExecutor,
+        ExecutionBridge,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -22,21 +22,20 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluWRegU16AdapterRecord, Rv64ShiftWLogicalChipGpu,
-        Rv64ShiftWRightArithmeticChipGpu, ShiftLogicalCoreRecord, ShiftRightArithmeticCoreRecord,
-    },
-    openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+    crate::{Rv64ShiftWLogicalChipGpu, Rv64ShiftWRightArithmeticChipGpu},
+    openvm_circuit::arch::testing::{
+        default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
 use super::{
+    trace::{
+        generate_logical_trace_from_postflight, generate_right_arithmetic_trace_from_postflight,
+    },
     Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChip, Rv64ShiftWLogicalExecutor,
     Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChip, Rv64ShiftWRightArithmeticExecutor,
     ShiftWLogicalCoreAir, ShiftWLogicalFiller, ShiftWRightArithmeticCoreAir,
@@ -44,8 +43,7 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols,
-        Rv64BaseAluWRegU16AdapterExecutor, Rv64BaseAluWRegU16AdapterFiller, RV64_BYTE_BITS,
+        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols, RV64_BYTE_BITS,
         RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     shift_logical::ShiftLogicalCoreCols,
@@ -113,15 +111,9 @@ fn create_logical_harness_fields(
         ),
         ShiftWLogicalCoreAir::new(range_checker_chip.bus(), ShiftWOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftWLogicalExecutor::new(
-        Rv64BaseAluWRegU16AdapterExecutor,
-        ShiftWOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftWLogicalExecutor::new(ShiftWOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftWLogicalChip::<F>::new(
-        ShiftWLogicalFiller::new(
-            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-        ),
+        ShiftWLogicalFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -145,15 +137,9 @@ fn create_right_arithmetic_harness_fields(
         ),
         ShiftWRightArithmeticCoreAir::new(range_checker_chip.bus(), ShiftWOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftWRightArithmeticExecutor::new(
-        Rv64BaseAluWRegU16AdapterExecutor::new(),
-        ShiftWOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftWRightArithmeticExecutor::new(ShiftWOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftWRightArithmeticChip::<F>::new(
-        ShiftWRightArithmeticFiller::new(
-            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-        ),
+        ShiftWRightArithmeticFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -166,7 +152,13 @@ fn create_logical_harness(tester: &VmChipTestBuilder<F>) -> LogicalHarness {
         tester.range_checker(),
         tester.memory_helper(),
     );
-    LogicalHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    LogicalHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_logical_trace_from_postflight,
+    )
 }
 
 fn create_right_arithmetic_harness(tester: &VmChipTestBuilder<F>) -> RightArithmeticHarness {
@@ -176,14 +168,20 @@ fn create_right_arithmetic_harness(tester: &VmChipTestBuilder<F>) -> RightArithm
         tester.range_checker(),
         tester.memory_helper(),
     );
-    RightArithmeticHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    RightArithmeticHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_right_arithmetic_trace_from_postflight,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: ShiftWOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -193,7 +191,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let (instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -205,10 +203,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     expected
 }
 
-fn execute_boundary_shifts<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn execute_boundary_shifts<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: ShiftWOpcode,
 ) {
@@ -222,7 +220,7 @@ fn execute_boundary_shifts<RA: Arena, E: PreflightExecutor<F, RA>>(
         for shift in REGISTER_SHIFT_AMOUNTS {
             let mut c = [0u8; RV64_REGISTER_NUM_LIMBS];
             c[0] = shift;
-            set_and_execute(tester, executor, arena, rng, opcode, Some(b), Some(c));
+            set_and_execute(tester, executor, preflight, rng, opcode, Some(b), Some(c));
         }
     }
 }
@@ -244,7 +242,7 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
             set_and_execute(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode,
                 None,
@@ -254,7 +252,7 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
         execute_boundary_shifts(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
         );
@@ -266,7 +264,7 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
             set_and_execute(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode,
                 None,
@@ -277,7 +275,7 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
         execute_boundary_shifts(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
         );
@@ -322,7 +320,7 @@ fn run_negative_shift_logical_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),
@@ -487,7 +485,7 @@ fn run_negative_shift_right_arithmetic_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),
@@ -754,7 +752,7 @@ fn run_sraw_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuLogicalHarness = GpuTestChipHarness<
     F,
     Rv64ShiftWLogicalExecutor,
@@ -763,7 +761,7 @@ type GpuLogicalHarness = GpuTestChipHarness<
     Rv64ShiftWLogicalChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuRightArithmeticHarness = GpuTestChipHarness<
     F,
     Rv64ShiftWRightArithmeticExecutor,
@@ -772,7 +770,7 @@ type GpuRightArithmeticHarness = GpuTestChipHarness<
     Rv64ShiftWRightArithmeticChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_logical_harness(tester: &GpuChipTestBuilder) -> GpuLogicalHarness {
     let range_bus = default_var_range_checker_bus();
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -787,9 +785,15 @@ fn create_cuda_logical_harness(tester: &GpuChipTestBuilder) -> GpuLogicalHarness
         Rv64ShiftWLogicalChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_logical_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_right_arithmetic_harness(tester: &GpuChipTestBuilder) -> GpuRightArithmeticHarness {
     let range_bus = default_var_range_checker_bus();
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -804,9 +808,15 @@ fn create_cuda_right_arithmetic_harness(tester: &GpuChipTestBuilder) -> GpuRight
         Rv64ShiftWRightArithmeticChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_right_arithmetic_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(ShiftWOpcode::SLLW, 100)]
 #[test_case(ShiftWOpcode::SRLW, 100)]
 #[test_case(ShiftWOpcode::SRAW, 100)]
@@ -821,7 +831,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
             set_and_execute(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.dense_arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode,
                 None,
@@ -832,22 +842,10 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
         execute_boundary_shifts(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
         );
-
-        type Record<'a> = (
-            &'a mut Rv64BaseAluWRegU16AdapterRecord,
-            &'a mut ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
-        );
-        harness
-            .dense_arena
-            .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv64BaseAluWRegU16AdapterExecutor>::new(),
-            );
 
         tester
             .build()
@@ -862,7 +860,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
             set_and_execute(
                 &mut tester,
                 &mut harness.executor,
-                &mut harness.dense_arena,
+                &mut harness.preflight,
                 &mut rng,
                 opcode,
                 None,
@@ -873,22 +871,10 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
         execute_boundary_shifts(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
         );
-
-        type Record<'a> = (
-            &'a mut Rv64BaseAluWRegU16AdapterRecord,
-            &'a mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
-        );
-        harness
-            .dense_arena
-            .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv64BaseAluWRegU16AdapterExecutor>::new(),
-            );
 
         tester
             .build()

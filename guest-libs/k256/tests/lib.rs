@@ -3,8 +3,8 @@ mod guest_tests {
     use eyre::Result;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
-        arch::instructions::exe::VmExe,
-        utils::{air_test, test_system_config},
+        arch::{instructions::exe::VmExe, Streams},
+        utils::{air_test, air_test_impl, test_system_config},
     };
     use openvm_ecc_circuit::{
         CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, SECP256K1_CONFIG,
@@ -14,7 +14,10 @@ mod guest_tests {
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
+        openvm_stark_backend::SystemParams, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -91,34 +94,19 @@ mod guest_tests {
         use openvm_circuit::{
             arch::{
                 AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
-                VmChipComplex, VmProverExtension,
+                VmChipComplex, VmField, VmProverExtension,
             },
             derive::VmConfig,
+            system::SystemChipInventory,
         };
+        use openvm_cpu_backend::{CpuBackend, CpuDevice};
         use openvm_ecc_circuit::{
-            CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig,
-            Rv64WeierstrassConfigExecutor,
+            CurveConfig, Rv64WeierstrassConfig, Rv64WeierstrassConfigExecutor,
+            Rv64WeierstrassCpuBuilder,
         };
-        use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
+        use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
+        use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
         use serde::{Deserialize, Serialize};
-        #[cfg(feature = "cuda")]
-        use {
-            openvm_circuit::{
-                arch::DenseRecordArena,
-                openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend},
-                system::cuda::SystemChipInventoryGPU,
-            },
-            openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-        };
-        #[cfg(not(feature = "cuda"))]
-        use {
-            openvm_circuit::{
-                arch::{MatrixRecordArena, VmField},
-                system::SystemChipInventory,
-            },
-            openvm_cpu_backend::{CpuBackend, CpuDevice},
-            openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val},
-        };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
@@ -150,7 +138,6 @@ mod guest_tests {
         #[derive(Clone)]
         pub struct EcdsaBuilder;
 
-        #[cfg(not(feature = "cuda"))]
         impl<E, SC> VmBuilder<E> for EcdsaBuilder
         where
             SC: StarkProtocolConfig,
@@ -160,63 +147,23 @@ mod guest_tests {
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;
-            type RecordArena = MatrixRecordArena<Val<SC>>;
 
             fn create_chip_complex(
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<SC>,
                 device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-            ) -> Result<
-                VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-                ChipInventoryError,
-            > {
+            ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError>
+            {
                 let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-                    &Rv64WeierstrassBuilder,
+                    &Rv64WeierstrassCpuBuilder,
                     &config.weierstrass,
                     circuit,
                     device_ctx,
                 )?;
                 let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<E, _, _>::extend_prover(
-                    &Sha2ProverExt,
-                    &config.sha2,
-                    inventory,
-                )?;
-                Ok(chip_complex)
-            }
-        }
-
-        #[cfg(feature = "cuda")]
-        impl VmBuilder<BabyBearPoseidon2GpuEngine> for EcdsaBuilder {
-            type VmConfig = EcdsaConfig;
-            type SystemChipInventory = SystemChipInventoryGPU;
-            type RecordArena = DenseRecordArena;
-
-            fn create_chip_complex(
-                &self,
-                config: &EcdsaConfig,
-                circuit: AirInventory<BabyBearPoseidon2Config>,
-                device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
-            ) -> Result<
-                VmChipComplex<
-                    BabyBearPoseidon2Config,
-                    Self::RecordArena,
-                    GpuBackend,
-                    Self::SystemChipInventory,
-                >,
-                ChipInventoryError,
-            > {
-                let mut chip_complex =
-                    VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
-                        &Rv64WeierstrassBuilder,
-                        &config.weierstrass,
-                        circuit,
-                        device_ctx,
-                    )?;
-                let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
-                    &Sha2ProverExt,
+                VmProverExtension::<E, _>::extend_prover(
+                    &Sha2CpuProverExt,
                     &config.sha2,
                     inventory,
                 )?;
@@ -241,7 +188,17 @@ mod guest_tests {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Sha2TranspilerExtension),
         )?;
-        air_test(EcdsaBuilder, config, openvm_exe);
+        let debug = std::env::var("OPENVM_SKIP_DEBUG") != Ok("1".to_string());
+        air_test_impl::<BabyBearPoseidon2CpuEngine, _>(
+            SystemParams::new_for_testing(22),
+            EcdsaBuilder,
+            config,
+            openvm_exe,
+            Streams::default(),
+            1,
+            debug,
+        )
+        .unwrap();
         Ok(())
     }
 

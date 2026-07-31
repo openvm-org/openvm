@@ -13,28 +13,20 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluImmU16AdapterRecord, LessThanImmCoreRecord, Rv64LessThanImmChipGpu,
-    },
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64LessThanImmChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
 use super::{
-    LessThanImmCoreAir, LessThanImmCoreCols, LessThanImmFiller, Rv64LessThanImmAir,
-    Rv64LessThanImmChip, Rv64LessThanImmExecutor,
+    trace::generate_trace_from_postflight, LessThanImmCoreAir, LessThanImmCoreCols,
+    LessThanImmFiller, Rv64LessThanImmAir, Rv64LessThanImmChip, Rv64LessThanImmExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
-        Rv64BaseAluImmU16AdapterFiller, U16_BITS,
-    },
+    adapters::{Rv64BaseAluImmU16AdapterAir, U16_BITS},
     test_utils::rv64_rand_write_register_or_imm,
 };
 
@@ -48,15 +40,12 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         LessThanImmCoreAir::new(range_checker.bus(), LessThanImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64LessThanImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        LessThanImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LessThanImmExecutor::new(LessThanImmOpcode::CLASS_OFFSET);
     let chip = Rv64LessThanImmChip::new(
-        LessThanImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        LessThanImmFiller::new(range_checker),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, 64)
+    Harness::with_capacity(executor, air, chip, 64, generate_trace_from_postflight)
 }
 
 fn encode_i12(imm: i16) -> usize {
@@ -88,7 +77,7 @@ fn rv64_less_than_immediate_boundaries() {
                     opcode.global_opcode().as_usize(),
                     &mut rng,
                 );
-                tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+                tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
                 let mut result = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
                 result[0] = F::from_bool(expected(opcode, source, imm));
@@ -118,7 +107,7 @@ fn rv64_less_than_immediate_result_negative() {
         LessThanImmOpcode::SLTI.global_opcode().as_usize(),
         &mut rng,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
@@ -138,7 +127,7 @@ fn rv64_less_than_immediate_result_negative() {
         .expect_err("altered comparison result should fail");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64LessThanImmExecutor,
@@ -147,7 +136,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64LessThanImmChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_checker = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -156,19 +145,21 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         LessThanImmCoreAir::new(range_checker.bus(), LessThanImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64LessThanImmExecutor::new(
-        Rv64BaseAluImmU16AdapterExecutor::new(),
-        LessThanImmOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64LessThanImmExecutor::new(LessThanImmOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64LessThanImmChip::new(
-        LessThanImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
+        LessThanImmFiller::new(range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64LessThanImmChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64).with_trace_generators(
+        generate_trace_from_postflight,
+        |chip, program, transcript, plan| {
+            chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+        },
+    )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_less_than_immediate_boundaries_tracegen() {
     let mut rng = create_seeded_rng();
@@ -191,25 +182,9 @@ fn test_cuda_less_than_immediate_boundaries_tracegen() {
                 opcode.global_opcode().as_usize(),
                 &mut rng,
             );
-            tester.execute(
-                &mut harness.executor,
-                &mut harness.dense_arena,
-                &instruction,
-            );
+            tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
         }
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluImmU16AdapterRecord,
-        &'a mut LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()

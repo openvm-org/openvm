@@ -51,6 +51,7 @@ tracing = { workspace = true }
 metrics = { workspace = true, optional = true }
 
 [dev-dependencies]
+openvm-sdk-config = { workspace = true, features = ["test-utils"] }
 tempfile = { workspace = true }
 
 [features]
@@ -95,7 +96,7 @@ perf-metrics = [
 
 # turns on stark-backend debugger in all proofs
 stark-debug = ["openvm-circuit/stark-debug"]
-test-utils = ["openvm-circuit/test-utils"]
+test-utils = ["openvm-circuit/test-utils", "openvm-sdk-config/test-utils"]
 
 parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]

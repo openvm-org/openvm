@@ -11,7 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::DivRemWOpcode;
+use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::DivRemWExecutor;
@@ -24,7 +24,7 @@ struct DivRemWPreCompute {
     c: u8,
 }
 
-impl<A> DivRemWExecutor<A> {
+impl DivRemWExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -60,10 +60,14 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for DivRemWExecutor<A>
+impl<F> InterpreterExecutor<F> for DivRemWExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<DivRemWPreCompute>()
@@ -98,7 +102,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for DivRemWExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for DivRemWExecutor
 where
     F: PrimeField32,
 {

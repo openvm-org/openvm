@@ -32,7 +32,7 @@ default = ["import_sha2"]
 import_sha2 = ["dep:sha2"]
 rvr = ["openvm-sdk/rvr", "openvm-sha2-circuit/rvr"]
 # Internal feature for testing only.
-cuda = ["openvm-sha2-circuit/cuda"]
+cuda = ["openvm-sha2-circuit/cuda", "openvm-sha2-circuit/test-utils"]
 
 [lints]
 workspace = true

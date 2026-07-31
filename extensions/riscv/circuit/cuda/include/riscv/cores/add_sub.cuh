@@ -64,22 +64,27 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS, bool RANGE_CHECK_TOP_LIMB> struct 
 
     __device__ AddSubCore(VariableRangeChecker rc) : range_checker(rc) {}
 
-    __device__ void fill_trace_row(RowSlice row, AddSubCoreRecord<NUM_LIMBS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&b)[NUM_LIMBS],
+        uint16_t const (&c)[NUM_LIMBS],
+        uint8_t local_opcode
+    ) {
         uint16_t a[NUM_LIMBS];
         uint32_t carry_buf[NUM_LIMBS];
 
-        if (record.local_opcode == 0) {
-            run_add<NUM_LIMBS, LIMB_BITS>(record.b, record.c, a, carry_buf);
+        if (local_opcode == 0) {
+            run_add<NUM_LIMBS, LIMB_BITS>(b, c, a, carry_buf);
         } else {
-            run_sub<NUM_LIMBS, LIMB_BITS>(record.b, record.c, a, carry_buf);
+            run_sub<NUM_LIMBS, LIMB_BITS>(b, c, a, carry_buf);
         }
 
         COL_WRITE_ARRAY(row, Cols, a, a);
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
-        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, b, b);
+        COL_WRITE_ARRAY(row, Cols, c, c);
 
-        COL_WRITE_VALUE(row, Cols, opcode_add_flag, record.local_opcode == 0);
-        COL_WRITE_VALUE(row, Cols, opcode_sub_flag, record.local_opcode == 1);
+        COL_WRITE_VALUE(row, Cols, opcode_add_flag, local_opcode == 0);
+        COL_WRITE_VALUE(row, Cols, opcode_sub_flag, local_opcode == 1);
 
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS - !RANGE_CHECK_TOP_LIMB; i++) {
@@ -87,5 +92,9 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS, bool RANGE_CHECK_TOP_LIMB> struct 
             // constrained by the adapter must be canonicalized here.
             range_checker.add_count(a[i], LIMB_BITS);
         }
+    }
+
+    __device__ void fill_trace_row(RowSlice row, AddSubCoreRecord<NUM_LIMBS> record) {
+        fill_trace_row(row, record.b, record.c, record.local_opcode);
     }
 };

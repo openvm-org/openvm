@@ -225,13 +225,12 @@ impl VariableRangeCheckerChip {
     }
 }
 
-// We allow any `R` type so this can work with arbitrary record arenas.
-impl<R, SC: StarkProtocolConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
 {
     /// Generates trace and resets the internal counters all to 0.
-    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let trace_row_maj = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(trace_row_maj)
     }

@@ -1822,7 +1822,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2578,7 +2578,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3620,7 +3620,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4315,7 +4315,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -4425,6 +4425,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
+ "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
@@ -4437,6 +4438,7 @@ dependencies = [
  "rand 0.9.2",
  "rvr-openvm-ext-algebra",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "serde_with",
  "strum",
@@ -4665,6 +4667,7 @@ name = "openvm-circuit"
 version = "2.1.0"
 dependencies = [
  "backtrace",
+ "bytemuck",
  "bytesize",
  "cfg-if 1.0.1",
  "dashmap",
@@ -4701,6 +4704,7 @@ dependencies = [
  "rvr-state",
  "serde",
  "serde-big-array",
+ "sha2 0.10.9",
  "static_assertions",
  "tempfile",
  "test-case",
@@ -4915,6 +4919,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rvr-openvm-ext-deferral",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
 ]
 
@@ -4991,6 +4996,7 @@ dependencies = [
  "rand 0.9.2",
  "rvr-openvm-ext-ecc",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "serde_with",
  "strum",
@@ -5150,12 +5156,14 @@ dependencies = [
  "openvm-instructions",
  "openvm-keccak256-transpiler",
  "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-keccak-air",
  "rand 0.9.2",
  "rvr-openvm-ext-keccak",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "strum",
  "tiny-keccak",
@@ -5202,7 +5210,6 @@ dependencies = [
  "num-traits",
  "openvm-circuit",
  "openvm-circuit-primitives",
- "openvm-instructions",
  "openvm-pairing-guest",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -5273,12 +5280,14 @@ dependencies = [
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
  "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
  "rand 0.9.2",
  "rvr-openvm-ext-pairing",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "strum",
 ]
@@ -5439,6 +5448,7 @@ dependencies = [
  "rand 0.9.2",
  "rvr-openvm-ext-riscv",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "strum",
  "test-case",
@@ -5467,6 +5477,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "rand 0.9.2",
  "serde",
  "strum",
  "tempfile",
@@ -5563,6 +5574,7 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
+ "openvm-instructions",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
  "openvm-pairing-circuit",
@@ -5578,6 +5590,7 @@ dependencies = [
  "rvr-openvm-lift",
  "serde",
  "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -5632,6 +5645,7 @@ dependencies = [
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-sha2-air",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
@@ -5639,6 +5653,7 @@ dependencies = [
  "rand 0.9.2",
  "rvr-openvm-ext-sha2",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "sha2 0.10.9",
 ]
@@ -7279,7 +7294,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7447,6 +7462,8 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-stark-backend",
+ "p3-baby-bear",
+ "rand 0.9.2",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
@@ -8255,7 +8272,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9028,7 +9045,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

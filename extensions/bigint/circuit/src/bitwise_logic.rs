@@ -12,18 +12,18 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, BitwiseLogicExecutor};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64BitwiseLogic256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    Rv64BitwiseLogic256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64BitwiseLogic256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
-        Self(BitwiseLogicExecutor::new(adapter, offset))
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -46,6 +46,13 @@ macro_rules! dispatch {
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BitwiseLogic256Executor {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BaseAluOpcode::from_usize(opcode - Rv64BaseAlu256Opcode::CLASS_OFFSET)
+        )
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<BitwiseLogicPreCompute>()
     }
@@ -128,19 +135,20 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BitwiseLogic256Execu
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &BitwiseLogicPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let rs1_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr))?;
     let rd = <OP as AluOp>::compute(rs1, rs2);
-    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd);
+    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd)?;
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[create_handler]
@@ -148,10 +156,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
 unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &BitwiseLogicPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<BitwiseLogicPreCompute>()).borrow();
-    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -159,7 +167,7 @@ unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
 unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<BitwiseLogicPreCompute> = std::slice::from_raw_parts(
         pre_compute,
         size_of::<E2PreCompute<BitwiseLogicPreCompute>>(),
@@ -168,7 +176,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state)
 }
 
 impl Rv64BitwiseLogic256Executor {

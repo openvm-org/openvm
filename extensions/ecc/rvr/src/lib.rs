@@ -26,6 +26,16 @@ fn decode_reg(value: u32) -> Variable {
     decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
+fn emit_pointer_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
+    let pointers = pointers.join(" | ");
+    ctx.write_line(&format!(
+        "if (unlikely((({pointers}) & {}ull) != 0ull)) {{",
+        RV64_REGISTER_BYTES - 1
+    ));
+    ctx.emit_trap();
+    ctx.write_line("}");
+}
+
 #[derive(Debug, Clone, Copy)]
 enum KnownCurve {
     K256,
@@ -51,6 +61,13 @@ impl KnownCurve {
             Self::P256 => "p256",
             Self::Bn254 => "bn254",
             Self::Bls12381 => "bls12_381",
+        }
+    }
+
+    fn point_dwords(self) -> u32 {
+        match self {
+            Self::K256 | Self::P256 | Self::Bn254 => 8,
+            Self::Bls12381 => 12,
         }
     }
 
@@ -83,9 +100,16 @@ impl ExtInstr for EcAddNeInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
+        let is_preflight = ctx.is_preflight();
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        emit_pointer_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
+        let point_dwords = self.curve.point_dwords();
+        if is_preflight {
+            // Two point reads followed by one point write happen inside the opaque call.
+            ctx.advance_timestamp(3 * point_dwords);
+        }
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_add_ne_{suffix}");
@@ -93,6 +117,11 @@ impl ExtInstr for EcAddNeInstr {
             ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2]);
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
+        }
+        // Add setup constrains only its modulus input; y1, x2, and y2 remain execution data.
+        // Its postimage is therefore no less authoritative than a regular add postimage.
+        for word in 0..point_dwords {
+            ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
         }
     }
 
@@ -102,6 +131,10 @@ impl ExtInstr for EcAddNeInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -120,8 +153,15 @@ impl ExtInstr for EcDoubleInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
+        let is_preflight = ctx.is_preflight();
         let rs1 = ctx.read_var(self.rs1_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        emit_pointer_alignment_guard(ctx, &[&rd, &rs1]);
+        let point_dwords = self.curve.point_dwords();
+        if is_preflight {
+            // One point read followed by one point write happens inside the opaque call.
+            ctx.advance_timestamp(2 * point_dwords);
+        }
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_double_{suffix}");
@@ -129,6 +169,14 @@ impl ExtInstr for EcDoubleInstr {
             ctx.emit_checked_call(&name, &["state", &rd, &rs1]);
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1]);
+        }
+        if !self.is_setup {
+            // Regular-operation outputs are the only replay values. Setup replay derives its writes
+            // from the timed reads and the configured field-expression program rather than
+            // extending the transcript with setup-only values.
+            for word in 0..point_dwords {
+                ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
+            }
         }
     }
 
@@ -138,6 +186,10 @@ impl ExtInstr for EcDoubleInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -255,8 +307,144 @@ impl RvrExtension for EccExtension {
 #[cfg(test)]
 mod tests {
     use openvm_instructions::VmOpcode;
+    use rvr_openvm_ir::{MemWidth, PageAddressSpace};
 
     use super::*;
+
+    struct TestEmitCtx {
+        operations: Vec<String>,
+        preflight: bool,
+        next_tmp: usize,
+    }
+
+    impl TestEmitCtx {
+        fn preflight() -> Self {
+            Self {
+                operations: Vec::new(),
+                preflight: true,
+                next_tmp: 0,
+            }
+        }
+
+        fn legacy() -> Self {
+            Self {
+                operations: Vec::new(),
+                preflight: false,
+                next_tmp: 0,
+            }
+        }
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn is_preflight(&self) -> bool {
+            self.preflight
+        }
+
+        fn read_var(&mut self, var: Variable) -> String {
+            let value = format!("r{}", var.index());
+            self.operations.push(format!("read({value})"));
+            value
+        }
+
+        fn peek_var(&mut self, _var: Variable) -> String {
+            unreachable!()
+        }
+
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.operations.push(format!("timestamp_slots({slots})"));
+        }
+
+        fn write_var(&mut self, _var: Variable, _val: &str) {
+            unreachable!()
+        }
+
+        fn write_line(&mut self, line: &str) {
+            self.operations.push(line.to_string());
+        }
+
+        fn emit_trap(&mut self) {
+            self.operations.push("trap".to_string());
+        }
+
+        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+            unreachable!()
+        }
+
+        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
+            unreachable!()
+        }
+
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_timestamp_slots(&mut self, _slots: &str) {
+            unreachable!()
+        }
+
+        fn append_replay_value(&mut self, value: &str) {
+            if self.preflight {
+                self.operations.push(format!("replay_value({value})"));
+            }
+        }
+
+        fn emit_call(&mut self, name: &str, args: &[&str]) {
+            self.operations.push(format!("{name}({})", args.join(", ")));
+        }
+
+        fn emit_call_without_page_flush(&mut self, _name: &str, _args: &[&str]) {
+            unreachable!()
+        }
+
+        fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+            let value = format!("tmp{}", self.next_tmp);
+            self.next_tmp += 1;
+            self.operations
+                .push(format!("{ret_ty} {value} = {name}({})", args.join(", ")));
+            value
+        }
+
+        fn emit_call_with_trace_result(
+            &mut self,
+            _ret_ty: &str,
+            _name: &str,
+            _args: &[&str],
+        ) -> Option<String> {
+            unreachable!()
+        }
+
+        fn trace_chip(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_chip_if_nonzero(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_page_access(
+            &mut self,
+            _addr: &str,
+            _width: MemWidth,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+
+        fn trace_page_access_u64_range(
+            &mut self,
+            _base_addr: &str,
+            _num_dwords: &str,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+    }
+
+    fn expected_replay_values(rd: &str, point_dwords: u32) -> Vec<String> {
+        (0..point_dwords)
+            .map(|word| format!("replay_value(peek_mem_u64(state, {rd} + {}ull))", word * 8))
+            .collect()
+    }
 
     #[test]
     fn ignores_opcodes_outside_configured_curves() {
@@ -267,5 +455,140 @@ mod tests {
         let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
 
         assert!(extension.try_lift(&insn, 0x100).is_none());
+    }
+
+    #[test]
+    fn add_preflight_matches_schedule_and_minimal_replay_values() {
+        for (curve, point_dwords) in [(KnownCurve::K256, 8), (KnownCurve::Bls12381, 12)] {
+            for is_setup in [false, true] {
+                let instruction = EcAddNeInstr {
+                    rd_reg: Variable::new(1),
+                    rs1_reg: Variable::new(2),
+                    rs2_reg: Variable::new(3),
+                    curve,
+                    is_setup,
+                };
+                assert!(instruction.supports_preflight());
+
+                let mut preflight = TestEmitCtx::preflight();
+                instruction.emit_c(&mut preflight);
+                let mut expected = vec![
+                    "read(r2)".to_string(),
+                    "read(r3)".to_string(),
+                    "read(r1)".to_string(),
+                    "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {".to_string(),
+                    "trap".to_string(),
+                    "}".to_string(),
+                    format!("timestamp_slots({})", 3 * point_dwords),
+                ];
+                let name = format!(
+                    "rvr_ext_{}ec_add_ne_{}",
+                    if is_setup { "setup_" } else { "" },
+                    curve.c_suffix()
+                );
+                if is_setup {
+                    expected.extend([
+                        format!("bool tmp0 = {name}(state, r1, r2, r3)"),
+                        "if (unlikely(!tmp0)) {".to_string(),
+                        "trap".to_string(),
+                        "}".to_string(),
+                    ]);
+                } else {
+                    expected.push(format!("{name}(state, r1, r2, r3)"));
+                }
+                expected.extend(expected_replay_values("r1", point_dwords));
+                assert_eq!(preflight.operations, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn double_preflight_matches_schedule_and_minimal_replay_values() {
+        for (curve, point_dwords) in [(KnownCurve::P256, 8), (KnownCurve::Bls12381, 12)] {
+            for is_setup in [false, true] {
+                let instruction = EcDoubleInstr {
+                    rd_reg: Variable::new(1),
+                    rs1_reg: Variable::new(2),
+                    curve,
+                    is_setup,
+                };
+                assert!(instruction.supports_preflight());
+
+                let mut preflight = TestEmitCtx::preflight();
+                instruction.emit_c(&mut preflight);
+                let mut expected = vec![
+                    "read(r2)".to_string(),
+                    "read(r1)".to_string(),
+                    "if (unlikely(((r1 | r2) & 7ull) != 0ull)) {".to_string(),
+                    "trap".to_string(),
+                    "}".to_string(),
+                    format!("timestamp_slots({})", 2 * point_dwords),
+                ];
+                let name = format!(
+                    "rvr_ext_{}ec_double_{}",
+                    if is_setup { "setup_" } else { "" },
+                    curve.c_suffix()
+                );
+                if is_setup {
+                    expected.extend([
+                        format!("bool tmp0 = {name}(state, r1, r2)"),
+                        "if (unlikely(!tmp0)) {".to_string(),
+                        "trap".to_string(),
+                        "}".to_string(),
+                    ]);
+                } else {
+                    expected.push(format!("{name}(state, r1, r2)"));
+                }
+                if !is_setup {
+                    expected.extend(expected_replay_values("r1", point_dwords));
+                }
+                assert_eq!(preflight.operations, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn execution_modes_use_air_operand_order_without_preflight_data() {
+        let add = EcAddNeInstr {
+            rd_reg: Variable::new(1),
+            rs1_reg: Variable::new(2),
+            rs2_reg: Variable::new(3),
+            curve: KnownCurve::K256,
+            is_setup: false,
+        };
+        let mut legacy = TestEmitCtx::legacy();
+        add.emit_c(&mut legacy);
+        assert_eq!(
+            legacy.operations,
+            [
+                "read(r2)",
+                "read(r3)",
+                "read(r1)",
+                "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
+                "trap",
+                "}",
+                "rvr_ext_ec_add_ne_k256(state, r1, r2, r3)",
+            ]
+        );
+
+        let double = EcDoubleInstr {
+            rd_reg: Variable::new(1),
+            rs1_reg: Variable::new(2),
+            curve: KnownCurve::P256,
+            is_setup: false,
+        };
+        let mut legacy = TestEmitCtx::legacy();
+        double.emit_c(&mut legacy);
+        assert_eq!(
+            legacy.operations,
+            [
+                "read(r2)",
+                "read(r1)",
+                "if (unlikely(((r1 | r2) & 7ull) != 0ull)) {",
+                "trap",
+                "}",
+                "rvr_ext_ec_double_p256(state, r1, r2)",
+            ]
+        );
     }
 }

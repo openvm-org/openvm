@@ -1,13 +1,12 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::{
-    Rv64BaseAluImmAdapterAir, Rv64BaseAluImmAdapterExecutor, Rv64BaseAluImmAdapterFiller,
-    RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
-};
+use crate::adapters::{Rv64BaseAluImmAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
 
 mod core;
 mod execution;
 pub use core::*;
+
+pub(crate) mod trace;
 
 #[cfg(test)]
 mod tests;
@@ -23,8 +22,6 @@ pub type Rv64BitwiseLogicImmAir = VmAirWrapper<
     BitwiseLogicImmCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;
 pub type Rv64BitwiseLogicImmExecutor =
-    BitwiseLogicImmExecutor<Rv64BaseAluImmAdapterExecutor, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64BitwiseLogicImmChip<F> = VmChipWrapper<
-    F,
-    BitwiseLogicImmFiller<Rv64BaseAluImmAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
->;
+    BitwiseLogicImmExecutor<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type Rv64BitwiseLogicImmChip<F> =
+    VmChipWrapper<F, BitwiseLogicImmFiller<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;

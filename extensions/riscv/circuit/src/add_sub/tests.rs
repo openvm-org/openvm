@@ -3,12 +3,12 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -22,23 +22,19 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64BaseAluRegU16AdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64AddSubChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
-use super::{AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
+use super::{
+    trace::generate_trace_from_postflight, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor,
+};
 use crate::{
-    adapters::{
-        Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
-        Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
-    },
+    adapters::{Rv64BaseAluRegU16AdapterAir, U16_BITS},
     add_sub::AddSubCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
     AddSubFiller, Rv64AddSubAir,
@@ -64,14 +60,8 @@ fn create_harness_fields(
         Rv64BaseAluRegU16AdapterAir::new(execution_bridge, memory_bridge),
         AddSubCoreAir::new(range_checker_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddSubExecutor::new(
-        Rv64BaseAluRegU16AdapterExecutor,
-        BaseAluOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64AddSubChip::new(
-        AddSubFiller::new(Rv64BaseAluRegU16AdapterFiller, range_checker_chip),
-        memory_helper,
-    );
+    let executor = Rv64AddSubExecutor::new(BaseAluOpcode::CLASS_OFFSET);
+    let chip = Rv64AddSubChip::new(AddSubFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -83,13 +73,19 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         range_checker,
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    )
 }
 
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -100,7 +96,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let b = u64::from_le_bytes(b);
     let c = u64::from_le_bytes(c);
@@ -142,7 +138,7 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -172,7 +168,7 @@ fn run_add_sub_memory_binding_negative_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         ADD,
         Some([0; RV64_REGISTER_NUM_LIMBS]),
@@ -223,11 +219,11 @@ fn rv64_add_sub_rs1_memory_binding_negative_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64AddSubExecutor, Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -242,9 +238,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let gpu_chip = Rv64AddSubChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(BaseAluOpcode::ADD, 100)]
 #[test_case(BaseAluOpcode::SUB, 100)]
 fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
@@ -256,26 +258,13 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluRegU16AdapterRecord,
-        &'a mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
-    );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()

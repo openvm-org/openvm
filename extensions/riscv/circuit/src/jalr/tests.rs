@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        ExecutionBridge, MemoryConfig, Postflight, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -14,7 +14,11 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{Program, PC_BITS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -27,24 +31,20 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64JalrAdapterRecord, Rv64JalrChipGpu, Rv64JalrCoreRecord},
-    openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-            GpuTestChipHarness,
-        },
-        EmptyAdapterCoreLayout,
+    crate::Rv64JalrChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
     },
 };
 
-use super::Rv64JalrCoreAir;
+use super::{trace::generate_trace_from_postflight, Rv64JalrCoreAir};
 use crate::{
     adapters::{
         rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
-        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
-        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -76,11 +76,8 @@ fn create_harness_fields(
         Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
         Rv64JalrCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
-    let chip = Rv64JalrChip::<F>::new(
-        Rv64JalrFiller::new(Rv64JalrAdapterFiller::new(), range_checker_chip),
-        memory_helper,
-    );
+    let executor = Rv64JalrExecutor::new();
+    let chip = Rv64JalrChip::<F>::new(Rv64JalrFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -106,16 +103,22 @@ fn create_harness(
         range_checker_chip,
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64JalrOpcode,
     initial_imm: Option<u32>,
@@ -124,8 +127,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     rd_ptr: Option<usize>,
 ) {
-    let imm = initial_imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
     let imm_sign = initial_imm_sign.unwrap_or(rng.random_range(0..2));
+    let imm = initial_imm.unwrap_or_else(|| {
+        let low = rng.random_range(0..(1 << (IMM_BITS - 5)));
+        low + imm_sign * 0xf800
+    });
     let imm_ext = imm + (imm_sign * 0xffff0000);
     let a = rd_ptr.unwrap_or_else(|| rng.random_range(0..32) << 3);
     let b = rng.random_range(1..32) << 3;
@@ -141,7 +147,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let initial_pc = initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -194,7 +200,7 @@ fn rand_jalr_test() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             JALR,
             None,
@@ -252,7 +258,7 @@ fn run_negative_jalr_test_with_rd_ptr(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         initial_imm,
@@ -333,7 +339,7 @@ fn invalid_cols_negative_tests() {
         JALR,
         None,
         None,
-        Some(15362),
+        Some(0x402),
         Some(0),
         JalrPrankValues {
             imm_sign: Some(1),
@@ -346,7 +352,7 @@ fn invalid_cols_negative_tests() {
         JALR,
         None,
         None,
-        Some(15362),
+        Some(0xfc02),
         Some(1),
         JalrPrankValues {
             imm_sign: Some(0),
@@ -359,7 +365,7 @@ fn invalid_cols_negative_tests() {
         JALR,
         None,
         Some([23, 154, 67, 28, 0, 0, 0, 0]),
-        Some(42512),
+        Some(0xfe10),
         Some(1),
         JalrPrankValues {
             to_pc_least_sig_bit: Some(0),
@@ -376,7 +382,7 @@ fn rs1_upper_bytes_preflight_rejects_test() {
         JALR,
         None,
         Some([23, 154, 67, 28, 1, 0, 0, 0]),
-        Some(42512),
+        Some(0xfe10),
         Some(1),
         JalrPrankValues::default(),
         true,
@@ -384,60 +390,47 @@ fn rs1_upper_bytes_preflight_rejects_test() {
 }
 
 #[test]
-fn rs1_upper_bytes_trace_tamper_negative_test() {
+fn rs1_upper_bytes_postflight_rejects_test() {
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let (mut harness, _) = create_harness(&mut tester);
 
     let initial_pc = 0x1234;
     let imm = 16usize;
     let imm_sign = 0usize;
     let rd_ptr = 16usize;
     let rs1_ptr = 8usize;
-    let rs1_low = 0x20000u32;
-    let mem_helper = tester.memory_helper();
+    let rs1_low = initial_pc + 4 - imm as u32;
+    tester.write_bytes(1, rs1_ptr, into_limbs(rs1_low).map(F::from_u32));
 
-    let mut poisoned_rs1 = into_limbs(rs1_low);
-    poisoned_rs1[4] = 1;
-    let clean_rs1 = into_limbs(rs1_low);
-    let poisoned_write_timestamp = tester.memory.memory.timestamp();
-
-    // Seed the same source register with a poisoned value, then overwrite with a clean one so
-    // the execution is initially valid.
-    tester.write_bytes(1, rs1_ptr, poisoned_rs1.map(F::from_u32));
-    tester.write_bytes(1, rs1_ptr, clean_rs1.map(F::from_u32));
-
+    let instruction = Instruction::from_usize(
+        JALR.global_opcode(),
+        [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+    );
     tester.execute_with_pc(
         &mut harness.executor,
-        &mut harness.arena,
-        &Instruction::from_usize(
-            JALR.global_opcode(),
-            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
-        ),
+        &mut harness.preflight,
+        &instruction,
         initial_pc,
     );
 
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
-        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
-        let rs1_aux_base = adapter_cols.rs1_aux_cols.as_mut();
-        mem_helper
-            .as_borrowed()
-            .fill(poisoned_write_timestamp, read_timestamp, rs1_aux_base);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
+    let history = &mut harness.preflight.executions[0].history;
+    let rs1_read = history
+        .memory
+        .accesses
+        .iter_mut()
+        .find(|event| event.address_space() == 1 && event.pointer == (rs1_ptr / 2) as u32)
+        .expect("JALR history contains the source-register read");
+    rs1_read.value[2] = 1;
 
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-    tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
+    let sentinel = instruction.clone();
+    let program = Program::new_without_debug_infos(&[instruction, sentinel], initial_pc);
+    let memory_config = MemoryConfig::default();
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
+    let error = generate_trace_from_postflight(&harness.chip, &postflight)
+        .expect_err("postflight must reject a JALR source wider than 32 bits");
+    assert!(error
+        .to_string()
+        .contains("JALR source register has nonzero upper 32 bits"));
 }
 
 #[test]
@@ -459,7 +452,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
     tester.execute_with_pc(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::from_usize(
             JALR.global_opcode(),
             [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
@@ -537,7 +530,7 @@ fn overflow_negative_tests() {
         JALR,
         None,
         Some([0, 0, 0, 0, 0, 0, 0, 0]),
-        Some((1 << 15) - 2),
+        Some((1 << 11) - 2),
         Some(0),
         JalrPrankValues {
             to_pc_limbs: Some([
@@ -582,7 +575,7 @@ fn jalr_x0_write_suppression_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         JALR,
         Some(16),
@@ -599,11 +592,11 @@ fn jalr_x0_write_suppression_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChipGpu, Rv64JalrChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
@@ -622,9 +615,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let gpu_chip = Rv64JalrChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_jalr_tracegen() {
     let mut tester =
@@ -637,7 +636,7 @@ fn test_cuda_rand_jalr_tracegen() {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             JALR,
             None,
@@ -647,15 +646,6 @@ fn test_cuda_rand_jalr_tracegen() {
             None,
         );
     }
-
-    type Record<'a> = (&'a mut Rv64JalrAdapterRecord, &'a mut Rv64JalrCoreRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new(),
-        );
 
     tester
         .build()

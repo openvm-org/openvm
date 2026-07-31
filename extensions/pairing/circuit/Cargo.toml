@@ -50,16 +50,22 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { path = "../../../crates/circuits/mod-builder", default-features = false, features = ["test-utils"] }
 openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
+rvr-state = { workspace = true }
 openvm-ecc-guest = { path = "../../ecc/guest", default-features = false }
 openvm-pairing-guest = { path = "../guest", default-features = false, features = [
     "halo2curves",
     "bls12_381",
     "bn254",
 ] }
+openvm-riscv-transpiler.workspace = true
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []
+test-utils = [
+    "openvm-circuit/test-utils",
+    "openvm-ecc-circuit/test-utils",
+]
 tco = ["openvm-riscv-circuit/tco", "openvm-ecc-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",

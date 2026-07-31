@@ -1,6 +1,5 @@
 use std::{iter, sync::Arc};
 
-use openvm_circuit_primitives::Chip;
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -59,11 +58,9 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         trace: cached_trace,
     };
     let chip = ProgramChip {
-        filtered_exec_frequencies,
         cached: Some(cached),
-        _marker: std::marker::PhantomData,
     };
-    let ctx = chip.generate_proving_ctx(());
+    let ctx = chip.generate_proving_ctx_with_frequencies(&filtered_exec_frequencies);
 
     let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
@@ -171,11 +168,9 @@ fn test_program_negative() {
         trace: cached_trace,
     };
     let chip = ProgramChip {
-        filtered_exec_frequencies: execution_frequencies.clone(),
         cached: Some(cached),
-        _marker: std::marker::PhantomData,
     };
-    let ctx = chip.generate_proving_ctx(());
+    let ctx = chip.generate_proving_ctx_with_frequencies(&execution_frequencies);
 
     let counter_air = DummyInteractionAir::new(7, true, bus.inner.index);
     let mut program_rows = vec![];

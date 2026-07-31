@@ -20,7 +20,7 @@ use {
         SC,
     },
     openvm_circuit::arch::{
-        Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
     },
     openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, Val},
 };
@@ -139,10 +139,9 @@ pub fn generate_dummy_root_proof<E, VB>(
 ) -> Proof<RootSC>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
+    VB: ContinuationProverBuilder<E> + Clone,
     Val<SC>: PrimeField32,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
 {
     let dummy_exe = dummy_terminate_exe();
 

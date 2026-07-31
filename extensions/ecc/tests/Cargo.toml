@@ -31,5 +31,9 @@ default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 tco = ["openvm-ecc-circuit/tco"]
 rvr = ["openvm-ecc-circuit/rvr", "openvm-sdk/rvr"]
-cuda = ["openvm-ecc-circuit/cuda", "openvm-sdk/cuda"]
+cuda = [
+    "openvm-ecc-circuit/cuda",
+    "openvm-ecc-circuit/test-utils",
+    "openvm-sdk/cuda",
+]
 touchemall = ["cuda", "openvm-ecc-circuit/touchemall"]

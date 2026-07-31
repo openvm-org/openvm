@@ -2,8 +2,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
     adapters::{
-        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, DOUBLEWORD_ACCESS_WIDTH,
+        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller, DOUBLEWORD_ACCESS_WIDTH,
     },
     load::{
         common::LoadExecutor,
@@ -23,10 +22,7 @@ pub type LoadDoublewordFiller = LoadFiller<
 >;
 
 pub type Rv64LoadDoublewordAir = VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadDoublewordCoreAir>;
-pub type Rv64LoadDoublewordExecutor = LoadExecutor<
-    Rv64LoadMultiByteAdapterExecutor<DOUBLEWORD_ACCESS_WIDTH>,
-    DOUBLEWORD_ACCESS_WIDTH,
->;
+pub type Rv64LoadDoublewordExecutor = LoadExecutor<DOUBLEWORD_ACCESS_WIDTH>;
 pub type Rv64LoadDoublewordChip<F> = VmChipWrapper<F, LoadDoublewordFiller>;
 
 #[cfg(feature = "cuda")]
@@ -36,3 +32,4 @@ pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
+pub(crate) mod trace;

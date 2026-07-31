@@ -4,12 +4,12 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     arch::{
-        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmField, VmProverExtension,
+        AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
+        VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
+use openvm_circuit_derive::{Executor, MeteredExecutor, VmConfig};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_stark_backend::{EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -72,9 +72,11 @@ pub use store::*;
 mod extension;
 pub use extension::*;
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub mod preflight;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
@@ -163,17 +165,13 @@ where
 {
     type VmConfig = Rv64IConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Rv64IConfig,
         circuit: AirInventory<E::SC>,
         device_ctx: &EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -181,8 +179,8 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         Ok(chip_complex)
     }
 }
@@ -199,17 +197,13 @@ where
 {
     type VmConfig = Rv64ImConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
         device_ctx: &EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &Rv64ICpuBuilder,
             &config.rv64i,
@@ -217,7 +211,7 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
     }
 }
@@ -230,7 +224,6 @@ pub struct Rv64IGpuBuilder;
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
     type VmConfig = Rv64IConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -238,12 +231,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
-        VmChipComplex<
-            BabyBearPoseidon2Config,
-            Self::RecordArena,
-            GpuBackend,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<BabyBearPoseidon2Config, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
@@ -253,12 +241,12 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &Rv64ImGpuProverExt,
             &config.base,
             inventory,
         )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &Rv64ImGpuProverExt,
             &config.io,
             inventory,
@@ -275,7 +263,6 @@ pub struct Rv64ImGpuBuilder;
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     type VmConfig = Rv64ImConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
@@ -283,12 +270,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
-        VmChipComplex<
-            BabyBearPoseidon2Config,
-            Self::RecordArena,
-            GpuBackend,
-            Self::SystemChipInventory,
-        >,
+        VmChipComplex<BabyBearPoseidon2Config, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
@@ -298,7 +280,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
             &Rv64ImGpuProverExt,
             &config.mul,
             inventory,

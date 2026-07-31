@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug};
+use std::{array::from_fn, fmt::Debug, mem::size_of_val, slice};
 
 use getset::Getters;
 use openvm_instructions::exe::SparseMemoryImage;
@@ -6,12 +6,18 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
 };
+use rvr_state::{
+    PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT,
+};
 use thiserror::Error;
 use tracing::instrument;
 
 use super::has_nonzero_byte;
 use crate::{
-    arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH},
+    arch::{
+        AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryCellType, MemoryConfig,
+        PreflightMemoryLog, BLOCK_FE_WIDTH,
+    },
     system::{TouchedBlock, TouchedMemory},
 };
 
@@ -546,6 +552,7 @@ pub struct TracingMemory {
     /// during this segment. Dirtiness is per write access, independent of the written
     /// content; stamped into each [`TouchedBlock`] by [`Self::finalize`].
     pub(super) is_dirty: Vec<PagedVec<bool, PAGE_SIZE>>,
+    log: PreflightMemoryLog,
 }
 
 impl TracingMemory {
@@ -573,7 +580,13 @@ impl TracingMemory {
             meta,
             is_dirty,
             timestamp: INITIAL_TIMESTAMP + 1,
+            log: PreflightMemoryLog::default(),
         }
+    }
+
+    /// Takes the append-only memory history accumulated so far.
+    pub fn take_log(&mut self) -> PreflightMemoryLog {
+        std::mem::take(&mut self.log)
     }
 
     #[inline(always)]
@@ -642,6 +655,100 @@ impl TracingMemory {
         dirty_page.set(block_idx, true);
     }
 
+    #[inline(always)]
+    fn compact_field_reference(index: usize) -> [u16; BLOCK_FE_WIDTH] {
+        let index = u32::try_from(index).expect("field preflight log exceeds u32::MAX blocks");
+        [index as u16, (index >> 16) as u16, 0, 0]
+    }
+
+    #[inline(always)]
+    fn append_access(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        is_write: bool,
+        value: &[u8],
+        initial_value: Option<&[u8]>,
+    ) {
+        let layout = self.data.memory.config[address_space as usize].layout;
+        let event_value = match layout {
+            MemoryCellType::U16 => {
+                debug_assert_eq!(value.len(), BLOCK_FE_WIDTH * size_of::<u16>());
+                from_fn(|lane| {
+                    let offset = lane * size_of::<u16>();
+                    u16::from_le_bytes([value[offset], value[offset + 1]])
+                })
+            }
+            MemoryCellType::FIELD32 => {
+                debug_assert_eq!(value.len(), BLOCK_FE_WIDTH * size_of::<u32>());
+                let field = PreflightFieldBlock {
+                    values: from_fn(|lane| {
+                        let offset = lane * size_of::<u32>();
+                        u32::from_ne_bytes(
+                            value[offset..offset + size_of::<u32>()].try_into().unwrap(),
+                        )
+                    }),
+                };
+                let reference = Self::compact_field_reference(self.log.field_values.len());
+                self.log.field_values.push(field);
+                reference
+            }
+            _ => panic!("preflight memory log requires u16 or 32-bit field cells"),
+        };
+
+        self.log.accesses.push(PreflightMemoryEvent {
+            timestamp: self.timestamp,
+            address_space_and_kind: address_space | if is_write { PREFLIGHT_WRITE_BIT } else { 0 },
+            pointer,
+            value: event_value,
+        });
+
+        let Some(initial_value) = initial_value else {
+            return;
+        };
+        let initial_value = match layout {
+            MemoryCellType::U16 => {
+                debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH * size_of::<u16>());
+                from_fn(|lane| {
+                    let offset = lane * size_of::<u16>();
+                    u16::from_le_bytes([initial_value[offset], initial_value[offset + 1]])
+                })
+            }
+            MemoryCellType::FIELD32 => {
+                debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH * size_of::<u32>());
+                let field = PreflightFieldBlock {
+                    values: from_fn(|lane| {
+                        let offset = lane * size_of::<u32>();
+                        u32::from_ne_bytes(
+                            initial_value[offset..offset + size_of::<u32>()]
+                                .try_into()
+                                .unwrap(),
+                        )
+                    }),
+                };
+                let reference = Self::compact_field_reference(self.log.field_initial_values.len());
+                self.log.field_initial_values.push(field);
+                reference
+            }
+            _ => unreachable!(),
+        };
+        self.log.initial_writes.push(PreflightInitialWrite {
+            address_space,
+            pointer,
+            initial_value,
+        });
+    }
+
+    #[inline(always)]
+    unsafe fn as_bytes<T, const N: usize>(values: &[T; N]) -> &[u8]
+    where
+        T: Copy,
+    {
+        // SAFETY: callers already require `T` to be the POD memory-cell type
+        // configured for this address space.
+        unsafe { slice::from_raw_parts(values.as_ptr().cast(), size_of_val(values)) }
+    }
+
     /// Atomic cell read operation which increments the timestamp by 1.
     /// Returns `(t_prev, values)`.
     ///
@@ -662,6 +769,7 @@ impl TracingMemory {
         self.assert_valid_access::<BLOCK_SIZE>(address_space, ptr);
         let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
         let values = self.data.read(address_space, ptr);
+        self.append_access(address_space, ptr, false, Self::as_bytes(&values), None);
         self.timestamp += 1;
 
         (t_prev, values)
@@ -688,6 +796,13 @@ impl TracingMemory {
         let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
         self.mark_dirty(address_space as usize, ptr as usize / BLOCK_FE_WIDTH);
         let values_prev = self.data.read(address_space, ptr);
+        self.append_access(
+            address_space,
+            ptr,
+            true,
+            Self::as_bytes(&values),
+            (t_prev == INITIAL_TIMESTAMP).then(|| Self::as_bytes(&values_prev)),
+        );
         self.data.write(address_space, ptr, values);
         self.timestamp += 1;
 
@@ -710,6 +825,16 @@ impl TracingMemory {
         self.assert_valid_byte_access::<N>(address_space, byte_ptr);
         let t_prev = self.byte_prev_access_time(address_space as usize, byte_ptr as usize);
         let values = self.data.read_bytes::<N>(address_space, byte_ptr);
+        let cell_size = self.data.memory.config[address_space as usize]
+            .layout
+            .size();
+        self.append_access(
+            address_space,
+            byte_ptr / cell_size as u32,
+            false,
+            &values,
+            None,
+        );
         self.timestamp += 1;
 
         (t_prev, values)
@@ -733,6 +858,16 @@ impl TracingMemory {
             byte_ptr as usize / self.memory_block_bytes(address_space),
         );
         let values_prev = self.data.read_bytes::<N>(address_space, byte_ptr);
+        let cell_size = self.data.memory.config[address_space as usize]
+            .layout
+            .size();
+        self.append_access(
+            address_space,
+            byte_ptr / cell_size as u32,
+            true,
+            &values,
+            (t_prev == INITIAL_TIMESTAMP).then_some(values_prev.as_slice()),
+        );
         self.data.write_bytes::<N>(address_space, byte_ptr, values);
         self.timestamp += 1;
 
@@ -821,7 +956,7 @@ impl TracingMemory {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::VM_DIGEST_WIDTH;
+    use openvm_instructions::{riscv::RV64_REGISTER_AS, VM_DIGEST_WIDTH};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -832,6 +967,98 @@ mod tests {
     };
 
     type F = BabyBear;
+
+    #[test]
+    fn timed_accesses_append_minimal_u16_history() {
+        let mut memory = TracingMemory::new(&MemoryConfig::default());
+        let first_block = [1u16, 2, 3, 4];
+        let second_initial = [5u16, 6, 7, 8];
+        let second_write = [9u16, 10, 11, 12];
+
+        // Seed through the underlying image: initialization and peeks are not
+        // timed memory-bus accesses.
+        unsafe {
+            memory.data.write(RV64_REGISTER_AS, 0, first_block);
+            memory
+                .data
+                .write(RV64_REGISTER_AS, BLOCK_FE_WIDTH as u32, second_initial);
+            let _: [u16; BLOCK_FE_WIDTH] = memory.data.read(RV64_REGISTER_AS, 0);
+
+            let _ = memory.read::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 0);
+            let _ = memory.write::<u16, BLOCK_FE_WIDTH>(
+                RV64_REGISTER_AS,
+                BLOCK_FE_WIDTH as u32,
+                second_write,
+            );
+        }
+
+        let log = memory.take_log();
+        assert_eq!(
+            log.accesses,
+            vec![
+                PreflightMemoryEvent {
+                    timestamp: 1,
+                    address_space_and_kind: RV64_REGISTER_AS,
+                    pointer: 0,
+                    value: first_block,
+                },
+                PreflightMemoryEvent {
+                    timestamp: 2,
+                    address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+                    pointer: BLOCK_FE_WIDTH as u32,
+                    value: second_write,
+                },
+            ]
+        );
+        assert_eq!(
+            log.initial_writes,
+            vec![PreflightInitialWrite {
+                address_space: RV64_REGISTER_AS,
+                pointer: BLOCK_FE_WIDTH as u32,
+                initial_value: second_initial,
+            }]
+        );
+        assert!(log.field_values.is_empty());
+        assert!(log.field_initial_values.is_empty());
+    }
+
+    #[test]
+    fn field_accesses_use_dense_sidecars() {
+        let mem_config = MemoryConfig::new(
+            1,
+            vec![
+                AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+                AddressSpaceHostConfig::new(2 * BLOCK_FE_WIDTH, MemoryCellType::field32()),
+                AddressSpaceHostConfig::new(2 * BLOCK_FE_WIDTH, MemoryCellType::field32()),
+            ],
+            3,
+            20,
+            17,
+        );
+        let mut memory = TracingMemory::new(&mem_config);
+        let initial = [F::ONE, F::TWO, F::from_u8(3), F::from_u8(4)];
+        let written = [F::from_u8(5), F::from_u8(6), F::from_u8(7), F::from_u8(8)];
+        unsafe {
+            memory.data.write(1, 0, initial);
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 0, written);
+        }
+
+        let log = memory.take_log();
+        assert_eq!(log.accesses.len(), 1);
+        assert_eq!(log.accesses[0].value, [0, 0, 0, 0]);
+        assert_eq!(log.initial_writes.len(), 1);
+        assert_eq!(log.initial_writes[0].initial_value, [0, 0, 0, 0]);
+        assert_eq!(log.field_values.len(), 1);
+        assert_eq!(log.field_initial_values.len(), 1);
+        assert_eq!(
+            log.field_values[0].values,
+            written.map(|value| unsafe { std::mem::transmute::<F, u32>(value) })
+        );
+        assert_eq!(
+            log.field_initial_values[0].values,
+            initial.map(|value| unsafe { std::mem::transmute::<F, u32>(value) })
+        );
+    }
 
     #[test]
     fn recompute_touched_pages_reflects_current_memory() {
@@ -906,11 +1133,11 @@ mod tests {
                 },
                 AddressSpaceHostConfig {
                     num_cells: VM_DIGEST_WIDTH << height,
-                    layout: MemoryCellType::F { size: 4 },
+                    layout: MemoryCellType::FIELD32,
                 },
                 AddressSpaceHostConfig {
                     num_cells: VM_DIGEST_WIDTH << height,
-                    layout: MemoryCellType::F { size: 4 },
+                    layout: MemoryCellType::FIELD32,
                 },
             ],
             ptr_bits_from_address_height(height),

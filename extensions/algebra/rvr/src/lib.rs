@@ -9,8 +9,11 @@ mod common;
 mod fp2;
 mod modular;
 
+#[cfg(test)]
+pub(crate) use common::BINARY_INPUTS_AND_OUTPUT;
 pub(crate) use common::{
-    ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind,
+    emit_word_alignment_guard, ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind,
+    FieldSetupInstr, IsEqKind, SetupKind, BINARY_INPUTS, MEMORY_BLOCK_BYTES_U32,
 };
 pub use fp2::Fp2RvrExtension;
 pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};

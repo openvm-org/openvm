@@ -2,93 +2,107 @@ use std::collections::HashMap;
 
 use crate::types::MetricDb;
 
+const OPCODE_COUNT_METRIC: &str = "opcode_count";
+
 pub fn generate_instruction_count_table(db: &MetricDb) -> String {
     let mut markdown_output = String::new();
+    let mut aggregated: HashMap<(Option<String>, String), f64> = HashMap::new();
+    let mut has_group = false;
 
-    // Find the table that has "opcode" and "frequency"
     for (label_keys, metrics_dict) in &db.dict_by_label_types {
-        let has_opcode = label_keys.iter().any(|k| k == "opcode");
-        let has_frequency = metrics_dict
-            .values()
-            .flat_map(|metrics| metrics.iter().map(|m| m.name.clone()))
-            .any(|name| name == "frequency");
-
-        if !has_opcode || !has_frequency {
+        let Some(opcode_index) = label_keys.iter().position(|key| key == "opcode") else {
             continue;
-        }
+        };
 
-        // Aggregate frequencies by opcode (and group if present)
-        let mut aggregated: HashMap<(Option<String>, String), f64> = HashMap::new();
         let group_index = label_keys.iter().position(|k| k == "group");
-        let opcode_index = label_keys.iter().position(|k| k == "opcode");
+        has_group |= group_index.is_some();
 
         for (label_values, metrics) in metrics_dict {
-            // Get opcode value
-            let opcode = if let Some(idx) = opcode_index {
-                label_values.get(idx).cloned().unwrap_or_default()
-            } else {
+            let Some(count) = metrics
+                .iter()
+                .find(|metric| metric.name == OPCODE_COUNT_METRIC)
+                .map(|metric| metric.value)
+            else {
                 continue;
             };
-
-            // Get group value if present
-            let group = if let Some(idx) = group_index {
-                label_values.get(idx).cloned()
-            } else {
-                None
-            };
-
-            // Get frequency value
-            let frequency = metrics
-                .iter()
-                .find(|m| m.name == "frequency")
-                .map(|m| m.value)
-                .unwrap_or(0.0);
-
-            // Aggregate by (group, opcode) tuple
-            let key = (group, opcode);
-            *aggregated.entry(key).or_insert(0.0) += frequency;
+            let opcode = label_values.get(opcode_index).cloned().unwrap_or_default();
+            let group = group_index.and_then(|index| label_values.get(index).cloned());
+            *aggregated.entry((group, opcode)).or_insert(0.0) += count;
         }
-
-        // Create table header
-        let mut header_parts = Vec::new();
-        if group_index.is_some() {
-            header_parts.push("group".to_string());
-        }
-        header_parts.push("opcode".to_string());
-        header_parts.push("frequency".to_string());
-
-        let header = format!("| {} |", header_parts.join(" | "));
-        let separator = format!("| {} |", vec!["---"; header_parts.len()].join(" | "));
-
-        markdown_output.push_str(&header);
-        markdown_output.push('\n');
-        markdown_output.push_str(&separator);
-        markdown_output.push('\n');
-
-        // Sort by frequency (descending)
-        let mut sorted_entries: Vec<_> = aggregated.into_iter().collect();
-        sorted_entries.sort_by(|(_, freq_a), (_, freq_b)| {
-            freq_b
-                .partial_cmp(freq_a)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Generate rows
-        for ((group, opcode), frequency) in sorted_entries {
-            let formatted_freq = MetricDb::format_number(frequency);
-            if let Some(group_val) = group {
-                markdown_output.push_str(&format!(
-                    "| {} | {} | {} |\n",
-                    group_val, opcode, formatted_freq
-                ));
-            } else {
-                markdown_output.push_str(&format!("| {} | {} |\n", opcode, formatted_freq));
-            }
-        }
-
-        markdown_output.push('\n');
-        break; // Only process the first matching table
     }
 
+    if aggregated.is_empty() {
+        return String::new();
+    }
+
+    let mut header_parts = Vec::new();
+    if has_group {
+        header_parts.push("group");
+    }
+    header_parts.extend(["opcode", "Instructions"]);
+
+    let header = format!("| {} |", header_parts.join(" | "));
+    let separator = format!("| {} |", vec!["---"; header_parts.len()].join(" | "));
+
+    markdown_output.push_str(&header);
+    markdown_output.push('\n');
+    markdown_output.push_str(&separator);
+    markdown_output.push('\n');
+
+    let mut sorted_entries: Vec<_> = aggregated.into_iter().collect();
+    sorted_entries.sort_by(|(key_a, count_a), (key_b, count_b)| {
+        count_b.total_cmp(count_a).then_with(|| key_a.cmp(key_b))
+    });
+
+    for ((group, opcode), count) in sorted_entries {
+        let formatted_count = MetricDb::format_number(count);
+        if has_group {
+            markdown_output.push_str(&format!(
+                "| {} | {} | {} |\n",
+                group.unwrap_or_default(),
+                opcode,
+                formatted_count
+            ));
+        } else {
+            markdown_output.push_str(&format!("| {} | {} |\n", opcode, formatted_count));
+        }
+    }
+
+    markdown_output.push('\n');
     markdown_output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Labels, Metric};
+
+    #[test]
+    fn aggregates_opcode_counts_across_label_sets() {
+        let mut db = MetricDb::default();
+        db.flat_dict.insert(
+            Labels(vec![
+                ("group".to_string(), "app_proof".to_string()),
+                ("opcode".to_string(), "ADD".to_string()),
+                ("segment".to_string(), "0".to_string()),
+            ]),
+            vec![
+                Metric::new(OPCODE_COUNT_METRIC.to_string(), 3.0),
+                Metric::new("frequency".to_string(), 99.0),
+            ],
+        );
+        db.flat_dict.insert(
+            Labels(vec![
+                ("group".to_string(), "app_proof".to_string()),
+                ("opcode".to_string(), "ADD".to_string()),
+            ]),
+            vec![Metric::new(OPCODE_COUNT_METRIC.to_string(), 4.0)],
+        );
+        db.separate_by_label_types();
+
+        let markdown = generate_instruction_count_table(&db);
+
+        assert!(markdown.contains("| app_proof | ADD | 7 |"));
+        assert!(!markdown.contains("99"));
+    }
 }

@@ -243,12 +243,11 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
     }
 }
 
-impl<R, SC: StarkProtocolConfig, const N: usize> Chip<R, CpuBackend<SC>>
-    for RangeTupleCheckerChip<N>
+impl<SC: StarkProtocolConfig, const N: usize> Chip<CpuBackend<SC>> for RangeTupleCheckerChip<N>
 where
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let trace_row_maj = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(trace_row_maj)
     }

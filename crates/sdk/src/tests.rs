@@ -5,6 +5,8 @@ use openvm::platform::memory::MEM_SIZE;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{verify_segments, VirtualMachineError};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
@@ -395,6 +397,60 @@ fn test_sdk_fibonacci() -> Result<()> {
     prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
 }
 
+#[cfg(feature = "cuda")]
+#[test]
+fn test_preflight_app_prover_reuse() -> Result<()> {
+    setup_tracing();
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut prover = sdk.app_prover(exe)?;
+
+    let error = match prover.prove(StdIn::default()) {
+        Ok(_) => panic!("missing guest input must fail"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(error, VirtualMachineError::Execution(_)),
+        "unexpected preflight proof error: {error}"
+    );
+
+    let mut stdin = StdIn::default();
+    stdin.write(&1000u64);
+    let first = prover.prove(stdin.clone())?;
+    let second = prover.prove(stdin)?;
+
+    let (_, app_vk) = sdk.app_keygen();
+    verify_segments(&prover.vm().engine, &app_vk.vk, &first.per_segment)?;
+    verify_segments(&prover.vm().engine, &app_vk.vk, &second.per_segment)?;
+    assert_eq!(
+        first.user_public_values.public_values,
+        second.user_public_values.public_values
+    );
+    Ok(())
+}
+
+#[cfg(all(feature = "cuda", not(feature = "root-prover")))]
+#[test]
+fn test_preflight_stark_prover() -> Result<()> {
+    setup_tracing();
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut prover = sdk.prover(exe)?;
+    let mut stdin = StdIn::default();
+    stdin.write(&1000u64);
+    let proof = prover.prove(stdin, &[])?.0;
+    Sdk::verify_proof((*sdk.agg_vk()).clone(), prover.generate_baseline(), &proof)?;
+    Ok(())
+}
+
 #[test]
 fn test_verify_stark_deferral() -> Result<()> {
     setup_tracing();
@@ -649,6 +705,36 @@ fn test_sdk_compiled_metered_execute() -> Result<()> {
     let compiled = sdk.compile_metered(exe)?;
     let (_, segments) = sdk.execute_metered(&compiled, stdin)?;
     assert!(!segments.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_sdk_compiled_preflight_executes_metered_segment() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let metered = sdk.compile_metered(exe.clone())?;
+    let (_, segments) = sdk.execute_metered(&metered, stdin.clone())?;
+    let preflight = sdk.compile_preflight(exe)?;
+    let state = preflight.create_initial_vm_state(stdin);
+    let initial_pc = state.pc();
+    let mut empty_segment = segments[0].clone();
+    empty_segment.num_insns = 0;
+    empty_segment.num_preflight_replay_values = 0;
+    let empty = sdk.execute_preflight(&preflight, state, &empty_segment)?;
+    assert!(!empty.is_terminated());
+    assert_eq!(empty.state().pc(), initial_pc);
+
+    let output = sdk.execute_preflight(&preflight, empty.into_state(), &segments[0])?;
+
+    assert_eq!(output.is_terminated(), segments.len() == 1);
     Ok(())
 }
 

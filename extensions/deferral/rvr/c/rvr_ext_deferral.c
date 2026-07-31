@@ -26,6 +26,11 @@ static constexpr uint32_t COMMIT_WORDS = DEFERRAL_COMMIT_NUM_BYTES / WORD_SIZE;
 static constexpr uint32_t OUTPUT_KEY_WORDS =
     DEFERRAL_OUTPUT_KEY_BYTES / WORD_SIZE;
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
+static constexpr uint32_t ACCUMULATOR_WORDS = 2u * DIGEST_MEMORY_OPS;
+typedef struct DeferralCallReplay {
+  uint64_t output_key[OUTPUT_KEY_WORDS];
+  uint64_t accumulators[ACCUMULATOR_WORDS];
+} DeferralCallReplay;
 /* Page size from the configured leaves per page and byte addresses per leaf. */
 static constexpr uint64_t MAIN_MEMORY_PAGE_BYTES =
     1ull << (TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS + TRACER_PAGE_BITS);
@@ -43,8 +48,14 @@ void register_deferral_callbacks(const DeferralHostCallbacks* cb) {
 }
 
 /* Deferral CALL: read input_commit, look up output_key, write it. */
-void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
-                           uint64_t input_ptr, uint32_t def_idx) {
+bool rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
+                           uint64_t input_ptr, uint32_t def_idx,
+                           uint64_t* replay_out) {
+  if (unlikely(((input_ptr | output_ptr) & (WORD_SIZE - 1u)) != 0u ||
+               input_ptr > OPENVM_MEM_SIZE - DEFERRAL_COMMIT_NUM_BYTES ||
+               output_ptr > OPENVM_MEM_SIZE - DEFERRAL_OUTPUT_KEY_BYTES)) {
+    return false;
+  }
   /* Read input_commit (COMMIT_WORDS words) from guest memory. */
   uint64_t commit_words[COMMIT_WORDS];
   read_mem_u64_range(state, input_ptr, commit_words, COMMIT_WORDS);
@@ -60,8 +71,17 @@ void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
 
   /* Look up output_key + update accumulators (Rust side, on byte buffers). */
   uint64_t key_words[OUTPUT_KEY_WORDS];
-  g_deferral.call_lookup(g_deferral.ctx, openvm_get_io_ctx(), def_idx,
-                         (const uint8_t*)commit_words, (uint8_t*)key_words);
+  DeferralCallReplay* replay = (DeferralCallReplay*)replay_out;
+  uint64_t* accumulators_out = replay ? replay->accumulators : NULL;
+  if (unlikely(!g_deferral.call_lookup(
+          g_deferral.ctx, openvm_get_io_ctx(), def_idx,
+          (const uint8_t*)commit_words, (uint8_t*)key_words,
+          accumulators_out))) {
+    return false;
+  }
+  if (replay) {
+    memcpy(replay->output_key, key_words, sizeof(key_words));
+  }
 
   /* Write output_key (OUTPUT_KEY_WORDS words) to guest memory. */
   write_mem_u64_range(state, output_ptr, key_words, OUTPUT_KEY_WORDS);
@@ -71,19 +91,31 @@ void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
                               AS_DEFERRAL);
   trace_page_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
                               AS_DEFERRAL);
+  return true;
 }
 
 /* Deferral OUTPUT: read output_key, look up raw output, write it. */
-uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
-                                 uint64_t input_ptr, uint32_t def_idx) {
+bool rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
+                             uint64_t input_ptr, uint32_t def_idx,
+                             uint32_t* num_rows_out) {
+  if (unlikely(((input_ptr | output_ptr) & (WORD_SIZE - 1u)) != 0u ||
+               input_ptr > OPENVM_MEM_SIZE - DEFERRAL_OUTPUT_KEY_BYTES ||
+               output_ptr >= OPENVM_MEM_SIZE)) {
+    return false;
+  }
   /* Read output_key (OUTPUT_KEY_WORDS words) from guest memory. */
   uint64_t key_words[OUTPUT_KEY_WORDS];
   read_mem_u64_range(state, input_ptr, key_words, OUTPUT_KEY_WORDS);
 
-  /* output_len is the u64 LE stored right after the commit. */
-  /* The AIR stores the length in the low four bytes. The upper bytes are
-   * unconstrained, so ignore them as the reference executor does. */
-  uint32_t output_len = (uint32_t)key_words[COMMIT_WORDS];
+  /* The AIR reads a u64 slot whose upper four bytes are fixed to zero. Reject
+   * malformed guest memory before lookup or output-memory mutation. */
+  uint64_t output_len_u64 = key_words[COMMIT_WORDS];
+  if (unlikely(output_len_u64 > UINT32_MAX)) return false;
+  uint32_t output_len = (uint32_t)output_len_u64;
+  if (unlikely((output_len & (DEFERRAL_DIGEST_SIZE - 1u)) != 0u ||
+               output_len > OPENVM_MEM_SIZE - output_ptr)) {
+    return false;
+  }
 
   /* Look up the raw output into a heap buffer sized to output_len. The
    * output_commit is the leading DEFERRAL_COMMIT_NUM_BYTES of output_key. */
@@ -91,11 +123,14 @@ uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
   uint8_t* output_raw = &empty_output;
   if (output_len > 0) {
     output_raw = (uint8_t*)malloc((size_t)output_len);
-    if (!output_raw) abort();
+    if (!output_raw) return false;
   }
-  g_deferral.output_lookup(g_deferral.ctx, openvm_get_io_ctx(), def_idx,
-                           (const uint8_t*)key_words, output_raw,
-                           (uint32_t)output_len);
+  if (unlikely(!g_deferral.output_lookup(
+          g_deferral.ctx, openvm_get_io_ctx(), def_idx,
+          (const uint8_t*)key_words, output_raw, output_len))) {
+    if (output_len > 0) free(output_raw);
+    return false;
+  }
 
   /* The key read above is covered by the extension's fixed page bound. Drain
    * it before the variable-size output so each output chunk starts empty. */
@@ -128,6 +163,6 @@ uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
   }
   if (output_len > 0) free(output_raw);
 
-  uint32_t num_rows = num_data_rows + 1;
-  return num_rows;
+  *num_rows_out = num_data_rows + 1;
+  return true;
 }

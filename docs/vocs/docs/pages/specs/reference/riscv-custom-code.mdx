@@ -59,8 +59,8 @@ the guest must take care to validate all data and account for behavior in cases 
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                                                               |
 | ----------- | --- | ----------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hintstored  | I   | 0001011     | 001    | 0x0       | Stores next 8-byte dword from hint stream in user memory at `[rd]_2`. The address `rd` does not have any alignment requirements. |
-| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `8 * rs1` bytes from hint stream in user memory at `[rd..rd + 8 * rs1]_2`. Only valid if next `8 * rs1` values in hint stream are bytes and `rs1` is non-zero and at most `1023`. The address `rd` does not have any alignment requirements. |
+| hintstored  | I   | 0001011     | 001    | 0x0       | Stores next 8-byte dword from hint stream in user memory at `[rd]_2`. The address `rd` must be aligned to an 8-byte boundary. |
+| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `8 * rs1` bytes from hint stream in user memory at `[rd..rd + 8 * rs1]_2`. Only valid if next `8 * rs1` values in hint stream are bytes, `rs1` is non-zero and at most `1023`, and `rd` is aligned to an 8-byte boundary. |
 | reveal      | I   | 0001011     | 010    |           | Stores the 8-byte dword `rs1` at address `rd + imm` in user IO space. The address `rd + imm` must be aligned to an 8-byte boundary. |
 | hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to `[(len as u64).to_le_bytes(), vector, zero padding to 8-byte alignment]`, where `len` is the vector length in bytes. |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |

@@ -2,6 +2,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "system/memory/params.cuh"
+#include "system/memory/touched_block.cuh"
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -27,8 +28,19 @@ template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
 // Input records are one memory-bus message (`BLOCK_FE_WIDTH` cells, one
 // timestamp). The merge kernel groups `BLOCKS_PER_LEAF` of them per merkle
 // leaf (= `DIGEST_WIDTH` cells, `BLOCKS_PER_LEAF` timestamps).
-using InRec = MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>;
+using InRec = MemoryTouchedBlock;
 using OutRec = MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>;
+inline constexpr uint32_t ADDRESS_SPACE_OFFSET = 1;
+
+struct MemoryInventoryMetadata {
+    size_t out_num_records;
+    uint64_t touched_path_sum;
+    size_t dirty_leaves;
+    uint64_t dirty_path_sum;
+};
+
+static_assert(sizeof(size_t) == sizeof(uint64_t));
+static_assert(sizeof(MemoryInventoryMetadata) == 4 * sizeof(uint64_t));
 
 __device__ inline bool same_output_block(
     InRec const *in,
@@ -87,13 +99,32 @@ __device__ inline void read_initial_leaf(
 __global__ void cukernel_build_candidates(
     InRec const *in,
     size_t in_num_records,
+    size_t address_height,
     uint8_t const *const *initial_mem,
     OutRec *tmp_out,
-    uint32_t *flags
+    uint32_t *flags,
+    uint64_t *touched_path_sum
 ) {
     size_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (row_idx >= in_num_records) {
         return;
+    }
+    if (touched_path_sum != nullptr && row_idx != 0) {
+        InRec const &lhs = in[row_idx - 1];
+        InRec const &rhs = in[row_idx];
+        uint64_t lhs_index =
+            (static_cast<uint64_t>(lhs.address_space - ADDRESS_SPACE_OFFSET) << address_height) +
+            lhs.ptr / DIGEST_WIDTH;
+        uint64_t rhs_index =
+            (static_cast<uint64_t>(rhs.address_space - ADDRESS_SPACE_OFFSET) << address_height) +
+            rhs.ptr / DIGEST_WIDTH;
+        uint64_t delta = lhs_index ^ rhs_index;
+        if (delta != 0) {
+            atomicAdd(
+                reinterpret_cast<unsigned long long *>(touched_path_sum),
+                static_cast<unsigned long long>(63 - __clzll(delta))
+            );
+        }
     }
     if (row_idx != 0 && same_output_block(in, row_idx - 1, row_idx)) {
         flags[row_idx] = 0;
@@ -104,7 +135,7 @@ __global__ void cukernel_build_candidates(
     OutRec rec{};
     rec.address_space = in[row_idx].address_space;
     rec.ptr = (in[row_idx].ptr / DIGEST_WIDTH) * DIGEST_WIDTH;
-    rec.is_dirty = in[row_idx].is_dirty;
+    rec.is_dirty = uint32_t(in[row_idx].is_dirty != 0);
     #pragma unroll
     for (size_t i = 0; i < BLOCKS_PER_LEAF; ++i) {
         rec.timestamps[i] = 0;
@@ -119,7 +150,7 @@ __global__ void cukernel_build_candidates(
     for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
         rec.values[block_idx * BLOCK_FE_WIDTH + i] = in[row_idx].values[i];
     }
-    rec.timestamps[block_idx] = in[row_idx].timestamps[0];
+    rec.timestamps[block_idx] = in[row_idx].timestamp;
 
     // If two input records fall in the same chunk, overwrite the second block too
     if (row_idx + 1 < in_num_records && same_output_block(in, row_idx, row_idx + 1)) {
@@ -128,11 +159,74 @@ __global__ void cukernel_build_candidates(
         for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
             rec.values[block_idx2 * BLOCK_FE_WIDTH + i] = in[row_idx + 1].values[i];
         }
-        rec.timestamps[block_idx2] = in[row_idx + 1].timestamps[0];
-        rec.is_dirty |= in[row_idx + 1].is_dirty;
+        rec.timestamps[block_idx2] = in[row_idx + 1].timestamp;
+        rec.is_dirty |= uint32_t(in[row_idx + 1].is_dirty != 0);
     }
 
     tmp_out[row_idx] = rec;
+}
+
+__device__ inline uint64_t leaf_index(OutRec const &rec, size_t address_height) {
+    return
+        (static_cast<uint64_t>(rec.address_space - ADDRESS_SPACE_OFFSET) << address_height) +
+        rec.ptr / DIGEST_WIDTH;
+}
+
+__global__ void cukernel_mark_dirty_leaves(
+    OutRec const *out,
+    size_t capacity,
+    size_t address_height,
+    MemoryInventoryMetadata const *metadata,
+    uint32_t *flags,
+    uint64_t *leaf_indices
+) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= capacity) {
+        return;
+    }
+    bool const present = idx < metadata->out_num_records;
+    flags[idx] = uint32_t(present && out[idx].is_dirty != 0);
+    if (present) {
+        leaf_indices[idx] = leaf_index(out[idx], address_height);
+    }
+}
+
+__global__ void cukernel_scatter_dirty_leaves(
+    uint64_t const *leaf_indices,
+    uint32_t const *flags,
+    uint32_t const *positions,
+    size_t n,
+    uint64_t *dirty_leaf_indices,
+    size_t *dirty_leaves
+) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n) {
+        return;
+    }
+    if (flags[idx]) {
+        dirty_leaf_indices[positions[idx]] = leaf_indices[idx];
+    }
+    if (idx == n - 1) {
+        *dirty_leaves = static_cast<size_t>(positions[idx] + flags[idx]);
+    }
+}
+
+__global__ void cukernel_accumulate_dirty_path(
+    uint64_t const *dirty_leaf_indices,
+    size_t capacity,
+    MemoryInventoryMetadata *metadata
+) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx == 0 || idx >= capacity || idx >= metadata->dirty_leaves) {
+        return;
+    }
+    uint64_t delta = dirty_leaf_indices[idx - 1] ^ dirty_leaf_indices[idx];
+    if (delta != 0) {
+        atomicAdd(
+            reinterpret_cast<unsigned long long *>(&metadata->dirty_path_sum),
+            static_cast<unsigned long long>(63 - __clzll(delta))
+        );
+    }
 }
 
 __global__ void cukernel_scatter_compact(
@@ -157,6 +251,7 @@ __global__ void cukernel_scatter_compact(
 extern "C" int _inventory_merge_records(
     uint32_t const *d_in_records,
     size_t in_num_records,
+    size_t address_height,
     uint8_t const *const *d_initial_mem,
     uint32_t *d_tmp_records,
     uint32_t *d_out_records,
@@ -164,7 +259,8 @@ extern "C" int _inventory_merge_records(
     uint32_t *d_positions,
     void *d_temp_storage,
     size_t temp_storage_bytes,
-    size_t *out_num_records,
+    MemoryInventoryMetadata *metadata,
+    uint32_t collect_merkle_metadata,
     cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(in_num_records);
@@ -175,23 +271,25 @@ extern "C" int _inventory_merge_records(
     cukernel_build_candidates<<<grid, block, 0, stream>>>(
         in,
         in_num_records,
+        address_height,
         d_initial_mem,
         tmp_out,
-        d_flags
+        d_flags,
+        collect_merkle_metadata ? &metadata->touched_path_sum : nullptr
     );
     if (int err = CHECK_KERNEL(); err) {
         return err;
     }
 
-    cub::DeviceScan::ExclusiveSum(
-        d_temp_storage,
-        temp_storage_bytes,
-        d_flags,
-        d_positions,
-        in_num_records,
-        stream
-    );
-    if (int err = CHECK_KERNEL(); err) {
+    if (cudaError_t err = cub::DeviceScan::ExclusiveSum(
+            d_temp_storage,
+            temp_storage_bytes,
+            d_flags,
+            d_positions,
+            in_num_records,
+            stream
+        );
+        err != cudaSuccess) {
         return err;
     }
 
@@ -201,7 +299,52 @@ extern "C" int _inventory_merge_records(
         d_positions,
         in_num_records,
         out,
-        out_num_records
+        &metadata->out_num_records
+    );
+    if (int err = CHECK_KERNEL(); err || !collect_merkle_metadata) {
+        return err;
+    }
+
+    static_assert(2 * sizeof(uint64_t) <= sizeof(OutRec));
+    uint64_t *leaf_indices = reinterpret_cast<uint64_t *>(tmp_out);
+    uint64_t *dirty_leaf_indices = leaf_indices + in_num_records;
+    cukernel_mark_dirty_leaves<<<grid, block, 0, stream>>>(
+        out,
+        in_num_records,
+        address_height,
+        metadata,
+        d_flags,
+        leaf_indices
+    );
+    if (int err = CHECK_KERNEL(); err) {
+        return err;
+    }
+    if (cudaError_t err = cub::DeviceScan::ExclusiveSum(
+            d_temp_storage,
+            temp_storage_bytes,
+            d_flags,
+            d_positions,
+            in_num_records,
+            stream
+        );
+        err != cudaSuccess) {
+        return err;
+    }
+    cukernel_scatter_dirty_leaves<<<grid, block, 0, stream>>>(
+        leaf_indices,
+        d_flags,
+        d_positions,
+        in_num_records,
+        dirty_leaf_indices,
+        &metadata->dirty_leaves
+    );
+    if (int err = CHECK_KERNEL(); err) {
+        return err;
+    }
+    cukernel_accumulate_dirty_path<<<grid, block, 0, stream>>>(
+        dirty_leaf_indices,
+        in_num_records,
+        metadata
     );
     return CHECK_KERNEL();
 }
@@ -246,7 +389,7 @@ __global__ void inventory_to_merkle_records_kernel(
         uint32_t *dst = merkle_records + i * MERKLE_REC_WIDTH;
         dst[0] = r.address_space;
         dst[1] = r.ptr;
-        dst[2] = r.is_dirty;
+        dst[2] = uint32_t(r.is_dirty != 0);
 #pragma unroll
         for (int j = 0; j < DIGEST_WIDTH; ++j) {
             dst[3 + j] = r.values[j];

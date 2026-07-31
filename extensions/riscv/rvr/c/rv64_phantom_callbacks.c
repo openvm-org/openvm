@@ -13,8 +13,8 @@ void register_rv64_phantom_host_callbacks(const Rv64PhantomHostCallbacks* cb) {
   g_rv64_phantom_host_callbacks = *cb;
 }
 
-void openvm_hint_input(void) {
-  g_rv64_phantom_host_callbacks.hint_input(openvm_get_io_ctx());
+bool openvm_hint_input(void) {
+  return g_rv64_phantom_host_callbacks.hint_input(openvm_get_io_ctx());
 }
 
 bool openvm_print_str(uint64_t ptr, uint64_t len) {

@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
@@ -13,7 +13,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREH};
 use openvm_stark_backend::{
@@ -27,22 +27,24 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterFiller,
+        RV64_BYTE_BITS,
     },
     store::{
-        common::store_write_data, core::StoreCoreCols, Rv64StoreHalfwordAir, Rv64StoreHalfwordChip,
-        Rv64StoreHalfwordExecutor, StoreHalfwordCoreAir, StoreHalfwordFiller,
-        STORE_HALFWORD_VALUE_CELLS,
+        common::store_write_data,
+        core::{fill_padding_row, StoreCoreCols},
+        Rv64StoreHalfwordAir, Rv64StoreHalfwordChip, Rv64StoreHalfwordExecutor,
+        StoreHalfwordCoreAir, StoreHalfwordFiller, STORE_HALFWORD_VALUE_CELLS,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
     store::Rv64StoreHalfwordChipGpu,
-    test_utils::memory::{dummy_range_checker, store_gpu_memory_config, transfer_store_records},
+    test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
 type StoreHalfwordHarness =
@@ -71,10 +73,7 @@ fn create_store_halfword_harness(
         ),
         StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreHalfwordExecutor::new(
-        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let chip = Rv64StoreHalfwordChip::<F>::new(
         StoreHalfwordFiller::new(
             Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -84,7 +83,14 @@ fn create_store_halfword_harness(
         tester.memory_helper(),
     );
     (
-        StoreHalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        StoreHalfwordHarness::with_capacity(
+            executor,
+            air,
+            chip,
+            MAX_INS_CAPACITY,
+            generate_trace_from_postflight,
+        )
+        .with_padding(fill_padding_row),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -98,7 +104,7 @@ fn rand_store_halfword_test() {
         set_and_execute_store(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             STOREH,
             None,
@@ -177,7 +183,7 @@ fn negative_split_opcode_role_test() {
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         STOREH,
         None,
@@ -203,7 +209,7 @@ fn negative_split_opcode_role_test() {
         .expect_err("pranked halfword store trace should fail");
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuStoreHalfwordHarness = GpuTestChipHarness<
     F,
     Rv64StoreHalfwordExecutor,
@@ -212,7 +218,7 @@ type GpuStoreHalfwordHarness = GpuTestChipHarness<
     Rv64StoreHalfwordChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHalfwordHarness {
     let range_checker = dummy_range_checker();
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
@@ -227,10 +233,7 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
         ),
         StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreHalfwordExecutor::new(
-        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64StoreHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
     let cpu_chip = Rv64StoreHalfwordChip::<F>::new(
         StoreHalfwordFiller::new(
             Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
@@ -247,9 +250,16 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+        .with_padding(fill_padding_row)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case::test_case(RV64_MEMORY_AS as usize)]
 #[test_case::test_case(PUBLIC_VALUES_AS as usize)]
 fn test_cuda_rand_store_halfword_tracegen(mem_as: usize) {
@@ -262,7 +272,7 @@ fn test_cuda_rand_store_halfword_tracegen(mem_as: usize) {
         set_and_execute_store(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             STOREH,
             None,
@@ -271,7 +281,6 @@ fn test_cuda_rand_store_halfword_tracegen(mem_as: usize) {
             Some(mem_as),
         );
     }
-    transfer_store_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

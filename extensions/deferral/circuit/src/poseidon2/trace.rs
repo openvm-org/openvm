@@ -10,8 +10,8 @@ use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
 use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, POSEIDON2_WIDTH};
 use openvm_stark_backend::{
-    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::AirProvingContext, StarkProtocolConfig, Val,
+    p3_air::BaseAir, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    prover::AirProvingContext, StarkProtocolConfig, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use rustc_hash::FxBuildHasher;
@@ -83,17 +83,11 @@ impl<F: VmField> DeferralPoseidon2Chip<F> {
         let offset = if is_compress { 0 } else { DIGEST_SIZE };
         from_fn(|i| output[i + offset])
     }
-}
 
-impl<RA, SC: StarkProtocolConfig> Chip<RA, CpuBackend<SC>> for DeferralPoseidon2Chip<Val<SC>>
-where
-    Val<SC>: VmField,
-{
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let width = DeferralPoseidon2Cols::<Val<SC>>::width();
+    fn generate_trace(&self) -> RowMajorMatrix<F> {
+        let width = DeferralPoseidon2Cols::<F>::width();
         if !self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
-            let trace = RowMajorMatrix::new(vec![], width);
-            return AirProvingContext::simple_no_pis(trace);
+            return RowMajorMatrix::new(vec![], width);
         }
         let height = next_power_of_two_or_zero(self.records.len());
 
@@ -117,29 +111,34 @@ where
             .unzip();
         inputs.extend(actual_inputs);
         multiplicities.extend(actual_multiplicities);
-        inputs.resize(height, [Val::<SC>::ZERO; POSEIDON2_WIDTH]);
+        inputs.resize(height, [F::ZERO; POSEIDON2_WIDTH]);
         multiplicities.resize(height, (0, 0));
 
         let inner_trace = self.subchip.generate_trace(inputs);
         let inner_width = self.subchip.air.width();
-
-        let mut values = Val::<SC>::zero_vec(height * width);
+        let mut values = F::zero_vec(height * width);
         values
             .par_chunks_mut(width)
             .zip(inner_trace.values.par_chunks(inner_width))
             .zip(multiplicities)
             .for_each(|((row, inner_row), (compress_mult, capacity_mult))| {
-                // WARNING: Poseidon2SubCols must be the first field in DeferralPoseidon2Cols.
                 row[..inner_width].copy_from_slice(inner_row);
-                let cols: &mut DeferralPoseidon2Cols<Val<SC>> = row.borrow_mut();
-                cols.compress_mult = Val::<SC>::from_u32(compress_mult);
-                cols.capacity_mult = Val::<SC>::from_u32(capacity_mult);
+                let cols: &mut DeferralPoseidon2Cols<F> = row.borrow_mut();
+                cols.compress_mult = F::from_u32(compress_mult);
+                cols.capacity_mult = F::from_u32(capacity_mult);
             });
         self.records.clear();
         self.nonempty
             .store(false, std::sync::atomic::Ordering::Relaxed);
+        RowMajorMatrix::new(values, width)
+    }
+}
 
-        let trace = RowMajorMatrix::new(values, width);
-        AirProvingContext::simple_no_pis(trace)
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for DeferralPoseidon2Chip<Val<SC>>
+where
+    Val<SC>: VmField,
+{
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
+        AirProvingContext::simple_no_pis(self.generate_trace())
     }
 }

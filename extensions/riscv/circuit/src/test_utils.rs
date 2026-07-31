@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder},
+    testing::{memory::gen_register_pointer, TestBuilder},
     BLOCK_FE_WIDTH,
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
@@ -11,6 +11,15 @@ use super::adapters::{rv64_bytes_to_u16_block, RV64_REGISTER_NUM_LIMBS, RV_IS_TY
 
 #[cfg(test)]
 pub(crate) mod memory;
+
+fn gen_register_pointer_except(rng: &mut StdRng, excluded: usize) -> usize {
+    loop {
+        let pointer = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        if pointer != excluded {
+            return pointer;
+        }
+    }
+}
 
 // Returns (instruction, rd)
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
@@ -24,9 +33,9 @@ pub fn rv64_rand_write_register_or_imm(
 ) -> (Instruction<BabyBear>, usize) {
     let rs2_is_imm = imm.is_some();
 
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, RV64_REGISTER_NUM_LIMBS));
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = imm.unwrap_or_else(|| gen_register_pointer_except(rng, rs1));
+    let rd = gen_register_pointer_except(rng, 0);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {

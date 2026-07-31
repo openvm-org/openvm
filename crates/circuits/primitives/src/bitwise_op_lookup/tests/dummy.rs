@@ -72,8 +72,8 @@ pub mod cuda {
         }
     }
 
-    impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<NUM_BITS> {
-        fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+    impl<const NUM_BITS: usize> Chip<GpuBackend> for DummyInteractionChipGPU<NUM_BITS> {
+        fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
             let height = self.data.len() / RECORD_WIDTH;
             let device_ctx = &self.bitwise.device_ctx;
             let trace = DeviceMatrix::<F>::with_capacity_on(height, NUM_COLS, device_ctx);

@@ -24,7 +24,7 @@ pub(super) struct BitwiseLogicPreCompute {
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -58,11 +58,15 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<BitwiseLogicPreCompute>()
@@ -99,8 +103,8 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {

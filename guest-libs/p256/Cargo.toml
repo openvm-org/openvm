@@ -71,6 +71,7 @@ voprf = ["elliptic-curve/voprf"]
 cuda = [
     "openvm-circuit/cuda",
     "openvm-ecc-circuit/cuda",
+    "openvm-ecc-circuit/test-utils",
     "openvm-sha2-circuit/cuda",
 ]
 tco = ["openvm-circuit/tco"]

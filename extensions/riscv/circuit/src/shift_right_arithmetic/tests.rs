@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -22,29 +22,22 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{
-        adapters::Rv64BaseAluRegU16AdapterRecord, Rv64ShiftRightArithmeticChipGpu,
-        ShiftRightArithmeticCoreRecord,
-    },
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64ShiftRightArithmeticChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
 use super::{
-    core::run_shift_right_arithmetic, Rv64ShiftRightArithmeticChip, ShiftRightArithmeticCoreAir,
-    ShiftRightArithmeticCoreCols,
+    core::run_shift_right_arithmetic, trace::generate_trace_from_postflight,
+    Rv64ShiftRightArithmeticChip, ShiftRightArithmeticCoreAir, ShiftRightArithmeticCoreCols,
 };
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BaseAluRegU16AdapterAir,
-        Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
-        U16_BITS,
+        RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     test_utils::rv64_rand_write_register_or_imm,
     Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
@@ -74,12 +67,9 @@ fn create_harness_fields(
         Rv64BaseAluRegU16AdapterAir::new(execution_bridge, memory_bridge),
         ShiftRightArithmeticCoreAir::new(range_checker_chip.bus(), ShiftOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticExecutor::new(
-        Rv64BaseAluRegU16AdapterExecutor,
-        ShiftOpcode::CLASS_OFFSET,
-    );
+    let executor = Rv64ShiftRightArithmeticExecutor::new(ShiftOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftRightArithmeticChip::<F>::new(
-        ShiftRightArithmeticFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker_chip),
+        ShiftRightArithmeticFiller::new(range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -93,14 +83,20 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
         range_checker,
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: ShiftOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
@@ -110,7 +106,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let (instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 
     let b_u16 = rv64_bytes_to_u16_block(b);
     let c_u16 = rv64_bytes_to_u16_block(c);
@@ -122,10 +118,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     )
 }
 
-fn execute_boundary_shifts<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn execute_boundary_shifts<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: ShiftOpcode,
 ) {
@@ -134,7 +130,7 @@ fn execute_boundary_shifts<RA: Arena, E: PreflightExecutor<F, RA>>(
         for shift in REGISTER_SHIFT_AMOUNTS {
             let mut c = [0u8; RV64_REGISTER_NUM_LIMBS];
             c[0] = shift;
-            set_and_execute(tester, executor, arena, rng, opcode, Some(b), Some(c));
+            set_and_execute(tester, executor, preflight, rng, opcode, Some(b), Some(c));
         }
     }
 }
@@ -155,7 +151,7 @@ fn run_rv64_shift_right_arithmetic_rand_test(opcode: ShiftOpcode, num_ops: usize
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -166,7 +162,7 @@ fn run_rv64_shift_right_arithmetic_rand_test(opcode: ShiftOpcode, num_ops: usize
     execute_boundary_shifts(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
     );
@@ -207,7 +203,7 @@ fn run_negative_shift_test(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         Some(b),
@@ -358,7 +354,7 @@ fn run_sra_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     Rv64ShiftRightArithmeticExecutor,
@@ -367,7 +363,7 @@ type GpuHarness = GpuTestChipHarness<
     Rv64ShiftRightArithmeticChip<F>,
 >;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -383,9 +379,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         Rv64ShiftRightArithmeticChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(ShiftOpcode::SRA, 100)]
 fn test_cuda_rand_shift_right_arithmetic_tracegen(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
@@ -397,7 +399,7 @@ fn test_cuda_rand_shift_right_arithmetic_tracegen(opcode: ShiftOpcode, num_ops: 
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -408,22 +410,10 @@ fn test_cuda_rand_shift_right_arithmetic_tracegen(opcode: ShiftOpcode, num_ops: 
     execute_boundary_shifts(
         &mut tester,
         &mut harness.executor,
-        &mut harness.dense_arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
     );
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluRegU16AdapterRecord,
-        &'a mut ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
-        );
 
     tester
         .build()
