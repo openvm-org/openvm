@@ -1,5 +1,6 @@
 use std::{collections::HashSet, fmt::Write};
 
+use openvm_instructions::MEMORY_BLOCK_BYTES;
 use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
 use rvr_state::NUM_REGS;
 
@@ -441,7 +442,7 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// Emit one naturally aligned eight-byte main-memory block write.
+    /// Emit one naturally aligned main-memory block write.
     pub fn write_aligned_mem_block(&mut self, addr: &str, val: &str) {
         assert!(
             !self.mode.is_metered_without_memory_pages(),
@@ -449,9 +450,9 @@ impl<'a> EmitContext<'a> {
         );
         self.uses_raw_memory = true;
 
-        self.emit_memory_bounds_trap(addr, 8);
+        self.emit_memory_bounds_trap(addr, MEMORY_BLOCK_BYTES as u8);
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(addr, 8);
+            self.emit_inline_page_record(addr, MEMORY_BLOCK_BYTES as u8);
         }
         self.count_fixed_timestamp_slots(1);
         self.write_line(&format!(
@@ -459,7 +460,7 @@ impl<'a> EmitContext<'a> {
         ));
         if self.mode.uses_checkpoint_local() {
             self.write_line(&format!(
-                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, 8u);"
+                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {MEMORY_BLOCK_BYTES}u);"
             ));
         }
     }
