@@ -3,10 +3,10 @@ use std::{mem::size_of, sync::Arc};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, comm_stream::MemCopyH2DOverlapped,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use super::{BitwiseLogicCoreCols, BitwiseLogicCoreRecord};
@@ -44,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BitwiseLogicChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
 
         let d_records = tracing::info_span!("trace_gen.h2d_records")
-            .in_scope(|| records.to_device_on(device_ctx))
+            .in_scope(|| records.to_device_overlapped_on(device_ctx))
             .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 

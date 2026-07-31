@@ -48,7 +48,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, Gp
     for ModularIsEqualChipGpu<NUM_LANES, TOTAL_LIMBS>
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        use openvm_cuda_common::copy::MemCopyH2D;
+        use openvm_circuit_primitives::comm_stream::MemCopyH2DOverlapped;
         type ARec<const L: usize> = Rv64IsEqualModU16AdapterRecord<2, L>;
         let record_stride = size_of::<(ARec<NUM_LANES>, ModularIsEqualRecord<TOTAL_LIMBS>)>();
         let rec_core_offset = size_of::<ARec<NUM_LANES>>();
@@ -63,7 +63,7 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, Gp
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
 
         let device_ctx = &self.range_checker.device_ctx;
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = records.to_device_overlapped_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         unsafe {
             cuda_abi::tracegen(

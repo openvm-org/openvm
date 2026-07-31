@@ -5,9 +5,10 @@ use openvm_circuit::{
     arch::{DenseRecordArena, BLOCK_FE_WIDTH},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_circuit_primitives::{
+    comm_stream::MemCopyH2DOverlapped, var_range::VariableRangeCheckerChipGPU, Chip,
+};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -40,7 +41,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LessThanChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
 
         let d_records = tracing::info_span!("trace_gen.h2d_records")
-            .in_scope(|| records.to_device_on(device_ctx))
+            .in_scope(|| records.to_device_overlapped_on(device_ctx))
             .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 

@@ -6,10 +6,13 @@ use std::{
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    comm_stream::{CommDeviceBuffer, MemCopyH2DOverlapped},
+    var_range::VariableRangeCheckerChipGPU,
+    Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
@@ -45,7 +48,7 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = records.to_device_overlapped_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -72,8 +75,10 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
 /// The OpChip generates first and stores the device buffer, then PermChip takes it.
 #[derive(Default)]
 pub struct SharedKeccakfRecords {
-    /// Device buffer containing records (set by OpChip, consumed by PermChip)
-    pub d_records: Option<DeviceBuffer<u8>>,
+    /// Device buffer containing records (set by OpChip, consumed by PermChip).
+    /// Both chips enqueue onto the same main stream, which keeps the comm-stream
+    /// upload ordered before the PermChip kernel and the deferred free after it.
+    pub d_records: Option<CommDeviceBuffer<u8>>,
     /// Number of records
     pub num_records: usize,
 }
@@ -109,7 +114,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
 
         // Transfer records to GPU
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = records.to_device_overlapped_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
