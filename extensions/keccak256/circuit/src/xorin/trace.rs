@@ -3,8 +3,7 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::*,
     system::memory::{
-        offline_checker::{pack_u8_block_bytes, MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
-        MemoryAuxColsFactory,
+        offline_checker::MemoryReadAuxRecord, MemoryAuxColsFactory,
     },
     utils::next_power_of_two_or_zero,
 };
@@ -42,7 +41,7 @@ struct XorinTraceInput {
     register_aux_cols: [MemoryReadAuxRecord; 3],
     input_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
     buffer_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
-    buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; KECCAK_RATE_MEM_OPS],
+    buffer_write_prev_timestamps: [u32; KECCAK_RATE_MEM_OPS],
 }
 
 impl XorinVmFiller {
@@ -126,13 +125,10 @@ impl XorinVmFiller {
 
         for t in 0..num_reads {
             mem_helper.fill(
-                input.buffer_write_aux_cols[t].prev_timestamp,
+                input.buffer_write_prev_timestamps[t],
                 timestamp,
-                trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut(),
+                &mut trace_row.mem_oc.buffer_bytes_write_base_aux[t],
             );
-            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].set_prev_data(pack_u8_block_bytes(
-                &input.buffer_write_aux_cols[t].prev_data,
-            ));
             timestamp += 1;
         }
 
@@ -256,9 +252,12 @@ fn replay_input<F: PrimeField32>(
         input_read_aux_cols[index].prev_timestamp = access.previous_timestamp;
     }
 
-    let mut buffer_write_aux_cols =
-        [MemoryWriteBytesAuxRecord::<MEMORY_BLOCK_BYTES>::default(); KECCAK_RATE_MEM_OPS];
-    for (index, write_aux) in buffer_write_aux_cols.iter_mut().enumerate().take(num_reads) {
+    let mut buffer_write_prev_timestamps = [0; KECCAK_RATE_MEM_OPS];
+    for (index, prev_timestamp) in buffer_write_prev_timestamps
+        .iter_mut()
+        .enumerate()
+        .take(num_reads)
+    {
         let mut output = [0u8; MEMORY_BLOCK_BYTES];
         for (byte, output_byte) in output.iter_mut().enumerate() {
             let offset = index * MEMORY_BLOCK_BYTES + byte;
@@ -269,8 +268,7 @@ fn replay_input<F: PrimeField32>(
             byte_ptr_to_u16_ptr_value(buffer) + (index * BLOCK_FE_WIDTH) as u32,
             rv64_bytes_to_u16_block(output),
         )?;
-        write_aux.prev_timestamp = access.previous_timestamp;
-        write_aux.prev_data = rv64_u16_block_to_bytes(access.previous_value);
+        *prev_timestamp = access.previous_timestamp;
     }
     let next_pc = from_pc
         .checked_add(DEFAULT_PC_STEP)
@@ -293,6 +291,6 @@ fn replay_input<F: PrimeField32>(
         }),
         input_read_aux_cols,
         buffer_read_aux_cols,
-        buffer_write_aux_cols,
+        buffer_write_prev_timestamps,
     })
 }

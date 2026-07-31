@@ -4,7 +4,9 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{
+            pack_u8_block, MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxInput,
+        },
         MemoryAddress,
     },
 };
@@ -79,7 +81,7 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
             builder,
             local,
             start_write_timestamp,
-            &mem.buffer_bytes_write_aux_cols,
+            &mem.buffer_bytes_write_base_aux,
         );
     }
 }
@@ -321,18 +323,24 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: &[MemoryWriteAuxCols<AB::Var, BLOCK_FE_WIDTH>; KECCAK_RATE_MEM_OPS],
+        write_base_aux: &[MemoryBaseAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
 
         // Constrain write of buffer bytes
-        for (i, (output, mem_aux)) in izip!(
+        // Each block is written back to the address its buffer read came from,
+        // so preimage_buffer_bytes can act as the previous data.
+        for (i, (prev, output, base_aux)) in izip!(
+            local
+                .sponge
+                .preimage_buffer_bytes
+                .chunks_exact(MEMORY_BLOCK_BYTES),
             local
                 .sponge
                 .postimage_buffer_bytes
                 .chunks_exact(MEMORY_BLOCK_BYTES),
-            mem_aux
+            write_base_aux
         )
         .enumerate()
         {
@@ -340,24 +348,18 @@ impl XorinVmAir {
             let should_write = is_enabled * not(is_padding);
             let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
 
+            let prev_data = pack_u8_block::<AB>(&std::array::from_fn(|j| prev[j].into()));
+            let data = pack_u8_block::<AB>(&std::array::from_fn(|j| output[j].into()));
+
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    pack_u8_block::<AB>(&[
-                        output[0].into(),
-                        output[1].into(),
-                        output[2].into(),
-                        output[3].into(),
-                        output[4].into(),
-                        output[5].into(),
-                        output[6].into(),
-                        output[7].into(),
-                    ]),
+                    data,
                     timestamp.clone(),
-                    mem_aux,
+                    MemoryWriteAuxInput::from_prev_data_exprs(base_aux, prev_data),
                 )
                 .eval(builder, should_write);
 

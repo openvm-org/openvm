@@ -1,7 +1,4 @@
-use openvm_circuit::{
-    arch::BLOCK_FE_WIDTH,
-    system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-};
+use openvm_circuit::system::memory::offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols};
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
@@ -53,7 +50,8 @@ pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
-    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; KECCAK_RATE_MEM_OPS],
+    // Only store timestamp for write. preimage_buffer_bytes contains previous data.
+    pub buffer_bytes_write_base_aux: [MemoryBaseAuxCols<T>; KECCAK_RATE_MEM_OPS],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();
