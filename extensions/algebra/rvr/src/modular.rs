@@ -4,7 +4,7 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{LocalOpcode, SystemOpcode, MEMORY_BLOCK_BYTES};
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
@@ -13,7 +13,7 @@ use strum::EnumCount;
 use crate::{
     decode_reg, emit_word_alignment_guard, format_c_byte_array, pad_modulus, ArithKind,
     FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, KnownField, ModOp,
-    SetupKind,
+    SetupKind, BINARY_INPUTS, BINARY_INPUTS_AND_OUTPUT, MEMORY_BLOCK_BYTES_U32,
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
@@ -113,7 +113,8 @@ impl ExtInstr for ModSetupIsEqInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        ctx.advance_timestamp(self.num_limbs * 2 / 8);
+        let timed_blocks = self.num_limbs * BINARY_INPUTS / MEMORY_BLOCK_BYTES_U32;
+        ctx.advance_timestamp(timed_blocks);
         emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
         let mod_literal = format_c_byte_array(&self.modulus);
         let num_limbs = format!("{}u", self.num_limbs);
@@ -560,7 +561,10 @@ mod tests {
                         "read(r2);",
                         "read(r3);",
                         "read(r1);",
-                        &format!("timestamp_slots({});", num_limbs * 3 / 8),
+                        &format!(
+                            "timestamp_slots({});",
+                            num_limbs * BINARY_INPUTS_AND_OUTPUT / MEMORY_BLOCK_BYTES_U32
+                        ),
                     ]
                 );
                 assert!(checkpoint
@@ -573,11 +577,17 @@ mod tests {
                     .filter(|operation| operation.starts_with("residual("))
                     .cloned()
                     .collect();
-                assert_eq!(residuals.len(), num_limbs as usize / 8);
+                assert_eq!(
+                    residuals.len(),
+                    num_limbs as usize / MEMORY_BLOCK_BYTES as usize
+                );
                 for (word, residual) in residuals.iter().enumerate() {
                     assert_eq!(
                         residual,
-                        &format!("residual(peek_mem_u64(state, r1 + {}ull));", word * 8)
+                        &format!(
+                            "residual(peek_mem_u64(state, r1 + {}ull));",
+                            word * MEMORY_BLOCK_BYTES as usize
+                        )
                     );
                 }
 
@@ -617,7 +627,10 @@ mod tests {
                     "read(r2);",
                     "read(r3);",
                     "read(r1);",
-                    &format!("timestamp_slots({});", num_limbs * 3 / 8),
+                    &format!(
+                        "timestamp_slots({});",
+                        num_limbs * BINARY_INPUTS_AND_OUTPUT / MEMORY_BLOCK_BYTES_U32
+                    ),
                 ]
             );
             assert!(checkpoint
@@ -650,7 +663,10 @@ mod tests {
                 [
                     "read(r2);",
                     "read(r3);",
-                    &format!("timestamp_slots({});", num_limbs * 2 / 8),
+                    &format!(
+                        "timestamp_slots({});",
+                        num_limbs * BINARY_INPUTS / MEMORY_BLOCK_BYTES_U32
+                    ),
                 ]
             );
             assert!(checkpoint
@@ -695,7 +711,10 @@ mod tests {
                 [
                     "read(r2);",
                     "read(r3);",
-                    &format!("timestamp_slots({});", num_limbs * 2 / 8),
+                    &format!(
+                        "timestamp_slots({});",
+                        num_limbs * BINARY_INPUTS / MEMORY_BLOCK_BYTES_U32
+                    ),
                 ]
             );
             assert!(checkpoint

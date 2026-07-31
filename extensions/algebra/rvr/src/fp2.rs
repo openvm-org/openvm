@@ -2,14 +2,14 @@
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{LocalOpcode, MEMORY_BLOCK_BYTES};
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
     decode_reg, pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField,
-    ModOp, SetupKind,
+    ModOp, SetupKind, BINARY_INPUTS_AND_OUTPUT, MEMORY_BLOCK_BYTES_U32,
 };
 
 // An Fp2 operation can read two independent 96-byte values and write one.
@@ -238,7 +238,11 @@ mod tests {
                         "read(r2);",
                         "read(r3);",
                         "read(r1);",
-                        &format!("timestamp_slots({});", num_limbs * 3 / 4),
+                        &format!(
+                            "timestamp_slots({});",
+                            num_limbs * Fp2Kind::STORAGE_FACTOR * BINARY_INPUTS_AND_OUTPUT
+                                / MEMORY_BLOCK_BYTES_U32
+                        ),
                     ]
                 );
                 assert!(checkpoint
@@ -250,11 +254,18 @@ mod tests {
                     .iter()
                     .filter(|operation| operation.starts_with("residual("))
                     .collect();
-                assert_eq!(residuals.len(), num_limbs as usize / 4);
+                assert_eq!(
+                    residuals.len(),
+                    num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize
+                        / MEMORY_BLOCK_BYTES as usize
+                );
                 for (word, residual) in residuals.iter().enumerate() {
                     assert_eq!(
                         residual.as_str(),
-                        format!("residual(peek_mem_u64(state, r1 + {}ull));", word * 8)
+                        format!(
+                            "residual(peek_mem_u64(state, r1 + {}ull));",
+                            word * MEMORY_BLOCK_BYTES as usize
+                        )
                     );
                 }
 
@@ -291,7 +302,11 @@ mod tests {
                     "read(r2);",
                     "read(r3);",
                     "read(r1);",
-                    &format!("timestamp_slots({});", num_limbs * 3 / 4),
+                    &format!(
+                        "timestamp_slots({});",
+                        num_limbs * Fp2Kind::STORAGE_FACTOR * BINARY_INPUTS_AND_OUTPUT
+                            / MEMORY_BLOCK_BYTES_U32
+                    ),
                 ]
             );
             assert!(checkpoint
@@ -303,11 +318,17 @@ mod tests {
                 .iter()
                 .filter(|operation| operation.starts_with("residual("))
                 .collect();
-            assert_eq!(residuals.len(), num_limbs as usize / 4);
+            assert_eq!(
+                residuals.len(),
+                num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize / MEMORY_BLOCK_BYTES as usize
+            );
             for (word, residual) in residuals.iter().enumerate() {
                 assert_eq!(
                     residual.as_str(),
-                    format!("residual(peek_mem_u64(state, r1 + {}ull));", word * 8)
+                    format!(
+                        "residual(peek_mem_u64(state, r1 + {}ull));",
+                        word * MEMORY_BLOCK_BYTES as usize
+                    )
                 );
             }
             assert!(checkpoint

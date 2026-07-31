@@ -1,8 +1,16 @@
 use std::{fmt::Debug, marker::PhantomData};
 
+use openvm_instructions::MEMORY_BLOCK_BYTES;
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, Variable};
 
 use crate::{detect_known_field, format_c_byte_array, KnownField, ModOp};
+
+/// Number of input values read by a binary field operation.
+pub(crate) const BINARY_INPUTS: u32 = 2;
+/// Two input values plus the destination value written by a field operation.
+pub(crate) const BINARY_INPUTS_AND_OUTPUT: u32 = 3;
+/// Memory-block width in the u32 unit used by RVR limb counts.
+pub(crate) const MEMORY_BLOCK_BYTES_U32: u32 = MEMORY_BLOCK_BYTES as u32;
 
 /// Algebra operands are proof-visible system-memory blocks. The v2.1 memory
 /// equipartition requires every four-u16-cell block to start on an eight-byte
@@ -156,8 +164,8 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let rd = ctx.read_var(self.rd_reg);
-        // Convert three byte-wide values into timed 8-byte memory blocks.
-        let timed_blocks = self.num_limbs * K::STORAGE_FACTOR * 3 / 8;
+        let timed_blocks =
+            self.num_limbs * K::STORAGE_FACTOR * BINARY_INPUTS_AND_OUTPUT / MEMORY_BLOCK_BYTES_U32;
         ctx.advance_timestamp(timed_blocks);
         emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let num_limbs = format!("{}u", self.num_limbs);
@@ -167,8 +175,11 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
         ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
         if !K::SETUP_OUTPUT_IS_STATIC_ZERO {
-            for word in 0..self.num_limbs * K::STORAGE_FACTOR / 8 {
-                ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
+            for word in 0..self.num_limbs * K::STORAGE_FACTOR / MEMORY_BLOCK_BYTES_U32 {
+                ctx.append_replay_value(&format!(
+                    "peek_mem_u64(state, {rd} + {}ull)",
+                    word * MEMORY_BLOCK_BYTES_U32
+                ));
             }
         }
         ctx.write_line("}");
@@ -195,7 +206,9 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        ctx.advance_timestamp(self.num_limbs * K::STORAGE_FACTOR * 2 / 8);
+        let timed_blocks =
+            self.num_limbs * K::STORAGE_FACTOR * BINARY_INPUTS / MEMORY_BLOCK_BYTES_U32;
+        ctx.advance_timestamp(timed_blocks);
         emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
         let prefix = K::c_prefix();
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
@@ -239,7 +252,9 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let rd = ctx.read_var(self.rd_reg);
-        ctx.advance_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
+        let timed_blocks =
+            self.num_limbs * K::STORAGE_FACTOR * BINARY_INPUTS_AND_OUTPUT / MEMORY_BLOCK_BYTES_U32;
+        ctx.advance_timestamp(timed_blocks);
         emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let op_name = self.op.c_name();
         let prefix = K::c_prefix();
@@ -256,8 +271,11 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
-        for word in 0..self.num_limbs * K::STORAGE_FACTOR / 8 {
-            ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
+        for word in 0..self.num_limbs * K::STORAGE_FACTOR / MEMORY_BLOCK_BYTES_U32 {
+            ctx.append_replay_value(&format!(
+                "peek_mem_u64(state, {rd} + {}ull)",
+                word * MEMORY_BLOCK_BYTES_U32
+            ));
         }
     }
 

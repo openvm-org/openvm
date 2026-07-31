@@ -11,6 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
+pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
@@ -66,9 +67,6 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 //   Digest  the output of one Poseidon2 compression (VM_DIGEST_WIDTH cells); also
 //           one merkle leaf.
 
-/// Host byte width of one u16-celled storage cell.
-pub const U16_CELL_SIZE: usize = size_of::<u16>();
-
 // TODO: replace with `p3_util::log2_strict_usize` once p3-util is bumped to
 // >= 0.4.3 (where it becomes `const fn`).
 pub(crate) const fn const_log2_strict_usize(value: usize) -> usize {
@@ -83,12 +81,6 @@ pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
 pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
     ptr_bits + U16_CELL_SIZE_BITS
 }
-
-/// Cells per memory-bus block.
-pub const BLOCK_FE_WIDTH: usize = 4;
-
-/// Bytes per memory-bus block.
-pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
