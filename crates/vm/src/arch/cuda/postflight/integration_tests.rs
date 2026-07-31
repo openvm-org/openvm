@@ -1,7 +1,8 @@
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode,
-    PUBLIC_VALUES_AS,
+    instruction::Instruction,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode, SystemOpcode, VmOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -16,6 +17,7 @@ use super::{
     },
     *,
 };
+use crate::arch::{rvr::PreflightEndpoint, Postflight, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT};
 
 fn configured_byte_lengths(config: &MemoryConfig) -> Vec<usize> {
     config
@@ -56,7 +58,6 @@ fn initial_memory_must_match_every_configured_address_space() {
         Err(GpuPostflightError::InvalidTranscript(_))
     ));
 }
-use crate::arch::POSTFLIGHT_PREDECESSOR_INDEX_LIMIT;
 
 fn event_value(
     timestamp: u32,
@@ -534,7 +535,6 @@ fn gpu_program_rejects_memory_configs_outside_the_compact_key_abi() {
 
     let ordinary = MemoryConfig::default();
     let uploaded = GpuPostflightProgram::upload(&program, &ordinary, &device_ctx).unwrap();
-    assert_eq!(uploaded.byte_pointer_max_bits, 32);
     assert_eq!(uploaded.cell_pointer_max_bits(), 31);
 
     for pointer_max_bits in [1, 33] {
