@@ -405,7 +405,7 @@ where
             Ok(chip.generate_proving_ctx())
         });
 
-        assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+        assert_eq!(inventory.num_chips(), POSEIDON2_INSERTION_IDX);
         // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
         if config.max_constraint_degree >= 7 {
             inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?;

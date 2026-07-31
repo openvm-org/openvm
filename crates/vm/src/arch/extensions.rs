@@ -173,17 +173,24 @@ pub struct BusIndexManager {
 
 // @dev: ChipInventory does not have the SystemChipComplex because that is custom depending on `PB`.
 // The full struct with SystemChipComplex is VmChipComplex
-pub struct InventoryChip {
+struct InventoryChip<PB: ProverBackend> {
     value: Box<dyn Any>,
     constant_trace_height: Option<usize>,
+    postflight_generator: Option<PostflightGenerator<PB>>,
 }
 
-impl InventoryChip {
+impl<PB: ProverBackend> InventoryChip<PB> {
     fn new<C: 'static>(value: C, constant_trace_height: Option<usize>) -> Self {
         Self {
             value: Box::new(value),
             constant_trace_height,
+            postflight_generator: None,
         }
+    }
+
+    fn with_postflight_generator(mut self, generator: PostflightGenerator<PB>) -> Self {
+        self.postflight_generator = Some(generator);
+        self
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -201,9 +208,7 @@ where
     #[get = "pub"]
     airs: AirInventory<SC>,
     /// Chips that are being built.
-    #[get = "pub"]
-    chips: Vec<InventoryChip>,
-    postflight_generators: Vec<Option<PostflightGenerator<PB>>>,
+    chips: Vec<InventoryChip<PB>>,
 
     /// Number of extensions that have chips added, including the current one that is still being
     /// built.
@@ -561,7 +566,6 @@ where
         Self {
             airs,
             chips: Vec::new(),
-            postflight_generators: Vec::new(),
             cur_num_exts: 0,
             executor_idx_to_insertion_idx: Vec::new(),
         }
@@ -569,6 +573,10 @@ where
 
     pub fn config(&self) -> &SystemConfig {
         &self.airs.config
+    }
+
+    pub(crate) fn num_chips(&self) -> usize {
+        self.chips.len()
     }
 
     // NOTE[jpw]: this is currently unused, it is for debugging purposes
@@ -624,7 +632,6 @@ where
     ) {
         self.chips
             .push(InventoryChip::new(chip, constant_trace_height));
-        self.postflight_generators.push(None);
     }
 
     /// Adds a chip and associates it to the next executor.
@@ -634,7 +641,6 @@ where
         tracing::debug!("add_executor_chip: {}", type_name::<C>());
         self.executor_idx_to_insertion_idx.push(self.chips.len());
         self.chips.push(InventoryChip::new(chip, None));
-        self.postflight_generators.push(None);
     }
 
     /// Adds a periphery chip with its CPU trace generator over postflight history.
@@ -669,10 +675,10 @@ where
             + Sync
             + 'static,
     {
-        self.chips
-            .push(InventoryChip::new(chip, constant_trace_height));
-        self.postflight_generators
-            .push(Some(erase_postflight_generator(generate)));
+        self.chips.push(
+            InventoryChip::new(chip, constant_trace_height)
+                .with_postflight_generator(erase_postflight_generator(generate)),
+        );
     }
 
     /// Adds an executor chip with its CPU trace generator over postflight history.
@@ -689,9 +695,10 @@ where
     {
         tracing::debug!("add_executor_chip: {}", type_name::<C>());
         self.executor_idx_to_insertion_idx.push(self.chips.len());
-        self.chips.push(InventoryChip::new(chip, None));
-        self.postflight_generators
-            .push(Some(erase_postflight_generator(generate)));
+        self.chips.push(
+            InventoryChip::new(chip, None)
+                .with_postflight_generator(erase_postflight_generator(generate)),
+        );
     }
 
     /// Returns the mapping from executor index to the AIR index, where AIR index is the index of
@@ -814,11 +821,6 @@ where
         &mut self,
         postflight: &Postflight<'_, Val<SC>>,
     ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
-        debug_assert_eq!(
-            self.inventory.chips.len(),
-            self.inventory.postflight_generators.len()
-        );
-
         let sys_ctxs = {
             let _span = info_span!("system_trace_gen").entered();
             self.system.generate_proving_ctx_from_postflight(postflight)
@@ -828,18 +830,12 @@ where
         exec_ctxs.resize_with(self.inventory.chips.len(), || None);
         {
             let _span = info_span!("executor_trace_gen").entered();
-            for (chain_pos, (insertion_idx, (chip, generator))) in self
-                .inventory
-                .chips
-                .iter()
-                .zip(&self.inventory.postflight_generators)
-                .enumerate()
-                .rev()
-                .enumerate()
+            for (chain_pos, (insertion_idx, chip)) in
+                self.inventory.chips.iter().enumerate().rev().enumerate()
             {
                 let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
                 let _air_span = info_span!("single_trace_gen", air = air_name).entered();
-                let generator = generator.as_ref().ok_or_else(|| {
+                let generator = chip.postflight_generator.as_ref().ok_or_else(|| {
                     GenerationError::ExtensionTracegen(format!(
                         "AIR {air_name} has no postflight trace generator"
                     ))

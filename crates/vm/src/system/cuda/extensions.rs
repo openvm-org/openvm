@@ -88,7 +88,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 
-        assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+        assert_eq!(inventory.num_chips(), POSEIDON2_INSERTION_IDX);
         let sbox_registers = if config.max_constraint_degree >= 7 {
             0
         } else {
