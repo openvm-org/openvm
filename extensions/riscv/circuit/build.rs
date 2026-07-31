@@ -1,11 +1,11 @@
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use std::{env, fmt::Write, fs, path::Path};
 
 #[cfg(feature = "cuda")]
 use openvm_cuda_builder::{cuda_available, CudaBuilder};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_instructions::{LocalOpcode, SystemOpcode};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
@@ -13,7 +13,7 @@ use openvm_riscv_transpiler::{
     Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
     ShiftWOpcode,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 fn opcode_family<T: Copy + LocalOpcode>(
     name: &'static str,
     opcodes: &[T],
@@ -32,13 +32,13 @@ fn opcode_family<T: Copy + LocalOpcode>(
     (name, first, opcodes.len())
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[cfg(feature = "cuda")]
 fn opcode<T: LocalOpcode>(name: &'static str, opcode: T) -> (&'static str, usize, usize) {
     (name, opcode.global_opcode_usize(), 1)
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-fn write_checkpoint_replay_opcodes(out_dir: &Path) {
+#[cfg(feature = "cuda")]
+fn write_replay_opcode_registry(out_dir: &Path) {
     let families = [
         opcode_family(
             "BASE_ALU",
@@ -185,7 +185,7 @@ fn main() {
             return; // Skip CUDA compilation
         }
 
-        let mut builder: CudaBuilder = CudaBuilder::new()
+        let builder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("cuda/include")
             .include("cuda/rvr/include")
@@ -202,15 +202,14 @@ fn main() {
             .library_name("tracegen_gpu_rv64im")
             .files_from_glob("cuda/src/**/*.cu");
 
+        let out_dir = env::var_os("OUT_DIR").expect("OUT_DIR");
+        let out_dir = Path::new(&out_dir);
+        write_replay_opcode_registry(out_dir);
+
         #[cfg(feature = "rvr")]
-        {
-            let out_dir = env::var_os("OUT_DIR").expect("OUT_DIR");
-            let out_dir = Path::new(&out_dir);
-            write_checkpoint_replay_opcodes(out_dir);
-            builder = builder
-                .include(out_dir)
-                .file("cuda/rvr/checkpoint_replay.cu");
-        }
+        let builder = builder
+            .include(out_dir)
+            .file("cuda/rvr/checkpoint_replay.cu");
 
         builder.emit_link_directives();
         builder.build();

@@ -64,7 +64,6 @@ use crate::{
     Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
 
-#[cfg(feature = "rvr")]
 include!(concat!(
     env!("OUT_DIR"),
     "/rv64_checkpoint_replay_opcodes.rs"

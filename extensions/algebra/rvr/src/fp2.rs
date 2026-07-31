@@ -260,15 +260,14 @@ mod tests {
                     .collect();
                 assert_eq!(
                     replay_values.len(),
-                    num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize
-                        / MEMORY_BLOCK_BYTES as usize
+                    num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize / MEMORY_BLOCK_BYTES
                 );
                 for (word, replay_value) in replay_values.iter().enumerate() {
                     assert_eq!(
                         replay_value.as_str(),
                         format!(
                             "replay_value(peek_mem_u64(state, r1 + {}ull));",
-                            word * MEMORY_BLOCK_BYTES as usize
+                            word * MEMORY_BLOCK_BYTES
                         )
                     );
                 }
@@ -325,14 +324,14 @@ mod tests {
                 .collect();
             assert_eq!(
                 replay_values.len(),
-                num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize / MEMORY_BLOCK_BYTES as usize
+                num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize / MEMORY_BLOCK_BYTES
             );
             for (word, replay_value) in replay_values.iter().enumerate() {
                 assert_eq!(
                     replay_value.as_str(),
                     format!(
                         "replay_value(peek_mem_u64(state, r1 + {}ull));",
-                        word * MEMORY_BLOCK_BYTES as usize
+                        word * MEMORY_BLOCK_BYTES
                     )
                 );
             }

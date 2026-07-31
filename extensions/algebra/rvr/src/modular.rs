@@ -581,16 +581,13 @@ mod tests {
                     .filter(|operation| operation.starts_with("replay_value("))
                     .cloned()
                     .collect();
-                assert_eq!(
-                    replay_values.len(),
-                    num_limbs as usize / MEMORY_BLOCK_BYTES as usize
-                );
+                assert_eq!(replay_values.len(), num_limbs as usize / MEMORY_BLOCK_BYTES);
                 for (word, replay_value) in replay_values.iter().enumerate() {
                     assert_eq!(
                         replay_value,
                         &format!(
                             "replay_value(peek_mem_u64(state, r1 + {}ull));",
-                            word * MEMORY_BLOCK_BYTES as usize
+                            word * MEMORY_BLOCK_BYTES
                         )
                     );
                 }
