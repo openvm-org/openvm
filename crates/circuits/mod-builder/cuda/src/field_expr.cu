@@ -435,24 +435,35 @@ __global__ void field_expr_tracegen_kernel(
     }
 }
 
+static constexpr int MB_THREADS = 256;
+
+// Grid sizing lives on the Rust side (src/cuda/mod.rs), which sizes d_aux and the
+// launch grid from the same value: min(ceil(height / MB_THREADS), max_grid_blocks).
+// `_field_expr_max_grid_blocks_*` is the one-time query for that cap — the number of
+// co-resident blocks (SM count x per-SM occupancy of this kernel variant). A larger
+// grid adds no parallelism to the grid-stride kernel and only grows d_aux. Called at
+// chip construction with the chip's device current, keeping the per-launch path free
+// of CUDA attribute queries.
 #define MB_LAUNCHER(R, B)                                                                     \
+    extern "C" int _field_expr_max_grid_blocks_r##R##_b##B(uint32_t *out_max_grid_blocks) {   \
+        int device, sm_count, blocks_per_sm;                                                  \
+        cudaError_t err = cudaGetDevice(&device);                                             \
+        if (err != cudaSuccess) return err;                                                   \
+        err = cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device);      \
+        if (err != cudaSuccess) return err;                                                   \
+        err = cudaOccupancyMaxActiveBlocksPerMultiprocessor(                                  \
+            &blocks_per_sm, field_expr_tracegen_kernel<R, B>, MB_THREADS, 0);                 \
+        if (err != cudaSuccess) return err;                                                   \
+        *out_max_grid_blocks = (uint32_t)(sm_count * blocks_per_sm);                          \
+        return cudaSuccess;                                                                   \
+    }                                                                                         \
     extern "C" int _field_expr_tracegen_r##R##_b##B(                                          \
         Fp *d_trace, size_t height, size_t rows_used, const uint32_t *d_blob,                 \
         const uint8_t *d_records, size_t rec_stride, size_t rec_core_offset,                  \
         uint32_t *d_range_checker, size_t rc_bins, uint32_t *d_aux, size_t aux_words,         \
         uint32_t pointer_max_bits, uint32_t timestamp_max_bits, int should_finalize,          \
-        uint32_t *d_err, cudaStream_t stream) {                                               \
-        const int threads = 256;                                                              \
-        int device, sm_count;                                                                 \
-        cudaError_t err = cudaGetDevice(&device);                                             \
-        if (err != cudaSuccess) return err;                                                   \
-        err = cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device);       \
-        if (err != cudaSuccess) return err;                                                   \
-        const size_t want = (height + threads - 1) / threads;                                 \
-        const size_t max_blocks = 512 / sm_count * sm_count;                                  \
-        const size_t rounded = (want + sm_count - 1) / sm_count * sm_count;                    \
-        const int blocks = (int)(rounded < max_blocks ? rounded : max_blocks);                 \
-        field_expr_tracegen_kernel<R, B><<<blocks, threads, 0, stream>>>(                     \
+        uint32_t *d_err, uint32_t grid_blocks, cudaStream_t stream) {                         \
+        field_expr_tracegen_kernel<R, B><<<grid_blocks, MB_THREADS, 0, stream>>>(             \
             d_trace, height, rows_used, d_blob, d_records, rec_stride, rec_core_offset,       \
             d_range_checker, rc_bins, d_aux, aux_words, pointer_max_bits,                     \
             timestamp_max_bits, should_finalize, d_err);                                      \

@@ -19,8 +19,12 @@ use crate::{tracegen_ir::compile_tracegen_ir, FieldExpressionFiller};
 
 pub mod cuda_abi;
 
-/// Hard bound on the per-launch aux scratch; the launcher caps the grid at
-/// 512 x 256 threads (grid-stride), so this is a fixed bound, not per-row.
+/// Threads per block; must match `MB_THREADS` in `cuda/src/field_expr.cu`.
+const THREADS_PER_BLOCK: usize = 256;
+
+/// Hard bound on the per-launch aux scratch; the grid is capped at the device's
+/// co-resident block count (`max_grid_blocks`, queried once at construction), so
+/// the scratch scales with the device, not the trace height.
 const MAX_AUX_BYTES: usize = 1 << 30; // 1 GiB
 
 pub struct FieldExprChipGpu {
@@ -38,6 +42,10 @@ pub struct FieldExprChipGpu {
     pub timestamp_max_bits: u32,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub should_finalize: bool,
+    /// Co-resident grid cap for this kernel variant (SM count x per-SM occupancy);
+    /// a larger grid adds no parallelism to the grid-stride kernel and only grows
+    /// the aux scratch.
+    max_grid_blocks: usize,
 }
 
 impl FieldExprChipGpu {
@@ -64,6 +72,8 @@ impl FieldExprChipGpu {
         let aux_words = ir.aux_words();
         let blob = ir.encode();
         let d_blob = blob.to_device_on(&range_checker.device_ctx).unwrap();
+        let max_grid_blocks = cuda_abi::max_grid_blocks(num_reads, blocks).unwrap() as usize;
+        assert!(max_grid_blocks > 0);
         Self {
             d_blob,
             num_reads,
@@ -77,6 +87,7 @@ impl FieldExprChipGpu {
             timestamp_max_bits,
             range_checker,
             should_finalize: filler.should_finalize,
+            max_grid_blocks,
         }
     }
 
@@ -94,7 +105,8 @@ impl FieldExprChipGpu {
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
 
-        let n_threads = height.div_ceil(256).min(512) * 256;
+        let grid_blocks = height.div_ceil(THREADS_PER_BLOCK).min(self.max_grid_blocks);
+        let n_threads = grid_blocks * THREADS_PER_BLOCK;
         assert!(n_threads * self.aux_words * 4 <= MAX_AUX_BYTES);
         let d_aux = DeviceBuffer::<u32>::with_capacity_on(n_threads * self.aux_words, device_ctx);
         let d_err = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
@@ -118,6 +130,7 @@ impl FieldExprChipGpu {
                 self.timestamp_max_bits,
                 self.should_finalize,
                 &d_err,
+                grid_blocks as u32,
                 device_ctx,
             )
             .unwrap();
