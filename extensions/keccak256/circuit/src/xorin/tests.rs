@@ -305,6 +305,22 @@ fn xorin_wrong_len_limb_negative_test() {
     });
 }
 
+#[test]
+fn xorin_wrong_preimage_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.sponge.preimage_buffer_bytes[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_write_timestamp_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.mem_oc.buffer_bytes_write_base_aux[0]
+            .timestamp_lt_aux
+            .diff_decomp[0] += F::ONE;
+    });
+}
+
 fn xorin_postflight_fixture() -> Harness {
     const LEN: usize = 16;
 
