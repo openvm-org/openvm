@@ -74,18 +74,19 @@ impl PreflightLimits {
         let max_instructions = u32::try_from(self.max_instructions)
             .map_err(|_| "preflight instruction limit exceeds u32".to_string())?;
         let max_replay_values_u32 = u32::try_from(self.max_replay_values).map_err(|_| {
-            "preflight replay-value limit exceeds the u32 checkpoint-cursor domain".to_string()
+            "preflight replay-value limit exceeds the u32 cursor stored in each checkpoint"
+                .to_string()
         })?;
         let max_replay_values = u64::from(max_replay_values_u32);
         let checkpoint_interval = u32::try_from(self.checkpoint_interval)
-            .map_err(|_| "preflight interval exceeds u32".to_string())?;
+            .map_err(|_| "preflight checkpoint interval exceeds u32".to_string())?;
         if checkpoint_interval == 0 {
-            return Err("preflight interval must be nonzero".to_string());
+            return Err("preflight checkpoint interval must be nonzero".to_string());
         }
 
-        // Every interior checkpoint advances the last-checkpoint ordinal by
-        // at least one interval. Ceiling division is a simple safe bound even
-        // when basic blocks overshoot an interval boundary.
+        // Every interior checkpoint advances the instruction count by at least one
+        // interval. Ceiling division remains safe when a basic block overshoots
+        // an interval boundary.
         let max_checkpoints = (self.max_instructions / self.checkpoint_interval)
             .checked_add(usize::from(
                 !self
@@ -394,7 +395,7 @@ fn validate_checkpoints(
 ) -> Result<(), String> {
     let mut previous_timestamp = 1;
     let mut previous_retired = 0;
-    let mut previous_replay_value = 0;
+    let mut previous_replay_value_cursor = 0;
     for checkpoint in checkpoints {
         let replay_value_cursor = usize::try_from(checkpoint.replay_value_cursor)
             .map_err(|_| "preflight replay-value cursor exceeds usize".to_string())?;
@@ -402,20 +403,22 @@ fn validate_checkpoints(
             return Err("preflight timestamps are not monotonic".to_string());
         }
         if checkpoint.retired < previous_retired || checkpoint.retired > final_retired {
-            return Err("preflight retired ordinals are not monotonic".to_string());
+            return Err("preflight checkpoint instruction counts are not monotonic".to_string());
         }
         if checkpoint.retired - previous_retired < checkpoint_interval {
             return Err("preflight checkpoint interval was not respected".to_string());
         }
-        if replay_value_cursor < previous_replay_value || replay_value_cursor > replay_value_len {
+        if replay_value_cursor < previous_replay_value_cursor
+            || replay_value_cursor > replay_value_len
+        {
             return Err("preflight replay-value cursors are not monotonic".to_string());
         }
         previous_timestamp = checkpoint.timestamp;
         previous_retired = checkpoint.retired;
-        previous_replay_value = replay_value_cursor;
+        previous_replay_value_cursor = replay_value_cursor;
     }
     if last_checkpoint_retired != previous_retired {
-        return Err("preflight last-checkpoint cursor is inconsistent".to_string());
+        return Err("preflight last checkpoint instruction count is inconsistent".to_string());
     }
     Ok(())
 }
@@ -578,8 +581,9 @@ impl<'a> PreflightInstance<'a> {
         #[cfg(feature = "metrics")]
         {
             metrics.record(u64::from(retired));
+            // Interior checkpoints divide execution into one additional replay interval.
             metrics::counter!("execute_preflight_intervals")
-                .absolute(transcript.checkpoints.len() as u64);
+                .absolute(transcript.checkpoints.len() as u64 + 1);
             metrics::counter!("execute_preflight_replay_values")
                 .absolute(transcript.replay_values.len() as u64);
             let transcript_bytes = std::mem::size_of_val(transcript.checkpoints.as_slice()) as u64

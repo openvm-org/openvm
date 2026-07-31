@@ -29,7 +29,7 @@ For a segment proof, the following metrics are collected:
 - `execute_metered_insns` (counter): The total number of instructions executed in metered execution mode.
 - `execute_preflight_insns` (counter): The number of instructions executed by one preflight call. Continuation proving adds the `segment` label, so summing the segment series gives the proof-level total.
 - `execute_preflight_intervals`, `execute_preflight_replay_values`, and
-  `execute_preflight_transcript_bytes` (counters): The compact authoritative transcript size produced by one compiled preflight call. Transcript bytes measure the initialized checkpoint and replay-value payload. Continuation proving adds the `segment` label.
+  `execute_preflight_transcript_bytes` (counters): The replay shape and compact transcript size produced by one compiled preflight call. The interval count includes the final interval after the last interior checkpoint; transcript bytes measure the initialized checkpoint and replay-value payload. Continuation proving adds the `segment` label.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 - `total_cells_used` (counter): The total number of preprocessed, main, and permutation trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights.
 
