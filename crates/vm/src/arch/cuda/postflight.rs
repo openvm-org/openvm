@@ -35,6 +35,7 @@ use crate::{
     arch::{
         postflight::validate_postflight_memory_config, AddressSpaceHostLayout, ExecutionState,
         MemoryCellType, MemoryConfig, PreflightHistory, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
+        POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
     },
     cuda_abi::postflight,
     system::TouchedBlock,
@@ -388,7 +389,7 @@ fn validated_history_write_masks(
             "preflight history must contain a final program sentinel".to_string(),
         ));
     }
-    if history.memory.accesses.len() >= (1usize << 31) {
+    if history.memory.accesses.len() >= POSTFLIGHT_PREDECESSOR_INDEX_LIMIT as usize {
         return Err(GpuPostflightError::InvalidTranscript(
             "preflight memory log exceeds packed predecessor indexes".to_string(),
         ));

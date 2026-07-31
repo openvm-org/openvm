@@ -56,7 +56,7 @@ fn initial_memory_must_match_every_configured_address_space() {
         Err(GpuPostflightError::InvalidTranscript(_))
     ));
 }
-use crate::arch::postflight::PREDECESSOR_SEED_BIT_FOR_TEST;
+use crate::arch::POSTFLIGHT_PREDECESSOR_INDEX_LIMIT;
 
 fn event_value(
     timestamp: u32,
@@ -239,7 +239,7 @@ fn interpreter_history_uses_the_standard_gpu_indexes() {
     );
     assert_eq!(
         transcript.memory_predecessors_host().unwrap(),
-        vec![0, 0, PREDECESSOR_SEED_BIT_FOR_TEST]
+        vec![0, 0, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT]
     );
     assert_eq!(
         plan.opcode_range(VmOpcode::from_usize(opcode as usize))
@@ -319,7 +319,18 @@ fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order
         )
         .unwrap();
 
-    assert_eq!(predecessors, [0, 1 << 31, 1, 3, 2, (1 << 31) | 1, 6]);
+    assert_eq!(
+        predecessors,
+        [
+            0,
+            POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
+            1,
+            3,
+            2,
+            POSTFLIGHT_PREDECESSOR_INDEX_LIMIT | 1,
+            6,
+        ]
+    );
     assert_eq!(resolved[1].value, [0x00aa, 2, 3, 4]);
     assert_eq!(resolved[4].value, [0x00aa, 2, 3, 4]);
     assert_eq!(resolved_fields[0].values, [11, 12, 13, 14]);

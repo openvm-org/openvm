@@ -4,9 +4,6 @@ use crate::arch::{
     VmField,
 };
 
-#[cfg(test)]
-pub(crate) const PREDECESSOR_SEED_BIT_FOR_TEST: u32 = PREDECESSOR_SEED_BIT;
-
 impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new_for_test(
         program: &'a Program<F>,

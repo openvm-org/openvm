@@ -30,10 +30,11 @@ use index::{
 
 #[cfg(any(test, feature = "test-utils"))]
 mod testing;
-#[cfg(test)]
-pub(crate) use testing::PREDECESSOR_SEED_BIT_FOR_TEST;
 
-pub(crate) const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
+/// Exclusive upper bound for indexes packed into a postflight predecessor.
+/// The high bit distinguishes an initial-memory entry from a memory event.
+pub const POSTFLIGHT_PREDECESSOR_INDEX_LIMIT: u32 = 1 << (u32::BITS - 1);
+pub(crate) const PREDECESSOR_SEED_BIT: u32 = POSTFLIGHT_PREDECESSOR_INDEX_LIMIT;
 const PREDECESSOR_INDEX_MASK: u32 = !PREDECESSOR_SEED_BIT;
 
 #[inline]

@@ -10,7 +10,7 @@ use openvm_circuit::arch::{
         GpuPostflightProgram, GpuPostflightTranscript, GpuUnindexedHistory,
     },
     rvr::{bridge::read_rv64_registers, PreflightEndpoint, PreflightExecution},
-    to_byte_ptr_bits, MemoryConfig, PreflightFieldBlock,
+    to_byte_ptr_bits, MemoryConfig, PreflightFieldBlock, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
 };
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -102,7 +102,7 @@ impl ReplayEventLayout {
                 )
             })?;
         }
-        if total_memory >= (1u32 << 31) {
+        if total_memory >= POSTFLIGHT_PREDECESSOR_INDEX_LIMIT {
             return Err(GpuPostflightError::InvalidTranscript(
                 "checkpoint replay memory log exceeds packed predecessor indexes".to_string(),
             ));
