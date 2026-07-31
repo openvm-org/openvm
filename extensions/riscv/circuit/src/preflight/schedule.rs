@@ -272,7 +272,7 @@ enum PostflightRegisterWrite {
     ReplayValue { operand: u8 },
 }
 
-fn is_replay_operand(word: u8) -> bool {
+fn is_instruction_operand(word: u8) -> bool {
     (1..POSTFLIGHT_INSTRUCTION_FIELDS as u8).contains(&word)
 }
 
@@ -281,7 +281,7 @@ fn invalid_access_schedule(message: impl Into<String>) -> GpuPostflightError {
 }
 
 fn validate_instruction_operand(operand: u8, role: &str) -> Result<(), GpuPostflightError> {
-    if !is_replay_operand(operand) {
+    if !is_instruction_operand(operand) {
         return Err(invalid_access_schedule(format!(
             "{role} must reference instruction operand a..g"
         )));
