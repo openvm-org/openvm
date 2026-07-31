@@ -9,7 +9,7 @@ use core::mem::{align_of, offset_of, size_of};
 /// Byte size of one sparse-upload dirty page.
 ///
 /// The VM asserts this against its host-to-device `TouchedPages` page size.
-pub const CHECKPOINT_DIRTY_PAGE_BYTES: usize = 4096;
+pub const PREFLIGHT_DIRTY_PAGE_BYTES: usize = 4096;
 
 /// One independently replayable execution boundary.
 ///
@@ -25,7 +25,7 @@ pub struct RvrCheckpoint {
     pub regs: [u64; 31],
 }
 
-/// Raw buffer descriptors shared with generated checkpoint-preflight C.
+/// Raw buffer descriptors shared with generated preflight C.
 ///
 /// The pointers refer to spare capacity owned by Rust for the duration of one
 /// execution call. Generated code updates only lengths and scalar execution
@@ -33,7 +33,7 @@ pub struct RvrCheckpoint {
 /// consuming registers in the generated block ABI.
 #[repr(C)]
 #[derive(Debug)]
-pub struct CheckpointPreflightState {
+pub struct PreflightTranscriptState {
     pub checkpoint_log: *mut RvrCheckpoint,
     pub replay_value_log: *mut u64,
     pub checkpoint_log_len: u64,
@@ -54,7 +54,7 @@ pub struct CheckpointPreflightState {
     pub padding: u32,
 }
 
-impl Default for CheckpointPreflightState {
+impl Default for PreflightTranscriptState {
     fn default() -> Self {
         Self {
             checkpoint_log: core::ptr::null_mut(),
@@ -88,24 +88,24 @@ const _: () = {
     assert!(offset_of!(RvrCheckpoint, replay_value_cursor) == 12);
     assert!(offset_of!(RvrCheckpoint, regs) == 16);
 
-    assert!(size_of::<CheckpointPreflightState>() == 112);
-    assert!(align_of::<CheckpointPreflightState>() == 8);
-    assert!(offset_of!(CheckpointPreflightState, checkpoint_log) == 0);
-    assert!(offset_of!(CheckpointPreflightState, replay_value_log) == 8);
-    assert!(offset_of!(CheckpointPreflightState, checkpoint_log_len) == 16);
-    assert!(offset_of!(CheckpointPreflightState, checkpoint_log_cap) == 24);
-    assert!(offset_of!(CheckpointPreflightState, replay_value_log_len) == 32);
-    assert!(offset_of!(CheckpointPreflightState, replay_value_log_cap) == 40);
-    assert!(offset_of!(CheckpointPreflightState, timestamp) == 48);
-    assert!(offset_of!(CheckpointPreflightState, retired) == 52);
-    assert!(offset_of!(CheckpointPreflightState, checkpoint_interval) == 56);
-    assert!(offset_of!(CheckpointPreflightState, last_checkpoint_retired) == 60);
-    assert!(offset_of!(CheckpointPreflightState, error) == 64);
-    assert!(offset_of!(CheckpointPreflightState, instruction_limit) == 68);
-    assert!(offset_of!(CheckpointPreflightState, memory_dirty_pages) == 72);
-    assert!(offset_of!(CheckpointPreflightState, public_values_dirty_pages) == 80);
-    assert!(offset_of!(CheckpointPreflightState, memory_dirty_page_words) == 88);
-    assert!(offset_of!(CheckpointPreflightState, public_values_dirty_page_words) == 96);
-    assert!(offset_of!(CheckpointPreflightState, last_memory_dirty_page) == 104);
-    assert!(offset_of!(CheckpointPreflightState, padding) == 108);
+    assert!(size_of::<PreflightTranscriptState>() == 112);
+    assert!(align_of::<PreflightTranscriptState>() == 8);
+    assert!(offset_of!(PreflightTranscriptState, checkpoint_log) == 0);
+    assert!(offset_of!(PreflightTranscriptState, replay_value_log) == 8);
+    assert!(offset_of!(PreflightTranscriptState, checkpoint_log_len) == 16);
+    assert!(offset_of!(PreflightTranscriptState, checkpoint_log_cap) == 24);
+    assert!(offset_of!(PreflightTranscriptState, replay_value_log_len) == 32);
+    assert!(offset_of!(PreflightTranscriptState, replay_value_log_cap) == 40);
+    assert!(offset_of!(PreflightTranscriptState, timestamp) == 48);
+    assert!(offset_of!(PreflightTranscriptState, retired) == 52);
+    assert!(offset_of!(PreflightTranscriptState, checkpoint_interval) == 56);
+    assert!(offset_of!(PreflightTranscriptState, last_checkpoint_retired) == 60);
+    assert!(offset_of!(PreflightTranscriptState, error) == 64);
+    assert!(offset_of!(PreflightTranscriptState, instruction_limit) == 68);
+    assert!(offset_of!(PreflightTranscriptState, memory_dirty_pages) == 72);
+    assert!(offset_of!(PreflightTranscriptState, public_values_dirty_pages) == 80);
+    assert!(offset_of!(PreflightTranscriptState, memory_dirty_page_words) == 88);
+    assert!(offset_of!(PreflightTranscriptState, public_values_dirty_page_words) == 96);
+    assert!(offset_of!(PreflightTranscriptState, last_memory_dirty_page) == 104);
+    assert!(offset_of!(PreflightTranscriptState, padding) == 108);
 };

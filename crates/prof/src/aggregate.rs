@@ -109,14 +109,14 @@ impl GroupedMetrics {
                 labels.remove(group_label_name);
                 for metric in metrics {
                     group_entry
-                        .entry(canonical_metric_name(&metric.name).to_string())
+                        .entry(metric.name.clone())
                         .or_default()
                         .push((metric.value, labels.clone()));
                 }
             } else {
                 for metric in metrics {
                     ungrouped
-                        .entry(canonical_metric_name(&metric.name).to_string())
+                        .entry(metric.name.clone())
                         .or_default()
                         .push((metric.value, labels.clone()));
                 }
@@ -871,28 +871,6 @@ fn canonical_group_name(name: &str) -> &str {
         "app_proof"
     } else {
         name
-    }
-}
-
-fn canonical_metric_name(name: &str) -> &str {
-    match name {
-        "prepare_rvr_checkpoint_time_ms" | "prepare_rvr_preflight_time_ms" => {
-            PREPARE_PREFLIGHT_TIME_LABEL
-        }
-        "compile_checkpoint_preflight_time_ms" => COMPILE_PREFLIGHT_TIME_LABEL,
-        "upload_checkpoint_program_time_ms" | "upload_postflight_program_time_ms" => {
-            UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL
-        }
-        "app_prove_rvr_checkpoint_time_ms" => APP_PROVE_TIME_LABEL,
-        "expand_checkpoint_replay_time_ms" => POSTFLIGHT_TIME_LABEL,
-        "execute_checkpoint_preflight_insns" => EXECUTE_PREFLIGHT_INSNS_LABEL,
-        "execute_preflight_checkpoints" | "execute_checkpoint_preflight_checkpoints" => {
-            EXECUTE_PREFLIGHT_INTERVALS_LABEL
-        }
-        "execute_checkpoint_preflight_transcript_bytes" => EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
-        "execute_checkpoint_preflight_time_ms" => EXECUTE_PREFLIGHT_TIME_LABEL,
-        "execute_checkpoint_preflight_insn_mi/s" => EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
-        _ => name,
     }
 }
 

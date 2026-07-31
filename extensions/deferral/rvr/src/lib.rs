@@ -181,7 +181,7 @@ impl ExtInstr for DeferralOutputInstr {
             ctx.write_line("}");
             ctx.write_line("uint32_t deferral_output_len = (uint32_t)deferral_output_len_u64;");
             // Output rows are one guest word. Reject a partial row before
-            // reserving checkpoint slots or mutating guest memory.
+            // reserving timestamp slots or mutating guest memory.
             ctx.write_line(&format!(
                 "if (unlikely((deferral_output_len & {}u) != 0u)) {{",
                 DEFERRAL_OUTPUT_ROW_BYTES - 1
@@ -433,7 +433,7 @@ unsafe fn prepare_deferral_accumulator_update<F: PrimeField32>(
     let end = output_acc_ptr.checked_add(VM_DIGEST_WIDTH)?;
     let byte_start = input_acc_ptr.checked_mul(size_of::<F>())?;
     let byte_len = (end - input_acc_ptr).checked_mul(size_of::<F>())?;
-    if !io.can_mark_checkpoint_deferral_write(byte_start, byte_len) {
+    if !io.can_mark_preflight_deferral_write(byte_start, byte_len) {
         return None;
     }
     let memory = unsafe { deferral_memory::<F>(io) }?;
@@ -483,7 +483,7 @@ unsafe fn apply_deferral_accumulator_update<F: PrimeField32>(
             VM_DIGEST_WIDTH,
         );
     }
-    io.mark_checkpoint_deferral_write(
+    io.mark_preflight_deferral_write(
         update.input_acc_ptr * size_of::<F>(),
         2 * VM_DIGEST_WIDTH * size_of::<F>(),
     );
@@ -692,16 +692,16 @@ mod tests {
 
     struct TestEmitCtx {
         operations: Vec<String>,
-        checkpoint: bool,
+        preflight: bool,
         trace_result: bool,
         next_tmp: usize,
     }
 
     impl TestEmitCtx {
-        fn checkpoint() -> Self {
+        fn preflight() -> Self {
             Self {
                 operations: Vec::new(),
-                checkpoint: true,
+                preflight: true,
                 trace_result: false,
                 next_tmp: 0,
             }
@@ -710,7 +710,7 @@ mod tests {
         fn legacy() -> Self {
             Self {
                 operations: Vec::new(),
-                checkpoint: false,
+                preflight: false,
                 trace_result: false,
                 next_tmp: 0,
             }
@@ -726,7 +726,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn is_preflight(&self) -> bool {
-            self.checkpoint
+            self.preflight
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -912,7 +912,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: deferral_memory.as_mut_ptr().cast(),
             deferral_memory_len_bytes: size_of_val(deferral_memory.as_slice()),
-            checkpoint_deferral_dirty_pages: Some(&mut dirty_pages),
+            preflight_deferral_dirty_pages: Some(&mut dirty_pages),
             deferrals: &mut deferrals,
         };
 
@@ -986,7 +986,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: deferral_memory.as_mut_ptr().cast(),
             deferral_memory_len_bytes: size_of_val(deferral_memory.as_slice()),
-            checkpoint_deferral_dirty_pages: Some(&mut dirty_pages),
+            preflight_deferral_dirty_pages: Some(&mut dirty_pages),
             deferrals: &mut deferrals,
         };
 
@@ -1067,7 +1067,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: deferral_memory.as_mut_ptr().cast(),
             deferral_memory_len_bytes: size_of_val(&deferral_memory),
-            checkpoint_deferral_dirty_pages: None,
+            preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let d_ctx = &deferral_ctx as *const DeferralCtx as *mut c_void;
@@ -1125,7 +1125,7 @@ mod tests {
     }
 
     #[test]
-    fn call_checkpoint_reserves_exact_schedule_and_emits_replay_values_once() {
+    fn call_preflight_reserves_exact_schedule_and_emits_replay_values_once() {
         let instruction = DeferralCallInstr {
             rd_reg: Variable::new(1),
             rs_reg: Variable::new(2),
@@ -1134,10 +1134,10 @@ mod tests {
         };
         assert!(instruction.supports_preflight());
 
-        let mut checkpoint = TestEmitCtx::checkpoint();
-        instruction.emit_c(&mut checkpoint);
+        let mut preflight = TestEmitCtx::preflight();
+        instruction.emit_c(&mut preflight);
         assert_eq!(
-            checkpoint.operations,
+            preflight.operations,
             [
                 "read(r1)",
                 "read(r2)",
@@ -1154,7 +1154,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            checkpoint
+            preflight
                 .operations
                 .iter()
                 .filter(|operation| operation.contains("rvr_ext_deferral_call("))
@@ -1178,7 +1178,7 @@ mod tests {
     }
 
     #[test]
-    fn output_checkpoint_reserves_dynamic_schedule_and_calls_closure_once() {
+    fn output_preflight_reserves_dynamic_schedule_and_calls_closure_once() {
         let instruction = DeferralOutputInstr {
             rd_reg: Variable::new(1),
             rs_reg: Variable::new(2),
@@ -1188,10 +1188,10 @@ mod tests {
         };
         assert!(instruction.supports_preflight());
 
-        let mut checkpoint = TestEmitCtx::checkpoint();
-        instruction.emit_c(&mut checkpoint);
+        let mut preflight = TestEmitCtx::preflight();
+        instruction.emit_c(&mut preflight);
         assert_eq!(
-            checkpoint.operations,
+            preflight.operations,
             [
                 "read(r1)",
                 "read(r2)",
@@ -1222,7 +1222,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            checkpoint
+            preflight
                 .operations
                 .iter()
                 .filter(|operation| operation.contains("rvr_ext_deferral_output("))

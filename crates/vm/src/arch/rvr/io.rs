@@ -5,7 +5,7 @@ use std::{collections::VecDeque, ffi::c_void, ops::Range};
 #[cfg(not(feature = "unprotected"))]
 use openvm_platform::memory::MEM_SIZE;
 use rand::rngs::StdRng;
-use rvr_state::CHECKPOINT_DIRTY_PAGE_BYTES;
+use rvr_state::PREFLIGHT_DIRTY_PAGE_BYTES;
 
 use crate::arch::{deferral::DeferralState, HintStream};
 
@@ -21,19 +21,19 @@ pub struct OpenVmIoState<'a> {
     pub public_values: &'a mut [u8],
     pub deferral_memory: *mut u8,
     pub deferral_memory_len_bytes: usize,
-    /// Executor-only AS4 dirty-page bits used by checkpoint execution. Other
+    /// Executor-only AS4 dirty-page bits used by preflight execution. Other
     /// execution modes leave this absent, so their generated hot paths do no
     /// dirty-page work.
-    pub checkpoint_deferral_dirty_pages: Option<&'a mut [u64]>,
+    pub preflight_deferral_dirty_pages: Option<&'a mut [u64]>,
     pub deferrals: &'a mut Vec<DeferralState>,
 }
 
 impl OpenVmIoState<'_> {
-    /// Returns whether checkpoint dirty-page storage can represent an AS4
-    /// write. Non-checkpoint modes have no bitmap and are always valid.
+    /// Returns whether preflight dirty-page storage can represent an AS4
+    /// write. Other execution modes have no bitmap and are always valid.
     #[inline]
-    pub fn can_mark_checkpoint_deferral_write(&self, byte_start: usize, byte_len: usize) -> bool {
-        let Some(dirty_pages) = self.checkpoint_deferral_dirty_pages.as_deref() else {
+    pub fn can_mark_preflight_deferral_write(&self, byte_start: usize, byte_len: usize) -> bool {
+        let Some(dirty_pages) = self.preflight_deferral_dirty_pages.as_deref() else {
             return true;
         };
         if byte_len == 0 {
@@ -42,7 +42,7 @@ impl OpenVmIoState<'_> {
         let Some(byte_end) = byte_start.checked_add(byte_len - 1) else {
             return false;
         };
-        let last_page = byte_end / CHECKPOINT_DIRTY_PAGE_BYTES;
+        let last_page = byte_end / PREFLIGHT_DIRTY_PAGE_BYTES;
         last_page / (u64::BITS as usize) < dirty_pages.len()
     }
 
@@ -50,9 +50,9 @@ impl OpenVmIoState<'_> {
     /// only proof-visible AS4 writer that bypasses generated C. The caller must
     /// validate the range before mutating AS4 so this commit step cannot fail.
     #[inline]
-    pub fn mark_checkpoint_deferral_write(&mut self, byte_start: usize, byte_len: usize) {
-        debug_assert!(self.can_mark_checkpoint_deferral_write(byte_start, byte_len));
-        let Some(dirty_pages) = self.checkpoint_deferral_dirty_pages.as_deref_mut() else {
+    pub fn mark_preflight_deferral_write(&mut self, byte_start: usize, byte_len: usize) {
+        debug_assert!(self.can_mark_preflight_deferral_write(byte_start, byte_len));
+        let Some(dirty_pages) = self.preflight_deferral_dirty_pages.as_deref_mut() else {
             return;
         };
         if byte_len == 0 {
@@ -62,12 +62,12 @@ impl OpenVmIoState<'_> {
         let Some(byte_end) = byte_start.checked_add(byte_len - 1) else {
             return;
         };
-        let first_page = byte_start / CHECKPOINT_DIRTY_PAGE_BYTES;
-        let last_page = byte_end / CHECKPOINT_DIRTY_PAGE_BYTES;
+        let first_page = byte_start / PREFLIGHT_DIRTY_PAGE_BYTES;
+        let last_page = byte_end / PREFLIGHT_DIRTY_PAGE_BYTES;
         for page in first_page..=last_page {
             let word = page / u64::BITS as usize;
             let Some(word_bits) = dirty_pages.get_mut(word) else {
-                debug_assert!(false, "prevalidated checkpoint dirty range became invalid");
+                debug_assert!(false, "prevalidated preflight dirty range became invalid");
                 return;
             };
             *word_bits |= 1 << (page % u64::BITS as usize);

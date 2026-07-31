@@ -11,6 +11,6 @@ pub use preflight_history::{
     PREFLIGHT_ADDRESS_SPACE_MASK, PREFLIGHT_WRITE_BIT,
 };
 pub use preflight_transcript::{
-    CheckpointPreflightState, RvrCheckpoint, CHECKPOINT_DIRTY_PAGE_BYTES,
+    PreflightTranscriptState, RvrCheckpoint, PREFLIGHT_DIRTY_PAGE_BYTES,
 };
 pub use state::{ExecutionStatus, RvState, NUM_REGS};

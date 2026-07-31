@@ -21,11 +21,11 @@ use super::{
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
     preflight::{
-        CheckpointDirtyPages, CheckpointPreflightBuffers, PreflightEndpoint, PreflightLimits,
+        PreflightBuffers, PreflightDirtyPages, PreflightEndpoint, PreflightLimits,
         PreflightTranscript,
     },
     state::{
-        init_state, CheckpointPreflightRvState, MeteredCostRvState, MeteredRvState, PureRvState,
+        init_state, MeteredCostRvState, MeteredRvState, PreflightRvState, PureRvState,
         PureWithInstretTrackingRvState,
     },
 };
@@ -62,7 +62,7 @@ pub enum ExecuteError {
 
 fn build_io_state_borrowed<'a>(
     vm_state: &'a mut VmState<GuestMemory>,
-    checkpoint_deferral_dirty_pages: Option<&'a mut [u64]>,
+    preflight_deferral_dirty_pages: Option<&'a mut [u64]>,
 ) -> OpenVmIoState<'a> {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let (deferral_memory, deferral_memory_len_bytes) =
@@ -76,7 +76,7 @@ fn build_io_state_borrowed<'a>(
         public_values: public_values_slice(&mut vm_state.memory.memory),
         deferral_memory,
         deferral_memory_len_bytes,
-        checkpoint_deferral_dirty_pages,
+        preflight_deferral_dirty_pages,
         deferrals: &mut streams.deferrals,
     }
 }
@@ -172,9 +172,9 @@ fn run_and_finalize<ModeState>(
     vm_state: &mut VmState<GuestMemory>,
     state: &mut RvState<ModeState>,
     allow_suspended: bool,
-    checkpoint_deferral_dirty_pages: Option<&mut [u64]>,
+    preflight_deferral_dirty_pages: Option<&mut [u64]>,
 ) -> Result<ExecutionStatus, ExecuteError> {
-    let mut io_state = build_io_state_borrowed(vm_state, checkpoint_deferral_dirty_pages);
+    let mut io_state = build_io_state_borrowed(vm_state, preflight_deferral_dirty_pages);
     unsafe {
         register_openvm_io_ctx(compiled, &mut io_state)?;
         for hook in runtime_hooks {
@@ -231,7 +231,7 @@ pub(super) fn execute_pure(
     Ok(())
 }
 
-/// Execute the checkpoint-and-replay-value preflight artifact.
+/// Execute a compiled preflight artifact.
 pub(super) fn execute_preflight(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
@@ -244,13 +244,13 @@ pub(super) fn execute_preflight(
     require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
     let mut buffers = match reuse {
-        Some(transcript) => CheckpointPreflightBuffers::reuse(limits, transcript),
-        None => CheckpointPreflightBuffers::new(limits),
+        Some(transcript) => PreflightBuffers::reuse(limits, transcript),
+        None => PreflightBuffers::new(limits),
     }
     .map_err(ExecuteError::InvalidPreflightContext)?;
-    let mut dirty_pages = CheckpointDirtyPages::new(&vm_state.memory.memory)
+    let mut dirty_pages = PreflightDirtyPages::new(&vm_state.memory.memory)
         .map_err(ExecuteError::InvalidPreflightContext)?;
-    let mut state: CheckpointPreflightRvState = init_state(vm_state, pc);
+    let mut state: PreflightRvState = init_state(vm_state, pc);
     state.regs = read_rv64_registers(vm_state);
     state.mode_state = buffers.ffi_state(&mut dirty_pages);
 

@@ -42,7 +42,7 @@ use {
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{
-        rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
+        rvr::{cuda::PreflightReplayProgram, PreflightExecution},
         MemoryConfig,
     },
     openvm_cuda_common::stream::GpuDeviceCtx,
@@ -177,12 +177,12 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         program: &Program<T>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<CheckpointReplayProgram, GpuPostflightError> {
+    ) -> Result<PreflightReplayProgram, GpuPostflightError> {
         let mut registry = PostflightAccessRegistry::default();
         Self::register_postflight_access_schedules(&mut registry)?;
         registry
             .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
-        CheckpointReplayProgram::upload_with_postflight_access_registry(
+        PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -193,7 +193,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &CheckpointReplayProgram,
+        program: &PreflightReplayProgram,
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>

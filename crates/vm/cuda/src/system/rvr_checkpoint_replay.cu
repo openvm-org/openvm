@@ -70,7 +70,7 @@ struct RvrCheckpointOpcodeBases {
 
 static_assert(sizeof(RvrCheckpointOpcodeBases) == 24 * sizeof(uint32_t));
 
-struct RvrCheckpointAccessSchedule {
+struct RvrReplayAccessSchedule {
     uint32_t first_span;
     uint32_t num_spans;
     uint8_t register_operands[3];
@@ -81,7 +81,7 @@ struct RvrCheckpointAccessSchedule {
     uint8_t register_write_operand;
 };
 
-static_assert(sizeof(RvrCheckpointAccessSchedule) == 16);
+static_assert(sizeof(RvrReplayAccessSchedule) == 16);
 
 struct RvrCheckpointAccessSpan {
     uint32_t address_space;
@@ -654,7 +654,7 @@ __device__ __forceinline__ void write_memory_intent(
 
 __device__ __forceinline__ bool resolve_access_span_count(
     RvrCheckpointAccessSpan const &span,
-    RvrCheckpointAccessSchedule const &schedule,
+    RvrReplayAccessSchedule const &schedule,
     uint64_t const (&register_values)[3],
     DeviceBufferConstView<uint64_t> replay_values,
     uint64_t replay_value_index,
@@ -700,7 +700,7 @@ __device__ __forceinline__ bool resolve_access_span_count(
 
 __device__ __forceinline__ bool replay_access_schedule(
     RvrReplayInstruction const &instruction,
-    RvrCheckpointAccessSchedule const &schedule,
+    RvrReplayAccessSchedule const &schedule,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
     DeviceBufferConstView<uint64_t> replay_values,
@@ -1027,7 +1027,7 @@ __device__ bool replay_chunk(
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
-    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrReplayAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
     size_t chunk,
@@ -1479,7 +1479,7 @@ __global__ void checkpoint_count(
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
-    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrReplayAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
     RvrCheckpointOpcodeBases opcodes,
@@ -1519,7 +1519,7 @@ __global__ void checkpoint_emit(
     DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<RvrCheckpointEventCount> event_offsets,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
-    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrReplayAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
     RvrCheckpointOpcodeBases opcodes,
@@ -1584,7 +1584,7 @@ extern "C" int _rvr_checkpoint_count(
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
-    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrReplayAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
     RvrCheckpointOpcodeBases opcodes,
@@ -1622,7 +1622,7 @@ extern "C" int _rvr_checkpoint_emit(
     DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<RvrCheckpointEventCount> event_offsets,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
-    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrReplayAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
     RvrCheckpointOpcodeBases opcodes,

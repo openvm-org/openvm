@@ -783,33 +783,30 @@ fn validate_endpoint<F: Field>(
     Ok(())
 }
 
-fn validate_memory_config(config: &MemoryConfig) -> Result<(), PostflightError> {
+pub(crate) fn validate_postflight_memory_config(config: &MemoryConfig) -> Result<(), String> {
     if config.pointer_max_bits > u32::BITS as usize
         || config.addr_space_height >= u32::BITS as usize
         || config.timestamp_max_bits >= u32::BITS as usize
     {
-        return Err(PostflightError::new(
-            "address-space height, pointer width, and timestamp width must fit u32",
-        ));
+        return Err(
+            "address-space height, pointer width, and timestamp width must fit u32".to_string(),
+        );
     }
     if config.pointer_max_bits < BLOCK_FE_WIDTH.ilog2() as usize {
-        return Err(PostflightError::new(
-            "pointer width is smaller than one memory block",
-        ));
+        return Err("pointer width is smaller than one memory block".to_string());
     }
-    let address_space_count = 1usize
-        .checked_shl(config.addr_space_height as u32)
-        .ok_or_else(|| PostflightError::new("address-space count overflow"))?;
-    let expected_address_spaces = (ADDR_SPACE_OFFSET as usize)
-        .checked_add(address_space_count)
-        .ok_or_else(|| PostflightError::new("address-space count overflow"))?;
+    let expected_address_spaces = ADDR_SPACE_OFFSET as usize + (1usize << config.addr_space_height);
     if config.addr_spaces.len() != expected_address_spaces {
-        return Err(PostflightError::new(format!(
+        return Err(format!(
             "expected {expected_address_spaces} address-space layouts, found {}",
             config.addr_spaces.len()
-        )));
+        ));
     }
     Ok(())
+}
+
+fn validate_memory_config(config: &MemoryConfig) -> Result<(), PostflightError> {
+    validate_postflight_memory_config(config).map_err(PostflightError::new)
 }
 
 fn validate_memory_block(

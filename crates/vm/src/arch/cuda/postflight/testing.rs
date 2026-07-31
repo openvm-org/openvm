@@ -83,7 +83,7 @@ impl GpuPostflightProgram {
     ) -> Result<Self, GpuPostflightError> {
         let instructions = opcodes
             .iter()
-            .map(|&opcode| PostflightInstruction {
+            .map(|&opcode| GpuReplayInstruction {
                 words: [opcode, 0, 0, 0, 0, 0, 0, 0],
             })
             .collect::<Vec<_>>();
@@ -227,8 +227,8 @@ impl GpuPostflightPlan {
 pub(crate) type ChronologyOutputForTest = (
     Vec<PreflightMemoryEvent>,
     Vec<PreflightInitialWrite>,
-    Vec<PostflightFieldBlock>,
-    Vec<PostflightFieldBlock>,
+    Vec<PreflightFieldBlock>,
+    Vec<PreflightFieldBlock>,
     Vec<u32>,
     Vec<TouchedBlock<BabyBear>>,
 );
@@ -237,7 +237,7 @@ pub(crate) type ChronologyOutputForTest = (
 pub(crate) fn build_memory_chronology_for_test(
     memory: &[PreflightMemoryEvent],
     write_masks: &[u8],
-    field_values: &[PostflightFieldBlock],
+    field_values: &[PreflightFieldBlock],
     initial_memory: &[Vec<u8>],
     config: &MemoryConfig,
 ) -> Result<ChronologyOutputForTest, GpuPostflightError> {
@@ -294,7 +294,7 @@ pub(crate) fn empty_chronology_counts_for_test(
     let device_ctx = GpuDeviceCtx::for_current_device()?;
     let memory = DeviceBuffer::<PreflightMemoryEvent>::new();
     let write_masks = DeviceBuffer::<u8>::new();
-    let field_values = DeviceBuffer::<PostflightFieldBlock>::new();
+    let field_values = DeviceBuffer::<PreflightFieldBlock>::new();
     let address_spaces = DeviceBuffer::<GpuMemoryAddressSpace>::new();
     let workspace = DeviceBuffer::<u64>::new();
     let counts_len = if count_field_metadata { 7 } else { 3 };

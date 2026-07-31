@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_checkpoint_preflight_carries_deferral_state_across_segments() -> Result<()> {
+    fn test_preflight_carries_deferral_state_across_segments() -> Result<()> {
         let config = make_config(1);
         let instructions = [
             Instruction::<F>::from_usize(

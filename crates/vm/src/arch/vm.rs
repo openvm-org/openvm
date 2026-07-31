@@ -67,7 +67,7 @@ use super::cuda::postflight::{
 #[cfg(any(not(feature = "rvr"), feature = "test-utils"))]
 use super::execution_mode::PreflightCtx;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::cuda::{CheckpointReplayProgram, PostflightOpcodeBases};
+use super::rvr::cuda::{PostflightOpcodeBases, PreflightReplayProgram};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use super::rvr::PreflightExecution;
 #[cfg(feature = "rvr")]
@@ -1582,7 +1582,7 @@ where
     #[instrument(name = "postflight", skip_all)]
     pub fn postflight(
         &self,
-        program: &CheckpointReplayProgram,
+        program: &PreflightReplayProgram,
         execution: &PreflightExecution,
         num_insns: u32,
         opcodes: PostflightOpcodeBases,

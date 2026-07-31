@@ -453,7 +453,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
-            checkpoint_deferral_dirty_pages: None,
+            preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
@@ -484,7 +484,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
-            checkpoint_deferral_dirty_pages: None,
+            preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
@@ -513,7 +513,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
-            checkpoint_deferral_dirty_pages: None,
+            preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
@@ -548,7 +548,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
-            checkpoint_deferral_dirty_pages: None,
+            preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 

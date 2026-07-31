@@ -3,8 +3,8 @@ use openvm_circuit::{
         cuda::postflight::GpuPostflightProgram,
         rvr::{
             cuda::{
-                CheckpointReplayProgram, PostflightAccessRegistry, PostflightAccessSchedule,
-                PostflightAccessSpan,
+                PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+                PreflightReplayProgram,
             },
             PreflightLimits,
         },
@@ -212,7 +212,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         "{malformed}"
     );
 
-    let unclaimed_program = CheckpointReplayProgram::upload(
+    let unclaimed_program = PreflightReplayProgram::upload(
         &program,
         &config.system.memory_config,
         &vm.engine.device().device_ctx,

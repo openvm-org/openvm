@@ -30,9 +30,9 @@ impl ExtInstr for UnsupportedPreflightInstr {
 }
 
 #[derive(Clone, Debug)]
-struct CheckpointCapableInstr;
+struct PreflightCapableInstr;
 
-impl ExtInstr for CheckpointCapableInstr {
+impl ExtInstr for PreflightCapableInstr {
     fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
 
     fn cfg_effect(&self) -> CfgEffect {
@@ -89,7 +89,7 @@ impl Drop for TempDir {
 
 #[test]
 fn preflight_compiler_rejects_unsupported_instruction() {
-    let output = std::env::temp_dir().join("unused-checkpoint-capability-output");
+    let output = std::env::temp_dir().join("unused-preflight-capability-output");
     let project = CProject::new(&output, "test", RvrExecutionKind::Preflight);
     let error = project
         .write_all(
@@ -108,12 +108,12 @@ fn preflight_compiler_rejects_unsupported_instruction() {
 
 #[test]
 fn preflight_compiler_accepts_explicit_capability() {
-    let output = TempDir::new("checkpoint-capable");
+    let output = TempDir::new("preflight-capable");
     let project = CProject::new(output.path(), "test", RvrExecutionKind::Preflight);
 
     project
         .write_all(
-            &[block(CheckpointCapableInstr)],
+            &[block(PreflightCapableInstr)],
             0x100,
             0x100,
             &ExtensionRegistry::new(),

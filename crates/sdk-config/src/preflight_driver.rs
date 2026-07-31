@@ -10,7 +10,7 @@
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
     rvr::{
-        cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightExecution, PreflightInstance,
+        cuda::PreflightReplayProgram, PreflightEndpoint, PreflightExecution, PreflightInstance,
         PreflightTranscript, RvrMeteredInstance,
     },
 };
@@ -57,7 +57,7 @@ struct PreparedSegment {
     #[cfg(not(feature = "rvr"))]
     preflight: InterpretedPreflight,
     #[cfg(feature = "rvr")]
-    program: CheckpointReplayProgram,
+    program: PreflightReplayProgram,
     #[cfg(not(feature = "rvr"))]
     program: GpuPostflightProgram,
 }

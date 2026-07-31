@@ -4,7 +4,7 @@ use openvm_algebra_circuit::AlgebraPreflightGpuTracegen;
 use openvm_bigint_circuit::Int256PreflightGpuTracegen;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::rvr::{
-    cuda::{CheckpointReplayProgram, PostflightAccessRegistry},
+    cuda::{PostflightAccessRegistry, PreflightReplayProgram},
     PreflightExecution,
 };
 use openvm_circuit::arch::{
@@ -72,7 +72,7 @@ impl SdkVmGpuBuilder {
     pub(crate) fn upload_preflight_program<F: PrimeField32>(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
         program: &Program<F>,
-    ) -> Result<CheckpointReplayProgram, GpuPostflightError> {
+    ) -> Result<PreflightReplayProgram, GpuPostflightError> {
         validate_preflight_config(vm.config())?;
         let config = vm.config().to_inner();
         let mut registry = PostflightAccessRegistry::default();
@@ -104,7 +104,7 @@ impl SdkVmGpuBuilder {
         }
         let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
         registry.validate_no_native_collisions(native)?;
-        CheckpointReplayProgram::upload_with_postflight_access_registry(
+        PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             &vm.config().as_ref().memory_config,
             &registry,
@@ -122,7 +122,7 @@ impl SdkVmGpuBuilder {
     #[cfg(feature = "rvr")]
     pub(crate) fn postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &CheckpointReplayProgram,
+        program: &PreflightReplayProgram,
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {

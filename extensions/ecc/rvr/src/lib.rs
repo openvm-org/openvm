@@ -313,15 +313,15 @@ mod tests {
 
     struct TestEmitCtx {
         operations: Vec<String>,
-        checkpoint: bool,
+        preflight: bool,
         next_tmp: usize,
     }
 
     impl TestEmitCtx {
-        fn checkpoint() -> Self {
+        fn preflight() -> Self {
             Self {
                 operations: Vec::new(),
-                checkpoint: true,
+                preflight: true,
                 next_tmp: 0,
             }
         }
@@ -329,7 +329,7 @@ mod tests {
         fn legacy() -> Self {
             Self {
                 operations: Vec::new(),
-                checkpoint: false,
+                preflight: false,
                 next_tmp: 0,
             }
         }
@@ -337,7 +337,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn is_preflight(&self) -> bool {
-            self.checkpoint
+            self.preflight
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -383,7 +383,7 @@ mod tests {
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            if self.checkpoint {
+            if self.preflight {
                 self.operations.push(format!("replay_value({value})"));
             }
         }
@@ -458,7 +458,7 @@ mod tests {
     }
 
     #[test]
-    fn add_checkpoint_matches_schedule_and_minimal_replay_values() {
+    fn add_preflight_matches_schedule_and_minimal_replay_values() {
         for (curve, point_dwords) in [(KnownCurve::K256, 8), (KnownCurve::Bls12381, 12)] {
             for is_setup in [false, true] {
                 let instruction = EcAddNeInstr {
@@ -470,8 +470,8 @@ mod tests {
                 };
                 assert!(instruction.supports_preflight());
 
-                let mut checkpoint = TestEmitCtx::checkpoint();
-                instruction.emit_c(&mut checkpoint);
+                let mut preflight = TestEmitCtx::preflight();
+                instruction.emit_c(&mut preflight);
                 let mut expected = vec![
                     "read(r2)".to_string(),
                     "read(r3)".to_string(),
@@ -497,13 +497,13 @@ mod tests {
                     expected.push(format!("{name}(state, r1, r2, r3)"));
                 }
                 expected.extend(expected_replay_values("r1", point_dwords));
-                assert_eq!(checkpoint.operations, expected);
+                assert_eq!(preflight.operations, expected);
             }
         }
     }
 
     #[test]
-    fn double_checkpoint_matches_schedule_and_minimal_replay_values() {
+    fn double_preflight_matches_schedule_and_minimal_replay_values() {
         for (curve, point_dwords) in [(KnownCurve::P256, 8), (KnownCurve::Bls12381, 12)] {
             for is_setup in [false, true] {
                 let instruction = EcDoubleInstr {
@@ -514,8 +514,8 @@ mod tests {
                 };
                 assert!(instruction.supports_preflight());
 
-                let mut checkpoint = TestEmitCtx::checkpoint();
-                instruction.emit_c(&mut checkpoint);
+                let mut preflight = TestEmitCtx::preflight();
+                instruction.emit_c(&mut preflight);
                 let mut expected = vec![
                     "read(r2)".to_string(),
                     "read(r1)".to_string(),
@@ -542,13 +542,13 @@ mod tests {
                 if !is_setup {
                     expected.extend(expected_replay_values("r1", point_dwords));
                 }
-                assert_eq!(checkpoint.operations, expected);
+                assert_eq!(preflight.operations, expected);
             }
         }
     }
 
     #[test]
-    fn execution_modes_use_air_operand_order_without_checkpoint_data() {
+    fn execution_modes_use_air_operand_order_without_preflight_data() {
         let add = EcAddNeInstr {
             rd_reg: Variable::new(1),
             rs1_reg: Variable::new(2),

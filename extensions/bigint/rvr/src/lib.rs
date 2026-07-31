@@ -129,7 +129,7 @@ impl ExtInstr for Int256AluInstr {
         let rd = ctx.read_var(self.rd_reg);
         emit_pointer_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         // The FFI performs eight aligned heap reads followed by four aligned
-        // heap writes. Checkpoint replay reconstructs those events from the
+        // heap writes. GPU replay reconstructs those events from the
         // postimage; pure and metered modes emit neither reservation nor peek.
         ctx.reserve_preflight_timestamp_slots("12u");
         let is_preflight = ctx.is_preflight();
@@ -455,7 +455,7 @@ mod tests {
 
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum TestEmitMode {
-        Checkpoint,
+        Preflight,
         Direct,
         Metered,
     }
@@ -465,7 +465,7 @@ mod tests {
             Self {
                 lines: Vec::new(),
                 next_tmp: 0,
-                mode: TestEmitMode::Checkpoint,
+                mode: TestEmitMode::Preflight,
             }
         }
     }
@@ -478,14 +478,14 @@ mod tests {
             }
         }
 
-        fn records_checkpoint(&self) -> bool {
-            self.mode == TestEmitMode::Checkpoint
+        fn records_preflight(&self) -> bool {
+            self.mode == TestEmitMode::Preflight
         }
     }
 
     impl ExtEmitCtx for TestEmitCtx {
         fn is_preflight(&self) -> bool {
-            self.records_checkpoint()
+            self.records_preflight()
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -499,7 +499,7 @@ mod tests {
         }
 
         fn advance_timestamp(&mut self, slots: u32) {
-            if self.records_checkpoint() {
+            if self.records_preflight() {
                 self.lines.push(format!("advance({slots})"));
             }
         }
@@ -529,31 +529,31 @@ mod tests {
         }
 
         fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
-            if self.records_checkpoint() {
+            if self.records_preflight() {
                 self.lines.push(format!("reserve({slots})"));
             }
         }
 
         fn reserve_replay_values(&mut self, count: &str) {
-            if self.records_checkpoint() {
+            if self.records_preflight() {
                 self.lines.push(format!("reserve_replay({count})"));
             }
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            if self.records_checkpoint() {
+            if self.records_preflight() {
                 self.lines.push(format!("append({value})"));
             }
         }
 
         fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
-            if self.records_checkpoint() {
+            if self.records_preflight() {
                 self.lines.push(format!("append_range({base}, {count})"));
             }
         }
 
         fn flush_before_control_transfer(&mut self) {
-            if self.records_checkpoint() {
+            if self.records_preflight() {
                 self.lines.push("flush".to_string());
             }
         }
@@ -638,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    fn int256_alu_checkpoint_emits_exact_schedule_and_postimage() {
+    fn int256_alu_preflight_emits_exact_schedule_and_postimage() {
         let instruction = Int256AluInstr {
             rd_reg: Variable::new(1),
             rs1_reg: Variable::new(2),
@@ -647,10 +647,10 @@ mod tests {
         };
         assert!(instruction.supports_preflight());
 
-        let mut checkpoint = TestEmitCtx::default();
-        instruction.emit_c(&mut checkpoint);
+        let mut preflight = TestEmitCtx::default();
+        instruction.emit_c(&mut preflight);
         assert_eq!(
-            checkpoint.lines,
+            preflight.lines,
             [
                 "read(r2)",
                 "read(r3)",
@@ -684,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn int256_branches_checkpoint_emit_only_the_decision_replay_value() {
+    fn int256_branches_preflight_emit_only_the_decision_replay_value() {
         let instruction = Int256BranchEqInstr {
             rs1_reg: Variable::new(2),
             rs2_reg: Variable::new(3),
@@ -694,10 +694,10 @@ mod tests {
         };
         assert!(instruction.supports_preflight());
 
-        let mut checkpoint = TestEmitCtx::default();
-        instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));
+        let mut preflight = TestEmitCtx::default();
+        instruction.emit_c_term(&mut preflight, &|pc| format!("goto_{pc}"));
         assert_eq!(
-            checkpoint.lines,
+            preflight.lines,
             [
                 "read(r2)",
                 "read(r3)",
@@ -742,12 +742,12 @@ mod tests {
             fall_pc: 44,
             op: Int256BranchLtOp::Bltu,
         };
-        let mut checkpoint = TestEmitCtx::default();
-        instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));
-        assert_eq!(checkpoint.lines[6], "advance(8)");
-        assert_eq!(checkpoint.lines[8], "flush");
+        let mut preflight = TestEmitCtx::default();
+        instruction.emit_c_term(&mut preflight, &|pc| format!("goto_{pc}"));
+        assert_eq!(preflight.lines[6], "advance(8)");
+        assert_eq!(preflight.lines[8], "flush");
         assert_eq!(
-            checkpoint.lines[5],
+            preflight.lines[5],
             "bool tmp0 = rvr_ext_int256_bltu(state, r2, r3)"
         );
     }

@@ -4,16 +4,20 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
-use openvm_instructions::{LocalOpcode, SystemOpcode, MEMORY_BLOCK_BYTES};
+#[cfg(test)]
+use openvm_instructions::MEMORY_BLOCK_BYTES;
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
+#[cfg(test)]
+use crate::BINARY_INPUTS_AND_OUTPUT;
 use crate::{
     decode_reg, emit_word_alignment_guard, format_c_byte_array, pad_modulus, ArithKind,
     FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, KnownField, ModOp,
-    SetupKind, BINARY_INPUTS, BINARY_INPUTS_AND_OUTPUT, MEMORY_BLOCK_BYTES_U32,
+    SetupKind, BINARY_INPUTS, MEMORY_BLOCK_BYTES_U32,
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
@@ -359,14 +363,14 @@ mod tests {
     #[derive(Default)]
     struct TestEmitCtx {
         operations: Vec<String>,
-        checkpoint: bool,
+        preflight: bool,
         next_tmp: usize,
     }
 
     impl TestEmitCtx {
-        fn checkpoint() -> Self {
+        fn preflight() -> Self {
             Self {
-                checkpoint: true,
+                preflight: true,
                 ..Self::default()
             }
         }
@@ -374,7 +378,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn is_preflight(&self) -> bool {
-            self.checkpoint
+            self.preflight
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -387,7 +391,7 @@ mod tests {
         }
 
         fn advance_timestamp(&mut self, slots: u32) {
-            if self.checkpoint {
+            if self.preflight {
                 self.operations.push(format!("timestamp_slots({slots});"));
             }
         }
@@ -422,7 +426,7 @@ mod tests {
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            if self.checkpoint {
+            if self.preflight {
                 self.operations.push(format!("replay_value({value});"));
             }
         }
@@ -487,7 +491,7 @@ mod tests {
         };
         assert!(instr.supports_preflight());
 
-        let mut ctx = TestEmitCtx::checkpoint();
+        let mut ctx = TestEmitCtx::preflight();
         instr.emit_c(&mut ctx);
 
         assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
@@ -518,7 +522,7 @@ mod tests {
         };
         assert!(instr.supports_preflight());
 
-        let mut ctx = TestEmitCtx::checkpoint();
+        let mut ctx = TestEmitCtx::preflight();
         instr.emit_c(&mut ctx);
 
         assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
@@ -540,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn modular_arithmetic_checkpoint_emits_air_order_and_minimal_postimage() {
+    fn modular_arithmetic_preflight_emits_air_order_and_minimal_postimage() {
         for num_limbs in [32, 48] {
             for op in [ModOp::Add, ModOp::Sub, ModOp::Mul, ModOp::Div] {
                 let instr = ModArithInstr::new(
@@ -553,10 +557,10 @@ mod tests {
                 );
                 assert!(instr.supports_preflight());
 
-                let mut checkpoint = TestEmitCtx::checkpoint();
-                instr.emit_c(&mut checkpoint);
+                let mut preflight = TestEmitCtx::preflight();
+                instr.emit_c(&mut preflight);
                 assert_eq!(
-                    &checkpoint.operations[..4],
+                    &preflight.operations[..4],
                     [
                         "read(r2);",
                         "read(r3);",
@@ -567,11 +571,11 @@ mod tests {
                         ),
                     ]
                 );
-                assert!(checkpoint
+                assert!(preflight
                     .operations
                     .iter()
                     .any(|operation| operation.contains("& 7ull")));
-                let replay_values: Vec<_> = checkpoint
+                let replay_values: Vec<_> = preflight
                     .operations
                     .iter()
                     .filter(|operation| operation.starts_with("replay_value("))
@@ -607,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn modular_setup_checkpoint_has_no_replay_value() {
+    fn modular_setup_preflight_has_no_replay_value() {
         for num_limbs in [32, 48] {
             // SETUP_ADDSUB and SETUP_MULDIV both lift to this node.
             let instr = ModSetupInstr::new(
@@ -619,10 +623,10 @@ mod tests {
             );
             assert!(instr.supports_preflight());
 
-            let mut checkpoint = TestEmitCtx::checkpoint();
-            instr.emit_c(&mut checkpoint);
+            let mut preflight = TestEmitCtx::preflight();
+            instr.emit_c(&mut preflight);
             assert_eq!(
-                &checkpoint.operations[..4],
+                &preflight.operations[..4],
                 [
                     "read(r2);",
                     "read(r3);",
@@ -633,11 +637,11 @@ mod tests {
                     ),
                 ]
             );
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation.contains("& 7ull")));
-            assert!(!checkpoint
+            assert!(!preflight
                 .operations
                 .iter()
                 .any(|operation| operation.starts_with("replay_value(")));
@@ -645,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn modular_iseq_checkpoint_emits_only_result_replay_value() {
+    fn modular_iseq_preflight_emits_only_result_replay_value() {
         for num_limbs in [32, 48] {
             let instr = ModIsEqInstr::new(
                 Variable::new(1),
@@ -656,10 +660,10 @@ mod tests {
             );
             assert!(instr.supports_preflight());
 
-            let mut checkpoint = TestEmitCtx::checkpoint();
-            instr.emit_c(&mut checkpoint);
+            let mut preflight = TestEmitCtx::preflight();
+            instr.emit_c(&mut preflight);
             assert_eq!(
-                &checkpoint.operations[..3],
+                &preflight.operations[..3],
                 [
                     "read(r2);",
                     "read(r3);",
@@ -669,23 +673,23 @@ mod tests {
                     ),
                 ]
             );
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation.contains("& 7ull")));
             assert_eq!(
-                checkpoint
+                preflight
                     .operations
                     .iter()
                     .filter(|operation| operation.starts_with("replay_value("))
                     .count(),
                 1
             );
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation == "replay_value(tmp0);"));
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation == "write(r1, tmp0);"));
@@ -693,7 +697,7 @@ mod tests {
     }
 
     #[test]
-    fn modular_setup_iseq_checkpoint_result_is_derivable() {
+    fn modular_setup_iseq_preflight_result_is_derivable() {
         for num_limbs in [32, 48] {
             let instr = ModSetupIsEqInstr {
                 rd_reg: Variable::new(1),
@@ -704,10 +708,10 @@ mod tests {
             };
             assert!(instr.supports_preflight());
 
-            let mut checkpoint = TestEmitCtx::checkpoint();
-            instr.emit_c(&mut checkpoint);
+            let mut preflight = TestEmitCtx::preflight();
+            instr.emit_c(&mut preflight);
             assert_eq!(
-                &checkpoint.operations[..3],
+                &preflight.operations[..3],
                 [
                     "read(r2);",
                     "read(r3);",
@@ -717,11 +721,11 @@ mod tests {
                     ),
                 ]
             );
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation.contains("& 7ull")));
-            assert!(!checkpoint
+            assert!(!preflight
                 .operations
                 .iter()
                 .any(|operation| operation.starts_with("replay_value(")));

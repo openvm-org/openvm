@@ -7,7 +7,7 @@ use openvm_instructions::{
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 use rvr_openvm_lift::MAIN_MEMORY_PAGE_BYTES;
-use rvr_state::CHECKPOINT_DIRTY_PAGE_BYTES;
+use rvr_state::PREFLIGHT_DIRTY_PAGE_BYTES;
 
 const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
 const DEFERRAL_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
@@ -47,7 +47,7 @@ pub fn constants_header(
     let memory_mask = MEM_SIZE as u64 - 1;
     let byte_space_ptrs_per_leaf_bits = BYTE_SPACE_PTRS_PER_LEAF.ilog2();
     let deferral_ptrs_per_leaf_bits = DEFERRAL_PTRS_PER_LEAF.ilog2();
-    let checkpoint_dirty_page_bits = CHECKPOINT_DIRTY_PAGE_BYTES.ilog2();
+    let preflight_dirty_page_bits = PREFLIGHT_DIRTY_PAGE_BYTES.ilog2();
 
     let mut header = format!(
         "\
@@ -68,8 +68,8 @@ static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;
 static constexpr uint32_t TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS = {byte_space_ptrs_per_leaf_bits};
 static constexpr uint32_t TRACER_DEFERRAL_PTRS_PER_LEAF_BITS = {deferral_ptrs_per_leaf_bits};
 static constexpr uint32_t TRACER_PAGE_BITS = {PAGE_MASK_LEAF_BITS};
-static constexpr uint32_t CHECKPOINT_DIRTY_PAGE_BITS = {checkpoint_dirty_page_bits};
-static_assert((1u << CHECKPOINT_DIRTY_PAGE_BITS) == {CHECKPOINT_DIRTY_PAGE_BYTES}u);
+static constexpr uint32_t PREFLIGHT_DIRTY_PAGE_BITS = {preflight_dirty_page_bits};
+static_assert((1u << PREFLIGHT_DIRTY_PAGE_BITS) == {PREFLIGHT_DIRTY_PAGE_BYTES}u);
 static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};

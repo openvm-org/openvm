@@ -42,7 +42,7 @@ use {
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
-    openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution},
+    openvm_circuit::arch::rvr::{cuda::PreflightReplayProgram, PreflightExecution},
     openvm_stark_backend::p3_field::PrimeField32,
 };
 
@@ -317,7 +317,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         fp2: Option<&Fp2Extension>,
         weierstrass: &WeierstrassExtension,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<CheckpointReplayProgram, GpuPostflightError> {
+    ) -> Result<PreflightReplayProgram, GpuPostflightError> {
         let mut registry = PostflightAccessRegistry::default();
         AlgebraPreflightGpuTracegen::register_postflight_access_schedules(
             &mut registry,
@@ -327,7 +327,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         Self::register_postflight_access_schedules(&mut registry, weierstrass)?;
         registry
             .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
-        CheckpointReplayProgram::upload_with_postflight_access_registry(
+        PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
             &registry,
@@ -338,7 +338,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &CheckpointReplayProgram,
+        program: &PreflightReplayProgram,
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>

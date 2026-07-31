@@ -206,7 +206,7 @@ mod tests {
     struct TestEmitCtx {
         lines: Vec<String>,
         next_tmp: usize,
-        record_checkpoint: bool,
+        record_preflight: bool,
         count_replay_values: bool,
     }
 
@@ -215,7 +215,7 @@ mod tests {
             Self {
                 lines: Vec::new(),
                 next_tmp: 0,
-                record_checkpoint: true,
+                record_preflight: true,
                 count_replay_values: true,
             }
         }
@@ -224,7 +224,7 @@ mod tests {
     impl TestEmitCtx {
         fn pure() -> Self {
             Self {
-                record_checkpoint: false,
+                record_preflight: false,
                 count_replay_values: false,
                 ..Self::default()
             }
@@ -232,7 +232,7 @@ mod tests {
 
         fn metered() -> Self {
             Self {
-                record_checkpoint: false,
+                record_preflight: false,
                 count_replay_values: true,
                 ..Self::default()
             }
@@ -241,7 +241,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn is_preflight(&self) -> bool {
-            self.record_checkpoint
+            self.record_preflight
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -283,7 +283,7 @@ mod tests {
         }
 
         fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
-            if self.record_checkpoint {
+            if self.record_preflight {
                 self.lines.push(format!("reserve({slots})"));
             }
         }

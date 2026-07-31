@@ -21,7 +21,7 @@ use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use rvr_openvm_lift::RvrRuntimeExtension;
-use rvr_state::{CheckpointPreflightState, RvrCheckpoint, CHECKPOINT_DIRTY_PAGE_BYTES};
+use rvr_state::{PreflightTranscriptState, RvrCheckpoint, PREFLIGHT_DIRTY_PAGE_BYTES};
 
 use super::{
     bridge::map_rvr_execute_error, compile::CompileError, execute::execute_preflight, RvrCompiled,
@@ -39,7 +39,7 @@ use crate::{
     },
 };
 
-const _: () = assert!(CHECKPOINT_DIRTY_PAGE_BYTES == PAGE_SIZE);
+const _: () = assert!(PREFLIGHT_DIRTY_PAGE_BYTES == PAGE_SIZE);
 const DEFAULT_CHECKPOINT_INTERVAL: usize = 512;
 
 /// Why preflight stopped.
@@ -136,7 +136,7 @@ pub struct PreflightExecution {
     pub retired: u32,
 }
 
-pub(crate) struct CheckpointPreflightBuffers {
+pub(crate) struct PreflightBuffers {
     checkpoints: Vec<RvrCheckpoint>,
     replay_values: Vec<u64>,
     limits: ValidatedLimits,
@@ -144,13 +144,13 @@ pub(crate) struct CheckpointPreflightBuffers {
 
 /// Executor-only sparse-upload metadata. This is intentionally absent from
 /// [`PreflightTranscript`]: replay does not consume it.
-pub(crate) struct CheckpointDirtyPages {
+pub(crate) struct PreflightDirtyPages {
     memory: Box<[u64]>,
     public_values: Box<[u64]>,
     deferral: Box<[u64]>,
 }
 
-impl CheckpointDirtyPages {
+impl PreflightDirtyPages {
     pub(crate) fn new(memory: &AddressMap) -> Result<Self, String> {
         Ok(Self {
             memory: zeroed_dirty_page_words(memory.mem[RV64_MEMORY_AS as usize].size())?,
@@ -170,7 +170,7 @@ impl CheckpointDirtyPages {
 
         // Generated execution keeps registers in RvState and copies them back
         // only after a successful execution boundary. Mark their single page
-        // at the same successful checkpoint finalization boundary.
+        // when preflight finalizes successfully.
         if memory.mem[RV64_REGISTER_AS as usize].size() != 0 {
             memory.touched_pages[RV64_REGISTER_AS as usize].mark_byte_range(0, 1);
         }
@@ -183,7 +183,7 @@ fn zeroed_dirty_page_words(num_bytes: usize) -> Result<Box<[u64]>, String> {
     let mut words = Vec::new();
     words
         .try_reserve_exact(num_words)
-        .map_err(|error| format!("failed to reserve checkpoint dirty-page bits: {error}"))?;
+        .map_err(|error| format!("failed to reserve preflight dirty-page bits: {error}"))?;
     words.resize(num_words, 0);
     Ok(words.into_boxed_slice())
 }
@@ -203,7 +203,7 @@ fn merge_dirty_page_words(memory: &mut AddressMap, address_space: u32, words: &[
     }
 }
 
-impl CheckpointPreflightBuffers {
+impl PreflightBuffers {
     pub(crate) fn new(limits: PreflightLimits) -> Result<Self, String> {
         Self::with_transcript(limits, PreflightTranscript::default())
     }
@@ -245,9 +245,9 @@ impl CheckpointPreflightBuffers {
 
     pub(crate) fn ffi_state(
         &mut self,
-        dirty_pages: &mut CheckpointDirtyPages,
-    ) -> CheckpointPreflightState {
-        CheckpointPreflightState {
+        dirty_pages: &mut PreflightDirtyPages,
+    ) -> PreflightTranscriptState {
+        PreflightTranscriptState {
             checkpoint_log: self.checkpoints.as_mut_ptr(),
             replay_value_log: self.replay_values.as_mut_ptr(),
             checkpoint_log_len: 0,
@@ -275,9 +275,9 @@ impl CheckpointPreflightBuffers {
     /// execution must not have changed either allocation or its capacity.
     pub(crate) unsafe fn finish(
         mut self,
-        ffi: &CheckpointPreflightState,
+        ffi: &PreflightTranscriptState,
         timestamp_max_bits: usize,
-        dirty_pages: &CheckpointDirtyPages,
+        dirty_pages: &PreflightDirtyPages,
     ) -> Result<(PreflightTranscript, u32, u32), String> {
         if ffi.error != 0 {
             return Err(format!(
@@ -622,29 +622,28 @@ mod tests {
 
     #[test]
     fn reused_buffers_grow_to_larger_limits() {
-        let initial = CheckpointPreflightBuffers::new(PreflightLimits::new(128, 8, 64)).unwrap();
+        let initial = PreflightBuffers::new(PreflightLimits::new(128, 8, 64)).unwrap();
         let transcript = PreflightTranscript {
             checkpoints: initial.checkpoints,
             replay_values: initial.replay_values,
         };
         let reused =
-            CheckpointPreflightBuffers::reuse(PreflightLimits::new(1024, 64, 64), transcript)
-                .unwrap();
+            PreflightBuffers::reuse(PreflightLimits::new(1024, 64, 64), transcript).unwrap();
         assert!(reused.checkpoints.capacity() >= 16);
         assert!(reused.replay_values.capacity() >= 64);
     }
 
     #[test]
     fn finalization_rejects_reported_values_beyond_limits() {
-        let mut retired = CheckpointPreflightBuffers::new(PreflightLimits::new(8, 4, 4)).unwrap();
-        let mut retired_dirty = CheckpointDirtyPages::new(&AddressMap::default()).unwrap();
+        let mut retired = PreflightBuffers::new(PreflightLimits::new(8, 4, 4)).unwrap();
+        let mut retired_dirty = PreflightDirtyPages::new(&AddressMap::default()).unwrap();
         let mut retired_ffi = retired.ffi_state(&mut retired_dirty);
         retired_ffi.retired = 9;
         let error = unsafe { retired.finish(&retired_ffi, 29, &retired_dirty) }.unwrap_err();
         assert!(error.contains("beyond its 8 instruction limit"));
 
-        let mut buffers = CheckpointPreflightBuffers::new(PreflightLimits::new(8, 4, 4)).unwrap();
-        let mut dirty = CheckpointDirtyPages::new(&AddressMap::default()).unwrap();
+        let mut buffers = PreflightBuffers::new(PreflightLimits::new(8, 4, 4)).unwrap();
+        let mut dirty = PreflightDirtyPages::new(&AddressMap::default()).unwrap();
         let mut ffi = buffers.ffi_state(&mut dirty);
         ffi.replay_value_log_len = 5;
         let error = unsafe { buffers.finish(&ffi, 29, &dirty) }.unwrap_err();
@@ -653,8 +652,8 @@ mod tests {
 
     #[test]
     fn finalization_enforces_timestamp_domain() {
-        let mut buffers = CheckpointPreflightBuffers::new(PreflightLimits::new(8, 0, 4)).unwrap();
-        let mut dirty = CheckpointDirtyPages::new(&AddressMap::default()).unwrap();
+        let mut buffers = PreflightBuffers::new(PreflightLimits::new(8, 0, 4)).unwrap();
+        let mut dirty = PreflightDirtyPages::new(&AddressMap::default()).unwrap();
         let mut ffi = buffers.ffi_state(&mut dirty);
         ffi.timestamp = 4;
         let error = unsafe { buffers.finish(&ffi, 2, &dirty) }.unwrap_err();
@@ -701,7 +700,7 @@ mod tests {
             .touched_byte_ranges(PAGE_SIZE)
             .is_empty());
 
-        let mut dirty = CheckpointDirtyPages::new(&memory).unwrap();
+        let mut dirty = PreflightDirtyPages::new(&memory).unwrap();
         dirty.deferral[0] = 1;
         dirty.merge_into(&mut memory);
 

@@ -253,16 +253,16 @@ mod tests {
         emit_terminator(&mut direct, &term, 0, &tc);
         assert!(!direct.buf().contains("reg_read"));
 
-        let mut checkpoint = EmitContext::new(
+        let mut preflight = EmitContext::new(
             HashSet::new(),
             EmitMode::Preflight,
             BlockAbi::Plain,
             None,
             None,
         );
-        emit_terminator(&mut checkpoint, &term, 0, &tc);
-        assert!(!checkpoint.buf().contains("preflight_local_reg_read"));
-        assert_eq!(checkpoint.preflight_block_budget(), (2, 0));
+        emit_terminator(&mut preflight, &term, 0, &tc);
+        assert!(!preflight.buf().contains("preflight_local_reg_read"));
+        assert_eq!(preflight.preflight_block_budget(), (2, 0));
     }
 
     #[test]

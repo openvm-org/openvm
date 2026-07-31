@@ -2,15 +2,19 @@
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_instructions::{LocalOpcode, MEMORY_BLOCK_BYTES};
+use openvm_instructions::LocalOpcode;
+#[cfg(test)]
+use openvm_instructions::MEMORY_BLOCK_BYTES;
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
     decode_reg, pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField,
-    ModOp, SetupKind, BINARY_INPUTS_AND_OUTPUT, MEMORY_BLOCK_BYTES_U32,
+    ModOp, SetupKind,
 };
+#[cfg(test)]
+use crate::{BINARY_INPUTS_AND_OUTPUT, MEMORY_BLOCK_BYTES_U32};
 
 // An Fp2 operation can read two independent 96-byte values and write one.
 const FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
@@ -95,14 +99,14 @@ mod tests {
     #[derive(Default)]
     struct TestEmitCtx {
         operations: Vec<String>,
-        checkpoint: bool,
+        preflight: bool,
         next_tmp: usize,
     }
 
     impl TestEmitCtx {
-        fn checkpoint() -> Self {
+        fn preflight() -> Self {
             Self {
-                checkpoint: true,
+                preflight: true,
                 ..Self::default()
             }
         }
@@ -110,7 +114,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn is_preflight(&self) -> bool {
-            self.checkpoint
+            self.preflight
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -123,7 +127,7 @@ mod tests {
         }
 
         fn advance_timestamp(&mut self, slots: u32) {
-            if self.checkpoint {
+            if self.preflight {
                 self.operations.push(format!("timestamp_slots({slots});"));
             }
         }
@@ -158,7 +162,7 @@ mod tests {
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            if self.checkpoint {
+            if self.preflight {
                 self.operations.push(format!("replay_value({value});"));
             }
         }
@@ -217,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn fp2_arithmetic_checkpoint_matches_vec_heap_schedule() {
+    fn fp2_arithmetic_preflight_matches_vec_heap_schedule() {
         for num_limbs in [32, 48] {
             for op in [ModOp::Add, ModOp::Sub, ModOp::Mul, ModOp::Div] {
                 let instr = Fp2ArithInstr::new(
@@ -230,10 +234,10 @@ mod tests {
                 );
                 assert!(instr.supports_preflight());
 
-                let mut checkpoint = TestEmitCtx::checkpoint();
-                instr.emit_c(&mut checkpoint);
+                let mut preflight = TestEmitCtx::preflight();
+                instr.emit_c(&mut preflight);
                 assert_eq!(
-                    &checkpoint.operations[..4],
+                    &preflight.operations[..4],
                     [
                         "read(r2);",
                         "read(r3);",
@@ -245,11 +249,11 @@ mod tests {
                         ),
                     ]
                 );
-                assert!(checkpoint
+                assert!(preflight
                     .operations
                     .iter()
                     .any(|operation| operation.contains("& 7ull")));
-                let replay_values: Vec<_> = checkpoint
+                let replay_values: Vec<_> = preflight
                     .operations
                     .iter()
                     .filter(|operation| operation.starts_with("replay_value("))
@@ -284,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn fp2_setup_checkpoint_appends_full_destination_postimage() {
+    fn fp2_setup_preflight_appends_full_destination_postimage() {
         for num_limbs in [32, 48] {
             let instr = Fp2SetupInstr::new(
                 Variable::new(1),
@@ -295,10 +299,10 @@ mod tests {
             );
             assert!(instr.supports_preflight());
 
-            let mut checkpoint = TestEmitCtx::checkpoint();
-            instr.emit_c(&mut checkpoint);
+            let mut preflight = TestEmitCtx::preflight();
+            instr.emit_c(&mut preflight);
             assert_eq!(
-                &checkpoint.operations[..4],
+                &preflight.operations[..4],
                 [
                     "read(r2);",
                     "read(r3);",
@@ -310,11 +314,11 @@ mod tests {
                     ),
                 ]
             );
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation.contains("& 7ull")));
-            let replay_values: Vec<_> = checkpoint
+            let replay_values: Vec<_> = preflight
                 .operations
                 .iter()
                 .filter(|operation| operation.starts_with("replay_value("))
@@ -332,19 +336,19 @@ mod tests {
                     )
                 );
             }
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation.starts_with("bool tmp0 = rvr_ext_fp2_setup(")));
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation == "if (unlikely(!tmp0)) {"));
-            assert!(checkpoint
+            assert!(preflight
                 .operations
                 .iter()
                 .any(|operation| operation == "trap;"));
-            assert!(!checkpoint
+            assert!(!preflight
                 .operations
                 .iter()
                 .any(|operation| operation.starts_with("write(r")));

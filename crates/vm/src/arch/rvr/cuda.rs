@@ -22,10 +22,10 @@ use crate::{
     arch::{
         cuda::postflight::{
             gpu_buffer, upload, GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram,
-            GpuPostflightTranscript, PostflightFieldBlock, PostflightInstruction,
+            GpuPostflightTranscript, GpuReplayInstruction,
         },
         rvr::{bridge::read_rv64_registers, preflight::PreflightExecution, PreflightEndpoint},
-        to_byte_ptr_bits, MemoryConfig, BLOCK_FE_WIDTH,
+        to_byte_ptr_bits, MemoryConfig, PreflightFieldBlock, BLOCK_FE_WIDTH,
     },
     cuda_abi::rvr_checkpoint_replay,
 };
@@ -96,26 +96,26 @@ impl PostflightOpcodeBases {
     }
 }
 
-const RVR_CHECKPOINT_NO_SCHEDULE: u32 = u32::MAX;
-const RVR_CHECKPOINT_MAX_DENSE_OPCODE: u32 = u16::MAX as u32;
-const RVR_CHECKPOINT_EFFECT_NEXT: u8 = 0;
-const RVR_CHECKPOINT_EFFECT_BRANCH_REPLAY_VALUE: u8 = 1;
-const RVR_CHECKPOINT_REGISTER_WRITE_NONE: u8 = 0;
-const RVR_CHECKPOINT_REGISTER_WRITE_ZERO: u8 = 1;
-const RVR_CHECKPOINT_REGISTER_WRITE_REPLAY_VALUE: u8 = 2;
-const RVR_CHECKPOINT_SPAN_BASE_REGISTER: u8 = 0;
-const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT: u8 = 1;
-const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT: u8 = 2;
-const RVR_CHECKPOINT_SPAN_COUNT_FIXED: u8 = 0;
-const RVR_CHECKPOINT_SPAN_COUNT_REGISTER: u8 = 1;
-const RVR_CHECKPOINT_SPAN_COUNT_REPLAY_VALUE: u8 = 2;
-const RVR_CHECKPOINT_SPAN_READ_U16: u8 = 0;
-const RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE: u8 = 1;
-const RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO: u8 = 2;
-const RVR_CHECKPOINT_SPAN_READ_FIELD32: u8 = 3;
-const RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS: u8 = 4;
-const RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC: u8 = 5;
-const RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS: u32 = 2;
+const RVR_REPLAY_NO_SCHEDULE: u32 = u32::MAX;
+const RVR_REPLAY_MAX_DENSE_OPCODE: u32 = u16::MAX as u32;
+const RVR_REPLAY_EFFECT_NEXT: u8 = 0;
+const RVR_REPLAY_EFFECT_BRANCH_REPLAY_VALUE: u8 = 1;
+const RVR_REPLAY_REGISTER_WRITE_NONE: u8 = 0;
+const RVR_REPLAY_REGISTER_WRITE_ZERO: u8 = 1;
+const RVR_REPLAY_REGISTER_WRITE_REPLAY_VALUE: u8 = 2;
+const RVR_REPLAY_SPAN_BASE_REGISTER: u8 = 0;
+const RVR_REPLAY_SPAN_BASE_DEFERRAL_INPUT: u8 = 1;
+const RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT: u8 = 2;
+const RVR_REPLAY_SPAN_COUNT_FIXED: u8 = 0;
+const RVR_REPLAY_SPAN_COUNT_REGISTER: u8 = 1;
+const RVR_REPLAY_SPAN_COUNT_REPLAY_VALUE: u8 = 2;
+const RVR_REPLAY_SPAN_READ_U16: u8 = 0;
+const RVR_REPLAY_SPAN_WRITE_U16_REPLAY_VALUE: u8 = 1;
+const RVR_REPLAY_SPAN_WRITE_U16_ZERO: u8 = 2;
+const RVR_REPLAY_SPAN_READ_FIELD32: u8 = 3;
+const RVR_REPLAY_SPAN_WRITE_FIELD32_CANONICAL_PAIRS: u8 = 4;
+const RVR_REPLAY_SPAN_WRITE_U16_STATIC: u8 = 5;
+const RVR_REPLAY_DEFERRAL_DIGEST_BLOCKS: u32 = 2;
 
 /// One contiguous sequence of fixed-width memory-bus accesses in an
 /// extension-owned checkpoint replay schedule. U16 spans access eight bytes per
@@ -151,11 +151,11 @@ impl PostflightAccessSpan {
             address_space,
             count,
             base_index: base_register,
-            base_source: RVR_CHECKPOINT_SPAN_BASE_REGISTER,
+            base_source: RVR_REPLAY_SPAN_BASE_REGISTER,
             count_register: 0,
             count_shift: 0,
-            count_source: RVR_CHECKPOINT_SPAN_COUNT_FIXED,
-            value_source: RVR_CHECKPOINT_SPAN_READ_U16,
+            count_source: RVR_REPLAY_SPAN_COUNT_FIXED,
+            value_source: RVR_REPLAY_SPAN_READ_U16,
             value_index: 0,
         }
     }
@@ -166,7 +166,7 @@ impl PostflightAccessSpan {
         count: u32,
     ) -> Self {
         Self {
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE,
+            value_source: RVR_REPLAY_SPAN_WRITE_U16_REPLAY_VALUE,
             ..Self::read_fixed(address_space, base_register, count)
         }
     }
@@ -175,7 +175,7 @@ impl PostflightAccessSpan {
     /// write slots without adding redundant zeroes to the serial transcript.
     pub const fn write_fixed_zero(address_space: u32, base_register: u8, count: u32) -> Self {
         Self {
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO,
+            value_source: RVR_REPLAY_SPAN_WRITE_U16_ZERO,
             ..Self::read_fixed(address_space, base_register, count)
         }
     }
@@ -191,11 +191,11 @@ impl PostflightAccessSpan {
             address_space,
             count: max_count,
             base_index: base_register,
-            base_source: RVR_CHECKPOINT_SPAN_BASE_REGISTER,
+            base_source: RVR_REPLAY_SPAN_BASE_REGISTER,
             count_register,
             count_shift,
-            count_source: RVR_CHECKPOINT_SPAN_COUNT_REGISTER,
-            value_source: RVR_CHECKPOINT_SPAN_READ_U16,
+            count_source: RVR_REPLAY_SPAN_COUNT_REGISTER,
+            value_source: RVR_REPLAY_SPAN_READ_U16,
             value_index: 0,
         }
     }
@@ -208,7 +208,7 @@ impl PostflightAccessSpan {
         max_count: u32,
     ) -> Self {
         Self {
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE,
+            value_source: RVR_REPLAY_SPAN_WRITE_U16_REPLAY_VALUE,
             ..Self::read_count_from_register(
                 address_space,
                 base_register,
@@ -227,8 +227,8 @@ impl PostflightAccessSpan {
         max_count: u32,
     ) -> Self {
         Self {
-            count_source: RVR_CHECKPOINT_SPAN_COUNT_REPLAY_VALUE,
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE,
+            count_source: RVR_REPLAY_SPAN_COUNT_REPLAY_VALUE,
+            value_source: RVR_REPLAY_SPAN_WRITE_U16_REPLAY_VALUE,
             ..Self::read_fixed(address_space, base_register, max_count)
         }
     }
@@ -238,8 +238,8 @@ impl PostflightAccessSpan {
     pub const fn read_deferral_input_accumulator(deferral_idx_operand: u8) -> Self {
         Self::deferral_accumulator(
             deferral_idx_operand,
-            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT,
-            RVR_CHECKPOINT_SPAN_READ_FIELD32,
+            RVR_REPLAY_SPAN_BASE_DEFERRAL_INPUT,
+            RVR_REPLAY_SPAN_READ_FIELD32,
         )
     }
 
@@ -248,8 +248,8 @@ impl PostflightAccessSpan {
     pub const fn read_deferral_output_accumulator(deferral_idx_operand: u8) -> Self {
         Self::deferral_accumulator(
             deferral_idx_operand,
-            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT,
-            RVR_CHECKPOINT_SPAN_READ_FIELD32,
+            RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT,
+            RVR_REPLAY_SPAN_READ_FIELD32,
         )
     }
 
@@ -258,8 +258,8 @@ impl PostflightAccessSpan {
     pub const fn write_deferral_input_accumulator(deferral_idx_operand: u8) -> Self {
         Self::deferral_accumulator(
             deferral_idx_operand,
-            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT,
-            RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS,
+            RVR_REPLAY_SPAN_BASE_DEFERRAL_INPUT,
+            RVR_REPLAY_SPAN_WRITE_FIELD32_CANONICAL_PAIRS,
         )
     }
 
@@ -267,8 +267,8 @@ impl PostflightAccessSpan {
     pub const fn write_deferral_output_accumulator(deferral_idx_operand: u8) -> Self {
         Self::deferral_accumulator(
             deferral_idx_operand,
-            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT,
-            RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS,
+            RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT,
+            RVR_REPLAY_SPAN_WRITE_FIELD32_CANONICAL_PAIRS,
         )
     }
 
@@ -279,12 +279,12 @@ impl PostflightAccessSpan {
     ) -> Self {
         Self {
             address_space: DEFERRAL_AS,
-            count: RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS,
+            count: RVR_REPLAY_DEFERRAL_DIGEST_BLOCKS,
             base_index: deferral_idx_operand,
             base_source,
             count_register: 0,
             count_shift: 0,
-            count_source: RVR_CHECKPOINT_SPAN_COUNT_FIXED,
+            count_source: RVR_REPLAY_SPAN_COUNT_FIXED,
             value_source,
             value_index: 0,
         }
@@ -304,7 +304,7 @@ const _: () = assert!(std::mem::offset_of!(PostflightEventCount, field) == 4);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct RvrCheckpointAccessSchedule {
+struct RvrReplayAccessSchedule {
     first_span: u32,
     num_spans: u32,
     register_operands: [u8; 3],
@@ -315,10 +315,10 @@ struct RvrCheckpointAccessSchedule {
     register_write_operand: u8,
 }
 
-const _: () = assert!(size_of::<RvrCheckpointAccessSchedule>() == 16);
+const _: () = assert!(size_of::<RvrReplayAccessSchedule>() == 16);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct RvrCheckpointInstructionLayout {
+struct RvrReplayInstructionLayout {
     zero_operand_mask: u32,
     register_as_operand: u8,
     memory_as_operand: u8,
@@ -333,8 +333,8 @@ struct RvrCheckpointInstructionLayout {
 #[derive(Clone, Debug, Default)]
 pub struct PostflightAccessRegistry {
     dispatch: Vec<u32>,
-    schedules: Vec<RvrCheckpointAccessSchedule>,
-    instruction_layouts: Vec<RvrCheckpointInstructionLayout>,
+    schedules: Vec<RvrReplayAccessSchedule>,
+    instruction_layouts: Vec<RvrReplayInstructionLayout>,
     spans: Vec<PostflightAccessSpan>,
     static_values: Vec<u64>,
 }
@@ -398,7 +398,7 @@ impl PostflightAccessRegistry {
             })?;
         self.static_values.extend_from_slice(values);
         Ok(PostflightAccessSpan {
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC,
+            value_source: RVR_REPLAY_SPAN_WRITE_U16_STATIC,
             value_index,
             ..PostflightAccessSpan::read_fixed(address_space, base_register, count)
         })
@@ -526,7 +526,7 @@ impl PostflightAccessRegistry {
                 "invalid operand layout".to_string(),
             ));
         }
-        if opcode > RVR_CHECKPOINT_MAX_DENSE_OPCODE {
+        if opcode > RVR_REPLAY_MAX_DENSE_OPCODE {
             return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "opcode {opcode} exceeds the dense checkpoint dispatch bound"
             )));
@@ -540,10 +540,9 @@ impl PostflightAccessRegistry {
                 )
             })?;
         if self.dispatch.len() < dispatch_len {
-            self.dispatch
-                .resize(dispatch_len, RVR_CHECKPOINT_NO_SCHEDULE);
+            self.dispatch.resize(dispatch_len, RVR_REPLAY_NO_SCHEDULE);
         }
-        if self.dispatch[opcode as usize] != RVR_CHECKPOINT_NO_SCHEDULE {
+        if self.dispatch[opcode as usize] != RVR_REPLAY_NO_SCHEDULE {
             return Err(GpuPostflightError::InvalidAccessSchedule(format!(
                 "duplicate checkpoint access schedule for opcode {opcode}"
             )));
@@ -551,15 +550,13 @@ impl PostflightAccessRegistry {
         for span in spans {
             let field = matches!(
                 span.value_source,
-                RVR_CHECKPOINT_SPAN_READ_FIELD32
-                    | RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
+                RVR_REPLAY_SPAN_READ_FIELD32 | RVR_REPLAY_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
             );
             let base_valid = match span.base_source {
-                RVR_CHECKPOINT_SPAN_BASE_REGISTER => {
+                RVR_REPLAY_SPAN_BASE_REGISTER => {
                     usize::from(span.base_index) < register_operands.len()
                 }
-                RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT
-                | RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT => {
+                RVR_REPLAY_SPAN_BASE_DEFERRAL_INPUT | RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT => {
                     (1..8).contains(&span.base_index)
                         && !register_operands.contains(&span.base_index)
                         && span.base_index != register_as_operand
@@ -569,26 +566,26 @@ impl PostflightAccessRegistry {
                 _ => false,
             };
             let count_valid = match span.count_source {
-                RVR_CHECKPOINT_SPAN_COUNT_FIXED => {
+                RVR_REPLAY_SPAN_COUNT_FIXED => {
                     span.count != 0 && span.count_register == 0 && span.count_shift == 0
                 }
-                RVR_CHECKPOINT_SPAN_COUNT_REGISTER => {
+                RVR_REPLAY_SPAN_COUNT_REGISTER => {
                     usize::from(span.count_register) < register_operands.len()
                         && span.count_shift < u64::BITS as u8
                 }
-                RVR_CHECKPOINT_SPAN_COUNT_REPLAY_VALUE => {
+                RVR_REPLAY_SPAN_COUNT_REPLAY_VALUE => {
                     span.count != 0 && span.count_register == 0 && span.count_shift == 0
                 }
                 _ => false,
             };
             let value_valid = matches!(
                 span.value_source,
-                RVR_CHECKPOINT_SPAN_READ_U16
-                    | RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE
-                    | RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO
-                    | RVR_CHECKPOINT_SPAN_READ_FIELD32
-                    | RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
-                    | RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
+                RVR_REPLAY_SPAN_READ_U16
+                    | RVR_REPLAY_SPAN_WRITE_U16_REPLAY_VALUE
+                    | RVR_REPLAY_SPAN_WRITE_U16_ZERO
+                    | RVR_REPLAY_SPAN_READ_FIELD32
+                    | RVR_REPLAY_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
+                    | RVR_REPLAY_SPAN_WRITE_U16_STATIC
             );
             let static_end = usize::from(span.value_index)
                 .checked_add(span.count as usize)
@@ -601,17 +598,14 @@ impl PostflightAccessRegistry {
                 || (field
                     && !matches!(
                         span.base_source,
-                        RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT
-                            | RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT
+                        RVR_REPLAY_SPAN_BASE_DEFERRAL_INPUT | RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT
                     ))
-                || (!field && span.base_source != RVR_CHECKPOINT_SPAN_BASE_REGISTER)
-                || (field && span.count_source != RVR_CHECKPOINT_SPAN_COUNT_FIXED)
-                || (field && span.count != RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS)
-                || (span.value_source == RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
-                    && (span.count_source != RVR_CHECKPOINT_SPAN_COUNT_FIXED
-                        || static_end.is_none()))
-                || (span.value_source != RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
-                    && span.value_index != 0)
+                || (!field && span.base_source != RVR_REPLAY_SPAN_BASE_REGISTER)
+                || (field && span.count_source != RVR_REPLAY_SPAN_COUNT_FIXED)
+                || (field && span.count != RVR_REPLAY_DEFERRAL_DIGEST_BLOCKS)
+                || (span.value_source == RVR_REPLAY_SPAN_WRITE_U16_STATIC
+                    && (span.count_source != RVR_REPLAY_SPAN_COUNT_FIXED || static_end.is_none()))
+                || (span.value_source != RVR_REPLAY_SPAN_WRITE_U16_STATIC && span.value_index != 0)
             {
                 return Err(GpuPostflightError::InvalidAccessSchedule(
                     "invalid access span".to_string(),
@@ -636,21 +630,19 @@ impl PostflightAccessRegistry {
         operand_words[..register_operands.len()].copy_from_slice(register_operands);
         self.spans.extend_from_slice(spans);
         let (effect, effect_operand) = match effect {
-            PostflightEffect::Next => (RVR_CHECKPOINT_EFFECT_NEXT, 0),
+            PostflightEffect::Next => (RVR_REPLAY_EFFECT_NEXT, 0),
             PostflightEffect::BranchFromReplayValue { operand } => {
-                (RVR_CHECKPOINT_EFFECT_BRANCH_REPLAY_VALUE, operand)
+                (RVR_REPLAY_EFFECT_BRANCH_REPLAY_VALUE, operand)
             }
         };
         let (register_write_source, register_write_operand) = match register_write {
-            PostflightRegisterWrite::None => (RVR_CHECKPOINT_REGISTER_WRITE_NONE, 0),
-            PostflightRegisterWrite::Zero { operand } => {
-                (RVR_CHECKPOINT_REGISTER_WRITE_ZERO, operand)
-            }
+            PostflightRegisterWrite::None => (RVR_REPLAY_REGISTER_WRITE_NONE, 0),
+            PostflightRegisterWrite::Zero { operand } => (RVR_REPLAY_REGISTER_WRITE_ZERO, operand),
             PostflightRegisterWrite::ReplayValue { operand } => {
-                (RVR_CHECKPOINT_REGISTER_WRITE_REPLAY_VALUE, operand)
+                (RVR_REPLAY_REGISTER_WRITE_REPLAY_VALUE, operand)
             }
         };
-        self.schedules.push(RvrCheckpointAccessSchedule {
+        self.schedules.push(RvrReplayAccessSchedule {
             first_span,
             num_spans,
             register_operands: operand_words,
@@ -660,12 +652,11 @@ impl PostflightAccessRegistry {
             register_write_source,
             register_write_operand,
         });
-        self.instruction_layouts
-            .push(RvrCheckpointInstructionLayout {
-                zero_operand_mask,
-                register_as_operand,
-                memory_as_operand,
-            });
+        self.instruction_layouts.push(RvrReplayInstructionLayout {
+            zero_operand_mask,
+            register_as_operand,
+            memory_as_operand,
+        });
         debug_assert_eq!(self.schedules.len(), self.instruction_layouts.len());
         self.dispatch[opcode as usize] = schedule_index;
         Ok(())
@@ -680,7 +671,7 @@ impl PostflightAccessRegistry {
             .iter()
             .enumerate()
             .find_map(|(opcode, &schedule)| {
-                (schedule != RVR_CHECKPOINT_NO_SCHEDULE && opcodes.owns(opcode as u32))
+                (schedule != RVR_REPLAY_NO_SCHEDULE && opcodes.owns(opcode as u32))
                     .then_some(opcode)
             })
         {
@@ -693,7 +684,7 @@ impl PostflightAccessRegistry {
 
     fn validate_instruction(
         &self,
-        instruction: &PostflightInstruction,
+        instruction: &GpuReplayInstruction,
         cell_pointer_max_bits: usize,
         deferral_num_cells: usize,
     ) -> Result<(), GpuPostflightError> {
@@ -701,7 +692,7 @@ impl PostflightAccessRegistry {
         let Some(&schedule_index) = self.dispatch.get(opcode) else {
             return Ok(());
         };
-        if schedule_index == RVR_CHECKPOINT_NO_SCHEDULE {
+        if schedule_index == RVR_REPLAY_NO_SCHEDULE {
             return Ok(());
         }
         debug_assert_eq!(self.schedules.len(), self.instruction_layouts.len());
@@ -724,13 +715,12 @@ impl PostflightAccessRegistry {
             .filter(|span| {
                 matches!(
                     span.base_source,
-                    RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT
-                        | RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT
+                    RVR_REPLAY_SPAN_BASE_DEFERRAL_INPUT | RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT
                 )
             })
             .any(|span| {
                 let base = u64::from(instruction.words[span.base_index as usize]) * 16
-                    + u64::from(span.base_source == RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT) * 8;
+                    + u64::from(span.base_source == RVR_REPLAY_SPAN_BASE_DEFERRAL_OUTPUT) * 8;
                 let end = base + u64::from(span.count) * BLOCK_FE_WIDTH as u64;
                 let pointer_limit = 1u64 << cell_pointer_max_bits;
                 end < base || end > pointer_limit || end > deferral_num_cells as u64
@@ -748,12 +738,12 @@ impl PostflightAccessRegistry {
                     let pointer = u64::from(instruction.words[word as usize]);
                     pointer >= 32 * RV64_REGISTER_BYTES || pointer % RV64_REGISTER_BYTES != 0
                 })
-            || (schedule.register_write_source != RVR_CHECKPOINT_REGISTER_WRITE_NONE && {
+            || (schedule.register_write_source != RVR_REPLAY_REGISTER_WRITE_NONE && {
                 let pointer =
                     u64::from(instruction.words[schedule.register_write_operand as usize]);
                 pointer >= 32 * RV64_REGISTER_BYTES || pointer % RV64_REGISTER_BYTES != 0
             })
-            || (schedule.effect == RVR_CHECKPOINT_EFFECT_BRANCH_REPLAY_VALUE
+            || (schedule.effect == RVR_REPLAY_EFFECT_BRANCH_REPLAY_VALUE
                 && instruction.words[schedule.effect_operand as usize] >= BabyBear::ORDER_U32)
             || invalid_deferral_span
         {
@@ -766,17 +756,17 @@ impl PostflightAccessRegistry {
     }
 }
 
-pub struct CheckpointReplayProgram {
+pub struct PreflightReplayProgram {
     program: GpuPostflightProgram,
-    checkpoint_schedule_dispatch: DeviceBuffer<u32>,
-    checkpoint_schedules: DeviceBuffer<RvrCheckpointAccessSchedule>,
-    checkpoint_spans: DeviceBuffer<PostflightAccessSpan>,
-    checkpoint_static_values: DeviceBuffer<u64>,
-    checkpoint_schedule_opcodes: Vec<u32>,
+    schedule_dispatch: DeviceBuffer<u32>,
+    access_schedules: DeviceBuffer<RvrReplayAccessSchedule>,
+    access_spans: DeviceBuffer<PostflightAccessSpan>,
+    static_values: DeviceBuffer<u64>,
+    scheduled_opcodes: Vec<u32>,
     byte_pointer_max_bits: u32,
 }
 
-impl CheckpointReplayProgram {
+impl PreflightReplayProgram {
     #[cfg(any(test, feature = "test-utils"))]
     pub fn upload<F: PrimeField32>(
         program: &Program<F>,
@@ -807,21 +797,21 @@ impl CheckpointReplayProgram {
                     memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells,
                 )
             })?;
-        let checkpoint_schedule_opcodes = registry
+        let scheduled_opcodes = registry
             .dispatch
             .iter()
             .enumerate()
             .filter_map(|(opcode, &schedule)| {
-                (schedule != RVR_CHECKPOINT_NO_SCHEDULE).then_some(opcode as u32)
+                (schedule != RVR_REPLAY_NO_SCHEDULE).then_some(opcode as u32)
             })
             .collect();
         Ok(Self {
             program,
-            checkpoint_schedule_dispatch: upload(&registry.dispatch, device_ctx)?,
-            checkpoint_schedules: upload(&registry.schedules, device_ctx)?,
-            checkpoint_spans: upload(&registry.spans, device_ctx)?,
-            checkpoint_static_values: upload(&registry.static_values, device_ctx)?,
-            checkpoint_schedule_opcodes,
+            schedule_dispatch: upload(&registry.dispatch, device_ctx)?,
+            access_schedules: upload(&registry.schedules, device_ctx)?,
+            access_spans: upload(&registry.spans, device_ctx)?,
+            static_values: upload(&registry.static_values, device_ctx)?,
+            scheduled_opcodes,
             byte_pointer_max_bits: to_byte_ptr_bits(memory_config.pointer_max_bits)
                 .min(u32::BITS as usize) as u32,
         })
@@ -834,7 +824,7 @@ impl CheckpointReplayProgram {
     }
 }
 
-impl CheckpointReplayProgram {
+impl PreflightReplayProgram {
     /// Expands checkpoint execution into ordinary program and memory logs.
     /// Independent chunks emit byte-masked block intents; one device-wide
     /// chronology pass resolves them against the segment-start memory image.
@@ -857,7 +847,7 @@ impl CheckpointReplayProgram {
             )));
         }
         if let Some(opcode) = self
-            .checkpoint_schedule_opcodes
+            .scheduled_opcodes
             .iter()
             .copied()
             .find(|&opcode| opcodes.owns(opcode))
@@ -910,10 +900,10 @@ impl CheckpointReplayProgram {
                 initial_memory,
                 anchors.view(),
                 replay_values.view(),
-                self.checkpoint_schedule_dispatch.view(),
-                self.checkpoint_schedules.view(),
-                self.checkpoint_spans.view(),
-                self.checkpoint_static_values.view(),
+                self.schedule_dispatch.view(),
+                self.access_schedules.view(),
+                self.access_spans.view(),
+                self.static_values.view(),
                 opcodes,
                 address_spaces,
                 self.byte_pointer_max_bits,
@@ -970,7 +960,7 @@ impl CheckpointReplayProgram {
         let memory_log =
             gpu_buffer::<PreflightMemoryEvent>(total_memory as usize, program.device_ctx());
         let field_values =
-            gpu_buffer::<PostflightFieldBlock>(total_fields as usize, program.device_ctx());
+            gpu_buffer::<PreflightFieldBlock>(total_fields as usize, program.device_ctx());
         // One transient byte per event is enough to distinguish reads, full
         // writes, and partial block writes. The chronology pass consumes and
         // releases this before opcode trace generation.
@@ -986,10 +976,10 @@ impl CheckpointReplayProgram {
                 anchors.view(),
                 replay_values.view(),
                 offsets.view(),
-                self.checkpoint_schedule_dispatch.view(),
-                self.checkpoint_schedules.view(),
-                self.checkpoint_spans.view(),
-                self.checkpoint_static_values.view(),
+                self.schedule_dispatch.view(),
+                self.access_schedules.view(),
+                self.access_spans.view(),
+                self.static_values.view(),
                 opcodes,
                 address_spaces,
                 self.byte_pointer_max_bits,
@@ -1293,18 +1283,18 @@ mod tests {
             field_event(6, 4, true, 3),
             field_event(7, 4, false, 4),
         ];
-        let first_write = PostflightFieldBlock {
+        let first_write = PreflightFieldBlock {
             values: [31, 32, 33, 34],
         };
-        let second_write = PostflightFieldBlock {
+        let second_write = PreflightFieldBlock {
             values: [41, 42, 43, 44],
         };
         let field_values = [
-            PostflightFieldBlock::default(),
+            PreflightFieldBlock::default(),
             first_write,
-            PostflightFieldBlock::default(),
+            PreflightFieldBlock::default(),
             second_write,
-            PostflightFieldBlock::default(),
+            PreflightFieldBlock::default(),
         ];
         let (resolved, seeds, resolved_fields, field_seeds, predecessors, touched) =
             gpu_chronology_with_fields(
@@ -1332,7 +1322,7 @@ mod tests {
         assert_eq!(seeds[1].initial_value, [0, 0, 0, 0]);
         assert_eq!(
             field_seeds,
-            [PostflightFieldBlock {
+            [PreflightFieldBlock {
                 values: [21, 22, 23, 24]
             }]
         );
@@ -1420,7 +1410,7 @@ mod tests {
     fn gpu_chronology_rejects_partial_or_noncanonical_field_values() {
         let (config, initial_memory) = mixed_chronology_fixture();
         let write = field_event(1, 0, true, 0);
-        let valid = [PostflightFieldBlock {
+        let valid = [PreflightFieldBlock {
             values: [1, 2, 3, 4],
         }];
 
@@ -1429,7 +1419,7 @@ mod tests {
                 .is_err()
         );
 
-        let invalid = [PostflightFieldBlock {
+        let invalid = [PreflightFieldBlock {
             values: [BabyBear::ORDER_U32, 2, 3, 4],
         }];
         assert!(
@@ -1461,7 +1451,7 @@ mod tests {
         .is_err());
 
         let nonzero_read = field_event(1, 0, false, 0);
-        let observed = [PostflightFieldBlock {
+        let observed = [PreflightFieldBlock {
             values: [11, 12, 13, 14],
         }];
         assert!(gpu_chronology_with_fields(
@@ -1535,7 +1525,7 @@ mod tests {
         };
 
         let ordinary = MemoryConfig::default();
-        let uploaded = CheckpointReplayProgram::upload(&program, &ordinary, &device_ctx).unwrap();
+        let uploaded = PreflightReplayProgram::upload(&program, &ordinary, &device_ctx).unwrap();
         assert_eq!(uploaded.byte_pointer_max_bits, 32);
         assert_eq!(uploaded.program().cell_pointer_max_bits(), 31);
 

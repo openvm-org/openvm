@@ -3,7 +3,7 @@ use std::{any::Any, sync::Arc};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::rvr::cuda::PostflightOpcodeBases;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
-use openvm_circuit::arch::rvr::{cuda::CheckpointReplayProgram, PreflightExecution};
+use openvm_circuit::arch::rvr::{cuda::PreflightReplayProgram, PreflightExecution};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -151,7 +151,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
-        program: &CheckpointReplayProgram,
+        program: &PreflightReplayProgram,
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError>

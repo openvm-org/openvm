@@ -63,7 +63,7 @@ impl EmitMode {
         matches!(self, Self::Preflight)
     }
 
-    fn uses_checkpoint_local(self) -> bool {
+    fn uses_preflight_local(self) -> bool {
         matches!(self, Self::Preflight)
     }
 
@@ -176,7 +176,7 @@ impl<'a> EmitContext<'a> {
     }
 
     fn count_fixed_timestamp_slots(&mut self, slots: u32) {
-        if !self.mode.uses_checkpoint_local()
+        if !self.mode.uses_preflight_local()
             || self.dynamic_timestamp_slots == DynamicTimestampSlots::Active
         {
             return;
@@ -444,9 +444,9 @@ impl<'a> EmitContext<'a> {
         self.write_line(&format!(
             "{write_func}(memory, {addr}, ({cast_ty})({val}));"
         ));
-        if self.mode.uses_checkpoint_local() {
+        if self.mode.uses_preflight_local() {
             self.write_line(&format!(
-                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {width}u);"
+                "preflight_local_mark_memory_write(state, &preflight, {addr}, {width}u);"
             ));
         }
     }
@@ -467,22 +467,22 @@ impl<'a> EmitContext<'a> {
         self.write_line(&format!(
             "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
         ));
-        if self.mode.uses_checkpoint_local() {
+        if self.mode.uses_preflight_local() {
             self.write_line(&format!(
-                "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {MEMORY_BLOCK_BYTES}u);"
+                "preflight_local_mark_memory_write(state, &preflight, {addr}, {MEMORY_BLOCK_BYTES}u);"
             ));
         }
     }
 
     /// Emit a fail-before-mutation capacity and timestamp-headroom check.
     pub fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
-        if self.mode.uses_checkpoint_local() {
+        if self.mode.uses_preflight_local() {
             assert!(
                 self.dynamic_timestamp_slots == DynamicTimestampSlots::None,
                 "nested preflight dynamic timestamp schedule"
             );
             self.write_line(&format!(
-                "if (unlikely(!checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, {slots}))) {{"
+                "if (unlikely(!preflight_local_reserve(&preflight, 0u, {slots}))) {{"
             ));
             self.emit_trap();
             self.write_line("}");
@@ -500,7 +500,7 @@ impl<'a> EmitContext<'a> {
             self.emit_metered_replay_value_add(count);
             return;
         }
-        if !self.mode.uses_checkpoint_local() {
+        if !self.mode.uses_preflight_local() {
             return;
         }
         assert!(
@@ -509,14 +509,14 @@ impl<'a> EmitContext<'a> {
         );
         self.replay_values_reserved = true;
         self.write_line(&format!(
-            "if (unlikely(!checkpoint_preflight_local_reserve_replay_values(&checkpoint_preflight, {count}))) {{"
+            "if (unlikely(!preflight_local_reserve_replay_values(&preflight, {count}))) {{"
         ));
         self.emit_trap();
         self.write_line("}");
         match std::mem::take(&mut self.dynamic_timestamp_slots) {
             DynamicTimestampSlots::Reserved(slots) => {
                 self.write_line(&format!(
-                    "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
+                    "preflight_local_add_timestamp_unchecked(&preflight, {slots});"
                 ));
                 self.dynamic_timestamp_slots = DynamicTimestampSlots::Active;
             }
@@ -574,7 +574,7 @@ impl<'a> EmitContext<'a> {
             }
             return;
         }
-        if !self.mode.uses_checkpoint_local() {
+        if !self.mode.uses_preflight_local() {
             return;
         }
         if !self.replay_values_reserved {
@@ -584,7 +584,7 @@ impl<'a> EmitContext<'a> {
                 .expect("preflight block replay-value count overflow");
         }
         self.write_line(&format!(
-            "checkpoint_preflight_local_append_replay_value_unchecked(&checkpoint_preflight, (uint64_t)({value}));"
+            "preflight_local_append_replay_value_unchecked(&preflight, (uint64_t)({value}));"
         ));
         self.replay_values_reserved = false;
         if self.dynamic_timestamp_slots == DynamicTimestampSlots::Active {
@@ -601,7 +601,7 @@ impl<'a> EmitContext<'a> {
             self.replay_values_reserved = false;
             return;
         }
-        if !self.mode.uses_checkpoint_local() {
+        if !self.mode.uses_preflight_local() {
             return;
         }
         assert!(
@@ -641,8 +641,8 @@ impl<'a> EmitContext<'a> {
 
     pub(crate) fn flush_preflight_local(&mut self) {
         if self.mode == EmitMode::Preflight {
-            self.write_line("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */");
-            self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
+            self.write_line("/* PREFLIGHT_FINISH_BLOCK */");
+            self.write_line("preflight_local_flush(state, &preflight);");
         }
     }
 
@@ -650,9 +650,9 @@ impl<'a> EmitContext<'a> {
         let state = std::mem::take(&mut self.dynamic_timestamp_slots);
         match state {
             DynamicTimestampSlots::Reserved(slots) => {
-                debug_assert!(self.mode.uses_checkpoint_local());
+                debug_assert!(self.mode.uses_preflight_local());
                 self.write_line(&format!(
-                    "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
+                    "preflight_local_add_timestamp_unchecked(&preflight, {slots});"
                 ));
             }
             state => self.dynamic_timestamp_slots = state,
@@ -835,7 +835,7 @@ impl<'a> EmitContext<'a> {
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     fn is_preflight(&self) -> bool {
-        self.mode.uses_checkpoint_local()
+        self.mode.uses_preflight_local()
     }
 
     fn read_var(&mut self, var: Variable) -> String {
@@ -900,7 +900,7 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn flush_before_control_transfer(&mut self) {
         if self.mode == EmitMode::Preflight {
-            self.write_line("checkpoint_preflight_local_flush(state, &checkpoint_preflight);");
+            self.write_line("preflight_local_flush(state, &preflight);");
         }
     }
 
@@ -964,7 +964,7 @@ mod tests {
 
     use super::{BlockAbi, EmitContext, EmitMode};
 
-    fn checkpoint_ctx() -> EmitContext<'static> {
+    fn preflight_ctx() -> EmitContext<'static> {
         EmitContext::new(
             HashSet::new(),
             EmitMode::Preflight,
@@ -976,10 +976,10 @@ mod tests {
 
     #[test]
     fn advance_timestamp_counts_fixed_preflight_slots() {
-        let mut checkpoint = checkpoint_ctx();
-        checkpoint.advance_timestamp(3);
-        assert!(checkpoint.buf().is_empty());
-        assert_eq!(checkpoint.preflight_block_budget(), (3, 0));
+        let mut preflight = preflight_ctx();
+        preflight.advance_timestamp(3);
+        assert!(preflight.buf().is_empty());
+        assert_eq!(preflight.preflight_block_budget(), (3, 0));
 
         for mode in [
             EmitMode::Direct,
@@ -1002,15 +1002,13 @@ mod tests {
 
     #[test]
     fn control_transfer_flush_preserves_pure_and_metered_codegen() {
-        let mut checkpoint = checkpoint_ctx();
-        checkpoint.flush_before_control_transfer();
+        let mut preflight = preflight_ctx();
+        preflight.flush_before_control_transfer();
         assert_eq!(
-            checkpoint.buf(),
-            "        checkpoint_preflight_local_flush(state, &checkpoint_preflight);\n"
+            preflight.buf(),
+            "        preflight_local_flush(state, &preflight);\n"
         );
-        assert!(!checkpoint
-            .buf()
-            .contains("CHECKPOINT_PREFLIGHT_FINISH_BLOCK"));
+        assert!(!preflight.buf().contains("PREFLIGHT_FINISH_BLOCK"));
 
         for mode in [
             EmitMode::Direct,
@@ -1035,8 +1033,8 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_counts_schedule_without_access_events() {
-        let mut ctx = checkpoint_ctx();
+    fn preflight_counts_schedule_without_access_events() {
+        let mut ctx = preflight_ctx();
         assert_eq!(ctx.read_reg(0), "0ull");
         assert_eq!(ctx.peek_reg(0), "0ull");
         assert_eq!(ctx.read_reg(3), "_v0");
@@ -1054,7 +1052,7 @@ mod tests {
         assert!(!ctx.buf().contains("trace_reg"));
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_mark_memory_write")
+                .matches("preflight_local_mark_memory_write")
                 .count(),
             2
         );
@@ -1062,13 +1060,13 @@ mod tests {
 
     #[test]
     fn preflight_replay_values_are_untagged_and_fixed_by_default() {
-        let mut ctx = checkpoint_ctx();
+        let mut ctx = preflight_ctx();
         ctx.append_replay_value("loaded");
 
         assert_eq!(ctx.preflight_block_budget(), (0, 1));
         assert_eq!(
             ctx.buf(),
-            "        checkpoint_preflight_local_append_replay_value_unchecked(&checkpoint_preflight, (uint64_t)(loaded));\n"
+            "        preflight_local_append_replay_value_unchecked(&preflight, (uint64_t)(loaded));\n"
         );
     }
 
@@ -1095,7 +1093,7 @@ mod tests {
 
     #[test]
     fn preflight_dynamic_hint_schedule_and_replay_values_are_counted_once() {
-        let mut ctx = checkpoint_ctx();
+        let mut ctx = preflight_ctx();
         ctx.append_replay_value("before");
         ctx.reserve_preflight_timestamp_slots("slots");
         ctx.reserve_replay_values("count");
@@ -1108,44 +1106,46 @@ mod tests {
         assert_eq!(ctx.preflight_block_budget(), (1, 2));
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_add_timestamp_unchecked")
+                .matches("preflight_local_add_timestamp_unchecked")
                 .count(),
             1
         );
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_reserve_replay_values")
+                .matches("preflight_local_reserve_replay_values")
                 .count(),
             1
         );
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_append_replay_value_unchecked")
+                .matches("preflight_local_append_replay_value_unchecked")
                 .count(),
             3
         );
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_append_replay_value_unchecked(&checkpoint_preflight, (uint64_t)(hint));")
+                .matches(
+                    "preflight_local_append_replay_value_unchecked(&preflight, (uint64_t)(hint));"
+                )
                 .count(),
             1
         );
         assert!(ctx
             .buf()
-            .contains("checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, slots)"));
+            .contains("preflight_local_reserve(&preflight, 0u, slots)"));
     }
 
     #[test]
-    fn replay_memory_range_materializes_only_in_checkpoint_and_counts_in_metered() {
-        let mut checkpoint = checkpoint_ctx();
-        checkpoint.reserve_replay_values("words");
-        checkpoint.append_replay_memory_u64_range("buffer", "words");
+    fn replay_memory_range_materializes_only_in_preflight_and_counts_in_metered() {
+        let mut preflight = preflight_ctx();
+        preflight.reserve_replay_values("words");
+        preflight.append_replay_memory_u64_range("buffer", "words");
 
-        assert_eq!(checkpoint.preflight_block_budget(), (0, 0));
-        assert!(checkpoint
+        assert_eq!(preflight.preflight_block_budget(), (0, 0));
+        assert!(preflight
             .buf()
             .contains("for (uint32_t replay_word = 0u; replay_word < words; ++replay_word) {"));
-        assert!(checkpoint
+        assert!(preflight
             .buf()
             .contains("peek_mem_u64(state, buffer + (uint64_t)replay_word * 8ull)"));
 
@@ -1180,23 +1180,21 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_host_call_does_not_finish_the_block() {
-        let mut ctx = checkpoint_ctx();
+    fn preflight_host_call_does_not_finish_the_block() {
+        let mut ctx = preflight_ctx();
         ctx.emit_call("host_call", &["state"]);
         assert_eq!(ctx.buf(), "        host_call(state);\n");
 
         ctx.flush_preflight_local();
+        assert!(ctx.buf().contains("/* PREFLIGHT_FINISH_BLOCK */"));
         assert!(ctx
             .buf()
-            .contains("/* CHECKPOINT_PREFLIGHT_FINISH_BLOCK */"));
-        assert!(ctx
-            .buf()
-            .contains("checkpoint_preflight_local_flush(state, &checkpoint_preflight);"));
+            .contains("preflight_local_flush(state, &preflight);"));
     }
 
     #[test]
-    fn checkpoint_host_call_consumes_reserved_slots_without_fixed_budget() {
-        let mut ctx = checkpoint_ctx();
+    fn preflight_host_call_consumes_reserved_slots_without_fixed_budget() {
+        let mut ctx = preflight_ctx();
         ctx.reserve_preflight_timestamp_slots("2u");
         let result = ctx.emit_call_expr("bool", "host_call", &["state"]);
 
@@ -1204,11 +1202,11 @@ mod tests {
         assert_eq!(ctx.preflight_block_budget(), (0, 0));
         let reserve = ctx
             .buf()
-            .find("checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, 2u)")
+            .find("preflight_local_reserve(&preflight, 0u, 2u)")
             .unwrap();
         let advance = ctx
             .buf()
-            .find("checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, 2u)")
+            .find("preflight_local_add_timestamp_unchecked(&preflight, 2u)")
             .unwrap();
         let call = ctx.buf().find("bool _v0 = host_call(state);").unwrap();
         assert!(reserve < advance && advance < call);

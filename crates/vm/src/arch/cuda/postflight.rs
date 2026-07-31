@@ -5,7 +5,10 @@
 //! system and instruction trace generators. Compiled checkpoint expansion is
 //! an optional producer in `arch::rvr::cuda`; this layer does not depend on it.
 
-use std::sync::Arc;
+use std::{
+    mem::{align_of, offset_of, size_of},
+    sync::Arc,
+};
 
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -27,8 +30,8 @@ use tracing::info_span;
 
 use crate::{
     arch::{
-        AddressSpaceHostLayout, ExecutionState, MemoryCellType, MemoryConfig, PreflightHistory,
-        ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
+        postflight::validate_postflight_memory_config, AddressSpaceHostLayout, ExecutionState,
+        MemoryCellType, MemoryConfig, PreflightHistory, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
     },
     cuda_abi::postflight,
     system::TouchedBlock,
@@ -39,8 +42,9 @@ mod testing;
 #[cfg(all(test, feature = "rvr"))]
 pub(crate) use testing::{build_memory_chronology_for_test, empty_chronology_counts_for_test};
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct PostflightInstruction {
+pub(crate) struct GpuReplayInstruction {
     /// Global opcode followed by the seven canonical instruction operands.
     pub words: [u32; 8],
 }
@@ -54,34 +58,63 @@ pub(crate) struct GpuReplayStep {
     pub memory_start: u32,
 }
 
-const _: () = assert!(size_of::<PostflightInstruction>() == 32);
-const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == size_of::<[u32; 8]>());
+// Keep Rust uploads byte-compatible with the CUDA replay instruction ABI.
+const _: () = assert!(size_of::<GpuReplayInstruction>() == size_of::<[u32; 8]>());
+// CUDA chronology stores configured address spaces starting at the register space.
 const _: () = assert!(RV64_REGISTER_AS == ADDR_SPACE_OFFSET);
-
-pub(crate) type PostflightFieldBlock = PreflightFieldBlock;
-
-const _: () = assert!(size_of::<PostflightFieldBlock>() == 4 * size_of::<u32>());
 
 /// Device-side layout metadata for one configured address space.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct GpuMemoryAddressSpace {
     num_cells: u64,
-    cell_kind: u32,
+    cell_kind: GpuMemoryCellKind,
     _padding: u32,
 }
 
-const _: () = assert!(size_of::<GpuMemoryAddressSpace>() == 16);
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GpuMemoryCellKind {
+    Unsupported = 0,
+    U16 = 1,
+    Field32 = 2,
+}
 
-const MEMORY_CELL_UNSUPPORTED: u32 = 0;
-const MEMORY_CELL_U16: u32 = 1;
-const MEMORY_CELL_FIELD32: u32 = 2;
+#[derive(Clone, Copy, Debug)]
+struct GpuMemoryDimensions {
+    addr_space_height: u32,
+    cell_pointer_max_bits: u32,
+    block_pointer_max_bits: u32,
+    timestamp_max_bits: u32,
+}
 
-fn memory_cell_kind(layout: MemoryCellType) -> u32 {
+impl GpuMemoryDimensions {
+    fn from_validated(config: &MemoryConfig) -> Self {
+        let block_pointer_bits = BLOCK_FE_WIDTH.ilog2() as usize;
+        Self {
+            addr_space_height: config.addr_space_height as u32,
+            cell_pointer_max_bits: config.pointer_max_bits as u32,
+            block_pointer_max_bits: (config.pointer_max_bits - block_pointer_bits) as u32,
+            timestamp_max_bits: config.timestamp_max_bits as u32,
+        }
+    }
+}
+
+// Keep address-space metadata byte-compatible with its CUDA mirror.
+const _: () = {
+    assert!(size_of::<GpuMemoryCellKind>() == size_of::<u32>());
+    assert!(size_of::<GpuMemoryAddressSpace>() == 16);
+    assert!(align_of::<GpuMemoryAddressSpace>() == align_of::<u64>());
+    assert!(offset_of!(GpuMemoryAddressSpace, num_cells) == 0);
+    assert!(offset_of!(GpuMemoryAddressSpace, cell_kind) == 8);
+    assert!(offset_of!(GpuMemoryAddressSpace, _padding) == 12);
+};
+
+fn memory_cell_kind(layout: MemoryCellType) -> GpuMemoryCellKind {
     match layout {
-        MemoryCellType::U16 => MEMORY_CELL_U16,
-        MemoryCellType::F { size: 4 } => MEMORY_CELL_FIELD32,
-        _ => MEMORY_CELL_UNSUPPORTED,
+        MemoryCellType::U16 => GpuMemoryCellKind::U16,
+        MemoryCellType::F { size: 4 } => GpuMemoryCellKind::Field32,
+        _ => GpuMemoryCellKind::Unsupported,
     }
 }
 
@@ -175,7 +208,7 @@ pub(crate) fn upload<T>(
 pub(crate) type ConnectorBoundary = (ExecutionState<u32>, ExecutionState<u32>, Option<u32>);
 
 pub struct GpuPostflightProgram {
-    instructions: DeviceBuffer<PostflightInstruction>,
+    instructions: DeviceBuffer<GpuReplayInstruction>,
     dense_program_rows: DeviceBuffer<u32>,
     num_program_rows: usize,
     active_opcodes: Vec<u32>,
@@ -208,37 +241,16 @@ impl GpuPostflightProgram {
         program: &Program<F>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
-        mut validate_instruction: impl FnMut(&PostflightInstruction) -> Result<(), GpuPostflightError>,
+        mut validate_instruction: impl FnMut(&GpuReplayInstruction) -> Result<(), GpuPostflightError>,
     ) -> Result<Self, GpuPostflightError> {
         if F::ORDER_U32 != BabyBear::ORDER_U32 || size_of::<F>() != size_of::<BabyBear>() {
             return Err(GpuPostflightError::InvalidMemoryConfig(
                 "GPU postflight currently requires the BabyBear proof field".to_string(),
             ));
         }
-        if memory_config.pointer_max_bits > u32::BITS as usize
-            || memory_config.addr_space_height >= u32::BITS as usize
-            || memory_config.timestamp_max_bits >= u32::BITS as usize
-        {
-            return Err(GpuPostflightError::InvalidMemoryConfig(
-                "address-space height, pointer width, and timestamp width must fit u32".to_string(),
-            ));
-        }
-        let address_space_count = 1usize
-            .checked_shl(memory_config.addr_space_height as u32)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidMemoryConfig("address-space count overflow".to_string())
-            })?;
-        let expected_address_spaces = (ADDR_SPACE_OFFSET as usize)
-            .checked_add(address_space_count)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidMemoryConfig("address-space count overflow".to_string())
-            })?;
-        if memory_config.addr_spaces.len() != expected_address_spaces {
-            return Err(GpuPostflightError::InvalidMemoryConfig(format!(
-                "expected {expected_address_spaces} address-space layouts, found {}",
-                memory_config.addr_spaces.len()
-            )));
-        }
+        validate_postflight_memory_config(memory_config)
+            .map_err(GpuPostflightError::InvalidMemoryConfig)?;
+        let dimensions = GpuMemoryDimensions::from_validated(memory_config);
         validate_field_address_spaces(memory_config)?;
         let memory_address_spaces = memory_config
             .addr_spaces
@@ -249,23 +261,7 @@ impl GpuPostflightProgram {
                 _padding: 0,
             })
             .collect::<Vec<_>>();
-        let block_pointer_bits = memory_config
-            .pointer_max_bits
-            .checked_sub(BLOCK_FE_WIDTH.ilog2() as usize)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidMemoryConfig(
-                    "pointer width is smaller than one memory block".to_string(),
-                )
-            })?;
-        let label_bits = memory_config
-            .addr_space_height
-            .checked_add(block_pointer_bits)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidMemoryConfig(
-                    "address-space and block-pointer label width overflow".to_string(),
-                )
-            })?;
-        if label_bits > u32::BITS as usize {
+        if dimensions.addr_space_height + dimensions.block_pointer_max_bits > u32::BITS {
             return Err(GpuPostflightError::InvalidMemoryConfig(
                 "address-space and block-pointer label does not fit u32".to_string(),
             ));
@@ -275,7 +271,7 @@ impl GpuPostflightProgram {
             .iter()
             .map(|entry| match entry {
                 Some((instruction, _)) => instruction_to_replay(instruction),
-                None => Ok(PostflightInstruction {
+                None => Ok(GpuReplayInstruction {
                     words: [u32::MAX, 0, 0, 0, 0, 0, 0, 0],
                 }),
             })
@@ -317,9 +313,9 @@ impl GpuPostflightProgram {
             active_opcodes,
             memory_address_spaces: upload(&memory_address_spaces, device_ctx)?,
             memory_config: memory_config.clone(),
-            address_space_height: memory_config.addr_space_height as u32,
-            cell_pointer_max_bits: memory_config.pointer_max_bits as u32,
-            timestamp_max_bits: memory_config.timestamp_max_bits as u32,
+            address_space_height: dimensions.addr_space_height,
+            cell_pointer_max_bits: dimensions.cell_pointer_max_bits,
+            timestamp_max_bits: dimensions.timestamp_max_bits,
             pc_base: program.pc_base,
             device_ctx: device_ctx.clone(),
             identity: Arc::new(()),
@@ -420,7 +416,7 @@ impl GpuPostflightProgram {
         &self,
         program_log: DeviceBuffer<PreflightProgramEvent>,
         memory_log: DeviceBuffer<PreflightMemoryEvent>,
-        field_values: DeviceBuffer<PostflightFieldBlock>,
+        field_values: DeviceBuffer<PreflightFieldBlock>,
         write_masks: DeviceBuffer<u8>,
         error: DeviceBuffer<u32>,
         initial_memory_images: &[DeviceBufferView],
@@ -534,10 +530,10 @@ fn ensure_same_context(
 
 fn instruction_to_replay<F: PrimeField32>(
     instruction: &Instruction<F>,
-) -> Result<PostflightInstruction, GpuPostflightError> {
+) -> Result<GpuReplayInstruction, GpuPostflightError> {
     let opcode = u32::try_from(instruction.opcode.as_usize())
         .map_err(|_| GpuPostflightError::OpcodeTooLarge(instruction.opcode.as_usize()))?;
-    Ok(PostflightInstruction {
+    Ok(GpuReplayInstruction {
         words: [
             opcode,
             instruction.a.as_canonical_u32(),
@@ -569,7 +565,7 @@ struct GpuMemoryIndex {
 fn build_gpu_memory_chronology(
     memory: &DeviceBuffer<PreflightMemoryEvent>,
     write_masks: &DeviceBuffer<u8>,
-    field_values: &DeviceBuffer<PostflightFieldBlock>,
+    field_values: &DeviceBuffer<PreflightFieldBlock>,
     initial_memory: &[DeviceBufferView],
     address_space_height: u32,
     pointer_max_bits: u32,
@@ -579,7 +575,7 @@ fn build_gpu_memory_chronology(
 ) -> Result<
     (
         DeviceBuffer<PreflightInitialWrite>,
-        DeviceBuffer<PostflightFieldBlock>,
+        DeviceBuffer<PreflightFieldBlock>,
         GpuMemoryIndex,
     ),
     GpuPostflightError,
@@ -684,7 +680,7 @@ fn build_gpu_memory_chronology(
         ));
     }
     let seeds = gpu_buffer::<PreflightInitialWrite>(num_seeds, device_ctx);
-    let field_seeds = gpu_buffer::<PostflightFieldBlock>(num_field_seeds, device_ctx);
+    let field_seeds = gpu_buffer::<PreflightFieldBlock>(num_field_seeds, device_ctx);
     let touched_blocks = gpu_buffer::<TouchedBlock<BabyBear>>(num_touched, device_ctx);
     unsafe {
         postflight::memory_chronology_resolve(
@@ -742,8 +738,8 @@ pub struct GpuPostflightTranscript {
     program_log: DeviceBuffer<PreflightProgramEvent>,
     memory_log: DeviceBuffer<PreflightMemoryEvent>,
     initial_write_log: DeviceBuffer<PreflightInitialWrite>,
-    field_values: DeviceBuffer<PostflightFieldBlock>,
-    field_initial_values: DeviceBuffer<PostflightFieldBlock>,
+    field_values: DeviceBuffer<PreflightFieldBlock>,
+    field_initial_values: DeviceBuffer<PreflightFieldBlock>,
     memory_predecessors: DeviceBuffer<u32>,
     touched_blocks: DeviceBuffer<TouchedBlock<BabyBear>>,
     num_touched_blocks: usize,

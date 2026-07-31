@@ -101,7 +101,7 @@ mod tests {
     use openvm_circuit::{
         arch::{
             cuda::postflight::GpuPostflightProgram,
-            rvr::{cuda::CheckpointReplayProgram, PreflightEndpoint, PreflightLimits},
+            rvr::{cuda::PreflightReplayProgram, PreflightEndpoint, PreflightLimits},
             PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
         },
         utils::{test_gpu_engine, test_system_config},
@@ -260,7 +260,7 @@ mod tests {
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
-        let gpu_program = CheckpointReplayProgram::upload(
+        let gpu_program = PreflightReplayProgram::upload(
             &program,
             &config.modular.system.memory_config,
             &vm.engine.device().device_ctx,

@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_matches_branch_suspension_and_resume() -> Result<()> {
+    fn test_rvr_preflight_matches_branch_suspension_and_resume() -> Result<()> {
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_isize(
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_carries_dirty_memory_across_segments() -> Result<()> {
+    fn test_rvr_preflight_carries_dirty_memory_across_segments() -> Result<()> {
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let memory = |opcode: Rv64LoadStoreOpcode, value: usize, base: usize| {
             Instruction::<F>::from_usize(
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_load_replay_values_omit_x0() -> Result<()> {
+    fn test_rvr_preflight_load_replay_values_omit_x0() -> Result<()> {
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let load = |opcode: Rv64LoadStoreOpcode, rd: usize, offset: usize| {
             Instruction::<F>::from_usize(
@@ -727,7 +727,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_hint_replay_value_order_and_memory() -> Result<()> {
+    fn test_rvr_preflight_hint_replay_value_order_and_memory() -> Result<()> {
         let instructions = [
             hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
             hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 2, 3),
@@ -774,7 +774,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_reveal_matches_clock_and_public_values() -> Result<()> {
+    fn test_rvr_preflight_reveal_matches_clock_and_public_values() -> Result<()> {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
         let instructions = [
