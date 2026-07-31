@@ -1050,28 +1050,28 @@ impl CProject {
         Self::emit_context_scope(&mut body, &mut ctx);
 
         if matches!(mode, EmitMode::Metered { .. }) {
-            let residuals = ctx.metered_checkpoint_residuals();
-            let update = if residuals == 0 {
+            let replay_values = ctx.metered_block_replay_values();
+            let update = if replay_values == 0 {
                 String::new()
             } else {
                 let args = self.fn_args_from_params();
                 format!(
-                    "if (unlikely({residuals}u > UINT32_MAX - state->mode_state.num_checkpoint_residuals)) {{\n\
+                    "if (unlikely({replay_values}u > UINT32_MAX - state->mode_state.num_checkpoint_residuals)) {{\n\
                          [[clang::musttail]] return rv_trap({args});\n\
                      }}\n\
-                     state->mode_state.num_checkpoint_residuals += {residuals}u;"
+                     state->mode_state.num_checkpoint_residuals += {replay_values}u;"
                 )
             };
             body = body.replace("/* METERED_CHECKPOINT_RESIDUALS */", &update);
         } else if matches!(self.execution_kind, RvrExecutionKind::Preflight) {
-            let (slots, residuals) = ctx.checkpoint_preflight_budget();
+            let (timestamp_slots, replay_values) = ctx.preflight_block_budget();
             let args = self.fn_args_from_params();
             let reserve = format!(
-                "    if (unlikely(!checkpoint_preflight_local_reserve(&checkpoint_preflight, {residuals}u, {slots}u))) {{\n\
+                "    if (unlikely(!checkpoint_preflight_local_reserve(&checkpoint_preflight, {replay_values}u, {timestamp_slots}u))) {{\n\
                      checkpoint_preflight_local_flush(state, &checkpoint_preflight);\n\
                      [[clang::musttail]] return rv_trap({args});\n\
                  }}\n\
-                 checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots}u);"
+                 checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {timestamp_slots}u);"
             );
             body = body.replace("/* CHECKPOINT_PREFLIGHT_LOCAL_RESERVE */", &reserve);
             body = body.replace(
@@ -1843,7 +1843,7 @@ mod tests {
     }
 
     #[test]
-    fn metered_codegen_adds_fixed_residuals_after_the_segment_check() {
+    fn metered_codegen_adds_fixed_replay_values_after_the_segment_check() {
         let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Metered);
         project.pc_base = 0x100;
         project.num_airs = Some(1);

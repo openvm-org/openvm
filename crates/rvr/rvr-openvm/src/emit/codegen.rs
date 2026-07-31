@@ -262,7 +262,7 @@ mod tests {
         );
         emit_terminator(&mut checkpoint, &term, 0, &tc);
         assert!(!checkpoint.buf().contains("preflight_local_reg_read"));
-        assert_eq!(checkpoint.checkpoint_preflight_budget(), (2, 0));
+        assert_eq!(checkpoint.preflight_block_budget(), (2, 0));
     }
 
     #[test]

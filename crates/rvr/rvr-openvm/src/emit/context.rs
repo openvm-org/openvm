@@ -97,6 +97,16 @@ enum RegisterReadKind {
     Peek,
 }
 
+#[derive(Debug, Default, Eq, PartialEq)]
+enum DynamicTimestampSlots {
+    #[default]
+    None,
+    /// Capacity checked; the runtime expression has not been applied yet.
+    Reserved(String),
+    /// Runtime schedule applied; fixed slot accounting is suspended.
+    Active,
+}
+
 /// Code generation context. Holds a mutable buffer and tracks hot registers.
 pub struct EmitContext<'a> {
     buf: String,
@@ -111,11 +121,10 @@ pub struct EmitContext<'a> {
     chip_widths: Option<&'a [u64]>,
     num_airs: Option<u32>,
     invalid_chip_index: Option<InvalidChipIndex>,
-    checkpoint_fixed_slots: u32,
-    checkpoint_fixed_residuals: u32,
-    checkpoint_pending_dynamic_slots: Option<String>,
-    checkpoint_dynamic_schedule: bool,
-    checkpoint_dynamic_residuals: bool,
+    fixed_timestamp_slots: u32,
+    fixed_replay_values: u32,
+    dynamic_timestamp_slots: DynamicTimestampSlots,
+    replay_values_reserved: bool,
 }
 
 impl<'a> EmitContext<'a> {
@@ -138,44 +147,44 @@ impl<'a> EmitContext<'a> {
             chip_widths,
             num_airs,
             invalid_chip_index: None,
-            checkpoint_fixed_slots: 0,
-            checkpoint_fixed_residuals: 0,
-            checkpoint_pending_dynamic_slots: None,
-            checkpoint_dynamic_schedule: false,
-            checkpoint_dynamic_residuals: false,
+            fixed_timestamp_slots: 0,
+            fixed_replay_values: 0,
+            dynamic_timestamp_slots: DynamicTimestampSlots::None,
+            replay_values_reserved: false,
         }
     }
 
-    pub(crate) fn checkpoint_preflight_budget(&self) -> (u32, u32) {
+    pub(crate) fn preflight_block_budget(&self) -> (u32, u32) {
         assert!(
-            self.checkpoint_pending_dynamic_slots.is_none()
-                && !self.checkpoint_dynamic_schedule
-                && !self.checkpoint_dynamic_residuals,
-            "unfinished checkpoint-preflight dynamic reservation"
+            self.dynamic_timestamp_slots == DynamicTimestampSlots::None
+                && !self.replay_values_reserved,
+            "unfinished preflight dynamic reservation"
         );
-        (self.checkpoint_fixed_slots, self.checkpoint_fixed_residuals)
+        (self.fixed_timestamp_slots, self.fixed_replay_values)
     }
 
-    pub(crate) fn metered_checkpoint_residuals(&self) -> u32 {
+    pub(crate) fn metered_block_replay_values(&self) -> u32 {
         if self.mode.meters_replay_values() {
             assert!(
-                !self.checkpoint_dynamic_residuals,
-                "unfinished metered dynamic residual reservation"
+                !self.replay_values_reserved,
+                "unfinished metered replay-value reservation"
             );
-            self.checkpoint_fixed_residuals
+            self.fixed_replay_values
         } else {
             0
         }
     }
 
     fn count_fixed_timestamp_slots(&mut self, slots: u32) {
-        if !self.mode.uses_checkpoint_local() || self.checkpoint_dynamic_schedule {
+        if !self.mode.uses_checkpoint_local()
+            || self.dynamic_timestamp_slots == DynamicTimestampSlots::Active
+        {
             return;
         }
-        self.checkpoint_fixed_slots = self
-            .checkpoint_fixed_slots
+        self.fixed_timestamp_slots = self
+            .fixed_timestamp_slots
             .checked_add(slots)
-            .expect("checkpoint-preflight block timestamp-slot count overflow");
+            .expect("preflight block timestamp-slot count overflow");
     }
 
     fn next_var(&mut self) -> String {
@@ -469,47 +478,52 @@ impl<'a> EmitContext<'a> {
     pub fn reserve_preflight_timestamp_slots(&mut self, slots: &str) {
         if self.mode.uses_checkpoint_local() {
             assert!(
-                self.checkpoint_pending_dynamic_slots.is_none()
-                    && !self.checkpoint_dynamic_schedule,
-                "nested checkpoint-preflight dynamic timestamp schedule"
+                self.dynamic_timestamp_slots == DynamicTimestampSlots::None,
+                "nested preflight dynamic timestamp schedule"
             );
             self.write_line(&format!(
                 "if (unlikely(!checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, {slots}))) {{"
             ));
             self.emit_trap();
             self.write_line("}");
-            self.checkpoint_pending_dynamic_slots = Some(slots.to_string());
+            self.dynamic_timestamp_slots = DynamicTimestampSlots::Reserved(slots.to_string());
         }
     }
 
     pub fn reserve_replay_values(&mut self, count: &str) {
         if self.mode.meters_replay_values() {
             assert!(
-                !self.checkpoint_dynamic_residuals,
-                "nested metered residual reservation"
+                !self.replay_values_reserved,
+                "nested metered replay-value reservation"
             );
-            self.checkpoint_dynamic_residuals = true;
-            self.emit_metered_residual_add(count);
+            self.replay_values_reserved = true;
+            self.emit_metered_replay_value_add(count);
             return;
         }
         if !self.mode.uses_checkpoint_local() {
             return;
         }
         assert!(
-            !self.checkpoint_dynamic_residuals,
-            "nested checkpoint-preflight residual reservation"
+            !self.replay_values_reserved,
+            "nested preflight replay-value reservation"
         );
-        self.checkpoint_dynamic_residuals = true;
+        self.replay_values_reserved = true;
         self.write_line(&format!(
             "if (unlikely(!checkpoint_preflight_local_reserve_residuals(&checkpoint_preflight, {count}))) {{"
         ));
         self.emit_trap();
         self.write_line("}");
-        if let Some(slots) = self.checkpoint_pending_dynamic_slots.take() {
-            self.write_line(&format!(
-                "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
-            ));
-            self.checkpoint_dynamic_schedule = true;
+        match std::mem::take(&mut self.dynamic_timestamp_slots) {
+            DynamicTimestampSlots::Reserved(slots) => {
+                self.write_line(&format!(
+                    "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
+                ));
+                self.dynamic_timestamp_slots = DynamicTimestampSlots::Active;
+            }
+            DynamicTimestampSlots::None => {}
+            DynamicTimestampSlots::Active => {
+                unreachable!("nested preflight dynamic timestamp schedule")
+            }
         }
     }
 
@@ -518,13 +532,13 @@ impl<'a> EmitContext<'a> {
             return;
         }
         assert!(
-            !self.checkpoint_dynamic_residuals,
-            "fixed residual count during a dynamic reservation"
+            !self.replay_values_reserved,
+            "fixed replay-value count during a dynamic reservation"
         );
-        self.checkpoint_fixed_residuals = self
-            .checkpoint_fixed_residuals
+        self.fixed_replay_values = self
+            .fixed_replay_values
             .checked_add(count)
-            .expect("metered block residual count overflow");
+            .expect("metered block replay-value count overflow");
     }
 
     pub fn count_replay_values(&mut self, count: &str) {
@@ -532,13 +546,13 @@ impl<'a> EmitContext<'a> {
             return;
         }
         assert!(
-            !self.checkpoint_dynamic_residuals,
-            "dynamic residual count during a materialization reservation"
+            !self.replay_values_reserved,
+            "dynamic replay-value count during a materialization reservation"
         );
-        self.emit_metered_residual_add(count);
+        self.emit_metered_replay_value_add(count);
     }
 
-    fn emit_metered_residual_add(&mut self, count: &str) {
+    fn emit_metered_replay_value_add(&mut self, count: &str) {
         let count_var = self.next_var();
         self.write_line(&format!("uint64_t {count_var} = (uint64_t)({count});"));
         self.write_line(&format!(
@@ -553,8 +567,8 @@ impl<'a> EmitContext<'a> {
 
     pub fn append_replay_value(&mut self, value: &str) {
         if self.mode.meters_replay_values() {
-            if self.checkpoint_dynamic_residuals {
-                self.checkpoint_dynamic_residuals = false;
+            if self.replay_values_reserved {
+                self.replay_values_reserved = false;
             } else {
                 self.count_fixed_replay_values(1);
             }
@@ -563,34 +577,36 @@ impl<'a> EmitContext<'a> {
         if !self.mode.uses_checkpoint_local() {
             return;
         }
-        if !self.checkpoint_dynamic_residuals {
-            self.checkpoint_fixed_residuals = self
-                .checkpoint_fixed_residuals
+        if !self.replay_values_reserved {
+            self.fixed_replay_values = self
+                .fixed_replay_values
                 .checked_add(1)
-                .expect("checkpoint-preflight block residual count overflow");
+                .expect("preflight block replay-value count overflow");
         }
         self.write_line(&format!(
             "checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)({value}));"
         ));
-        self.checkpoint_dynamic_residuals = false;
-        self.checkpoint_dynamic_schedule = false;
+        self.replay_values_reserved = false;
+        if self.dynamic_timestamp_slots == DynamicTimestampSlots::Active {
+            self.dynamic_timestamp_slots = DynamicTimestampSlots::None;
+        }
     }
 
     pub fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
         if self.mode.meters_replay_values() {
             assert!(
-                self.checkpoint_dynamic_residuals,
-                "metered replay range requires a residual reservation"
+                self.replay_values_reserved,
+                "metered replay range requires a replay-value reservation"
             );
-            self.checkpoint_dynamic_residuals = false;
+            self.replay_values_reserved = false;
             return;
         }
         if !self.mode.uses_checkpoint_local() {
             return;
         }
         assert!(
-            self.checkpoint_dynamic_residuals,
-            "checkpoint replay memory range requires a residual reservation"
+            self.replay_values_reserved,
+            "preflight replay memory range requires a replay-value reservation"
         );
         self.write_line(&format!(
             "for (uint32_t replay_word = 0u; replay_word < {count}; ++replay_word) {{"
@@ -630,19 +646,22 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn consume_checkpoint_call_slots(&mut self) {
-        if let Some(slots) = self.checkpoint_pending_dynamic_slots.take() {
-            debug_assert!(self.mode.uses_checkpoint_local());
-            debug_assert!(!self.checkpoint_dynamic_schedule);
-            self.write_line(&format!(
-                "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
-            ));
+    fn apply_reserved_timestamp_slots(&mut self) {
+        let state = std::mem::take(&mut self.dynamic_timestamp_slots);
+        match state {
+            DynamicTimestampSlots::Reserved(slots) => {
+                debug_assert!(self.mode.uses_checkpoint_local());
+                self.write_line(&format!(
+                    "checkpoint_preflight_local_add_timestamp_unchecked(&checkpoint_preflight, {slots});"
+                ));
+            }
+            state => self.dynamic_timestamp_slots = state,
         }
     }
 
     pub fn emit_call(&mut self, name: &str, args: &[&str]) {
         self.flush_page_locals();
-        self.consume_checkpoint_call_slots();
+        self.apply_reserved_timestamp_slots();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
         self.reload_page_locals();
@@ -655,7 +674,7 @@ impl<'a> EmitContext<'a> {
 
     pub fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
-        self.consume_checkpoint_call_slots();
+        self.apply_reserved_timestamp_slots();
         let tmp = self.next_var();
         let args_str = args.join(", ");
         self.write_line(&format!("{ret_ty} {tmp} = {name}({args_str});"));
@@ -960,7 +979,7 @@ mod tests {
         let mut checkpoint = checkpoint_ctx();
         checkpoint.advance_timestamp(3);
         assert!(checkpoint.buf().is_empty());
-        assert_eq!(checkpoint.checkpoint_preflight_budget(), (3, 0));
+        assert_eq!(checkpoint.preflight_block_budget(), (3, 0));
 
         for mode in [
             EmitMode::Direct,
@@ -1028,7 +1047,7 @@ mod tests {
         ctx.write_aligned_mem_block("addr", "4ull");
         ctx.advance_timestamp(3);
 
-        assert_eq!(ctx.checkpoint_preflight_budget(), (11, 0));
+        assert_eq!(ctx.preflight_block_budget(), (11, 0));
         assert!(!ctx.buf().contains("preflight_local_reg"));
         assert!(!ctx.buf().contains("trace_read"));
         assert!(!ctx.buf().contains("trace_write"));
@@ -1042,11 +1061,11 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_residuals_are_untagged_and_fixed_by_default() {
+    fn preflight_replay_values_are_untagged_and_fixed_by_default() {
         let mut ctx = checkpoint_ctx();
         ctx.append_replay_value("loaded");
 
-        assert_eq!(ctx.checkpoint_preflight_budget(), (0, 1));
+        assert_eq!(ctx.preflight_block_budget(), (0, 1));
         assert_eq!(
             ctx.buf(),
             "        checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)(loaded));\n"
@@ -1054,7 +1073,7 @@ mod tests {
     }
 
     #[test]
-    fn metered_residuals_fold_fixed_counts_and_emit_dynamic_counts() {
+    fn metered_replay_values_fold_fixed_counts_and_emit_dynamic_counts() {
         let mut ctx = metered_memory_ctx();
         ctx.count_fixed_replay_values(4);
         ctx.append_replay_value("fixed");
@@ -1062,7 +1081,7 @@ mod tests {
         ctx.append_replay_memory_u64_range("buffer", "words");
         ctx.count_replay_values("late_words");
 
-        assert_eq!(ctx.metered_checkpoint_residuals(), 5);
+        assert_eq!(ctx.metered_block_replay_values(), 5);
         assert!(ctx.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
         assert!(ctx
             .buf()
@@ -1075,7 +1094,7 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_dynamic_hint_schedule_and_residual_are_counted_once() {
+    fn preflight_dynamic_hint_schedule_and_replay_values_are_counted_once() {
         let mut ctx = checkpoint_ctx();
         ctx.append_replay_value("before");
         ctx.reserve_preflight_timestamp_slots("slots");
@@ -1086,7 +1105,7 @@ mod tests {
         ctx.append_replay_value("after");
         ctx.read_reg(3);
 
-        assert_eq!(ctx.checkpoint_preflight_budget(), (1, 2));
+        assert_eq!(ctx.preflight_block_budget(), (1, 2));
         assert_eq!(
             ctx.buf()
                 .matches("checkpoint_preflight_local_add_timestamp_unchecked")
@@ -1122,7 +1141,7 @@ mod tests {
         checkpoint.reserve_replay_values("words");
         checkpoint.append_replay_memory_u64_range("buffer", "words");
 
-        assert_eq!(checkpoint.checkpoint_preflight_budget(), (0, 0));
+        assert_eq!(checkpoint.preflight_block_budget(), (0, 0));
         assert!(checkpoint
             .buf()
             .contains("for (uint32_t replay_word = 0u; replay_word < words; ++replay_word) {"));
@@ -1182,7 +1201,7 @@ mod tests {
         let result = ctx.emit_call_expr("bool", "host_call", &["state"]);
 
         assert_eq!(result, "_v0");
-        assert_eq!(ctx.checkpoint_preflight_budget(), (0, 0));
+        assert_eq!(ctx.preflight_block_budget(), (0, 0));
         let reserve = ctx
             .buf()
             .find("checkpoint_preflight_local_reserve(&checkpoint_preflight, 0u, 2u)")
