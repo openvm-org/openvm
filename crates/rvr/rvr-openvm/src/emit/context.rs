@@ -167,7 +167,7 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn count_checkpoint_slots(&mut self, slots: u32) {
+    fn count_fixed_timestamp_slots(&mut self, slots: u32) {
         if !self.mode.uses_checkpoint_local() || self.checkpoint_dynamic_schedule {
             return;
         }
@@ -221,7 +221,7 @@ impl<'a> EmitContext<'a> {
         if slots == 0 {
             return;
         }
-        self.count_checkpoint_slots(slots);
+        self.count_fixed_timestamp_slots(slots);
     }
 
     /// Append a line of C code (indented).
@@ -287,7 +287,7 @@ impl<'a> EmitContext<'a> {
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
             if matches!(kind, RegisterReadKind::MemoryAccess) {
-                self.count_checkpoint_slots(1);
+                self.count_fixed_timestamp_slots(1);
             }
             return "0ull".to_string();
         }
@@ -304,7 +304,7 @@ impl<'a> EmitContext<'a> {
         };
 
         if matches!(kind, RegisterReadKind::MemoryAccess) {
-            self.count_checkpoint_slots(1);
+            self.count_fixed_timestamp_slots(1);
         }
 
         value
@@ -326,10 +326,10 @@ impl<'a> EmitContext<'a> {
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
-            self.count_checkpoint_slots(1);
+            self.count_fixed_timestamp_slots(1);
             return;
         }
-        self.count_checkpoint_slots(1);
+        self.count_fixed_timestamp_slots(1);
         self.write_reg_direct(idx, &format!("(uint64_t)({val})"));
     }
 
@@ -407,7 +407,7 @@ impl<'a> EmitContext<'a> {
 
         self.emit_memory_bounds_trap(&addr, width);
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
-        self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
+        self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
@@ -430,7 +430,7 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
-        self.count_checkpoint_slots(if width == 1 { 1 } else { 2 });
+        self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         self.write_line(&format!(
             "{write_func}(memory, {addr}, ({cast_ty})({val}));"
         ));
@@ -453,7 +453,7 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(addr, 8);
         }
-        self.count_checkpoint_slots(1);
+        self.count_fixed_timestamp_slots(1);
         self.write_line(&format!(
             "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
         ));
@@ -955,7 +955,7 @@ mod tests {
     }
 
     #[test]
-    fn advance_timestamp_counts_checkpoint_slots() {
+    fn advance_timestamp_counts_fixed_preflight_slots() {
         let mut checkpoint = checkpoint_ctx();
         checkpoint.advance_timestamp(3);
         assert!(checkpoint.buf().is_empty());
