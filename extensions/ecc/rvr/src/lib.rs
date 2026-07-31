@@ -108,7 +108,7 @@ impl ExtInstr for EcAddNeInstr {
         let point_dwords = self.curve.point_dwords();
         if is_preflight {
             // Two point reads followed by one point write happen inside the opaque call.
-            ctx.advance_checkpoint_timestamp(3 * point_dwords);
+            ctx.advance_timestamp(3 * point_dwords);
         }
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
@@ -160,7 +160,7 @@ impl ExtInstr for EcDoubleInstr {
         let point_dwords = self.curve.point_dwords();
         if is_preflight {
             // One point read followed by one point write happens inside the opaque call.
-            ctx.advance_checkpoint_timestamp(2 * point_dwords);
+            ctx.advance_timestamp(2 * point_dwords);
         }
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
@@ -350,12 +350,8 @@ mod tests {
             unreachable!()
         }
 
-        fn advance_timestamp(&mut self, _slots: u32) {
-            unreachable!()
-        }
-
-        fn advance_checkpoint_timestamp(&mut self, slots: u32) {
-            self.operations.push(format!("checkpoint_slots({slots})"));
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.operations.push(format!("timestamp_slots({slots})"));
         }
 
         fn write_var(&mut self, _var: Variable, _val: &str) {
@@ -483,7 +479,7 @@ mod tests {
                     "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {".to_string(),
                     "trap".to_string(),
                     "}".to_string(),
-                    format!("checkpoint_slots({})", 3 * point_dwords),
+                    format!("timestamp_slots({})", 3 * point_dwords),
                 ];
                 let name = format!(
                     "rvr_ext_{}ec_add_ne_{}",
@@ -526,7 +522,7 @@ mod tests {
                     "if (unlikely(((r1 | r2) & 7ull) != 0ull)) {".to_string(),
                     "trap".to_string(),
                     "}".to_string(),
-                    format!("checkpoint_slots({})", 2 * point_dwords),
+                    format!("timestamp_slots({})", 2 * point_dwords),
                 ];
                 let name = format!(
                     "rvr_ext_{}ec_double_{}",

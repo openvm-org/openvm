@@ -194,7 +194,7 @@ impl ExtInstr for Int256BranchEqInstr {
         // The predicate call performs eight aligned heap reads. Its one-bit
         // result is the minimum information needed by independent GPU chunks
         // to recover the dynamic successor before memory chronology exists.
-        ctx.advance_checkpoint_timestamp(8);
+        ctx.advance_timestamp(8);
         ctx.append_replay_value(&cond);
         ctx.flush_before_control_transfer();
         ctx.write_line(&format!("if ({cond}) {{"));
@@ -252,7 +252,7 @@ impl ExtInstr for Int256BranchLtInstr {
         let rs2 = ctx.read_var(self.rs2_reg);
         emit_pointer_alignment_guard(ctx, &[&rs1, &rs2]);
         let cond = ctx.emit_call_expr("bool", self.op.ffi_name(), &["state", &rs1, &rs2]);
-        ctx.advance_checkpoint_timestamp(8);
+        ctx.advance_timestamp(8);
         ctx.append_replay_value(&cond);
         ctx.flush_before_control_transfer();
         ctx.write_line(&format!("if ({cond}) {{"));
@@ -504,12 +504,6 @@ mod tests {
             }
         }
 
-        fn advance_checkpoint_timestamp(&mut self, slots: u32) {
-            if self.records_checkpoint() {
-                self.lines.push(format!("advance_checkpoint({slots})"));
-            }
-        }
-
         fn write_var(&mut self, _var: Variable, _val: &str) {
             unreachable!()
         }
@@ -711,7 +705,7 @@ mod tests {
                 "trap",
                 "}",
                 "bool tmp0 = rvr_ext_int256_beq(state, r2, r3)",
-                "advance_checkpoint(8)",
+                "advance(8)",
                 "append(tmp0)",
                 "flush",
                 "if (tmp0) {",
@@ -750,7 +744,7 @@ mod tests {
         };
         let mut checkpoint = TestEmitCtx::default();
         instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));
-        assert_eq!(checkpoint.lines[6], "advance_checkpoint(8)");
+        assert_eq!(checkpoint.lines[6], "advance(8)");
         assert_eq!(checkpoint.lines[8], "flush");
         assert_eq!(
             checkpoint.lines[5],

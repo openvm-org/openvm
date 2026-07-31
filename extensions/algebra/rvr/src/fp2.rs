@@ -123,7 +123,9 @@ mod tests {
         }
 
         fn advance_timestamp(&mut self, slots: u32) {
-            self.operations.push(format!("advance_timestamp({slots});"));
+            if self.checkpoint {
+                self.operations.push(format!("timestamp_slots({slots});"));
+            }
         }
 
         fn write_var(&mut self, var: Variable, val: &str) {
@@ -158,12 +160,6 @@ mod tests {
         fn append_replay_value(&mut self, value: &str) {
             if self.checkpoint {
                 self.operations.push(format!("residual({value});"));
-            }
-        }
-
-        fn advance_checkpoint_timestamp(&mut self, slots: u32) {
-            if self.checkpoint {
-                self.operations.push(format!("checkpoint_slots({slots});"));
             }
         }
 
@@ -242,7 +238,7 @@ mod tests {
                         "read(r2);",
                         "read(r3);",
                         "read(r1);",
-                        &format!("checkpoint_slots({});", num_limbs * 3 / 4),
+                        &format!("timestamp_slots({});", num_limbs * 3 / 4),
                     ]
                 );
                 assert!(checkpoint
@@ -269,7 +265,7 @@ mod tests {
                     ["read(r2);", "read(r3);", "read(r1);"]
                 );
                 assert!(!legacy.operations.iter().any(|operation| {
-                    operation.starts_with("checkpoint_slots(") || operation.starts_with("residual(")
+                    operation.starts_with("timestamp_slots(") || operation.starts_with("residual(")
                 }));
             }
         }
@@ -295,7 +291,7 @@ mod tests {
                     "read(r2);",
                     "read(r3);",
                     "read(r1);",
-                    &format!("checkpoint_slots({});", num_limbs * 3 / 4),
+                    &format!("timestamp_slots({});", num_limbs * 3 / 4),
                 ]
             );
             assert!(checkpoint
@@ -338,7 +334,7 @@ mod tests {
                 ["read(r2);", "read(r3);", "read(r1);"]
             );
             assert!(!legacy.operations.iter().any(|operation| {
-                operation.starts_with("checkpoint_slots(") || operation.starts_with("residual(")
+                operation.starts_with("timestamp_slots(") || operation.starts_with("residual(")
             }));
         }
     }

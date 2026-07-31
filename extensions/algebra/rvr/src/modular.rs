@@ -113,7 +113,7 @@ impl ExtInstr for ModSetupIsEqInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        ctx.advance_checkpoint_timestamp(self.num_limbs * 2 / 8);
+        ctx.advance_timestamp(self.num_limbs * 2 / 8);
         emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
         let mod_literal = format_c_byte_array(&self.modulus);
         let num_limbs = format!("{}u", self.num_limbs);
@@ -386,7 +386,9 @@ mod tests {
         }
 
         fn advance_timestamp(&mut self, slots: u32) {
-            self.operations.push(format!("advance_timestamp({slots});"));
+            if self.checkpoint {
+                self.operations.push(format!("timestamp_slots({slots});"));
+            }
         }
 
         fn write_var(&mut self, var: Variable, val: &str) {
@@ -421,12 +423,6 @@ mod tests {
         fn append_replay_value(&mut self, value: &str) {
             if self.checkpoint {
                 self.operations.push(format!("residual({value});"));
-            }
-        }
-
-        fn advance_checkpoint_timestamp(&mut self, slots: u32) {
-            if self.checkpoint {
-                self.operations.push(format!("checkpoint_slots({slots});"));
             }
         }
 
@@ -490,7 +486,7 @@ mod tests {
         };
         assert!(instr.supports_preflight());
 
-        let mut ctx = TestEmitCtx::default();
+        let mut ctx = TestEmitCtx::checkpoint();
         instr.emit_c(&mut ctx);
 
         assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
@@ -501,13 +497,13 @@ mod tests {
         assert_eq!(
             ctx.operations
                 .iter()
-                .filter(|op| op.as_str() == "advance_timestamp(1);")
+                .filter(|op| op.as_str() == "timestamp_slots(1);")
                 .count(),
             1
         );
         assert_eq!(
             ctx.operations.last().map(String::as_str),
-            Some("advance_timestamp(1);")
+            Some("timestamp_slots(1);")
         );
     }
 
@@ -521,7 +517,7 @@ mod tests {
         };
         assert!(instr.supports_preflight());
 
-        let mut ctx = TestEmitCtx::default();
+        let mut ctx = TestEmitCtx::checkpoint();
         instr.emit_c(&mut ctx);
 
         assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
@@ -532,13 +528,13 @@ mod tests {
         assert_eq!(
             ctx.operations
                 .iter()
-                .filter(|op| op.as_str() == "advance_timestamp(1);")
+                .filter(|op| op.as_str() == "timestamp_slots(1);")
                 .count(),
             1
         );
         assert_eq!(
             ctx.operations.last().map(String::as_str),
-            Some("advance_timestamp(1);")
+            Some("timestamp_slots(1);")
         );
     }
 
@@ -564,7 +560,7 @@ mod tests {
                         "read(r2);",
                         "read(r3);",
                         "read(r1);",
-                        &format!("checkpoint_slots({});", num_limbs * 3 / 8),
+                        &format!("timestamp_slots({});", num_limbs * 3 / 8),
                     ]
                 );
                 assert!(checkpoint
@@ -594,7 +590,7 @@ mod tests {
                 assert!(!legacy
                     .operations
                     .iter()
-                    .any(|operation| operation.starts_with("checkpoint_slots(")
+                    .any(|operation| operation.starts_with("timestamp_slots(")
                         || operation.starts_with("residual(")));
             }
         }
@@ -621,7 +617,7 @@ mod tests {
                     "read(r2);",
                     "read(r3);",
                     "read(r1);",
-                    &format!("checkpoint_slots({});", num_limbs * 3 / 8),
+                    &format!("timestamp_slots({});", num_limbs * 3 / 8),
                 ]
             );
             assert!(checkpoint
@@ -654,7 +650,7 @@ mod tests {
                 [
                     "read(r2);",
                     "read(r3);",
-                    &format!("checkpoint_slots({});", num_limbs * 2 / 8),
+                    &format!("timestamp_slots({});", num_limbs * 2 / 8),
                 ]
             );
             assert!(checkpoint
@@ -699,7 +695,7 @@ mod tests {
                 [
                     "read(r2);",
                     "read(r3);",
-                    &format!("checkpoint_slots({});", num_limbs * 2 / 8),
+                    &format!("timestamp_slots({});", num_limbs * 2 / 8),
                 ]
             );
             assert!(checkpoint

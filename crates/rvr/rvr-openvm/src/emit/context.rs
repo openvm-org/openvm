@@ -215,7 +215,8 @@ impl<'a> EmitContext<'a> {
         self.mode.preserves_logical_schedule()
     }
 
-    /// Reserve logical memory slots that have no enabled memory event.
+    /// Account for logical memory slots not emitted through the standard
+    /// memory-access helpers.
     pub(crate) fn advance_timestamp(&mut self, slots: u32) {
         if slots == 0 {
             return;
@@ -599,13 +600,6 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    /// Count fixed opaque-call slots only for checkpoint replay. The block
-    /// entry reservation advances the logical timestamp once, before any
-    /// instruction in the block can mutate state.
-    pub fn advance_checkpoint_timestamp(&mut self, slots: u32) {
-        self.count_checkpoint_slots(slots);
-    }
-
     fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
         if width == 1 {
             self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
@@ -890,10 +884,6 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         }
     }
 
-    fn advance_checkpoint_timestamp(&mut self, slots: u32) {
-        EmitContext::advance_checkpoint_timestamp(self, slots);
-    }
-
     fn emit_call(&mut self, name: &str, args: &[&str]) {
         EmitContext::emit_call(self, name, args);
     }
@@ -1021,32 +1011,6 @@ mod tests {
             let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
             ctx.flush_before_control_transfer();
             assert!(ctx.buf().is_empty(), "mode {mode:?} changed codegen");
-        }
-    }
-
-    #[test]
-    fn opaque_call_slots_are_checkpoint_only_and_emit_no_code() {
-        let mut checkpoint = checkpoint_ctx();
-        checkpoint.advance_checkpoint_timestamp(12);
-        assert!(checkpoint.buf().is_empty());
-        assert_eq!(checkpoint.checkpoint_preflight_budget(), (12, 0));
-
-        for mode in [
-            EmitMode::Direct,
-            EmitMode::Metered {
-                trace_memory_pages: false,
-            },
-            EmitMode::MeteredCost,
-        ] {
-            let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
-            let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
-                BlockAbi::Metered
-            } else {
-                BlockAbi::Plain
-            };
-            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
-            ctx.advance_checkpoint_timestamp(12);
-            assert!(ctx.buf().is_empty());
         }
     }
 

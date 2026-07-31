@@ -56,7 +56,8 @@ pub trait ExtEmitCtx {
     /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
 
-    /// Reserve logical clock slots that have no enabled memory event.
+    /// Account for logical memory slots not emitted through `read_var`,
+    /// `write_var`, `read_mem`, or `write_mem`.
     ///
     /// Pure and metered emitters preserve their existing execution behavior.
     fn advance_timestamp(&mut self, slots: u32);
@@ -120,11 +121,6 @@ pub trait ExtEmitCtx {
     /// Instruction-owned terminators must call this after their final logged
     /// access or replay value and before writing any branch or return.
     fn flush_before_control_transfer(&mut self) {}
-
-    /// Account for memory-bus slots performed inside an opaque extension call.
-    ///
-    /// This is preflight-only bookkeeping.
-    fn advance_checkpoint_timestamp(&mut self, _slots: u32) {}
 
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);

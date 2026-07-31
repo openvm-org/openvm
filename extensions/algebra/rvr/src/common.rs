@@ -158,7 +158,7 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         let rd = ctx.read_var(self.rd_reg);
         // Convert three byte-wide values into timed 8-byte memory blocks.
         let timed_blocks = self.num_limbs * K::STORAGE_FACTOR * 3 / 8;
-        ctx.advance_checkpoint_timestamp(timed_blocks);
+        ctx.advance_timestamp(timed_blocks);
         emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let num_limbs = format!("{}u", self.num_limbs);
         let mod_literal = format_c_byte_array(&self.modulus);
@@ -195,7 +195,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 2 / 8);
+        ctx.advance_timestamp(self.num_limbs * K::STORAGE_FACTOR * 2 / 8);
         emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
         let prefix = K::c_prefix();
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
@@ -239,7 +239,7 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let rd = ctx.read_var(self.rd_reg);
-        ctx.advance_checkpoint_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
+        ctx.advance_timestamp(self.num_limbs * K::STORAGE_FACTOR * 3 / 8);
         emit_word_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let op_name = self.op.c_name();
         let prefix = K::c_prefix();
