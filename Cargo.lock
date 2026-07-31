@@ -4685,6 +4685,7 @@ dependencies = [
  "p3-matrix",
  "serde",
  "test-case",
+ "thiserror 1.0.69",
  "tracing",
 ]
 

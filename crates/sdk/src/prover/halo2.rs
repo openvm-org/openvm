@@ -7,7 +7,10 @@ use openvm_static_verifier::{
 };
 use tracing::{info, info_span};
 
-use crate::{keygen::Halo2ProvingKey, types::EvmProof};
+use crate::{
+    keygen::Halo2ProvingKey,
+    types::{EvmProof, EvmProofConversionError},
+};
 
 #[derive(Clone)]
 pub struct Halo2Prover {
@@ -35,7 +38,10 @@ impl Halo2Prover {
         }
     }
 
-    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
+    pub fn prove_for_evm(
+        &self,
+        root_proof: &Proof<RootSC>,
+    ) -> Result<EvmProof, EvmProofConversionError> {
         #[cfg(feature = "metrics")]
         {
             let verifier_k = self.halo2_pk.verifier.pinning.metadata.config_params.k;
@@ -54,7 +60,7 @@ impl Halo2Prover {
                 .halo2_pk
                 .wrapper
                 .prove_for_evm(&self.wrapper_srs, snark);
-            EvmProof::from(raw)
+            EvmProof::try_from(raw)
         })
     }
 

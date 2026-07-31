@@ -33,6 +33,7 @@ cfg-if.workspace = true
 num-bigint.workspace = true
 hex.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }

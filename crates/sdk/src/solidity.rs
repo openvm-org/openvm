@@ -215,7 +215,9 @@ pub(crate) fn verify_evm_halo2_proof(
     evm_proof: crate::types::EvmProof,
 ) -> Result<u64, SdkError> {
     // Convert EvmProof → RawEvmProof for the static verifier's evm_verify
-    let raw_evm_proof: openvm_static_verifier::keygen::RawEvmProof = evm_proof.into();
+    let raw_evm_proof: openvm_static_verifier::keygen::RawEvmProof = evm_proof
+        .try_into()
+        .map_err(|err| SdkError::Other(eyre::eyre!("EVM proof verification failed: {err}")))?;
     let deployment_code = &openvm_verifier.artifact.bytecode;
 
     let gas_cost = openvm_static_verifier::keygen::evm_verify(deployment_code, &raw_evm_proof)
