@@ -268,7 +268,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -285,7 +285,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -308,7 +308,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -325,7 +325,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,

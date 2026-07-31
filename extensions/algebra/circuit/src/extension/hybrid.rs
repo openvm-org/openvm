@@ -305,7 +305,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -331,7 +331,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     start_offset,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -370,7 +370,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(is_eq, move |chip, postflight| {
                     let trace = generate_modular_is_equal_trace_from_postflight::<
                         _,
                         MODULAR_BLOCKS_32,
@@ -406,7 +406,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -432,7 +432,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     start_offset,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -471,7 +471,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(is_eq, move |chip, postflight| {
                     let trace = generate_modular_is_equal_trace_from_postflight::<
                         _,
                         MODULAR_BLOCKS_48,
@@ -1044,7 +1044,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     start_offset,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -1070,7 +1070,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     start_offset,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -1102,7 +1102,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     start_offset,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,
@@ -1128,7 +1128,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     start_offset,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
                         postflight,

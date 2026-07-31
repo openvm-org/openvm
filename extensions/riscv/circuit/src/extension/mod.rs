@@ -45,9 +45,9 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
-macro_rules! add_postflight_executor_chip {
+macro_rules! add_executor_chip_with_tracegen {
     ($inventory:expr, $chip:expr, $generate:path) => {
-        $inventory.add_postflight_executor_chip($chip, |chip, postflight| {
+        $inventory.add_executor_chip_with_tracegen($chip, |chip, postflight| {
             $generate(chip, postflight).map(AirProvingContext::simple_no_pis)
         });
     };
@@ -717,7 +717,7 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -729,7 +729,7 @@ where
         inventory.next_air::<Rv64AddSubAir>()?;
         let add_sub =
             Rv64AddSubChip::new(AddSubFiller::new(range_checker.clone()), mem_helper.clone());
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             add_sub,
             crate::add_sub::trace::generate_trace_from_postflight
@@ -740,7 +740,7 @@ where
             BitwiseLogicFiller::new(bitwise_lu.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             bitwise_logic,
             crate::bitwise_logic::trace::generate_trace_from_postflight
@@ -751,7 +751,7 @@ where
             crate::add_sub_w::AddSubWFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             add_sub_w,
             crate::add_sub_w::trace::generate_trace_from_postflight
@@ -762,7 +762,7 @@ where
             LessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             lt,
             crate::less_than::trace::generate_trace_from_postflight
@@ -773,7 +773,7 @@ where
             ShiftLogicalFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_logical,
             crate::shift_logical::trace::generate_trace_from_postflight
@@ -784,7 +784,7 @@ where
             ShiftRightArithmeticFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_right_arithmetic,
             crate::shift_right_arithmetic::trace::generate_trace_from_postflight
@@ -795,7 +795,7 @@ where
             crate::shift_w::ShiftWLogicalFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_w_logical,
             crate::shift_w::trace::generate_logical_trace_from_postflight
@@ -806,7 +806,7 @@ where
             crate::shift_w::ShiftWRightArithmeticFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_w_right_arithmetic,
             crate::shift_w::trace::generate_right_arithmetic_trace_from_postflight
@@ -814,7 +814,7 @@ where
 
         inventory.next_air::<Rv64AddIWAir>()?;
         let addi_w = Rv64AddIWChip::new(AddIFiller::new(range_checker.clone()), mem_helper.clone());
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             addi_w,
             crate::addi::trace::generate_w_trace_from_postflight
@@ -825,7 +825,7 @@ where
             ShiftLogicalImmFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_w_logical_imm,
             crate::shift_logical_imm::trace::generate_word_trace_from_postflight
@@ -836,7 +836,7 @@ where
             ShiftRightArithmeticImmFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_w_right_arithmetic_imm,
             crate::shift_right_arithmetic_imm::trace::generate_word_trace_from_postflight
@@ -852,7 +852,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_sign_extend_byte_chip,
             crate::load_sign_extend::byte::trace::generate_trace_from_postflight
@@ -867,7 +867,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_byte_chip,
             crate::load::byte::trace::generate_trace_from_postflight
@@ -882,7 +882,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             store_byte_chip,
             crate::store::byte::trace::generate_trace_from_postflight
@@ -898,7 +898,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_sign_extend_halfword_chip,
             crate::load_sign_extend::halfword::trace::generate_trace_from_postflight
@@ -913,7 +913,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_halfword_chip,
             crate::load::halfword::trace::generate_trace_from_postflight
@@ -928,7 +928,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             store_halfword_chip,
             crate::store::halfword::trace::generate_trace_from_postflight
@@ -944,7 +944,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_sign_extend_word_chip,
             crate::load_sign_extend::word::trace::generate_trace_from_postflight
@@ -959,7 +959,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_word_chip,
             crate::load::word::trace::generate_trace_from_postflight
@@ -974,7 +974,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             store_word_chip,
             crate::store::word::trace::generate_trace_from_postflight
@@ -989,7 +989,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             load_doubleword_chip,
             crate::load::doubleword::trace::generate_trace_from_postflight
@@ -1004,7 +1004,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             store_doubleword_chip,
             crate::store::doubleword::trace::generate_trace_from_postflight
@@ -1013,7 +1013,7 @@ where
         inventory.next_air::<Rv64BranchEqualAir>()?;
         let beq =
             Rv64BranchEqualChip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), mem_helper.clone());
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             beq,
             crate::branch_eq::trace::generate_trace_from_postflight
@@ -1024,7 +1024,7 @@ where
             BranchLessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             blt,
             crate::branch_lt::trace::generate_trace_from_postflight
@@ -1035,7 +1035,7 @@ where
             Rv64JalLuiFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             jal_lui,
             crate::jal_lui::trace::generate_trace_from_postflight
@@ -1046,7 +1046,7 @@ where
             Rv64JalrFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             jalr,
             crate::jalr::trace::generate_trace_from_postflight
@@ -1057,7 +1057,7 @@ where
             Rv64AuipcFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             auipc,
             crate::auipc::trace::generate_trace_from_postflight
@@ -1065,7 +1065,7 @@ where
 
         inventory.next_air::<Rv64AddIAir>()?;
         let addi = Rv64AddIChip::new(AddIFiller::new(range_checker.clone()), mem_helper.clone());
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             addi,
             crate::addi::trace::generate_trace_from_postflight
@@ -1076,7 +1076,7 @@ where
             ShiftLogicalImmFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_logical_imm,
             crate::shift_logical_imm::trace::generate_trace_from_postflight
@@ -1087,7 +1087,7 @@ where
             ShiftRightArithmeticImmFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             shift_right_arithmetic_imm,
             crate::shift_right_arithmetic_imm::trace::generate_trace_from_postflight
@@ -1098,7 +1098,7 @@ where
             LessThanImmFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             less_than_imm,
             crate::less_than_imm::trace::generate_trace_from_postflight
@@ -1109,7 +1109,7 @@ where
             BitwiseLogicImmFiller::new(bitwise_lu.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             bitwise_logic_imm,
             crate::bitwise_logic_imm::trace::generate_trace_from_postflight
@@ -1253,7 +1253,7 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -1272,7 +1272,7 @@ where
             } else {
                 let air: &RangeTupleCheckerAir<2> = inventory.next_air()?;
                 let chip = SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -1286,7 +1286,7 @@ where
             MultiplicationFiller::new(range_tuple_checker.clone(), bitwise_lu.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             mult,
             crate::mul::trace::generate_trace_from_postflight
@@ -1297,7 +1297,7 @@ where
             crate::mul_w::MulWFiller::new(range_tuple_checker.clone(), bitwise_lu.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             mul_w,
             crate::mul_w::trace::generate_trace_from_postflight
@@ -1308,7 +1308,7 @@ where
             MulHFiller::new(bitwise_lu.clone(), range_tuple_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             mul_h,
             crate::mulh::trace::generate_trace_from_postflight
@@ -1323,7 +1323,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             div_rem,
             crate::divrem::trace::generate_trace_from_postflight
@@ -1338,7 +1338,7 @@ where
             ),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             divrem_w,
             crate::divrem_w::trace::generate_trace_from_postflight
@@ -1414,7 +1414,7 @@ where
             Rv64HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
-        add_postflight_executor_chip!(
+        add_executor_chip_with_tracegen!(
             inventory,
             hint_store,
             crate::hintstore::trace::generate_trace_from_postflight

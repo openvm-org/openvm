@@ -637,8 +637,8 @@ where
         self.postflight_generators.push(None);
     }
 
-    /// Adds a periphery chip with its record-free CPU trace generator.
-    pub fn add_postflight_periphery_chip<C, G>(&mut self, chip: C, generate: G)
+    /// Adds a periphery chip with its CPU trace generator over postflight history.
+    pub fn add_periphery_chip_with_tracegen<C, G>(&mut self, chip: C, generate: G)
     where
         C: Chip<PB> + 'static,
         G: for<'a> Fn(
@@ -650,10 +650,11 @@ where
             + 'static,
     {
         let constant_trace_height = chip.constant_trace_height();
-        self.add_postflight_periphery_chip_with_height(chip, constant_trace_height, generate);
+        self.add_periphery_chip_with_height_and_tracegen(chip, constant_trace_height, generate);
     }
 
-    pub fn add_postflight_periphery_chip_with_height<C, G>(
+    /// Adds a periphery chip with an explicit trace height and CPU trace generator.
+    pub fn add_periphery_chip_with_height_and_tracegen<C, G>(
         &mut self,
         chip: C,
         constant_trace_height: Option<usize>,
@@ -674,8 +675,8 @@ where
             .push(Some(erase_postflight_generator(generate)));
     }
 
-    /// Adds an executor chip with its record-free CPU trace generator.
-    pub fn add_postflight_executor_chip<C, G>(&mut self, chip: C, generate: G)
+    /// Adds an executor chip with its CPU trace generator over postflight history.
+    pub fn add_executor_chip_with_tracegen<C, G>(&mut self, chip: C, generate: G)
     where
         C: 'static,
         G: for<'a> Fn(

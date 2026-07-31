@@ -539,7 +539,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
                     let trace =
                         generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
@@ -562,7 +562,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
@@ -590,7 +590,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
                     let trace =
                         generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
@@ -613,7 +613,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     opcode_base,
                     range_checker_gpu.clone(),
                 );
-                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(

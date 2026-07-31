@@ -246,7 +246,7 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -258,7 +258,7 @@ where
             XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), byte_ptr_max_bits),
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(xorin_chip, |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(xorin_chip, |chip, postflight| {
             crate::xorin::trace::generate_trace_from_postflight(chip, postflight)
                 .map(AirProvingContext::simple_no_pis)
         });
@@ -268,7 +268,7 @@ where
         let periphery_chip = KeccakfPermChip::new(shared_preimages.clone());
         // Trace generators run in reverse insertion order. Register the permutation first so the
         // operation generator publishes its preimages before they are consumed here.
-        inventory.add_postflight_periphery_chip(periphery_chip, |chip, postflight| {
+        inventory.add_periphery_chip_with_tracegen(periphery_chip, |chip, postflight| {
             crate::keccakf_perm::generate_trace_from_postflight(chip, postflight)
                 .map(AirProvingContext::simple_no_pis)
         });
@@ -280,7 +280,7 @@ where
             mem_helper.clone(),
             shared_preimages,
         );
-        inventory.add_postflight_executor_chip(op_chip, |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(op_chip, |chip, postflight| {
             crate::keccakf_op::generate_trace_from_postflight(chip, postflight)
                 .map(AirProvingContext::simple_no_pis)
         });

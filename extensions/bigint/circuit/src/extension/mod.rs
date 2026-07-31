@@ -331,7 +331,7 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -350,7 +350,7 @@ where
             } else {
                 let air: &RangeTupleCheckerAir<2> = inventory.next_air()?;
                 let chip = SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -360,7 +360,7 @@ where
         inventory.next_air::<Rv64AddSub256Air>()?;
         let add_sub =
             Rv64AddSub256Chip::new(AddSubFiller::new(range_checker.clone()), mem_helper.clone());
-        inventory.add_postflight_executor_chip(add_sub, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(add_sub, move |chip, postflight| {
             crate::trace::generate_add_sub_trace(chip, postflight, byte_ptr_max_bits)
                 .map(AirProvingContext::simple_no_pis)
         });
@@ -371,7 +371,7 @@ where
             mem_helper.clone(),
         );
         let bitwise_range_checker = range_checker.clone();
-        inventory.add_postflight_executor_chip(bitwise, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(bitwise, move |chip, postflight| {
             crate::trace::generate_bitwise_trace(
                 chip,
                 postflight,
@@ -386,7 +386,7 @@ where
             LessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(lt, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(lt, move |chip, postflight| {
             crate::trace::generate_less_than_trace(chip, postflight, byte_ptr_max_bits)
                 .map(AirProvingContext::simple_no_pis)
         });
@@ -397,7 +397,7 @@ where
             mem_helper.clone(),
         );
         let branch_equal_range_checker = range_checker.clone();
-        inventory.add_postflight_executor_chip(beq, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(beq, move |chip, postflight| {
             crate::trace::generate_branch_equal_trace(
                 chip,
                 postflight,
@@ -412,7 +412,7 @@ where
             BranchLessThanFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(blt, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(blt, move |chip, postflight| {
             crate::trace::generate_branch_less_than_trace(chip, postflight, byte_ptr_max_bits)
                 .map(AirProvingContext::simple_no_pis)
         });
@@ -423,7 +423,7 @@ where
             mem_helper.clone(),
         );
         let multiplication_range_checker = range_checker.clone();
-        inventory.add_postflight_executor_chip(mult, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(mult, move |chip, postflight| {
             crate::trace::generate_multiplication_trace(
                 chip,
                 postflight,
@@ -438,7 +438,7 @@ where
             ShiftLogicalFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(shift_logical, move |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(shift_logical, move |chip, postflight| {
             crate::trace::generate_shift_logical_trace(chip, postflight, byte_ptr_max_bits)
                 .map(AirProvingContext::simple_no_pis)
         });
@@ -448,10 +448,13 @@ where
             ShiftRightArithmeticFiller::new(range_checker.clone()),
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(shift_right_arithmetic, move |chip, postflight| {
-            crate::trace::generate_shift_arithmetic_trace(chip, postflight, byte_ptr_max_bits)
-                .map(AirProvingContext::simple_no_pis)
-        });
+        inventory.add_executor_chip_with_tracegen(
+            shift_right_arithmetic,
+            move |chip, postflight| {
+                crate::trace::generate_shift_arithmetic_trace(chip, postflight, byte_ptr_max_bits)
+                    .map(AirProvingContext::simple_no_pis)
+            },
+        );
         Ok(())
     }
 }

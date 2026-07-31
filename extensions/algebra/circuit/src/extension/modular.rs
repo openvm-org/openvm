@@ -356,7 +356,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -373,7 +373,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -396,7 +396,7 @@ where
                     ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
                     mem_helper.clone(),
                 );
-                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(is_eq, move |chip, postflight| {
                     generate_modular_is_equal_trace_from_postflight::<
                         _,
                         MODULAR_BLOCKS_32,
@@ -418,7 +418,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(addsub, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -435,7 +435,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(muldiv, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     generate_field_expression_trace_from_postflight(
                         chip,
                         postflight,
@@ -458,7 +458,7 @@ where
                     ModularIsEqualFiller::new(start_offset, modulus_limbs, range_checker.clone()),
                     mem_helper.clone(),
                 );
-                inventory.add_postflight_executor_chip(is_eq, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(is_eq, move |chip, postflight| {
                     generate_modular_is_equal_trace_from_postflight::<
                         _,
                         MODULAR_BLOCKS_48,

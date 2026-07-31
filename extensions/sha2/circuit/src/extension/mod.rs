@@ -241,7 +241,7 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -256,7 +256,7 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_postflight_periphery_chip_with_height(
+        inventory.add_periphery_chip_with_height_and_tracegen(
             sha256_block_hasher_chip,
             None,
             |chip, postflight| {
@@ -272,7 +272,7 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(sha256_main_chip, |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(sha256_main_chip, |chip, postflight| {
             Ok(AirProvingContext::simple_no_pis(
                 crate::generate_main_trace_from_postflight(chip, postflight)?,
             ))
@@ -286,7 +286,7 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_postflight_periphery_chip_with_height(
+        inventory.add_periphery_chip_with_height_and_tracegen(
             sha512_block_hasher_chip,
             None,
             |chip, postflight| {
@@ -302,7 +302,7 @@ where
             byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_postflight_executor_chip(sha512_main_chip, |chip, postflight| {
+        inventory.add_executor_chip_with_tracegen(sha512_main_chip, |chip, postflight| {
             Ok(AirProvingContext::simple_no_pis(
                 crate::generate_main_trace_from_postflight(chip, postflight)?,
             ))

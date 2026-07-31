@@ -401,7 +401,7 @@ where
 
         let mut inventory = ChipInventory::new(airs);
         inventory.next_air::<VariableRangeCheckerAir>()?;
-        inventory.add_postflight_periphery_chip(range_checker.clone(), |chip, _| {
+        inventory.add_periphery_chip_with_tracegen(range_checker.clone(), |chip, _| {
             Ok(chip.generate_proving_ctx())
         });
 
@@ -416,7 +416,7 @@ where
             vm_poseidon2_config(),
             config.max_constraint_degree,
         ));
-        inventory.add_postflight_periphery_chip(hasher_chip.clone(), |chip, _| {
+        inventory.add_periphery_chip_with_tracegen(hasher_chip.clone(), |chip, _| {
             Ok(chip.generate_proving_ctx())
         });
         let system = SystemChipInventory::new(
@@ -426,7 +426,7 @@ where
             hasher_chip,
         );
 
-        inventory.add_postflight_executor_chip((), |_, postflight| {
+        inventory.add_executor_chip_with_tracegen((), |_, postflight| {
             phantom::generate_trace_from_postflight(postflight)
                 .map(AirProvingContext::simple_no_pis)
         });

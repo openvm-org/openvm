@@ -195,7 +195,7 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_postflight_periphery_chip(chip.clone(), |chip, _| {
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
                     Ok(chip.generate_proving_ctx())
                 });
                 chip
@@ -205,19 +205,19 @@ where
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
         inventory.next_air::<DeferralCircuitCountAir>()?;
-        inventory.add_postflight_periphery_chip_with_height(
+        inventory.add_periphery_chip_with_height_and_tracegen(
             count_chip.clone(),
             Some(next_power_of_two_or_zero(extension.fns.len())),
             |chip, _| Ok(chip.generate_proving_ctx()),
         );
 
         inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
-        inventory.add_postflight_periphery_chip(poseidon2_chip.clone(), |chip, _| {
+        inventory.add_periphery_chip_with_tracegen(poseidon2_chip.clone(), |chip, _| {
             Ok(chip.generate_proving_ctx())
         });
 
         inventory.next_air::<DeferralCallAir>()?;
-        inventory.add_postflight_executor_chip(
+        inventory.add_executor_chip_with_tracegen(
             DeferralCallChip::new(
                 DeferralCallCoreFiller::new(
                     DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
@@ -235,7 +235,7 @@ where
         );
 
         inventory.next_air::<DeferralOutputAir>()?;
-        inventory.add_postflight_executor_chip(
+        inventory.add_executor_chip_with_tracegen(
             DeferralOutputChip::new(
                 DeferralOutputFiller::new(
                     count_chip.clone(),

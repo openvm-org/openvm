@@ -310,7 +310,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
                     generate_add_ne_trace_from_postflight(chip, postflight, opcode_base)
                         .map(AirProvingContext::simple_no_pis)
                 });
@@ -323,7 +323,7 @@ where
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     generate_double_trace_from_postflight(chip, postflight, opcode_base)
                         .map(AirProvingContext::simple_no_pis)
                 });
@@ -341,7 +341,7 @@ where
                     range_checker.clone(),
                     byte_ptr_max_bits,
                 );
-                inventory.add_postflight_executor_chip(addne, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
                     generate_add_ne_trace_from_postflight(chip, postflight, opcode_base)
                         .map(AirProvingContext::simple_no_pis)
                 });
@@ -354,7 +354,7 @@ where
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_postflight_executor_chip(double, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     generate_double_trace_from_postflight(chip, postflight, opcode_base)
                         .map(AirProvingContext::simple_no_pis)
                 });
