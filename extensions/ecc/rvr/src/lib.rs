@@ -171,7 +171,7 @@ impl ExtInstr for EcDoubleInstr {
             ctx.emit_call(&name, &["state", &rd, &rs1]);
         }
         if !self.is_setup {
-            // Regular-operation outputs are the only residuals. Setup replay derives its writes
+            // Regular-operation outputs are the only replay values. Setup replay derives its writes
             // from the timed reads and the configured field-expression program rather than
             // extending the transcript with setup-only values.
             for word in 0..point_dwords {
@@ -384,7 +384,7 @@ mod tests {
 
         fn append_replay_value(&mut self, value: &str) {
             if self.checkpoint {
-                self.operations.push(format!("residual({value})"));
+                self.operations.push(format!("replay_value({value})"));
             }
         }
 
@@ -440,9 +440,9 @@ mod tests {
         }
     }
 
-    fn expected_residuals(rd: &str, point_dwords: u32) -> Vec<String> {
+    fn expected_replay_values(rd: &str, point_dwords: u32) -> Vec<String> {
         (0..point_dwords)
-            .map(|word| format!("residual(peek_mem_u64(state, {rd} + {}ull))", word * 8))
+            .map(|word| format!("replay_value(peek_mem_u64(state, {rd} + {}ull))", word * 8))
             .collect()
     }
 
@@ -458,7 +458,7 @@ mod tests {
     }
 
     #[test]
-    fn add_checkpoint_matches_schedule_and_minimal_residuals() {
+    fn add_checkpoint_matches_schedule_and_minimal_replay_values() {
         for (curve, point_dwords) in [(KnownCurve::K256, 8), (KnownCurve::Bls12381, 12)] {
             for is_setup in [false, true] {
                 let instruction = EcAddNeInstr {
@@ -496,14 +496,14 @@ mod tests {
                 } else {
                     expected.push(format!("{name}(state, r1, r2, r3)"));
                 }
-                expected.extend(expected_residuals("r1", point_dwords));
+                expected.extend(expected_replay_values("r1", point_dwords));
                 assert_eq!(checkpoint.operations, expected);
             }
         }
     }
 
     #[test]
-    fn double_checkpoint_matches_schedule_and_minimal_residuals() {
+    fn double_checkpoint_matches_schedule_and_minimal_replay_values() {
         for (curve, point_dwords) in [(KnownCurve::P256, 8), (KnownCurve::Bls12381, 12)] {
             for is_setup in [false, true] {
                 let instruction = EcDoubleInstr {
@@ -540,7 +540,7 @@ mod tests {
                     expected.push(format!("{name}(state, r1, r2)"));
                 }
                 if !is_setup {
-                    expected.extend(expected_residuals("r1", point_dwords));
+                    expected.extend(expected_replay_values("r1", point_dwords));
                 }
                 assert_eq!(checkpoint.operations, expected);
             }

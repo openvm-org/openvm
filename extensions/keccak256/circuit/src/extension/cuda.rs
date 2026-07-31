@@ -84,7 +84,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
                 zero_operand_mask: (1 << 2) | (1 << 3) | (1 << 6) | (1 << 7),
                 register_as_operand: 4,
                 memory_as_operand: 5,
-                spans: &[PostflightAccessSpan::write_fixed_from_residuals(
+                spans: &[PostflightAccessSpan::write_fixed_from_replay_values(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     0,
                     25,
@@ -115,7 +115,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
                         count_shift,
                         max_words,
                     ),
-                    PostflightAccessSpan::write_count_from_register_from_residuals(
+                    PostflightAccessSpan::write_register_count_from_replay_values(
                         openvm_instructions::riscv::RV64_MEMORY_AS,
                         0,
                         2,

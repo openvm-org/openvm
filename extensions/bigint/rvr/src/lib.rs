@@ -684,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn int256_branches_checkpoint_emit_only_the_decision_residual() {
+    fn int256_branches_checkpoint_emit_only_the_decision_replay_value() {
         let instruction = Int256BranchEqInstr {
             rs1_reg: Variable::new(2),
             rs2_reg: Variable::new(3),

@@ -374,7 +374,7 @@ fn prove_inner(
                 ..
             } = execution;
             transcript.checkpoints.clear();
-            transcript.residuals.clear();
+            transcript.replay_values.clear();
             reuse = Some(transcript);
             (next_state, gpu_transcript, replay_plan)
         };

@@ -1,4 +1,4 @@
-//! C-compatible logical execution events derived by GPU replay.
+//! C-compatible logical execution history consumed by trace generation.
 
 pub const PREFLIGHT_WRITE_BIT: u32 = 1 << 31;
 pub const PREFLIGHT_ADDRESS_SPACE_MASK: u32 = !PREFLIGHT_WRITE_BIT;

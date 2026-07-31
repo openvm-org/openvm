@@ -627,7 +627,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
             let write_spans = [
                 read_spans[0],
                 read_spans[1],
-                PostflightAccessSpan::write_fixed_from_residuals(
+                PostflightAccessSpan::write_fixed_from_replay_values(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     2,
                     blocks as u32,
@@ -674,7 +674,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 memory_as_operand: 5,
                 spans: &read_spans,
             };
-            registry.register_with_residual_register_write(
+            registry.register_with_replay_value_write(
                 opcode(Rv64ModularArithmeticOpcode::IS_EQ)?,
                 read_schedule,
                 1,
@@ -727,7 +727,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                         1,
                         blocks as u32,
                     ),
-                    PostflightAccessSpan::write_fixed_from_residuals(
+                    PostflightAccessSpan::write_fixed_from_replay_values(
                         openvm_instructions::riscv::RV64_MEMORY_AS,
                         2,
                         blocks as u32,

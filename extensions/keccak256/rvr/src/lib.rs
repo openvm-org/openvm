@@ -207,7 +207,7 @@ mod tests {
         lines: Vec<String>,
         next_tmp: usize,
         record_checkpoint: bool,
-        count_residuals: bool,
+        count_replay_values: bool,
     }
 
     impl Default for TestEmitCtx {
@@ -216,7 +216,7 @@ mod tests {
                 lines: Vec::new(),
                 next_tmp: 0,
                 record_checkpoint: true,
-                count_residuals: true,
+                count_replay_values: true,
             }
         }
     }
@@ -225,7 +225,7 @@ mod tests {
         fn pure() -> Self {
             Self {
                 record_checkpoint: false,
-                count_residuals: false,
+                count_replay_values: false,
                 ..Self::default()
             }
         }
@@ -233,7 +233,7 @@ mod tests {
         fn metered() -> Self {
             Self {
                 record_checkpoint: false,
-                count_residuals: true,
+                count_replay_values: true,
                 ..Self::default()
             }
         }
@@ -289,13 +289,13 @@ mod tests {
         }
 
         fn reserve_replay_values(&mut self, count: &str) {
-            if self.count_residuals {
+            if self.count_replay_values {
                 self.lines.push(format!("reserve_replay({count})"));
             }
         }
 
         fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
-            if self.count_residuals {
+            if self.count_replay_values {
                 self.lines.push(format!("append_range({base}, {count})"));
             }
         }

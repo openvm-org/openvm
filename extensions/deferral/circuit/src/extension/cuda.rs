@@ -147,7 +147,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
                     PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
                     PostflightAccessSpan::read_deferral_input_accumulator(3),
                     PostflightAccessSpan::read_deferral_output_accumulator(3),
-                    PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
+                    PostflightAccessSpan::write_fixed_from_replay_values(RV64_MEMORY_AS, 0, 5),
                     PostflightAccessSpan::write_deferral_input_accumulator(3),
                     PostflightAccessSpan::write_deferral_output_accumulator(3),
                 ],
@@ -162,7 +162,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
                 memory_as_operand: 5,
                 spans: &[
                     PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
-                    PostflightAccessSpan::write_count_from_residual_from_residuals(
+                    PostflightAccessSpan::write_dynamic_from_replay_values(
                         RV64_MEMORY_AS,
                         0,
                         u32::MAX / MEMORY_BLOCK_BYTES as u32,

@@ -278,8 +278,11 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
 
     assert_eq!(execution.to_state.pc, (cases.len() * 4) as u32);
     assert_eq!(execution.to_state.timestamp, 226);
-    assert_eq!(execution.transcript.residuals.len(), 50);
-    assert_eq!(&execution.transcript.residuals[44..], &[0, 1, 1, 0, 0, 1]);
+    assert_eq!(execution.transcript.replay_values.len(), 50);
+    assert_eq!(
+        &execution.transcript.replay_values[44..],
+        &[0, 1, 1, 0, 0, 1]
+    );
 
     let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
         &program,
@@ -411,7 +414,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
     let execution = checkpoint
         .execute_from_state_for(initial_state, PreflightLimits::new(1, 1, 1))
         .unwrap();
-    assert_eq!(execution.transcript.residuals.len(), 1);
+    assert_eq!(execution.transcript.replay_values.len(), 1);
     assert_eq!(execution.endpoint, PreflightEndpoint::Suspended);
     let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
         &program,
@@ -487,7 +490,8 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
 
 #[test]
 fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
-    for (equal, expected_pc, expected_branch_residual) in [(false, 12, 0u64), (true, 16, 1u64)] {
+    for (equal, expected_pc, expected_branch_replay_value) in [(false, 12, 0u64), (true, 16, 1u64)]
+    {
         let (program, exe) = fixture(equal);
         let config = Int256Rv64Config {
             system: test_system_config(),
@@ -511,8 +515,11 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
 
         assert_eq!(execution.to_state.pc, expected_pc);
         assert_eq!(execution.to_state.timestamp, 28);
-        assert_eq!(execution.transcript.residuals.len(), 5);
-        assert_eq!(execution.transcript.residuals[4], expected_branch_residual);
+        assert_eq!(execution.transcript.replay_values.len(), 5);
+        assert_eq!(
+            execution.transcript.replay_values[4],
+            expected_branch_replay_value
+        );
 
         let gpu_program = Int256PreflightGpuTracegen::upload_postflight_program(
             &program,
@@ -521,7 +528,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
         )
         .unwrap();
 
-        execution.transcript.residuals[4] = 2;
+        execution.transcript.replay_values[4] = 2;
         let error = Int256PreflightGpuTracegen::postflight(
             &vm,
             &gpu_program,
@@ -529,10 +536,10 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             execution.retired,
         )
         .err()
-        .expect("a non-boolean branch residual must fail before replay mutation");
+        .expect("a non-boolean branch replay value must fail before replay mutation");
         assert!(error.to_string().contains("code 306"), "{error}");
 
-        execution.transcript.residuals[4] = expected_branch_residual ^ 1;
+        execution.transcript.replay_values[4] = expected_branch_replay_value ^ 1;
         let error = Int256PreflightGpuTracegen::postflight(
             &vm,
             &gpu_program,
@@ -540,10 +547,10 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             execution.retired,
         )
         .err()
-        .expect("a corrupt branch residual must disagree with the checkpoint anchor");
+        .expect("a corrupt branch replay value must disagree with the checkpoint anchor");
         assert!(error.to_string().contains("code 307"), "{error}");
 
-        execution.transcript.residuals[4] = expected_branch_residual;
+        execution.transcript.replay_values[4] = expected_branch_replay_value;
         let (transcript, replay_plan) = Int256PreflightGpuTracegen::postflight(
             &vm,
             &gpu_program,

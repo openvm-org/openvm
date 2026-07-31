@@ -832,7 +832,7 @@ pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_INTERVALS_LABEL: &str = "execute_preflight_intervals";
-pub const EXECUTE_PREFLIGHT_RESIDUALS_LABEL: &str = "execute_preflight_residuals";
+pub const EXECUTE_PREFLIGHT_REPLAY_VALUES_LABEL: &str = "execute_preflight_replay_values";
 pub const EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL: &str = "execute_preflight_transcript_bytes";
 pub const COMPILE_PURE_TIME_LABEL: &str = "compile_pure_time_ms";
 pub const COMPILE_METERED_TIME_LABEL: &str = "compile_metered_time_ms";
@@ -889,7 +889,6 @@ fn canonical_metric_name(name: &str) -> &str {
         "execute_preflight_checkpoints" | "execute_checkpoint_preflight_checkpoints" => {
             EXECUTE_PREFLIGHT_INTERVALS_LABEL
         }
-        "execute_checkpoint_preflight_residuals" => EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
         "execute_checkpoint_preflight_transcript_bytes" => EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
         "execute_checkpoint_preflight_time_ms" => EXECUTE_PREFLIGHT_TIME_LABEL,
         "execute_checkpoint_preflight_insn_mi/s" => EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
@@ -1118,7 +1117,7 @@ mod tests {
             (SET_INITIAL_MEMORY_TIME_LABEL.to_string(), one(Some(0))),
             (EXECUTE_PREFLIGHT_TIME_LABEL.to_string(), one(Some(0))),
             (EXECUTE_PREFLIGHT_INTERVALS_LABEL.to_string(), one(None)),
-            (EXECUTE_PREFLIGHT_RESIDUALS_LABEL.to_string(), one(None)),
+            (EXECUTE_PREFLIGHT_REPLAY_VALUES_LABEL.to_string(), one(None)),
             (
                 EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL.to_string(),
                 one(None),
@@ -1162,7 +1161,7 @@ mod tests {
             UPLOAD_PREFLIGHT_PROGRAM_TIME_LABEL,
             APP_PROVE_TIME_LABEL,
             EXECUTE_PREFLIGHT_INTERVALS_LABEL,
-            EXECUTE_PREFLIGHT_RESIDUALS_LABEL,
+            EXECUTE_PREFLIGHT_REPLAY_VALUES_LABEL,
             EXECUTE_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
         ] {
             assert!(

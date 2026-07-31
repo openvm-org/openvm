@@ -1,4 +1,4 @@
-/* Minimal checkpoint-and-residual OpenVM preflight logging. */
+/* Minimal checkpoint-and-replay_value OpenVM preflight logging. */
 
 #ifndef OPENVM_TRACER_CHECKPOINT_PREFLIGHT_H
 #define OPENVM_TRACER_CHECKPOINT_PREFLIGHT_H
@@ -9,20 +9,20 @@
 
 static constexpr uint32_t CHECKPOINT_PREFLIGHT_ERROR_NONE = 0u;
 static constexpr uint32_t CHECKPOINT_PREFLIGHT_ERROR_CHECKPOINT_CAPACITY = 1u;
-static constexpr uint32_t CHECKPOINT_PREFLIGHT_ERROR_RESIDUAL_CAPACITY = 2u;
+static constexpr uint32_t CHECKPOINT_PREFLIGHT_ERROR_REPLAY_VALUE_CAPACITY = 2u;
 static constexpr uint32_t CHECKPOINT_PREFLIGHT_ERROR_TIMESTAMP_OVERFLOW = 3u;
 
 /* Block-local cursors avoid repeated loads while keeping the generated block
  * ABI identical to pure execution. */
 typedef struct CheckpointPreflightLocal {
   RvrCheckpoint* checkpoint_log;
-  uint64_t* residual_log;
+  uint64_t* replay_value_log;
   uint64_t checkpoint_log_len;
   uint64_t checkpoint_log_cap;
-  uint64_t residual_log_len;
-  uint64_t residual_log_cap;
+  uint64_t replay_value_log_len;
+  uint64_t replay_value_log_cap;
   /* Capacity promised to fixed and dynamic appends in this block. */
-  uint64_t residual_log_reserved;
+  uint64_t replay_value_log_reserved;
   uint32_t timestamp;
   uint32_t retired;
   uint32_t checkpoint_interval;
@@ -41,12 +41,12 @@ checkpoint_preflight_local_load(RvState* restrict state) {
   CheckpointPreflightState* restrict p = &state->mode_state;
   return (CheckpointPreflightLocal){
       .checkpoint_log = p->checkpoint_log,
-      .residual_log = p->residual_log,
+      .replay_value_log = p->replay_value_log,
       .checkpoint_log_len = p->checkpoint_log_len,
       .checkpoint_log_cap = p->checkpoint_log_cap,
-      .residual_log_len = p->residual_log_len,
-      .residual_log_cap = p->residual_log_cap,
-      .residual_log_reserved = p->residual_log_len,
+      .replay_value_log_len = p->replay_value_log_len,
+      .replay_value_log_cap = p->replay_value_log_cap,
+      .replay_value_log_reserved = p->replay_value_log_len,
       .timestamp = p->timestamp,
       .retired = p->retired,
       .checkpoint_interval = p->checkpoint_interval,
@@ -64,7 +64,7 @@ checkpoint_preflight_local_flush(
     const CheckpointPreflightLocal* restrict local) {
   CheckpointPreflightState* restrict p = &state->mode_state;
   p->checkpoint_log_len = local->checkpoint_log_len;
-  p->residual_log_len = local->residual_log_len;
+  p->replay_value_log_len = local->replay_value_log_len;
   p->timestamp = local->timestamp;
   p->retired = local->retired;
   p->last_checkpoint_retired = local->last_checkpoint_retired;
@@ -132,19 +132,19 @@ checkpoint_preflight_local_set_error(
 /* Reserve before an instruction's first authoritative side effect. */
 static __attribute__((always_inline)) inline bool
 checkpoint_preflight_local_reserve(
-    CheckpointPreflightLocal* restrict p, uint32_t residuals,
+    CheckpointPreflightLocal* restrict p, uint32_t replay_values,
     uint32_t timestamp_slots) {
   if (unlikely(p->error != CHECKPOINT_PREFLIGHT_ERROR_NONE)) return false;
-  if (unlikely(p->residual_log_len > p->residual_log_reserved ||
-               p->residual_log_reserved > p->residual_log_cap ||
-               (uint64_t)residuals >
-                   p->residual_log_cap - p->residual_log_reserved ||
-               (residuals != 0u && p->residual_log == NULL))) {
+  if (unlikely(p->replay_value_log_len > p->replay_value_log_reserved ||
+               p->replay_value_log_reserved > p->replay_value_log_cap ||
+               (uint64_t)replay_values >
+                   p->replay_value_log_cap - p->replay_value_log_reserved ||
+               (replay_values != 0u && p->replay_value_log == NULL))) {
     checkpoint_preflight_local_set_error(
-        p, CHECKPOINT_PREFLIGHT_ERROR_RESIDUAL_CAPACITY);
+        p, CHECKPOINT_PREFLIGHT_ERROR_REPLAY_VALUE_CAPACITY);
     return false;
   }
-  p->residual_log_reserved += residuals;
+  p->replay_value_log_reserved += replay_values;
   if (unlikely(timestamp_slots > UINT32_MAX - p->timestamp)) {
     checkpoint_preflight_local_set_error(
         p, CHECKPOINT_PREFLIGHT_ERROR_TIMESTAMP_OVERFLOW);
@@ -154,9 +154,9 @@ checkpoint_preflight_local_reserve(
 }
 
 static __attribute__((always_inline)) inline bool
-checkpoint_preflight_local_reserve_residuals(
-    CheckpointPreflightLocal* restrict p, uint32_t residuals) {
-  return checkpoint_preflight_local_reserve(p, residuals, 0u);
+checkpoint_preflight_local_reserve_replay_values(
+    CheckpointPreflightLocal* restrict p, uint32_t replay_values) {
+  return checkpoint_preflight_local_reserve(p, replay_values, 0u);
 }
 
 static __attribute__((always_inline)) inline void
@@ -166,9 +166,9 @@ checkpoint_preflight_local_add_timestamp_unchecked(
 }
 
 static __attribute__((always_inline)) inline void
-checkpoint_preflight_local_append_residual_unchecked(
+checkpoint_preflight_local_append_replay_value_unchecked(
     CheckpointPreflightLocal* restrict p, uint64_t value) {
-  p->residual_log[p->residual_log_len++] = value;
+  p->replay_value_log[p->replay_value_log_len++] = value;
 }
 
 static __attribute__((always_inline)) inline bool
@@ -205,8 +205,8 @@ checkpoint_preflight_append_checkpoint(
     p->error = CHECKPOINT_PREFLIGHT_ERROR_CHECKPOINT_CAPACITY;
     return false;
   }
-  if (unlikely(p->residual_log_len > UINT32_MAX)) {
-    p->error = CHECKPOINT_PREFLIGHT_ERROR_RESIDUAL_CAPACITY;
+  if (unlikely(p->replay_value_log_len > UINT32_MAX)) {
+    p->error = CHECKPOINT_PREFLIGHT_ERROR_REPLAY_VALUE_CAPACITY;
     return false;
   }
 
@@ -214,7 +214,7 @@ checkpoint_preflight_append_checkpoint(
   checkpoint->pc = (uint32_t)pc;
   checkpoint->timestamp = p->timestamp;
   checkpoint->retired = p->retired;
-  checkpoint->residual_cursor = (uint32_t)p->residual_log_len;
+  checkpoint->replay_value_cursor = (uint32_t)p->replay_value_log_len;
   for (uint32_t i = 1u; i < 32u; ++i) {
     checkpoint->regs[i - 1u] = state->regs[i];
   }
@@ -225,7 +225,7 @@ checkpoint_preflight_append_checkpoint(
 #pragma clang unsafe_buffer_usage end
 
 /* Extension callbacks use one tracing ABI in every execution mode. Timestamp
- * and residual accounting for checkpoint preflight stays block-local, so the
+ * and replay_value accounting for checkpoint preflight stays block-local, so the
  * callback-facing hooks only preserve execution behavior. */
 static __attribute__((always_inline)) inline void
 trace_write_other_block_u64(

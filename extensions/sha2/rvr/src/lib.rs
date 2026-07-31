@@ -278,7 +278,7 @@ mod tests {
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            self.operations.push(format!("residual({value});"));
+            self.operations.push(format!("replay_value({value});"));
         }
 
         fn emit_call(&mut self, name: &str, args: &[&str]) {
@@ -334,7 +334,7 @@ mod tests {
         instr: &dyn ExtInstr,
         ffi_name: &str,
         remaining_slots: u32,
-        residuals: usize,
+        replay_values: usize,
     ) {
         assert!(instr.supports_preflight());
         let mut ctx = TestEmitCtx::default();
@@ -363,16 +363,16 @@ mod tests {
         let replay_values = ctx
             .operations
             .iter()
-            .filter(|operation| operation.starts_with("residual(peek_mem_u64("))
+            .filter(|operation| operation.starts_with("replay_value(peek_mem_u64("))
             .collect::<Vec<_>>();
-        assert_eq!(replay_values.len(), residuals);
+        assert_eq!(replay_values.len(), replay_values);
         for (index, operation) in replay_values.into_iter().enumerate() {
             assert!(operation.contains(&format!("+ {}ull", index * size_of::<u64>())));
         }
     }
 
     #[test]
-    fn sha256_checkpoint_emits_exact_schedule_and_residuals() {
+    fn sha256_checkpoint_emits_exact_schedule_and_replay_values() {
         assert_checkpoint_shape(
             &Sha256Instr {
                 dst_ptr_reg: Variable::new(1),
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn sha512_checkpoint_emits_exact_schedule_and_residuals() {
+    fn sha512_checkpoint_emits_exact_schedule_and_replay_values() {
         assert_checkpoint_shape(
             &Sha512Instr {
                 dst_ptr_reg: Variable::new(1),

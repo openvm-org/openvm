@@ -159,7 +159,7 @@ mod tests {
 
         fn append_replay_value(&mut self, value: &str) {
             if self.checkpoint {
-                self.operations.push(format!("residual({value});"));
+                self.operations.push(format!("replay_value({value});"));
             }
         }
 
@@ -249,21 +249,21 @@ mod tests {
                     .operations
                     .iter()
                     .any(|operation| operation.contains("& 7ull")));
-                let residuals: Vec<_> = checkpoint
+                let replay_values: Vec<_> = checkpoint
                     .operations
                     .iter()
-                    .filter(|operation| operation.starts_with("residual("))
+                    .filter(|operation| operation.starts_with("replay_value("))
                     .collect();
                 assert_eq!(
-                    residuals.len(),
+                    replay_values.len(),
                     num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize
                         / MEMORY_BLOCK_BYTES as usize
                 );
-                for (word, residual) in residuals.iter().enumerate() {
+                for (word, replay_value) in replay_values.iter().enumerate() {
                     assert_eq!(
-                        residual.as_str(),
+                        replay_value.as_str(),
                         format!(
-                            "residual(peek_mem_u64(state, r1 + {}ull));",
+                            "replay_value(peek_mem_u64(state, r1 + {}ull));",
                             word * MEMORY_BLOCK_BYTES as usize
                         )
                     );
@@ -276,7 +276,8 @@ mod tests {
                     ["read(r2);", "read(r3);", "read(r1);"]
                 );
                 assert!(!legacy.operations.iter().any(|operation| {
-                    operation.starts_with("timestamp_slots(") || operation.starts_with("residual(")
+                    operation.starts_with("timestamp_slots(")
+                        || operation.starts_with("replay_value(")
                 }));
             }
         }
@@ -313,20 +314,20 @@ mod tests {
                 .operations
                 .iter()
                 .any(|operation| operation.contains("& 7ull")));
-            let residuals: Vec<_> = checkpoint
+            let replay_values: Vec<_> = checkpoint
                 .operations
                 .iter()
-                .filter(|operation| operation.starts_with("residual("))
+                .filter(|operation| operation.starts_with("replay_value("))
                 .collect();
             assert_eq!(
-                residuals.len(),
+                replay_values.len(),
                 num_limbs as usize * Fp2Kind::STORAGE_FACTOR as usize / MEMORY_BLOCK_BYTES as usize
             );
-            for (word, residual) in residuals.iter().enumerate() {
+            for (word, replay_value) in replay_values.iter().enumerate() {
                 assert_eq!(
-                    residual.as_str(),
+                    replay_value.as_str(),
                     format!(
-                        "residual(peek_mem_u64(state, r1 + {}ull));",
+                        "replay_value(peek_mem_u64(state, r1 + {}ull));",
                         word * MEMORY_BLOCK_BYTES as usize
                     )
                 );
@@ -355,7 +356,7 @@ mod tests {
                 ["read(r2);", "read(r3);", "read(r1);"]
             );
             assert!(!legacy.operations.iter().any(|operation| {
-                operation.starts_with("timestamp_slots(") || operation.starts_with("residual(")
+                operation.starts_with("timestamp_slots(") || operation.starts_with("replay_value(")
             }));
         }
     }

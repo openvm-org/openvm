@@ -81,13 +81,13 @@ pub struct MeteringState {
     pub check_counter: u32,
     /// Dedup cache for AS_MEMORY pages. `u32::MAX` = none. Reset on flush.
     pub last_mem_page: u32,
-    /// Replay residuals accumulated in the current segment.
-    pub num_checkpoint_residuals: u32,
+    /// Replay values accumulated in the current segment.
+    pub num_preflight_replay_values: u32,
 }
 
 const _: () = {
     assert!(size_of::<MeteringState>() == 80);
-    assert!(offset_of!(MeteringState, num_checkpoint_residuals) == 76);
+    assert!(offset_of!(MeteringState, num_preflight_replay_values) == 76);
 };
 
 /// Sentinel indicating no last-seen page (matches `NO_LAST_PAGE` in C).
@@ -108,7 +108,7 @@ impl Default for MeteringState {
             deferral_page_buf_len: 0,
             check_counter: 0,
             last_mem_page: NO_LAST_PAGE,
-            num_checkpoint_residuals: 0,
+            num_preflight_replay_values: 0,
         }
     }
 }
@@ -279,7 +279,7 @@ impl SegmentationState {
         pv_len: u32,
         deferral_len: u32,
         remaining_counter: u32,
-        num_checkpoint_residuals: u32,
+        num_preflight_replay_values: u32,
     ) -> bool {
         let seg_check_insns = u64::from(SEGMENT_CHECK_INSNS);
         let insns_since_last_check = seg_check_insns - remaining_counter as u64;
@@ -292,7 +292,7 @@ impl SegmentationState {
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
 
-        self.ctx.segmentation_ctx.num_preflight_residuals = num_checkpoint_residuals;
+        self.ctx.segmentation_ctx.num_preflight_replay_values = num_preflight_replay_values;
         let did_segment = self
             .ctx
             .segmentation_ctx
@@ -327,7 +327,7 @@ impl SegmentationState {
         pv_len: u32,
         deferral_len: u32,
         remaining_counter: u32,
-        num_checkpoint_residuals: u32,
+        num_preflight_replay_values: u32,
     ) {
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.ctx
@@ -335,7 +335,7 @@ impl SegmentationState {
             .apply_height_updates(&mut self.ctx.trace_heights);
 
         self.ctx.segmentation_ctx.instrets_until_check = remaining_counter as u64;
-        self.ctx.segmentation_ctx.num_preflight_residuals = num_checkpoint_residuals;
+        self.ctx.segmentation_ctx.num_preflight_replay_values = num_preflight_replay_values;
         self.ctx
             .segmentation_ctx
             .create_final_segment(&self.ctx.trace_heights);
@@ -369,9 +369,10 @@ pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8
         pv_len,
         deferral_len,
         metering.check_counter,
-        metering.num_checkpoint_residuals,
+        metering.num_preflight_replay_values,
     );
-    metering.num_checkpoint_residuals = seg_state.ctx.segmentation_ctx.num_preflight_residuals;
+    metering.num_preflight_replay_values =
+        seg_state.ctx.segmentation_ctx.num_preflight_replay_values;
 
     // We are at the start of a block that would cross the old countdown.
     // `remaining_counter` was used to record this block start as the metering
@@ -754,7 +755,7 @@ mod tests {
             deferral_page_buf_len: 4,
             check_counter: 17,
             last_mem_page: 7,
-            num_checkpoint_residuals: 0,
+            num_preflight_replay_values: 0,
         };
 
         unsafe { metered_memory_buffer_flush(&mut metering) };
@@ -845,7 +846,7 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
-            num_checkpoint_residuals: 0,
+            num_preflight_replay_values: 0,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut metering) };
@@ -877,7 +878,7 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
-            num_checkpoint_residuals: 0,
+            num_preflight_replay_values: 0,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut metering) };
@@ -891,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn test_periodic_callback_carries_post_checkpoint_residuals_to_next_segment() {
+    fn test_periodic_callback_carries_post_checkpoint_replay_values_to_next_segment() {
         let remaining = SEGMENT_CHECK_INSNS / 4;
         let mut seg_state = make_segmentation_state();
         seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
@@ -908,22 +909,25 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
-            num_checkpoint_residuals: 5,
+            num_preflight_replay_values: 5,
         };
 
         assert_eq!(unsafe { metered_periodic_check(&mut metering) }, 0);
-        assert_eq!(metering.num_checkpoint_residuals, 5);
+        assert_eq!(metering.num_preflight_replay_values, 5);
 
         *seg_state.ctx.trace_heights.last_mut().unwrap() = 4096;
         metering.check_counter = remaining;
-        metering.num_checkpoint_residuals = 8;
+        metering.num_preflight_replay_values = 8;
         assert_eq!(unsafe { metered_periodic_check(&mut metering) }, 1);
 
         assert_eq!(
-            seg_state.ctx.segmentation_ctx.segments[0].num_preflight_residuals,
+            seg_state.ctx.segmentation_ctx.segments[0].num_preflight_replay_values,
             5
         );
-        assert_eq!(metering.num_checkpoint_residuals, 3);
-        assert_eq!(seg_state.ctx.segmentation_ctx.num_preflight_residuals, 3);
+        assert_eq!(metering.num_preflight_replay_values, 3);
+        assert_eq!(
+            seg_state.ctx.segmentation_ctx.num_preflight_replay_values,
+            3
+        );
     }
 }

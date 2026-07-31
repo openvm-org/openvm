@@ -90,7 +90,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         let alu_spans = [
             PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
             PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
-            PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 2, 4),
+            PostflightAccessSpan::write_fixed_from_replay_values(RV64_MEMORY_AS, 2, 4),
         ];
         let alu_schedule = PostflightAccessSchedule {
             register_operands: &[2, 3, 1],
@@ -115,7 +115,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
             .into_iter()
             .chain(Self::opcodes(Rv64BranchLessThan256Opcode::iter()))
         {
-            registry.register_branch_residual(
+            registry.register_branch_from_replay_value(
                 opcode,
                 PostflightAccessSchedule {
                     register_operands: &[1, 2],

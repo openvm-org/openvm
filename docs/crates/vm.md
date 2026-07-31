@@ -251,7 +251,7 @@ For execution with multiple segments (continuations), the trace generation proce
    pub struct Segment {
        pub instret_start: u64,
        pub num_insns: u64,
-       pub num_preflight_residuals: u32,
+       pub num_preflight_replay_values: u32,
        pub trace_heights: Vec<u32>,
    }
    ```

@@ -782,7 +782,7 @@ mod tests {
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            self.operations.push(format!("residual({value})"));
+            self.operations.push(format!("replay_value({value})"));
         }
 
         fn emit_call(&mut self, name: &str, args: &[&str]) {
@@ -1125,7 +1125,7 @@ mod tests {
     }
 
     #[test]
-    fn call_checkpoint_reserves_exact_schedule_and_emits_residuals_once() {
+    fn call_checkpoint_reserves_exact_schedule_and_emits_replay_values_once() {
         let instruction = DeferralCallInstr {
             rd_reg: Variable::new(1),
             rs_reg: Variable::new(2),
@@ -1149,7 +1149,7 @@ mod tests {
                 "trap",
                 "}",
                 "for (uint32_t deferral_replay_idx = 0u; deferral_replay_idx < 13u; ++deferral_replay_idx) {",
-                "residual(deferral_replay[deferral_replay_idx])",
+                "replay_value(deferral_replay[deferral_replay_idx])",
                 "}",
             ]
         );
@@ -1217,7 +1217,7 @@ mod tests {
                 "trace_nonzero(4294967295, deferral_num_rows - 1u)",
                 "trace(4294967295, deferral_num_rows)",
                 "for (uint32_t deferral_replay_idx = 0u; deferral_replay_idx <= deferral_output_words; ++deferral_replay_idx) {",
-                "residual(deferral_replay_idx == 0u ? (uint64_t)deferral_output_words : peek_mem_u64(state, r1 + (uint64_t)(deferral_replay_idx - 1u) * 8ull))",
+                "replay_value(deferral_replay_idx == 0u ? (uint64_t)deferral_output_words : peek_mem_u64(state, r1 + (uint64_t)(deferral_replay_idx - 1u) * 8ull))",
                 "}",
             ]
         );
@@ -1269,11 +1269,11 @@ mod tests {
             .iter()
             .position(|operation| operation.contains("rvr_ext_deferral_output"))
             .unwrap();
-        let residual_count = metered
+        let replay_value_count = metered
             .operations
             .iter()
             .position(|operation| operation.starts_with("count_replay"))
             .unwrap();
-        assert!(checked_call < residual_count);
+        assert!(checked_call < replay_value_count);
     }
 }

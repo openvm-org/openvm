@@ -23,7 +23,7 @@ pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), In
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Emit only block checkpoints and the residual values that execution
+    /// Emit only block checkpoints and the replay values that execution
     /// cannot derive while replaying a block.
     Preflight,
     /// Memory accesses use direct helpers and do not emit memory trace events.
@@ -509,7 +509,7 @@ impl<'a> EmitContext<'a> {
         );
         self.replay_values_reserved = true;
         self.write_line(&format!(
-            "if (unlikely(!checkpoint_preflight_local_reserve_residuals(&checkpoint_preflight, {count}))) {{"
+            "if (unlikely(!checkpoint_preflight_local_reserve_replay_values(&checkpoint_preflight, {count}))) {{"
         ));
         self.emit_trap();
         self.write_line("}");
@@ -556,12 +556,12 @@ impl<'a> EmitContext<'a> {
         let count_var = self.next_var();
         self.write_line(&format!("uint64_t {count_var} = (uint64_t)({count});"));
         self.write_line(&format!(
-            "if (unlikely({count_var} > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals)) {{"
+            "if (unlikely({count_var} > (uint64_t)UINT32_MAX - state->mode_state.num_preflight_replay_values)) {{"
         ));
         self.emit_trap();
         self.write_line("}");
         self.write_line(&format!(
-            "state->mode_state.num_checkpoint_residuals += (uint32_t){count_var};"
+            "state->mode_state.num_preflight_replay_values += (uint32_t){count_var};"
         ));
     }
 
@@ -584,7 +584,7 @@ impl<'a> EmitContext<'a> {
                 .expect("preflight block replay-value count overflow");
         }
         self.write_line(&format!(
-            "checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)({value}));"
+            "checkpoint_preflight_local_append_replay_value_unchecked(&checkpoint_preflight, (uint64_t)({value}));"
         ));
         self.replay_values_reserved = false;
         if self.dynamic_timestamp_slots == DynamicTimestampSlots::Active {
@@ -1068,7 +1068,7 @@ mod tests {
         assert_eq!(ctx.preflight_block_budget(), (0, 1));
         assert_eq!(
             ctx.buf(),
-            "        checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)(loaded));\n"
+            "        checkpoint_preflight_local_append_replay_value_unchecked(&checkpoint_preflight, (uint64_t)(loaded));\n"
         );
     }
 
@@ -1083,13 +1083,13 @@ mod tests {
 
         assert_eq!(ctx.metered_block_replay_values(), 5);
         assert!(ctx.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
-        assert!(ctx
-            .buf()
-            .contains("_v0 > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals"));
+        assert!(ctx.buf().contains(
+            "_v0 > (uint64_t)UINT32_MAX - state->mode_state.num_preflight_replay_values"
+        ));
         assert!(ctx.buf().contains("uint64_t _v1 = (uint64_t)(late_words);"));
-        assert!(ctx
-            .buf()
-            .contains("_v1 > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals"));
+        assert!(ctx.buf().contains(
+            "_v1 > (uint64_t)UINT32_MAX - state->mode_state.num_preflight_replay_values"
+        ));
         assert_eq!(ctx.buf().matches("return rv_trap(").count(), 2);
     }
 
@@ -1114,19 +1114,19 @@ mod tests {
         );
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_reserve_residuals")
+                .matches("checkpoint_preflight_local_reserve_replay_values")
                 .count(),
             1
         );
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_append_residual_unchecked")
+                .matches("checkpoint_preflight_local_append_replay_value_unchecked")
                 .count(),
             3
         );
         assert_eq!(
             ctx.buf()
-                .matches("checkpoint_preflight_local_append_residual_unchecked(&checkpoint_preflight, (uint64_t)(hint));")
+                .matches("checkpoint_preflight_local_append_replay_value_unchecked(&checkpoint_preflight, (uint64_t)(hint));")
                 .count(),
             1
         );
@@ -1163,7 +1163,7 @@ mod tests {
         assert!(metered.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
         assert!(metered
             .buf()
-            .contains("state->mode_state.num_checkpoint_residuals += (uint32_t)_v0;"));
+            .contains("state->mode_state.num_preflight_replay_values += (uint32_t)_v0;"));
 
         for mode in [EmitMode::Direct, EmitMode::MeteredCost] {
             let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);

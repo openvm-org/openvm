@@ -372,12 +372,12 @@ fn modular_checkpoint_executor_records_only_irreducible_results() {
         .execute_from_state(state, PreflightLimits::new(5, 5, 1))
         .unwrap();
 
-    // SETUP_ADDSUB and SETUP_ISEQ are derivable without residuals. ADD needs
+    // SETUP_ADDSUB and SETUP_ISEQ are derivable without replay values. ADD needs
     // four output words and IS_EQ needs one result bit.
     assert_eq!(execution.retired, 5);
     assert_eq!(execution.to_state.pc, 16);
     assert_eq!(execution.to_state.timestamp, 53);
-    assert_eq!(execution.transcript.residuals, [12, 0, 0, 0, 1]);
+    assert_eq!(execution.transcript.replay_values, [12, 0, 0, 0, 1]);
 }
 
 #[test]
@@ -395,7 +395,7 @@ fn modular_metering_counts_only_irreducible_results() {
 
     assert_eq!(segments.len(), 1);
     assert_eq!(segments[0].num_insns, 5);
-    assert_eq!(segments[0].num_preflight_residuals, 5);
+    assert_eq!(segments[0].num_preflight_replay_values, 5);
 }
 
 #[test]
@@ -478,7 +478,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
         .unwrap();
     assert_eq!(execution.retired, 5);
     assert_eq!(execution.to_state.timestamp, 53);
-    assert_eq!(execution.transcript.residuals, [12, 0, 0, 0, 1]);
+    assert_eq!(execution.transcript.replay_values, [12, 0, 0, 0, 1]);
 
     let gpu_program = AlgebraPreflightGpuTracegen::upload_postflight_program(
         &program,
@@ -489,13 +489,13 @@ fn modular_checkpoint_expansion_proves_without_records() {
     )
     .unwrap();
 
-    let missing = execution.transcript.residuals.pop().unwrap();
+    let missing = execution.transcript.replay_values.pop().unwrap();
     let error =
         AlgebraPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .err()
-            .expect("missing Algebra residual must fail checkpoint replay");
+            .expect("missing Algebra replay value must fail checkpoint replay");
     assert!(error.to_string().contains("code 306"), "{error}");
-    execution.transcript.residuals.push(missing);
+    execution.transcript.replay_values.push(missing);
 
     let (transcript, replay_plan) =
         AlgebraPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)

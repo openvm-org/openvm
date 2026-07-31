@@ -117,7 +117,7 @@ impl SdkVmGpuBuilder {
     /// retired-instruction boundary.
     ///
     /// This layer deliberately does not guess executor buffer limits. The
-    /// segment's metered instruction and residual counts must be used when
+    /// segment's metered instruction and replay-value counts must be used when
     /// constructing `PreflightLimits`.
     #[cfg(feature = "rvr")]
     pub(crate) fn postflight(

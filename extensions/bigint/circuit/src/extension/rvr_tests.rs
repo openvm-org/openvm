@@ -36,7 +36,7 @@ fn operands(equal: bool) -> ([u8; 32], [u8; 32]) {
     (lhs, rhs)
 }
 
-fn add_residuals(equal: bool) -> [u64; 4] {
+fn add_replay_values(equal: bool) -> [u64; 4] {
     let (lhs, rhs) = operands(equal);
     let mut carry = false;
     std::array::from_fn(|index| {
@@ -112,7 +112,7 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config).unwrap();
-    for (equal, expected_pc, expected_branch_residual) in [(false, 8, 0u64), (true, 12, 1u64)] {
+    for (equal, expected_pc, expected_branch_replay_value) in [(false, 8, 0u64), (true, 12, 1u64)] {
         let checkpoint = executor.preflight_instance(&fixture(equal)).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let execution = checkpoint
@@ -120,9 +120,9 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
             .unwrap();
         assert_eq!(execution.to_state.pc, expected_pc);
         assert_eq!(execution.to_state.timestamp, 26);
-        let mut expected_residuals = add_residuals(equal).to_vec();
-        expected_residuals.push(expected_branch_residual);
-        assert_eq!(execution.transcript.residuals, expected_residuals);
+        let mut expected_replay_values = add_replay_values(equal).to_vec();
+        expected_replay_values.push(expected_branch_replay_value);
+        assert_eq!(execution.transcript.replay_values, expected_replay_values);
     }
 }
 

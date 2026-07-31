@@ -163,7 +163,7 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     // slot is the modulus p read from rs1, so the first output coordinate is
     // p % p = 0. The second coordinate is the guest-provided second input
     // reduced mod p — genuine guest data, which is why Fp2 setup appends its
-    // destination postimage as a residual instead of a static zero.
+    // destination postimage as a replay value instead of a static zero.
     let modulus = BigUint::from_bytes_le(modulus_bytes);
     let second_output = (second_input % modulus).to_bytes_le();
     let mut output_words = vec![0u64; num_words as usize];

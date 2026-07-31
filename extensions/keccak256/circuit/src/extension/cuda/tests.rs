@@ -38,7 +38,7 @@ fn reg(index: usize) -> usize {
 #[test]
 fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     let opcode = KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32;
-    let span = PostflightAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 25);
+    let span = PostflightAccessSpan::write_fixed_from_replay_values(RV64_MEMORY_AS, 0, 25);
     let schedule = PostflightAccessSchedule {
         register_operands: &[1],
         zero_operand_mask: 0,
@@ -97,7 +97,7 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
 }
 
 #[test]
-fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
+fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values() {
     let instructions = [
         Instruction::<F>::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
@@ -183,7 +183,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
     // 2 * (read, read, write). KECCAKF: one register read + 25 writes.
     // TERMINATE consumes no clock slot.
     assert_eq!(execution.to_state.timestamp, 83);
-    assert_eq!(execution.transcript.residuals.len(), 42);
+    assert_eq!(execution.transcript.replay_values.len(), 42);
 
     let malformed = Program::from_instructions(&[
         Instruction::<F>::from_usize(
@@ -234,13 +234,13 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let missing = execution.transcript.residuals.pop().unwrap();
+    let missing = execution.transcript.replay_values.pop().unwrap();
     let error =
         Keccak256PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .err()
-            .expect("missing Keccak residual must fail checkpoint replay");
+            .expect("missing Keccak replay value must fail checkpoint replay");
     assert!(error.to_string().contains("code 306"), "{error}");
-    execution.transcript.residuals.push(missing);
+    execution.transcript.replay_values.push(missing);
 
     let (transcript, replay_plan) =
         Keccak256PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
@@ -340,7 +340,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         .execute_from_state(zero_state, PreflightLimits::new(2, 0, 1))
         .unwrap();
     assert_eq!(zero_execution.to_state.timestamp, 4);
-    assert!(zero_execution.transcript.residuals.is_empty());
+    assert!(zero_execution.transcript.replay_values.is_empty());
     let zero_gpu_program = Keccak256PreflightGpuTracegen::upload_postflight_program(
         &zero_program,
         &config.system.memory_config,

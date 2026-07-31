@@ -242,7 +242,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                     1,
                     blocks as u32,
                 ),
-                PostflightAccessSpan::write_fixed_from_residuals(
+                PostflightAccessSpan::write_fixed_from_replay_values(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     2,
                     blocks as u32,
@@ -267,7 +267,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                     0,
                     blocks as u32,
                 ),
-                PostflightAccessSpan::write_fixed_from_residuals(
+                PostflightAccessSpan::write_fixed_from_replay_values(
                     openvm_instructions::riscv::RV64_MEMORY_AS,
                     1,
                     blocks as u32,

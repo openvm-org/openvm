@@ -99,18 +99,18 @@ impl PostflightOpcodeBases {
 const RVR_CHECKPOINT_NO_SCHEDULE: u32 = u32::MAX;
 const RVR_CHECKPOINT_MAX_DENSE_OPCODE: u32 = u16::MAX as u32;
 const RVR_CHECKPOINT_EFFECT_NEXT: u8 = 0;
-const RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL: u8 = 1;
+const RVR_CHECKPOINT_EFFECT_BRANCH_REPLAY_VALUE: u8 = 1;
 const RVR_CHECKPOINT_REGISTER_WRITE_NONE: u8 = 0;
 const RVR_CHECKPOINT_REGISTER_WRITE_ZERO: u8 = 1;
-const RVR_CHECKPOINT_REGISTER_WRITE_RESIDUAL: u8 = 2;
+const RVR_CHECKPOINT_REGISTER_WRITE_REPLAY_VALUE: u8 = 2;
 const RVR_CHECKPOINT_SPAN_BASE_REGISTER: u8 = 0;
 const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT: u8 = 1;
 const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT: u8 = 2;
 const RVR_CHECKPOINT_SPAN_COUNT_FIXED: u8 = 0;
 const RVR_CHECKPOINT_SPAN_COUNT_REGISTER: u8 = 1;
-const RVR_CHECKPOINT_SPAN_COUNT_RESIDUAL: u8 = 2;
+const RVR_CHECKPOINT_SPAN_COUNT_REPLAY_VALUE: u8 = 2;
 const RVR_CHECKPOINT_SPAN_READ_U16: u8 = 0;
-const RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL: u8 = 1;
+const RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE: u8 = 1;
 const RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO: u8 = 2;
 const RVR_CHECKPOINT_SPAN_READ_FIELD32: u8 = 3;
 const RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS: u8 = 4;
@@ -160,13 +160,13 @@ impl PostflightAccessSpan {
         }
     }
 
-    pub const fn write_fixed_from_residuals(
+    pub const fn write_fixed_from_replay_values(
         address_space: u32,
         base_register: u8,
         count: u32,
     ) -> Self {
         Self {
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE,
             ..Self::read_fixed(address_space, base_register, count)
         }
     }
@@ -200,7 +200,7 @@ impl PostflightAccessSpan {
         }
     }
 
-    pub const fn write_count_from_register_from_residuals(
+    pub const fn write_register_count_from_replay_values(
         address_space: u32,
         base_register: u8,
         count_register: u8,
@@ -208,7 +208,7 @@ impl PostflightAccessSpan {
         max_count: u32,
     ) -> Self {
         Self {
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE,
             ..Self::read_count_from_register(
                 address_space,
                 base_register,
@@ -219,16 +219,16 @@ impl PostflightAccessSpan {
         }
     }
 
-    /// A variable-size write whose next residual is the number of eight-byte
-    /// blocks and whose following residuals are the block postimages.
-    pub const fn write_count_from_residual_from_residuals(
+    /// A variable-size write whose next replay value is the number of eight-byte
+    /// blocks and whose following replay values are the block postimages.
+    pub const fn write_dynamic_from_replay_values(
         address_space: u32,
         base_register: u8,
         max_count: u32,
     ) -> Self {
         Self {
-            count_source: RVR_CHECKPOINT_SPAN_COUNT_RESIDUAL,
-            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL,
+            count_source: RVR_CHECKPOINT_SPAN_COUNT_REPLAY_VALUE,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE,
             ..Self::read_fixed(address_space, base_register, max_count)
         }
     }
@@ -254,7 +254,7 @@ impl PostflightAccessSpan {
     }
 
     /// Two consecutive four-cell writes of a Deferral input accumulator. Each
-    /// block consumes two u64 residuals containing four canonical u32 cells.
+    /// block consumes two u64 replay values containing four canonical u32 cells.
     pub const fn write_deferral_input_accumulator(deferral_idx_operand: u8) -> Self {
         Self::deferral_accumulator(
             deferral_idx_operand,
@@ -328,7 +328,7 @@ struct RvrCheckpointInstructionLayout {
 /// describe access order only and are not part of the preflight transcript.
 ///
 /// This is an internal composition seam, not a stable extension API. The
-/// supported sources remain a finite POD set: residuals, zero, program-owned
+/// supported sources remain a finite POD set: replay values, zero, program-owned
 /// constants, and Deferral's field accumulator blocks.
 #[derive(Clone, Debug, Default)]
 pub struct PostflightAccessRegistry {
@@ -354,14 +354,14 @@ pub struct PostflightAccessSchedule<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PostflightEffect {
     Next,
-    BranchResidual { operand: u8 },
+    BranchFromReplayValue { operand: u8 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PostflightRegisterWrite {
     None,
     Zero { operand: u8 },
-    Residual { operand: u8 },
+    ReplayValue { operand: u8 },
 }
 
 impl PostflightAccessRegistry {
@@ -435,10 +435,10 @@ impl PostflightAccessRegistry {
         )
     }
 
-    /// Registers a schedule whose final clock slot writes one residual to a
-    /// register. An x0 destination consumes the residual and slot but emits no
+    /// Registers a schedule whose final clock slot writes one replay value to a
+    /// register. An x0 destination consumes the replay value and slot but emits no
     /// memory event.
-    pub fn register_with_residual_register_write(
+    pub fn register_with_replay_value_write(
         &mut self,
         opcode: u32,
         schedule: PostflightAccessSchedule<'_>,
@@ -448,13 +448,13 @@ impl PostflightAccessRegistry {
             opcode,
             schedule,
             PostflightEffect::Next,
-            PostflightRegisterWrite::Residual {
+            PostflightRegisterWrite::ReplayValue {
                 operand: write_operand,
             },
         )
     }
 
-    pub fn register_branch_residual(
+    pub fn register_branch_from_replay_value(
         &mut self,
         opcode: u32,
         schedule: PostflightAccessSchedule<'_>,
@@ -463,7 +463,7 @@ impl PostflightAccessRegistry {
         self.register_with_effect(
             opcode,
             schedule,
-            PostflightEffect::BranchResidual {
+            PostflightEffect::BranchFromReplayValue {
                 operand: branch_operand,
             },
             PostflightRegisterWrite::None,
@@ -486,12 +486,12 @@ impl PostflightAccessRegistry {
         } = schedule;
         let effect_operand = match effect {
             PostflightEffect::Next => 0,
-            PostflightEffect::BranchResidual { operand } => operand,
+            PostflightEffect::BranchFromReplayValue { operand } => operand,
         };
         let register_write_operand = match register_write {
             PostflightRegisterWrite::None => 0,
             PostflightRegisterWrite::Zero { operand }
-            | PostflightRegisterWrite::Residual { operand } => operand,
+            | PostflightRegisterWrite::ReplayValue { operand } => operand,
         };
         if register_operands.len() > 3
             || register_operands
@@ -509,7 +509,7 @@ impl PostflightAccessRegistry {
                 .iter()
                 .chain([register_as_operand, memory_as_operand].iter())
                 .any(|&word| zero_operand_mask & (1 << word) != 0)
-            || (matches!(effect, PostflightEffect::BranchResidual { .. })
+            || (matches!(effect, PostflightEffect::BranchFromReplayValue { .. })
                 && (!(1..8).contains(&effect_operand)
                     || register_operands.contains(&effect_operand)
                     || effect_operand == register_as_operand
@@ -576,7 +576,7 @@ impl PostflightAccessRegistry {
                     usize::from(span.count_register) < register_operands.len()
                         && span.count_shift < u64::BITS as u8
                 }
-                RVR_CHECKPOINT_SPAN_COUNT_RESIDUAL => {
+                RVR_CHECKPOINT_SPAN_COUNT_REPLAY_VALUE => {
                     span.count != 0 && span.count_register == 0 && span.count_shift == 0
                 }
                 _ => false,
@@ -584,7 +584,7 @@ impl PostflightAccessRegistry {
             let value_valid = matches!(
                 span.value_source,
                 RVR_CHECKPOINT_SPAN_READ_U16
-                    | RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL
+                    | RVR_CHECKPOINT_SPAN_WRITE_U16_REPLAY_VALUE
                     | RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO
                     | RVR_CHECKPOINT_SPAN_READ_FIELD32
                     | RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
@@ -637,8 +637,8 @@ impl PostflightAccessRegistry {
         self.spans.extend_from_slice(spans);
         let (effect, effect_operand) = match effect {
             PostflightEffect::Next => (RVR_CHECKPOINT_EFFECT_NEXT, 0),
-            PostflightEffect::BranchResidual { operand } => {
-                (RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL, operand)
+            PostflightEffect::BranchFromReplayValue { operand } => {
+                (RVR_CHECKPOINT_EFFECT_BRANCH_REPLAY_VALUE, operand)
             }
         };
         let (register_write_source, register_write_operand) = match register_write {
@@ -646,8 +646,8 @@ impl PostflightAccessRegistry {
             PostflightRegisterWrite::Zero { operand } => {
                 (RVR_CHECKPOINT_REGISTER_WRITE_ZERO, operand)
             }
-            PostflightRegisterWrite::Residual { operand } => {
-                (RVR_CHECKPOINT_REGISTER_WRITE_RESIDUAL, operand)
+            PostflightRegisterWrite::ReplayValue { operand } => {
+                (RVR_CHECKPOINT_REGISTER_WRITE_REPLAY_VALUE, operand)
             }
         };
         self.schedules.push(RvrCheckpointAccessSchedule {
@@ -753,7 +753,7 @@ impl PostflightAccessRegistry {
                     u64::from(instruction.words[schedule.register_write_operand as usize]);
                 pointer >= 32 * RV64_REGISTER_BYTES || pointer % RV64_REGISTER_BYTES != 0
             })
-            || (schedule.effect == RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL
+            || (schedule.effect == RVR_CHECKPOINT_EFFECT_BRANCH_REPLAY_VALUE
                 && instruction.words[schedule.effect_operand as usize] >= BabyBear::ORDER_U32)
             || invalid_deferral_span
         {
@@ -878,10 +878,10 @@ impl CheckpointReplayProgram {
                 "preflight has an invalid boundary".to_string(),
             ));
         }
-        let residual_cursor =
-            u32::try_from(execution.transcript.residuals.len()).map_err(|_| {
+        let replay_value_cursor =
+            u32::try_from(execution.transcript.replay_values.len()).map_err(|_| {
                 GpuPostflightError::InvalidTranscript(
-                    "checkpoint residual stream exceeds the u32 cursor domain".to_string(),
+                    "checkpoint replay-value stream exceeds the u32 cursor domain".to_string(),
                 )
             })?;
         let final_registers = read_rv64_registers(&execution.state);
@@ -889,14 +889,14 @@ impl CheckpointReplayProgram {
             pc: execution.to_state.pc,
             timestamp: execution.to_state.timestamp,
             retired: execution.retired,
-            residual_cursor,
+            replay_value_cursor,
             regs: [0; 31],
         };
         final_anchor.regs.copy_from_slice(&final_registers[1..]);
         let mut anchors = execution.transcript.checkpoints.clone();
         anchors.push(final_anchor);
         let anchors = upload(&anchors, program.device_ctx())?;
-        let residuals = upload(&execution.transcript.residuals, program.device_ctx())?;
+        let replay_values = upload(&execution.transcript.replay_values, program.device_ctx())?;
         let error = [0u32].to_device_on(program.device_ctx())?;
         let event_counts = gpu_buffer::<PostflightEventCount>(anchors.len(), program.device_ctx());
         event_counts.fill_zero_on(program.device_ctx())?;
@@ -909,7 +909,7 @@ impl CheckpointReplayProgram {
                 initial_registers,
                 initial_memory,
                 anchors.view(),
-                residuals.view(),
+                replay_values.view(),
                 self.checkpoint_schedule_dispatch.view(),
                 self.checkpoint_schedules.view(),
                 self.checkpoint_spans.view(),
@@ -984,7 +984,7 @@ impl CheckpointReplayProgram {
                 initial_registers,
                 initial_memory,
                 anchors.view(),
-                residuals.view(),
+                replay_values.view(),
                 offsets.view(),
                 self.checkpoint_schedule_dispatch.view(),
                 self.checkpoint_schedules.view(),
@@ -1015,7 +1015,7 @@ impl CheckpointReplayProgram {
         // The host reads above synchronize the emit stream. Release compact
         // replay inputs before chronology allocates its sort/scan scratch.
         drop(anchors);
-        drop(residuals);
+        drop(replay_values);
         drop(event_counts);
         drop(offsets);
         let boundary = (

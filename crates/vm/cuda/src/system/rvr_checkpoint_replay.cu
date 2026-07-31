@@ -16,7 +16,7 @@ static constexpr uint32_t ERROR_BAD_PC = 302;
 static constexpr uint32_t ERROR_UNSUPPORTED_OPCODE = 303;
 static constexpr uint32_t ERROR_BAD_INSTRUCTION = 304;
 static constexpr uint32_t ERROR_BAD_LOAD = 305;
-static constexpr uint32_t ERROR_BAD_RESIDUAL = 306;
+static constexpr uint32_t ERROR_BAD_REPLAY_VALUE = 306;
 static constexpr uint32_t ERROR_BAD_ANCHOR = 307;
 static constexpr uint32_t ERROR_BAD_TERMINATION = 308;
 static constexpr uint32_t ERROR_OUTPUT_BOUNDS = 309;
@@ -27,7 +27,7 @@ struct RvrCheckpoint {
     uint32_t pc;
     uint32_t timestamp;
     uint32_t retired;
-    uint32_t residual_cursor;
+    uint32_t replay_value_cursor;
     uint64_t regs[31];
 };
 
@@ -37,7 +37,7 @@ struct ReplayState {
     uint32_t pc;
     uint32_t timestamp;
     uint32_t retired;
-    uint32_t residual_cursor;
+    uint32_t replay_value_cursor;
     uint64_t regs[NUM_REGISTERS];
 };
 
@@ -117,18 +117,18 @@ static constexpr uint8_t SPAN_BASE_DEFERRAL_INPUT = 1;
 static constexpr uint8_t SPAN_BASE_DEFERRAL_OUTPUT = 2;
 static constexpr uint8_t SPAN_COUNT_FIXED = 0;
 static constexpr uint8_t SPAN_COUNT_REGISTER = 1;
-static constexpr uint8_t SPAN_COUNT_RESIDUAL = 2;
+static constexpr uint8_t SPAN_COUNT_REPLAY_VALUE = 2;
 static constexpr uint8_t SPAN_READ_U16 = 0;
-static constexpr uint8_t SPAN_WRITE_U16_RESIDUAL = 1;
+static constexpr uint8_t SPAN_WRITE_U16_REPLAY_VALUE = 1;
 static constexpr uint8_t SPAN_WRITE_U16_ZERO = 2;
 static constexpr uint8_t SPAN_READ_FIELD32 = 3;
 static constexpr uint8_t SPAN_WRITE_FIELD32_CANONICAL_PAIRS = 4;
 static constexpr uint8_t SPAN_WRITE_U16_STATIC = 5;
 static constexpr uint8_t EFFECT_NEXT = 0;
-static constexpr uint8_t EFFECT_BRANCH_RESIDUAL = 1;
+static constexpr uint8_t EFFECT_BRANCH_REPLAY_VALUE = 1;
 static constexpr uint8_t REGISTER_WRITE_NONE = 0;
 static constexpr uint8_t REGISTER_WRITE_ZERO = 1;
-static constexpr uint8_t REGISTER_WRITE_RESIDUAL = 2;
+static constexpr uint8_t REGISTER_WRITE_REPLAY_VALUE = 2;
 
 __device__ __forceinline__ uint64_t load_u64_le(uint8_t const *bytes) {
     uint64_t value = 0;
@@ -151,7 +151,7 @@ __device__ __forceinline__ void load_initial_state(
     state.pc = pc;
     state.timestamp = timestamp;
     state.retired = 0;
-    state.residual_cursor = 0;
+    state.replay_value_cursor = 0;
     state.regs[0] = 0;
 #pragma unroll
     for (uint32_t reg = 1; reg < NUM_REGISTERS; reg++) {
@@ -163,7 +163,7 @@ __device__ __forceinline__ void load_checkpoint(RvrCheckpoint const &checkpoint,
     state.pc = checkpoint.pc;
     state.timestamp = checkpoint.timestamp;
     state.retired = checkpoint.retired;
-    state.residual_cursor = checkpoint.residual_cursor;
+    state.replay_value_cursor = checkpoint.replay_value_cursor;
     state.regs[0] = 0;
 #pragma unroll
     for (uint32_t reg = 1; reg < NUM_REGISTERS; reg++) state.regs[reg] = checkpoint.regs[reg - 1];
@@ -175,7 +175,7 @@ __device__ __forceinline__ bool matches_checkpoint(
 ) {
     if (state.pc != checkpoint.pc || state.timestamp != checkpoint.timestamp ||
         state.retired != checkpoint.retired ||
-        state.residual_cursor != checkpoint.residual_cursor) return false;
+        state.replay_value_cursor != checkpoint.replay_value_cursor) return false;
 #pragma unroll
     for (uint32_t reg = 1; reg < NUM_REGISTERS; reg++) {
         if (state.regs[reg] != checkpoint.regs[reg - 1]) return false;
@@ -656,8 +656,8 @@ __device__ __forceinline__ bool resolve_access_span_count(
     RvrCheckpointAccessSpan const &span,
     RvrCheckpointAccessSchedule const &schedule,
     uint64_t const (&register_values)[3],
-    DeviceBufferConstView<uint64_t> residuals,
-    uint64_t residual_index,
+    DeviceBufferConstView<uint64_t> replay_values,
+    uint64_t replay_value_index,
     uint32_t &count,
     uint32_t *error
 ) {
@@ -685,13 +685,13 @@ __device__ __forceinline__ bool resolve_access_span_count(
         count = uint32_t(shifted);
         return true;
     }
-    if (span.count_source == SPAN_COUNT_RESIDUAL) {
+    if (span.count_source == SPAN_COUNT_REPLAY_VALUE) {
         if (span.count == 0 || span.count_register != 0 || span.count_shift != 0 ||
-            residual_index >= residuals.len() || residuals[residual_index] > span.count) {
-            preflight_set_error(error, ERROR_BAD_RESIDUAL);
+            replay_value_index >= replay_values.len() || replay_values[replay_value_index] > span.count) {
+            preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
             return false;
         }
-        count = uint32_t(residuals[residual_index]);
+        count = uint32_t(replay_values[replay_value_index]);
         return true;
     }
     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
@@ -703,7 +703,7 @@ __device__ __forceinline__ bool replay_access_schedule(
     RvrCheckpointAccessSchedule const &schedule,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     DeviceBufferConstView<uint64_t> static_values,
-    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint8_t> initial_memory,
     uint32_t register_as,
     uint32_t memory_as,
@@ -726,14 +726,14 @@ __device__ __forceinline__ bool replay_access_schedule(
         preflight_set_error(error, ERROR_BAD_INSTRUCTION);
         return false;
     }
-    if (schedule.effect != EFFECT_NEXT && schedule.effect != EFFECT_BRANCH_RESIDUAL) {
+    if (schedule.effect != EFFECT_NEXT && schedule.effect != EFFECT_BRANCH_REPLAY_VALUE) {
         preflight_set_error(error, ERROR_BAD_INSTRUCTION);
         return false;
     }
     bool has_register_write = schedule.register_write_source != REGISTER_WRITE_NONE;
     if ((schedule.register_write_source != REGISTER_WRITE_NONE &&
          schedule.register_write_source != REGISTER_WRITE_ZERO &&
-         schedule.register_write_source != REGISTER_WRITE_RESIDUAL) ||
+         schedule.register_write_source != REGISTER_WRITE_REPLAY_VALUE) ||
         (has_register_write ? !(schedule.register_write_operand >= 1 &&
                                 schedule.register_write_operand < 8)
                             : schedule.register_write_operand != 0)) {
@@ -759,14 +759,14 @@ __device__ __forceinline__ bool replay_access_schedule(
     // Count and emit therefore fail at the same boundary, and a malformed later
     // span cannot leave a partial memory schedule behind.
     uint64_t span_events = 0;
-    uint64_t span_residuals = 0;
+    uint64_t span_replay_values = 0;
     uint64_t field_events = 0;
     for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
         auto const &span = spans[schedule.first_span + span_index];
         bool field = span.value_source == SPAN_READ_FIELD32 ||
                      span.value_source == SPAN_WRITE_FIELD32_CANONICAL_PAIRS;
         bool known_value = span.value_source == SPAN_READ_U16 ||
-                           span.value_source == SPAN_WRITE_U16_RESIDUAL ||
+                           span.value_source == SPAN_WRITE_U16_REPLAY_VALUE ||
                            span.value_source == SPAN_WRITE_U16_ZERO ||
                            span.value_source == SPAN_WRITE_U16_STATIC || field;
         bool known_base = span.base_source == SPAN_BASE_REGISTER ||
@@ -774,7 +774,7 @@ __device__ __forceinline__ bool replay_access_schedule(
                           span.base_source == SPAN_BASE_DEFERRAL_OUTPUT;
         bool known_count = span.count_source == SPAN_COUNT_FIXED ||
                            span.count_source == SPAN_COUNT_REGISTER ||
-                           span.count_source == SPAN_COUNT_RESIDUAL;
+                           span.count_source == SPAN_COUNT_REPLAY_VALUE;
         bool static_write = span.value_source == SPAN_WRITE_U16_STATIC;
         if (!known_value || !known_base || !known_count ||
             (field ? span.address_space != deferral_as : span.address_space != memory_as) ||
@@ -788,8 +788,8 @@ __device__ __forceinline__ bool replay_access_schedule(
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
         }
-        if (span_residuals > UINT32_MAX - state.residual_cursor) {
-            preflight_set_error(error, ERROR_BAD_RESIDUAL);
+        if (span_replay_values > UINT32_MAX - state.replay_value_cursor) {
+            preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
             return false;
         }
         uint32_t count;
@@ -797,12 +797,12 @@ __device__ __forceinline__ bool replay_access_schedule(
                 span,
                 schedule,
                 register_values,
-                residuals,
-                uint64_t(state.residual_cursor) + span_residuals,
+                replay_values,
+                uint64_t(state.replay_value_cursor) + span_replay_values,
                 count,
                 error
             )) return false;
-        if (span.count_source == SPAN_COUNT_RESIDUAL) span_residuals++;
+        if (span.count_source == SPAN_COUNT_REPLAY_VALUE) span_replay_values++;
         if (uint64_t(count) > UINT32_MAX - span_events) {
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
@@ -838,9 +838,9 @@ __device__ __forceinline__ bool replay_access_schedule(
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
         }
-        if (span.value_source == SPAN_WRITE_U16_RESIDUAL) span_residuals += count;
+        if (span.value_source == SPAN_WRITE_U16_REPLAY_VALUE) span_replay_values += count;
         if (span.value_source == SPAN_WRITE_FIELD32_CANONICAL_PAIRS) {
-            span_residuals += 2u * count;
+            span_replay_values += 2u * count;
         }
     }
 
@@ -861,46 +861,46 @@ __device__ __forceinline__ bool replay_access_schedule(
         preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
         return false;
     }
-    uint64_t register_write_residuals =
-        schedule.register_write_source == REGISTER_WRITE_RESIDUAL ? 1u : 0u;
-    uint64_t effect_residual_index = uint64_t(state.residual_cursor) + span_residuals +
-                                     register_write_residuals;
-    uint64_t required_residuals = span_residuals + register_write_residuals +
-                                  (schedule.effect == EFFECT_BRANCH_RESIDUAL ? 1u : 0u);
-    if (required_residuals > UINT32_MAX - state.residual_cursor ||
-        uint64_t(state.residual_cursor) + required_residuals > residuals.len()) {
-        preflight_set_error(error, ERROR_BAD_RESIDUAL);
+    uint64_t register_write_replay_values =
+        schedule.register_write_source == REGISTER_WRITE_REPLAY_VALUE ? 1u : 0u;
+    uint64_t effect_replay_value_index = uint64_t(state.replay_value_cursor) + span_replay_values +
+                                     register_write_replay_values;
+    uint64_t required_replay_values = span_replay_values + register_write_replay_values +
+                                  (schedule.effect == EFFECT_BRANCH_REPLAY_VALUE ? 1u : 0u);
+    if (required_replay_values > UINT32_MAX - state.replay_value_cursor ||
+        uint64_t(state.replay_value_cursor) + required_replay_values > replay_values.len()) {
+        preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
         return false;
     }
-    uint64_t checked_residual = state.residual_cursor;
+    uint64_t checked_replay_value = state.replay_value_cursor;
     for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
         auto const &span = spans[schedule.first_span + span_index];
         uint32_t count;
         if (!resolve_access_span_count(
-                span, schedule, register_values, residuals, checked_residual, count, error
+                span, schedule, register_values, replay_values, checked_replay_value, count, error
             )) return false;
-        if (span.count_source == SPAN_COUNT_RESIDUAL) checked_residual++;
-        if (span.value_source == SPAN_WRITE_U16_RESIDUAL) {
-            checked_residual += count;
+        if (span.count_source == SPAN_COUNT_REPLAY_VALUE) checked_replay_value++;
+        if (span.value_source == SPAN_WRITE_U16_REPLAY_VALUE) {
+            checked_replay_value += count;
         } else if (span.value_source == SPAN_WRITE_FIELD32_CANONICAL_PAIRS) {
             for (uint32_t block = 0; block < count; block++) {
 #pragma unroll
                 for (uint32_t pair = 0; pair < 2; pair++) {
-                    uint64_t packed = residuals[checked_residual++];
+                    uint64_t packed = replay_values[checked_replay_value++];
                     if (uint32_t(packed) >= BABY_BEAR_ORDER ||
                         uint32_t(packed >> 32) >= BABY_BEAR_ORDER) {
-                        preflight_set_error(error, ERROR_BAD_RESIDUAL);
+                        preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
                         return false;
                     }
                 }
             }
         }
     }
-    uint64_t effect_residual = 0;
-    if (schedule.effect == EFFECT_BRANCH_RESIDUAL) {
-        effect_residual = residuals[effect_residual_index];
-        if (effect_residual > 1) {
-            preflight_set_error(error, ERROR_BAD_RESIDUAL);
+    uint64_t effect_replay_value = 0;
+    if (schedule.effect == EFFECT_BRANCH_REPLAY_VALUE) {
+        effect_replay_value = replay_values[effect_replay_value_index];
+        if (effect_replay_value > 1) {
+            preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
             return false;
         }
     }
@@ -924,12 +924,12 @@ __device__ __forceinline__ bool replay_access_schedule(
                 span,
                 schedule,
                 register_values,
-                residuals,
-                state.residual_cursor,
+                replay_values,
+                state.replay_value_cursor,
                 count,
                 error
             )) return false;
-        if (span.count_source == SPAN_COUNT_RESIDUAL) state.residual_cursor++;
+        if (span.count_source == SPAN_COUNT_REPLAY_VALUE) state.replay_value_cursor++;
         if (count == 0) continue;
 
         bool field = span.value_source == SPAN_READ_FIELD32 ||
@@ -938,11 +938,11 @@ __device__ __forceinline__ bool replay_access_schedule(
                             ? register_values[span.base_index]
                             : uint64_t(instruction.words[span.base_index]) * 16u +
                                   (span.base_source == SPAN_BASE_DEFERRAL_OUTPUT ? 8u : 0u);
-        bool is_u16_residual = span.value_source == SPAN_WRITE_U16_RESIDUAL;
-        bool is_field_residual =
+        bool is_u16_replay_value = span.value_source == SPAN_WRITE_U16_REPLAY_VALUE;
+        bool is_field_replay_value =
             span.value_source == SPAN_WRITE_FIELD32_CANONICAL_PAIRS;
         bool is_static_write = span.value_source == SPAN_WRITE_U16_STATIC;
-        bool is_write = is_u16_residual || is_field_residual ||
+        bool is_write = is_u16_replay_value || is_field_replay_value ||
                         span.value_source == SPAN_WRITE_U16_ZERO || is_static_write;
         for (uint32_t word = 0; word < count; word++) {
             if (memory != nullptr) {
@@ -962,17 +962,17 @@ __device__ __forceinline__ bool replay_access_schedule(
                     auto &block = field_values[reference];
 #pragma unroll
                     for (uint32_t lane = 0; lane < 4; lane++) block.values[lane] = 0;
-                    if (is_field_residual) {
+                    if (is_field_replay_value) {
 #pragma unroll
                         for (uint32_t pair = 0; pair < 2; pair++) {
-                            uint64_t packed = residuals[state.residual_cursor + pair];
+                            uint64_t packed = replay_values[state.replay_value_cursor + pair];
                             block.values[2 * pair] = uint32_t(packed);
                             block.values[2 * pair + 1] = uint32_t(packed >> 32);
                         }
                     }
                 } else {
-                    uint64_t value = is_u16_residual
-                                         ? residuals[state.residual_cursor]
+                    uint64_t value = is_u16_replay_value
+                                         ? replay_values[state.replay_value_cursor]
                                          : is_static_write
                                                ? static_values[span.value_index + word]
                                                : 0;
@@ -983,15 +983,15 @@ __device__ __forceinline__ bool replay_access_schedule(
                 }
             }
             if (field) field_emitted++;
-            if (is_u16_residual) state.residual_cursor++;
-            if (is_field_residual) state.residual_cursor += 2;
+            if (is_u16_replay_value) state.replay_value_cursor++;
+            if (is_field_replay_value) state.replay_value_cursor += 2;
             emitted++;
             state.timestamp++;
         }
     }
     if (has_register_write) {
-        uint64_t value = schedule.register_write_source == REGISTER_WRITE_RESIDUAL
-                             ? residuals[state.residual_cursor]
+        uint64_t value = schedule.register_write_source == REGISTER_WRITE_REPLAY_VALUE
+                             ? replay_values[state.replay_value_cursor]
                              : 0;
         if (register_write_enabled) {
             if (memory != nullptr) {
@@ -1002,15 +1002,15 @@ __device__ __forceinline__ bool replay_access_schedule(
             emitted++;
             state.regs[write_register] = value;
         }
-        if (schedule.register_write_source == REGISTER_WRITE_RESIDUAL) {
-            state.residual_cursor++;
+        if (schedule.register_write_source == REGISTER_WRITE_REPLAY_VALUE) {
+            state.replay_value_cursor++;
         }
         state.timestamp++;
     }
-    if (schedule.effect == EFFECT_BRANCH_RESIDUAL) {
-        // All write residuals, if any, precede the terminal control residual.
-        state.residual_cursor++;
-        state.pc = effect_residual != 0
+    if (schedule.effect == EFFECT_BRANCH_REPLAY_VALUE) {
+        // All write replay values, if any, precede the terminal control replay value.
+        state.replay_value_cursor++;
+        state.pc = effect_replay_value != 0
                        ? branch_target(state.pc, instruction.words[schedule.effect_operand])
                        : state.pc + 4;
     } else {
@@ -1025,7 +1025,7 @@ __device__ bool replay_chunk(
     DeviceBufferConstView<uint8_t> initial_registers,
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
-    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
     DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
@@ -1068,7 +1068,7 @@ __device__ bool replay_chunk(
         load_checkpoint(anchors[chunk - 1], state);
     }
     RvrCheckpoint const &end = anchors[chunk];
-    if (end.retired < state.retired || end.residual_cursor < state.residual_cursor) {
+    if (end.retired < state.retired || end.replay_value_cursor < state.replay_value_cursor) {
         preflight_set_error(error, ERROR_BAD_CHUNK);
         return false;
     }
@@ -1151,9 +1151,9 @@ __device__ bool replay_chunk(
                 return false;
             }
             uint32_t event_count = decoded.num_words + (decoded.is_single ? 1 : 2);
-            if (state.residual_cursor > residuals.len() ||
-                size_t(decoded.num_words) > residuals.len() - state.residual_cursor) {
-                preflight_set_error(error, ERROR_BAD_RESIDUAL);
+            if (state.replay_value_cursor > replay_values.len() ||
+                size_t(decoded.num_words) > replay_values.len() - state.replay_value_cursor) {
+                preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
                 return false;
             }
             if (decoded.num_words > (UINT32_MAX - state.timestamp) / 3) {
@@ -1177,18 +1177,18 @@ __device__ bool replay_chunk(
                     write_start++;
                 }
                 for (uint32_t word = 0; word < decoded.num_words; word++) {
-                    size_t residual_index = state.residual_cursor + word;
+                    size_t replay_value_index = state.replay_value_cursor + word;
                     uint32_t event_index = memory_start + write_start + word;
                     write_memory_intent(
                         memory[event_index], &write_masks[event_index],
                         state.timestamp + 2 + 3 * word, memory_as,
-                        decoded.mem_ptr + REGISTER_BYTES * word, residuals[residual_index],
+                        decoded.mem_ptr + REGISTER_BYTES * word, replay_values[replay_value_index],
                         FULL_WRITE_MASK
                     );
                 }
             }
             emitted += event_count;
-            state.residual_cursor += decoded.num_words;
+            state.replay_value_cursor += decoded.num_words;
             state.pc += 4;
             state.timestamp += 3 * decoded.num_words;
         } else if (opcode >= opcodes.load_store && opcode < opcodes.load_store + 11) {
@@ -1201,13 +1201,13 @@ __device__ bool replay_chunk(
             if (decoded.is_load) {
                 uint64_t value = 0;
                 if (decoded.needs_write) {
-                    if (state.residual_cursor >= residuals.len()) {
-                        preflight_set_error(error, ERROR_BAD_RESIDUAL);
+                    if (state.replay_value_cursor >= replay_values.len()) {
+                        preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
                         return false;
                     }
-                    value = residuals[state.residual_cursor++];
+                    value = replay_values[state.replay_value_cursor++];
                     if (normalize_load_result(value, decoded.width, decoded.sign_extend) != value) {
-                        preflight_set_error(error, ERROR_BAD_RESIDUAL);
+                        preflight_set_error(error, ERROR_BAD_REPLAY_VALUE);
                         return false;
                     }
                 }
@@ -1438,7 +1438,7 @@ __device__ bool replay_chunk(
                 uint32_t schedule_index = schedule_dispatch[opcode];
                 if (schedule_index >= schedules.len() ||
                     !replay_access_schedule(*instruction, schedules[schedule_index], spans,
-                                            static_values, residuals, initial_memory, register_as,
+                                            static_values, replay_values, initial_memory, register_as,
                                             memory_as, deferral_as,
                                             byte_pointer_max_bits, cell_pointer_max_bits, state,
                                             memory, write_masks,
@@ -1477,7 +1477,7 @@ __global__ void checkpoint_count(
     DeviceBufferConstView<uint8_t> initial_registers,
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
-    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
     DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
@@ -1499,7 +1499,7 @@ __global__ void checkpoint_count(
     if (chunk >= anchors.len()) return;
     uint32_t memory_count = 0;
     uint32_t field_count = 0;
-    if (replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
+    if (replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
                      schedule_dispatch, schedules, spans, static_values, chunk, opcodes,
                      register_as, memory_as, immediate_as, deferral_as,
                      byte_pointer_max_bits, cell_pointer_max_bits, initial_pc, initial_timestamp,
@@ -1516,7 +1516,7 @@ __global__ void checkpoint_emit(
     DeviceBufferConstView<uint8_t> initial_registers,
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
-    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<RvrCheckpointEventCount> event_offsets,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
     DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
@@ -1543,7 +1543,7 @@ __global__ void checkpoint_emit(
     uint32_t memory_count = 0;
     uint32_t field_count = 0;
     auto const offsets = event_offsets[chunk];
-    if (!replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
+    if (!replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
                       schedule_dispatch, schedules, spans, static_values, chunk, opcodes,
                       register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
                       cell_pointer_max_bits, initial_pc, initial_timestamp, endpoint_kind,
@@ -1582,7 +1582,7 @@ extern "C" int _rvr_checkpoint_count(
     DeviceBufferConstView<uint8_t> initial_registers,
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
-    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
     DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
     DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
@@ -1604,7 +1604,7 @@ extern "C" int _rvr_checkpoint_count(
     if (anchors.len() == 0) return int(cudaErrorInvalidValue);
     auto [grid, block] = kernel_launch_params(anchors.len(), REPLAY_THREADS);
     checkpoint_count<<<grid, block, 0, stream>>>(
-        instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
+        instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
         schedule_dispatch, schedules, spans, static_values, opcodes, register_as,
         memory_as, immediate_as, deferral_as, byte_pointer_max_bits, cell_pointer_max_bits,
         initial_pc, initial_timestamp,
@@ -1619,7 +1619,7 @@ extern "C" int _rvr_checkpoint_emit(
     DeviceBufferConstView<uint8_t> initial_registers,
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
-    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint64_t> replay_values,
     DeviceBufferConstView<RvrCheckpointEventCount> event_offsets,
     DeviceBufferConstView<uint32_t> schedule_dispatch,
     DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
@@ -1647,7 +1647,7 @@ extern "C" int _rvr_checkpoint_emit(
     }
     auto [grid, block] = kernel_launch_params(anchors.len(), REPLAY_THREADS);
     checkpoint_emit<<<grid, block, 0, stream>>>(
-        instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
+        instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
         event_offsets, schedule_dispatch, schedules, spans, static_values, opcodes,
         register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
         cell_pointer_max_bits, initial_pc, initial_timestamp,

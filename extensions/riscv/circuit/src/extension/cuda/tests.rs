@@ -953,7 +953,7 @@ fn preflight_gpu_replay_proves_bounded_rv64i_slice() {
         )
         .unwrap();
     assert!(!execution.transcript.checkpoints.is_empty());
-    assert_eq!(execution.transcript.residuals, vec![loaded]);
+    assert_eq!(execution.transcript.replay_values, vec![loaded]);
     assert_eq!(execution.endpoint, PreflightEndpoint::Terminated);
     assert_eq!(execution.retired as usize, max_instructions);
 
@@ -1058,7 +1058,7 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
         memory_instruction(Rv64LoadStoreOpcode::LOADHU, 8, 7, false, true),
         memory_instruction(Rv64LoadStoreOpcode::LOADWU, 9, 6, false, true),
         // A disabled destination still reserves its AIR timestamp slot but
-        // appends no residual and no register-write event.
+        // appends no replay value and no register-write event.
         memory_instruction(Rv64LoadStoreOpcode::LOADD, 0, u16::MAX, true, true),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ]);
@@ -1102,7 +1102,7 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
 
     assert!(checkpoint_execution.transcript.checkpoints.len() >= 4);
     assert_eq!(
-        checkpoint_execution.transcript.residuals,
+        checkpoint_execution.transcript.replay_values,
         [
             0x11,
             0x2211,
@@ -1489,7 +1489,7 @@ fn preflight_gpu_replay_proves_hint_store() {
             PreflightLimits::new(instructions.len(), hint_words.len(), 1),
         )
         .unwrap();
-    assert_eq!(execution.transcript.residuals, hint_words);
+    assert_eq!(execution.transcript.replay_values, hint_words);
     assert_eq!(execution.to_state.timestamp, 13);
 
     let gpu_program = CheckpointReplayProgram::upload(
@@ -1498,13 +1498,13 @@ fn preflight_gpu_replay_proves_hint_store() {
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let missing = execution.transcript.residuals.pop().unwrap();
+    let missing = execution.transcript.replay_values.pop().unwrap();
     let error =
         Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .err()
-            .expect("missing hint residual must fail checkpoint replay");
+            .expect("missing hint replay value must fail checkpoint replay");
     assert!(error.to_string().contains("code 306"), "{error}");
-    execution.transcript.residuals.push(missing);
+    execution.transcript.replay_values.push(missing);
 
     let (transcript, replay_plan) =
         Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)

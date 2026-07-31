@@ -38,14 +38,14 @@ use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_pr
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 const DISCOVERY_INSTRUCTIONS: usize = 512;
-const DISCOVERY_RESIDUALS: usize = 4_096;
+const DISCOVERY_REPLAY_VALUES: usize = 4_096;
 const PROOF_CHECKPOINT_INTERVAL: usize = 512;
 
 #[derive(Default)]
 struct Discovery {
     split: Option<u32>,
     retired: u32,
-    residuals: usize,
+    replay_values: usize,
 }
 
 fn instruction_at(exe: &VmExe<BabyBear>, pc: u32) -> &Instruction<BabyBear> {
@@ -95,7 +95,7 @@ fn discover_pairing_split(
     loop {
         let execution = checkpoint.execute_from_state_for(
             state,
-            PreflightLimits::new(DISCOVERY_INSTRUCTIONS, DISCOVERY_RESIDUALS, 1),
+            PreflightLimits::new(DISCOVERY_INSTRUCTIONS, DISCOVERY_REPLAY_VALUES, 1),
         )?;
         if discovery.split.is_none() {
             discovery.split = find_split_after_phantom(&execution, pairing_pc)
@@ -105,8 +105,8 @@ fn discover_pairing_split(
             .retired
             .checked_add(execution.retired)
             .expect("pairing fixture instruction count exceeds u32");
-        let chunk_residuals = execution.transcript.residuals.len();
-        discovery.residuals += chunk_residuals;
+        let chunk_replay_values = execution.transcript.replay_values.len();
+        discovery.replay_values += chunk_replay_values;
         state = execution.state;
         if matches!(execution.endpoint, PreflightEndpoint::Terminated) {
             break;
@@ -178,7 +178,7 @@ fn prove_pairing_checkpoint(
         vm.transport_init_memory_to_device(&state.memory);
         let limits = PreflightLimits::new(
             retired as usize,
-            discovery.residuals.max(1),
+            discovery.replay_values.max(1),
             PROOF_CHECKPOINT_INTERVAL,
         );
         let execution = checkpoint.execute_from_state_for(state, limits)?;

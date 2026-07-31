@@ -528,9 +528,9 @@ mod tests {
             (boundary.pc, boundary.timestamp, boundary.retired),
             (12, 5, 2)
         );
-        assert_eq!(boundary.residual_cursor, 0);
+        assert_eq!(boundary.replay_value_cursor, 0);
         assert_eq!(boundary.regs[0], 1);
-        assert!(first.transcript.residuals.is_empty());
+        assert!(first.transcript.replay_values.is_empty());
 
         let second = preflight.execute_from_state_for(
             first.state,
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_load_residuals_omit_x0() -> Result<()> {
+    fn test_rvr_checkpoint_preflight_load_replay_values_omit_x0() -> Result<()> {
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let load = |opcode: Rv64LoadStoreOpcode, rd: usize, offset: usize| {
             Instruction::<F>::from_usize(
@@ -688,7 +688,10 @@ mod tests {
             execution.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        assert_eq!(execution.transcript.residuals, vec![loaded, sign_extended]);
+        assert_eq!(
+            execution.transcript.replay_values,
+            vec![loaded, sign_extended]
+        );
         assert_eq!(read_register(&execution.state, 0), 0);
         assert_eq!(read_register(&execution.state, 2), loaded);
         assert_eq!(read_register(&execution.state, 3), sign_extended);
@@ -718,13 +721,13 @@ mod tests {
             .execute_metered_from_state(metered_initial, metered_ctx)?;
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].num_insns, instructions.len() as u64);
-        assert_eq!(segments[0].num_preflight_residuals, 2);
+        assert_eq!(segments[0].num_preflight_replay_values, 2);
         Ok(())
     }
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_checkpoint_preflight_hint_residual_order_and_memory() -> Result<()> {
+    fn test_rvr_checkpoint_preflight_hint_replay_value_order_and_memory() -> Result<()> {
         let instructions = [
             hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
             hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 2, 3),
@@ -757,7 +760,7 @@ mod tests {
             execution.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        assert_eq!(execution.transcript.residuals, hint_words);
+        assert_eq!(execution.transcript.replay_values, hint_words);
         assert_eq!(execution.state.streams.hint_stream.remaining(), 0);
         for (address, expected) in [
             (32, hint_words[0]),
@@ -803,7 +806,7 @@ mod tests {
         // Two register reads plus one memory slot for STOREB, followed by two
         // register reads plus two slots for the crossing STOREW.
         assert_eq!(execution.to_state.timestamp, 8);
-        assert!(execution.transcript.residuals.is_empty());
+        assert!(execution.transcript.replay_values.is_empty());
 
         let mut expected = initial_public_values;
         expected[2] = 0xa5;
@@ -822,7 +825,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_builtin_phantoms_have_one_slot_and_no_residuals() -> Result<()> {
+    fn test_rvr_builtin_phantoms_have_one_slot_and_no_replay_values() -> Result<()> {
         let instructions = [
             Instruction::<F>::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
@@ -862,7 +865,7 @@ mod tests {
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(execution.to_state.timestamp, 4);
-        assert!(execution.transcript.residuals.is_empty());
+        assert!(execution.transcript.replay_values.is_empty());
         assert_eq!(execution.state.pc(), 12);
 
         let pure = executor.instance(&exe)?;
@@ -889,7 +892,7 @@ mod tests {
             suspended.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Suspended
         );
-        assert!(suspended.transcript.residuals.is_empty());
+        assert!(suspended.transcript.replay_values.is_empty());
         assert_eq!(
             suspended
                 .state
@@ -920,7 +923,7 @@ mod tests {
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(execution.to_state.timestamp, 3);
-        assert!(execution.transcript.residuals.is_empty());
+        assert!(execution.transcript.replay_values.is_empty());
         assert_eq!(
             execution
                 .state
@@ -997,7 +1000,7 @@ mod tests {
             ),
         )?;
 
-        assert_eq!(execution.transcript.residuals, hint_words);
+        assert_eq!(execution.transcript.replay_values, hint_words);
         assert_eq!(execution.state.streams.hint_stream.remaining(), 0);
 
         let pure = executor.instance(&exe)?;
@@ -1054,7 +1057,7 @@ mod tests {
             first.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Suspended
         );
-        assert_eq!(first.transcript.residuals, vec![hint_words[0]]);
+        assert_eq!(first.transcript.replay_values, vec![hint_words[0]]);
         assert_eq!(read_main_word(&first.state, 32), hint_words[0]);
         assert_eq!(first.state.streams.hint_stream.remaining(), 8);
 
@@ -1066,7 +1069,7 @@ mod tests {
             second.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        assert_eq!(second.transcript.residuals, vec![hint_words[1]]);
+        assert_eq!(second.transcript.replay_values, vec![hint_words[1]]);
         assert_eq!(read_main_word(&second.state, 32), hint_words[1]);
         assert_eq!(second.state.streams.hint_stream.remaining(), 0);
         Ok(())
@@ -1193,7 +1196,7 @@ mod tests {
             first.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Suspended
         );
-        assert!(first.transcript.residuals.is_empty());
+        assert!(first.transcript.replay_values.is_empty());
         assert_eq!(
             &extract_public_values(PAGE_SIZE, &first.state.memory.memory)[8..12],
             &0xaabb_ccddu32.to_le_bytes()
@@ -1207,7 +1210,7 @@ mod tests {
             second.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        assert!(second.transcript.residuals.is_empty());
+        assert!(second.transcript.replay_values.is_empty());
         assert_eq!(
             &extract_public_values(PAGE_SIZE, &second.state.memory.memory)[8..12],
             &[0xdd, 0xee, 0xbb, 0xaa]
@@ -1386,7 +1389,7 @@ mod tests {
         )?;
         assert_eq!(preflight.state.pc(), 12);
         assert_eq!(preflight.to_state.timestamp, 5);
-        assert!(preflight.transcript.residuals.is_empty());
+        assert!(preflight.transcript.replay_values.is_empty());
         Ok(())
     }
 

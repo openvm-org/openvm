@@ -2,7 +2,7 @@
 //!
 //! Serial execution still uses mutable random-access VM memory. Its
 //! authoritative preflight output contains only periodic architectural
-//! checkpoints and ordered residual values that deterministic replay cannot
+//! checkpoints and ordered replay values that deterministic replay cannot
 //! recover from the program and segment-start state. GPU expansion converts
 //! those arrays into a read-only logical execution history for parallel
 //! tracegen.
@@ -53,19 +53,19 @@ pub enum PreflightEndpoint {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PreflightLimits {
     pub max_instructions: usize,
-    pub max_residuals: usize,
+    pub max_replay_values: usize,
     pub checkpoint_interval: usize,
 }
 
 impl PreflightLimits {
     pub const fn new(
         max_instructions: usize,
-        max_residuals: usize,
+        max_replay_values: usize,
         checkpoint_interval: usize,
     ) -> Self {
         Self {
             max_instructions,
-            max_residuals,
+            max_replay_values,
             checkpoint_interval,
         }
     }
@@ -73,10 +73,10 @@ impl PreflightLimits {
     fn validated(self) -> Result<ValidatedLimits, String> {
         let max_instructions = u32::try_from(self.max_instructions)
             .map_err(|_| "preflight instruction limit exceeds u32".to_string())?;
-        let max_residuals_u32 = u32::try_from(self.max_residuals).map_err(|_| {
-            "preflight residual limit exceeds the u32 checkpoint-cursor domain".to_string()
+        let max_replay_values_u32 = u32::try_from(self.max_replay_values).map_err(|_| {
+            "preflight replay-value limit exceeds the u32 checkpoint-cursor domain".to_string()
         })?;
-        let max_residuals = u64::from(max_residuals_u32);
+        let max_replay_values = u64::from(max_replay_values_u32);
         let checkpoint_interval = u32::try_from(self.checkpoint_interval)
             .map_err(|_| "preflight interval exceeds u32".to_string())?;
         if checkpoint_interval == 0 {
@@ -98,7 +98,7 @@ impl PreflightLimits {
 
         Ok(ValidatedLimits {
             max_instructions,
-            max_residuals,
+            max_replay_values,
             checkpoint_interval,
             max_checkpoints,
             max_checkpoints_u64,
@@ -109,7 +109,7 @@ impl PreflightLimits {
 #[derive(Clone, Copy, Debug)]
 struct ValidatedLimits {
     max_instructions: u32,
-    max_residuals: u64,
+    max_replay_values: u64,
     checkpoint_interval: u32,
     max_checkpoints: usize,
     max_checkpoints_u64: u64,
@@ -119,7 +119,7 @@ struct ValidatedLimits {
 #[derive(Debug, Default)]
 pub struct PreflightTranscript {
     pub checkpoints: Vec<RvrCheckpoint>,
-    pub residuals: Vec<u64>,
+    pub replay_values: Vec<u64>,
 }
 
 /// State and compact transcript returned by preflight.
@@ -138,7 +138,7 @@ pub struct PreflightExecution {
 
 pub(crate) struct CheckpointPreflightBuffers {
     checkpoints: Vec<RvrCheckpoint>,
-    residuals: Vec<u64>,
+    replay_values: Vec<u64>,
     limits: ValidatedLimits,
 }
 
@@ -221,24 +221,24 @@ impl CheckpointPreflightBuffers {
     ) -> Result<Self, String> {
         let limits = limits.validated()?;
         transcript.checkpoints.clear();
-        transcript.residuals.clear();
+        transcript.replay_values.clear();
         if transcript.checkpoints.capacity() < limits.max_checkpoints {
             transcript
                 .checkpoints
                 .try_reserve_exact(limits.max_checkpoints)
                 .map_err(|error| format!("failed to reserve preflight checkpoints: {error}"))?;
         }
-        let max_residuals = usize::try_from(limits.max_residuals)
-            .map_err(|_| "preflight residual limit exceeds usize".to_string())?;
-        if transcript.residuals.capacity() < max_residuals {
+        let max_replay_values = usize::try_from(limits.max_replay_values)
+            .map_err(|_| "preflight replay-value limit exceeds usize".to_string())?;
+        if transcript.replay_values.capacity() < max_replay_values {
             transcript
-                .residuals
-                .try_reserve_exact(max_residuals)
-                .map_err(|error| format!("failed to reserve preflight residuals: {error}"))?;
+                .replay_values
+                .try_reserve_exact(max_replay_values)
+                .map_err(|error| format!("failed to reserve preflight replay values: {error}"))?;
         }
         Ok(Self {
             checkpoints: transcript.checkpoints,
-            residuals: transcript.residuals,
+            replay_values: transcript.replay_values,
             limits,
         })
     }
@@ -249,11 +249,11 @@ impl CheckpointPreflightBuffers {
     ) -> CheckpointPreflightState {
         CheckpointPreflightState {
             checkpoint_log: self.checkpoints.as_mut_ptr(),
-            residual_log: self.residuals.as_mut_ptr(),
+            replay_value_log: self.replay_values.as_mut_ptr(),
             checkpoint_log_len: 0,
             checkpoint_log_cap: self.limits.max_checkpoints_u64,
-            residual_log_len: 0,
-            residual_log_cap: self.limits.max_residuals,
+            replay_value_log_len: 0,
+            replay_value_log_cap: self.limits.max_replay_values,
             timestamp: 1,
             retired: 0,
             checkpoint_interval: self.limits.checkpoint_interval,
@@ -286,9 +286,9 @@ impl CheckpointPreflightBuffers {
             ));
         }
         if ffi.checkpoint_log != self.checkpoints.as_mut_ptr()
-            || ffi.residual_log != self.residuals.as_mut_ptr()
+            || ffi.replay_value_log != self.replay_values.as_mut_ptr()
             || ffi.checkpoint_log_cap != self.limits.max_checkpoints_u64
-            || ffi.residual_log_cap != self.limits.max_residuals
+            || ffi.replay_value_log_cap != self.limits.max_replay_values
             || ffi.checkpoint_interval != self.limits.checkpoint_interval
             || ffi.instruction_limit != self.limits.max_instructions
             || ffi.memory_dirty_pages != dirty_pages.memory.as_ptr().cast_mut()
@@ -302,12 +302,12 @@ impl CheckpointPreflightBuffers {
 
         let checkpoint_len = usize::try_from(ffi.checkpoint_log_len)
             .map_err(|_| "preflight checkpoint length exceeds usize".to_string())?;
-        let residual_len = usize::try_from(ffi.residual_log_len)
-            .map_err(|_| "preflight residual length exceeds usize".to_string())?;
+        let replay_value_len = usize::try_from(ffi.replay_value_log_len)
+            .map_err(|_| "preflight replay-value length exceeds usize".to_string())?;
         if checkpoint_len > self.limits.max_checkpoints
             || checkpoint_len > self.checkpoints.capacity()
-            || residual_len > self.residuals.capacity()
-            || ffi.residual_log_len > self.limits.max_residuals
+            || replay_value_len > self.replay_values.capacity()
+            || ffi.replay_value_log_len > self.limits.max_replay_values
         {
             return Err("generated preflight logger returned an out-of-bounds length".to_string());
         }
@@ -335,13 +335,13 @@ impl CheckpointPreflightBuffers {
         // the returned lengths were checked against the original capacities.
         unsafe {
             self.checkpoints.set_len(checkpoint_len);
-            self.residuals.set_len(residual_len);
+            self.replay_values.set_len(replay_value_len);
         }
         validate_checkpoints(
             &self.checkpoints,
             ffi.timestamp,
             ffi.retired,
-            residual_len,
+            replay_value_len,
             self.limits.checkpoint_interval,
             ffi.last_checkpoint_retired,
         )?;
@@ -349,7 +349,7 @@ impl CheckpointPreflightBuffers {
         Ok((
             PreflightTranscript {
                 checkpoints: self.checkpoints,
-                residuals: self.residuals,
+                replay_values: self.replay_values,
             },
             ffi.timestamp,
             ffi.retired,
@@ -361,16 +361,16 @@ fn validate_checkpoints(
     checkpoints: &[RvrCheckpoint],
     final_timestamp: u32,
     final_retired: u32,
-    residual_len: usize,
+    replay_value_len: usize,
     checkpoint_interval: u32,
     last_checkpoint_retired: u32,
 ) -> Result<(), String> {
     let mut previous_timestamp = 1;
     let mut previous_retired = 0;
-    let mut previous_residual = 0;
+    let mut previous_replay_value = 0;
     for checkpoint in checkpoints {
-        let residual_cursor = usize::try_from(checkpoint.residual_cursor)
-            .map_err(|_| "preflight residual cursor exceeds usize".to_string())?;
+        let replay_value_cursor = usize::try_from(checkpoint.replay_value_cursor)
+            .map_err(|_| "preflight replay-value cursor exceeds usize".to_string())?;
         if checkpoint.timestamp < previous_timestamp || checkpoint.timestamp > final_timestamp {
             return Err("preflight timestamps are not monotonic".to_string());
         }
@@ -380,12 +380,12 @@ fn validate_checkpoints(
         if checkpoint.retired - previous_retired < checkpoint_interval {
             return Err("preflight checkpoint interval was not respected".to_string());
         }
-        if residual_cursor < previous_residual || residual_cursor > residual_len {
-            return Err("preflight residual cursors are not monotonic".to_string());
+        if replay_value_cursor < previous_replay_value || replay_value_cursor > replay_value_len {
+            return Err("preflight replay-value cursors are not monotonic".to_string());
         }
         previous_timestamp = checkpoint.timestamp;
         previous_retired = checkpoint.retired;
-        previous_residual = residual_cursor;
+        previous_replay_value = replay_value_cursor;
     }
     if last_checkpoint_retired != previous_retired {
         return Err("preflight last-checkpoint cursor is inconsistent".to_string());
@@ -497,7 +497,7 @@ impl<'a> PreflightInstance<'a> {
 
     /// Executes one metered segment from an arbitrary segment-start state.
     ///
-    /// Both the instruction and residual counts must match the metered segment.
+    /// Both the instruction and replay-value counts must match the metered segment.
     pub fn execute_segment(
         &self,
         state: VmState<GuestMemory>,
@@ -553,10 +553,10 @@ impl<'a> PreflightInstance<'a> {
             metrics.record(u64::from(retired));
             metrics::counter!("execute_preflight_intervals")
                 .absolute(transcript.checkpoints.len() as u64);
-            metrics::counter!("execute_preflight_residuals")
-                .absolute(transcript.residuals.len() as u64);
+            metrics::counter!("execute_preflight_replay_values")
+                .absolute(transcript.replay_values.len() as u64);
             let transcript_bytes = std::mem::size_of_val(transcript.checkpoints.as_slice()) as u64
-                + std::mem::size_of_val(transcript.residuals.as_slice()) as u64;
+                + std::mem::size_of_val(transcript.replay_values.as_slice()) as u64;
             metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);
         }
         let to_state = ExecutionState::new(state.pc(), final_timestamp);
@@ -577,7 +577,7 @@ fn limits_for_segment(segment: &Segment) -> Result<PreflightLimits, ExecutionErr
     })?;
     Ok(PreflightLimits::new(
         max_instructions,
-        segment.num_preflight_residuals as usize,
+        segment.num_preflight_replay_values as usize,
         DEFAULT_CHECKPOINT_INTERVAL,
     ))
 }
@@ -593,12 +593,12 @@ fn require_segment_boundary(
             actual: instret,
         });
     }
-    let residuals = execution.transcript.residuals.len() as u64;
-    let expected_residuals = u64::from(segment.num_preflight_residuals);
-    if residuals != expected_residuals {
-        return Err(ExecutionError::PreflightResidualCountMismatch {
-            expected: expected_residuals,
-            actual: residuals,
+    let replay_values = execution.transcript.replay_values.len() as u64;
+    let expected_replay_values = u64::from(segment.num_preflight_replay_values);
+    if replay_values != expected_replay_values {
+        return Err(ExecutionError::PreflightReplayValueCountMismatch {
+            expected: expected_replay_values,
+            actual: replay_values,
         });
     }
     Ok(execution)
@@ -625,13 +625,13 @@ mod tests {
         let initial = CheckpointPreflightBuffers::new(PreflightLimits::new(128, 8, 64)).unwrap();
         let transcript = PreflightTranscript {
             checkpoints: initial.checkpoints,
-            residuals: initial.residuals,
+            replay_values: initial.replay_values,
         };
         let reused =
             CheckpointPreflightBuffers::reuse(PreflightLimits::new(1024, 64, 64), transcript)
                 .unwrap();
         assert!(reused.checkpoints.capacity() >= 16);
-        assert!(reused.residuals.capacity() >= 64);
+        assert!(reused.replay_values.capacity() >= 64);
     }
 
     #[test]
@@ -643,11 +643,11 @@ mod tests {
         let error = unsafe { retired.finish(&retired_ffi, 29, &retired_dirty) }.unwrap_err();
         assert!(error.contains("beyond its 8 instruction limit"));
 
-        let mut residuals = CheckpointPreflightBuffers::new(PreflightLimits::new(8, 4, 4)).unwrap();
-        let mut residuals_dirty = CheckpointDirtyPages::new(&AddressMap::default()).unwrap();
-        let mut residuals_ffi = residuals.ffi_state(&mut residuals_dirty);
-        residuals_ffi.residual_log_len = 5;
-        let error = unsafe { residuals.finish(&residuals_ffi, 29, &residuals_dirty) }.unwrap_err();
+        let mut buffers = CheckpointPreflightBuffers::new(PreflightLimits::new(8, 4, 4)).unwrap();
+        let mut dirty = CheckpointDirtyPages::new(&AddressMap::default()).unwrap();
+        let mut ffi = buffers.ffi_state(&mut dirty);
+        ffi.replay_value_log_len = 5;
+        let error = unsafe { buffers.finish(&ffi, 29, &dirty) }.unwrap_err();
         assert!(error.contains("out-of-bounds length"));
     }
 
@@ -671,14 +671,14 @@ mod tests {
     }
 
     #[test]
-    fn segment_boundary_rejects_residual_count_mismatch() {
+    fn segment_boundary_rejects_replay_value_count_mismatch() {
         let config = SystemConfig::default();
         let state = VmState::initial(&config, &Default::default(), 0, Streams::default());
         let execution = PreflightExecution {
             state,
             transcript: PreflightTranscript {
                 checkpoints: vec![],
-                residuals: vec![1],
+                replay_values: vec![1],
             },
             endpoint: PreflightEndpoint::Suspended,
             from_state: ExecutionState::new(0u32, 1u32),
@@ -687,7 +687,7 @@ mod tests {
         };
         let segment = Segment::new(0, 2, 2, vec![]);
         match require_segment_boundary(execution, &segment) {
-            Err(ExecutionError::PreflightResidualCountMismatch { expected, actual }) => {
+            Err(ExecutionError::PreflightReplayValueCountMismatch { expected, actual }) => {
                 assert_eq!((expected, actual), (2, 1));
             }
             _ => panic!("unexpected segment validation result"),

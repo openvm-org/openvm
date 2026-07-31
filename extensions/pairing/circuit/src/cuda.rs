@@ -299,7 +299,7 @@ mod tests {
             .execute_from_state_for(first.state, PreflightLimits::new(2, 1, 1))
             .unwrap();
         assert_eq!(second.endpoint, PreflightEndpoint::Terminated);
-        assert_eq!(second.transcript.residuals.len(), 1);
+        assert_eq!(second.transcript.replay_values.len(), 1);
         assert_eq!(
             second.state.streams.hint_stream.remaining(),
             hint_bytes - u64::BITS as usize / 8

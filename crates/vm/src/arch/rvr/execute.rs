@@ -231,7 +231,7 @@ pub(super) fn execute_pure(
     Ok(())
 }
 
-/// Execute the checkpoint-and-residual preflight artifact.
+/// Execute the checkpoint-and-replay-value preflight artifact.
 pub(super) fn execute_preflight(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
@@ -437,8 +437,8 @@ fn execute_metered_impl(
     state.mode_state.pv_page_buf = seg_state.pv_page_buf_ptr();
     state.mode_state.deferral_page_buf = seg_state.deferral_page_buf_ptr();
     state.mode_state.check_counter = check_counter;
-    state.mode_state.num_checkpoint_residuals =
-        seg_state.ctx.segmentation_ctx.num_preflight_residuals;
+    state.mode_state.num_preflight_replay_values =
+        seg_state.ctx.segmentation_ctx.num_preflight_replay_values;
     state.mode_state.on_check = metered_periodic_check;
     state.mode_state.seg_state = &mut seg_state;
 
@@ -463,15 +463,15 @@ fn execute_metered_impl(
             state.mode_state.pv_page_buf_len,
             state.mode_state.deferral_page_buf_len,
             state.mode_state.check_counter,
-            state.mode_state.num_checkpoint_residuals,
+            state.mode_state.num_preflight_replay_values,
         );
     } else {
         // The segment boundary exits before executing the triggering block.
         // The periodic check already flushed page buffers and initialized the next
         // segment; carry the bumped countdown forward for resume.
         seg_state.ctx.segmentation_ctx.instrets_until_check = state.mode_state.check_counter as u64;
-        seg_state.ctx.segmentation_ctx.num_preflight_residuals =
-            state.mode_state.num_checkpoint_residuals;
+        seg_state.ctx.segmentation_ctx.num_preflight_replay_values =
+            state.mode_state.num_preflight_replay_values;
     }
     Ok(if terminated {
         RvrMeteredExecutionOutcome::Terminated(seg_state)

@@ -141,7 +141,7 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
     assert_eq!(execution.retired, 2);
     assert_eq!(execution.to_state.timestamp, 10);
     assert_eq!(
-        execution.transcript.residuals,
+        execution.transcript.replay_values,
         vec![
             2,
             u64::from_le_bytes(output_raw[..DIGEST_SIZE].try_into().unwrap()),
@@ -160,12 +160,12 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let missing = execution.transcript.residuals.pop().unwrap();
+    let missing = execution.transcript.replay_values.pop().unwrap();
     let error = DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2)
         .err()
-        .expect("missing OUTPUT residual must be rejected");
+        .expect("missing OUTPUT replay value must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
-    execution.transcript.residuals.push(missing);
+    execution.transcript.replay_values.push(missing);
 
     let (gpu_transcript, replay_plan) =
         DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2).unwrap();
@@ -284,7 +284,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         .unwrap();
     assert_eq!(execution.retired, 2);
     assert_eq!(execution.to_state.timestamp, 20);
-    assert_eq!(execution.transcript.residuals.len(), 13);
+    assert_eq!(execution.transcript.replay_values.len(), 13);
 
     let gpu_program = DeferralPreflightGpuTracegen::upload_postflight_program(
         &program,
@@ -293,20 +293,20 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     )
     .unwrap();
 
-    let original = execution.transcript.residuals[5];
-    execution.transcript.residuals[5] = u64::from(F::ORDER_U32) << 32;
+    let original = execution.transcript.replay_values[5];
+    execution.transcript.replay_values[5] = u64::from(F::ORDER_U32) << 32;
     let error = DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2)
         .err()
-        .expect("non-canonical CALL residual must be rejected");
+        .expect("non-canonical CALL replay value must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
-    execution.transcript.residuals[5] = original;
+    execution.transcript.replay_values[5] = original;
 
-    let missing = execution.transcript.residuals.pop().unwrap();
+    let missing = execution.transcript.replay_values.pop().unwrap();
     let error = DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2)
         .err()
-        .expect("missing CALL residual must be rejected");
+        .expect("missing CALL replay value must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
-    execution.transcript.residuals.push(missing);
+    execution.transcript.replay_values.push(missing);
 
     let (transcript, replay_plan) =
         DeferralPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, 2).unwrap();
@@ -358,7 +358,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     assert!(field_values[..4]
         .iter()
         .all(|block| *block == [0; BLOCK_FE_WIDTH]));
-    let expected_accumulators = execution.transcript.residuals[5..13]
+    let expected_accumulators = execution.transcript.replay_values[5..13]
         .iter()
         .flat_map(|&packed| [packed as u32, (packed >> 32) as u32])
         .collect::<Vec<_>>();

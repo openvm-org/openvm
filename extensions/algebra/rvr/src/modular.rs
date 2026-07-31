@@ -423,7 +423,7 @@ mod tests {
 
         fn append_replay_value(&mut self, value: &str) {
             if self.checkpoint {
-                self.operations.push(format!("residual({value});"));
+                self.operations.push(format!("replay_value({value});"));
             }
         }
 
@@ -571,21 +571,21 @@ mod tests {
                     .operations
                     .iter()
                     .any(|operation| operation.contains("& 7ull")));
-                let residuals: Vec<_> = checkpoint
+                let replay_values: Vec<_> = checkpoint
                     .operations
                     .iter()
-                    .filter(|operation| operation.starts_with("residual("))
+                    .filter(|operation| operation.starts_with("replay_value("))
                     .cloned()
                     .collect();
                 assert_eq!(
-                    residuals.len(),
+                    replay_values.len(),
                     num_limbs as usize / MEMORY_BLOCK_BYTES as usize
                 );
-                for (word, residual) in residuals.iter().enumerate() {
+                for (word, replay_value) in replay_values.iter().enumerate() {
                     assert_eq!(
-                        residual,
+                        replay_value,
                         &format!(
-                            "residual(peek_mem_u64(state, r1 + {}ull));",
+                            "replay_value(peek_mem_u64(state, r1 + {}ull));",
                             word * MEMORY_BLOCK_BYTES as usize
                         )
                     );
@@ -601,13 +601,13 @@ mod tests {
                     .operations
                     .iter()
                     .any(|operation| operation.starts_with("timestamp_slots(")
-                        || operation.starts_with("residual(")));
+                        || operation.starts_with("replay_value(")));
             }
         }
     }
 
     #[test]
-    fn modular_setup_checkpoint_has_no_residual() {
+    fn modular_setup_checkpoint_has_no_replay_value() {
         for num_limbs in [32, 48] {
             // SETUP_ADDSUB and SETUP_MULDIV both lift to this node.
             let instr = ModSetupInstr::new(
@@ -640,12 +640,12 @@ mod tests {
             assert!(!checkpoint
                 .operations
                 .iter()
-                .any(|operation| operation.starts_with("residual(")));
+                .any(|operation| operation.starts_with("replay_value(")));
         }
     }
 
     #[test]
-    fn modular_iseq_checkpoint_emits_only_result_residual() {
+    fn modular_iseq_checkpoint_emits_only_result_replay_value() {
         for num_limbs in [32, 48] {
             let instr = ModIsEqInstr::new(
                 Variable::new(1),
@@ -677,14 +677,14 @@ mod tests {
                 checkpoint
                     .operations
                     .iter()
-                    .filter(|operation| operation.starts_with("residual("))
+                    .filter(|operation| operation.starts_with("replay_value("))
                     .count(),
                 1
             );
             assert!(checkpoint
                 .operations
                 .iter()
-                .any(|operation| operation == "residual(tmp0);"));
+                .any(|operation| operation == "replay_value(tmp0);"));
             assert!(checkpoint
                 .operations
                 .iter()
@@ -724,7 +724,7 @@ mod tests {
             assert!(!checkpoint
                 .operations
                 .iter()
-                .any(|operation| operation.starts_with("residual(")));
+                .any(|operation| operation.starts_with("replay_value(")));
         }
     }
 }

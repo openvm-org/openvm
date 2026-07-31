@@ -268,7 +268,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
         .execute_from_state(state, PreflightLimits::new(4, 12, 1))
         .unwrap();
     assert_eq!(execution.to_state.timestamp, 57);
-    assert_eq!(execution.transcript.residuals.len(), 12);
+    assert_eq!(execution.transcript.replay_values.len(), 12);
     let gpu_program = Sha2PreflightGpuTracegen::upload_postflight_program(
         &program,
         &config.system.memory_config,

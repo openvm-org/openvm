@@ -93,7 +93,7 @@ impl<'a> Sha2PreflightGpuTracegen<'a> {
                     spans: &[
                         PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 2, input_blocks),
                         PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, state_blocks),
-                        PostflightAccessSpan::write_fixed_from_residuals(
+                        PostflightAccessSpan::write_fixed_from_replay_values(
                             RV64_MEMORY_AS,
                             0,
                             state_blocks,

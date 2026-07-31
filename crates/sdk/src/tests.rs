@@ -727,7 +727,7 @@ fn test_sdk_compiled_preflight_executes_metered_segment() -> Result<()> {
     let initial_pc = state.pc();
     let mut empty_segment = segments[0].clone();
     empty_segment.num_insns = 0;
-    empty_segment.num_preflight_residuals = 0;
+    empty_segment.num_preflight_replay_values = 0;
     let empty = sdk.execute_preflight(&preflight, state, &empty_segment)?;
     assert!(!empty.is_terminated());
     assert_eq!(empty.state().pc(), initial_pc);
