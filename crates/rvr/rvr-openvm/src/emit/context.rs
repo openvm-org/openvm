@@ -75,7 +75,7 @@ impl EmitMode {
         )
     }
 
-    fn tracks_metered_checkpoint_residuals(self) -> bool {
+    fn meters_replay_values(self) -> bool {
         matches!(self, Self::Metered { .. })
     }
 
@@ -156,7 +156,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub(crate) fn metered_checkpoint_residuals(&self) -> u32 {
-        if self.mode.tracks_metered_checkpoint_residuals() {
+        if self.mode.meters_replay_values() {
             assert!(
                 !self.checkpoint_dynamic_residuals,
                 "unfinished metered dynamic residual reservation"
@@ -482,7 +482,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn reserve_replay_values(&mut self, count: &str) {
-        if self.mode.tracks_metered_checkpoint_residuals() {
+        if self.mode.meters_replay_values() {
             assert!(
                 !self.checkpoint_dynamic_residuals,
                 "nested metered residual reservation"
@@ -513,7 +513,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn count_fixed_replay_values(&mut self, count: u32) {
-        if !self.mode.tracks_metered_checkpoint_residuals() {
+        if !self.mode.meters_replay_values() {
             return;
         }
         assert!(
@@ -527,7 +527,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn count_replay_values(&mut self, count: &str) {
-        if !self.mode.tracks_metered_checkpoint_residuals() {
+        if !self.mode.meters_replay_values() {
             return;
         }
         assert!(
@@ -551,7 +551,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn append_replay_value(&mut self, value: &str) {
-        if self.mode.tracks_metered_checkpoint_residuals() {
+        if self.mode.meters_replay_values() {
             if self.checkpoint_dynamic_residuals {
                 self.checkpoint_dynamic_residuals = false;
             } else {
@@ -576,7 +576,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
-        if self.mode.tracks_metered_checkpoint_residuals() {
+        if self.mode.meters_replay_values() {
             assert!(
                 self.checkpoint_dynamic_residuals,
                 "metered replay range requires a residual reservation"
