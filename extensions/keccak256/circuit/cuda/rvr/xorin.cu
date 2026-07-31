@@ -23,7 +23,6 @@ static constexpr uint32_t XORIN_REPLAY_ERROR = 801;
 
 #define XORIN_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, XorinVmCols, FIELD, VALUE)
 #define XORIN_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, XorinVmCols, FIELD, VALUES)
-#define XORIN_FILL_ZERO(FIELD) COL_FILL_ZERO(row, XorinVmCols, FIELD)
 #define XORIN_SLICE(FIELD) row.slice_from(COL_INDEX(XorinVmCols, FIELD))
 
 static __device__ bool xorin_replay_event(
@@ -298,12 +297,9 @@ __global__ void xorin_replay_tracegen(
             from.timestamp + XORIN_REGISTER_READS + num_blocks + i
         );
         mem_helper.fill(
-            XORIN_SLICE(mem_oc.buffer_bytes_write_aux_cols[i].base),
+            XORIN_SLICE(mem_oc.buffer_bytes_write_base_aux[i]),
             buffer_write_previous[i].timestamp,
             from.timestamp + XORIN_REGISTER_READS + 2 * num_blocks + i
-        );
-        XORIN_WRITE_ARRAY(
-            mem_oc.buffer_bytes_write_aux_cols[i].prev_data, buffer_write_previous[i].value
         );
     }
     range_checker.add_count(

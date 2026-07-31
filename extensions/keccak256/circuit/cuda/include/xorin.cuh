@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include "primitives/constants.h"
 #include "system/memory/offline_checker.cuh"
 
@@ -41,8 +40,7 @@ struct XorinMemoryCols {
     MemoryReadAuxCols<T> register_aux_cols[XORIN_REGISTER_READS];
     MemoryReadAuxCols<T> input_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
     MemoryReadAuxCols<T> buffer_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>
-        buffer_bytes_write_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
+    MemoryBaseAuxCols<T> buffer_bytes_write_base_aux[keccak256::KECCAK_RATE_MEM_OPS];
 };
 
 template <typename T>
@@ -50,24 +48,6 @@ struct XorinVmCols {
     XorinSpongeCols<T> sponge;
     XorinInstructionCols<T> instruction;
     XorinMemoryCols<T> mem_oc;
-};
-
-struct XorinVmRecord {
-    uint32_t from_pc;
-    uint32_t timestamp;
-    uint32_t rd_ptr;
-    uint32_t rs1_ptr;
-    uint32_t rs2_ptr;
-    uint32_t buffer;
-    uint32_t input;
-    uint32_t len;
-    uint8_t buffer_limbs[XORIN_RATE_BYTES];
-    uint8_t input_limbs[XORIN_RATE_BYTES];
-    MemoryReadAuxRecord register_aux_cols[XORIN_REGISTER_READS];
-    MemoryReadAuxRecord input_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryReadAuxRecord buffer_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryWriteBytesAuxRecord<program::DEFAULT_BLOCK_SIZE>
-        buffer_write_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
 };
 
 } // namespace xorin
