@@ -46,16 +46,8 @@ impl PageAddressSpace {
 /// the current timestamp.
 pub trait ExtEmitCtx {
     /// Whether this emitter is producing the minimal preflight transcript.
-    fn is_checkpoint_preflight(&self) -> bool {
+    fn is_preflight(&self) -> bool {
         false
-    }
-
-    /// Whether replay values must be counted for exact segment sizing.
-    ///
-    /// This is true during preflight and metered execution. Only preflight
-    /// materializes the values.
-    fn counts_checkpoint_residuals(&self) -> bool {
-        self.is_checkpoint_preflight()
     }
 
     /// Read a variable through a VM memory access.

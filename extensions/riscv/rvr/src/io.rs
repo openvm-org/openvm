@@ -41,7 +41,7 @@ impl ExtInstr for HintStoreWInstr {
         let ptr = ctx.read_var(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, "1u"]);
         ctx.reserve_preflight_timestamp_slots("2u");
-        if ctx.is_checkpoint_preflight() {
+        if ctx.is_preflight() {
             ctx.reserve_replay_values("1u");
         }
         ctx.write_line("uint64_t hint_word;");
@@ -477,7 +477,7 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn is_checkpoint_preflight(&self) -> bool {
+        fn is_preflight(&self) -> bool {
             self.checkpoint_preflight
         }
 

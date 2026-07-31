@@ -109,7 +109,7 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn is_checkpoint_preflight(&self) -> bool {
+        fn is_preflight(&self) -> bool {
             self.checkpoint
         }
 

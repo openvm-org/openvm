@@ -100,14 +100,13 @@ impl ExtInstr for EcAddNeInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let checkpoint = ctx.is_checkpoint_preflight();
-        let count_residuals = ctx.counts_checkpoint_residuals();
+        let is_preflight = ctx.is_preflight();
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let rd = ctx.read_var(self.rd_reg);
         emit_pointer_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         let point_dwords = self.curve.point_dwords();
-        if checkpoint {
+        if is_preflight {
             // Two point reads followed by one point write happen inside the opaque call.
             ctx.advance_checkpoint_timestamp(3 * point_dwords);
         }
@@ -119,12 +118,10 @@ impl ExtInstr for EcAddNeInstr {
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
         }
-        if count_residuals {
-            // Add setup constrains only its modulus input; y1, x2, and y2 remain execution data.
-            // Its postimage is therefore no less authoritative than a regular add postimage.
-            for word in 0..point_dwords {
-                ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
-            }
+        // Add setup constrains only its modulus input; y1, x2, and y2 remain execution data.
+        // Its postimage is therefore no less authoritative than a regular add postimage.
+        for word in 0..point_dwords {
+            ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
         }
     }
 
@@ -156,13 +153,12 @@ impl ExtInstr for EcDoubleInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let checkpoint = ctx.is_checkpoint_preflight();
-        let count_residuals = ctx.counts_checkpoint_residuals();
+        let is_preflight = ctx.is_preflight();
         let rs1 = ctx.read_var(self.rs1_reg);
         let rd = ctx.read_var(self.rd_reg);
         emit_pointer_alignment_guard(ctx, &[&rd, &rs1]);
         let point_dwords = self.curve.point_dwords();
-        if checkpoint {
+        if is_preflight {
             // One point read followed by one point write happens inside the opaque call.
             ctx.advance_checkpoint_timestamp(2 * point_dwords);
         }
@@ -174,7 +170,7 @@ impl ExtInstr for EcDoubleInstr {
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1]);
         }
-        if count_residuals && !self.is_setup {
+        if !self.is_setup {
             // Regular-operation outputs are the only residuals. Setup replay derives its writes
             // from the timed reads and the configured field-expression program rather than
             // extending the transcript with setup-only values.
@@ -340,7 +336,7 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn is_checkpoint_preflight(&self) -> bool {
+        fn is_preflight(&self) -> bool {
             self.checkpoint
         }
 
@@ -391,7 +387,9 @@ mod tests {
         }
 
         fn append_replay_value(&mut self, value: &str) {
-            self.operations.push(format!("residual({value})"));
+            if self.checkpoint {
+                self.operations.push(format!("residual({value})"));
+            }
         }
 
         fn emit_call(&mut self, name: &str, args: &[&str]) {

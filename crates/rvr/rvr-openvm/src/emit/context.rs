@@ -820,12 +820,8 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
-    fn is_checkpoint_preflight(&self) -> bool {
+    fn is_preflight(&self) -> bool {
         self.mode.uses_checkpoint_local()
-    }
-
-    fn counts_checkpoint_residuals(&self) -> bool {
-        self.mode.uses_checkpoint_local() || self.mode.tracks_metered_checkpoint_residuals()
     }
 
     fn read_var(&mut self, var: Variable) -> String {

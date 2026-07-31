@@ -95,9 +95,8 @@ impl ExtInstr for DeferralCallInstr {
         let rd = ctx.read_var(self.rd_reg);
         let rs = ctx.read_var(self.rs_reg);
         let def_idx = format!("{}u", self.def_idx);
-        let checkpoint = ctx.is_checkpoint_preflight();
-        let count_residuals = ctx.counts_checkpoint_residuals();
-        if checkpoint {
+        let is_preflight = ctx.is_preflight();
+        if is_preflight {
             // The opaque call performs four input-key reads, five output-key
             // writes, and two reads plus two writes of two-block AS4 digests.
             // Register reads are emitted above, for 2 + 17 = 19 total slots.
@@ -107,7 +106,7 @@ impl ExtInstr for DeferralCallInstr {
                 "uint64_t deferral_replay[{DEFERRAL_CALL_REPLAY_WORDS}u];"
             ));
         }
-        let replay_out = if checkpoint {
+        let replay_out = if is_preflight {
             "deferral_replay"
         } else {
             "NULL"
@@ -116,13 +115,13 @@ impl ExtInstr for DeferralCallInstr {
             "rvr_ext_deferral_call",
             &["state", &rd, &rs, &def_idx, replay_out],
         );
-        if checkpoint {
+        if is_preflight {
             ctx.write_line(&format!(
                 "for (uint32_t deferral_replay_idx = 0u; deferral_replay_idx < {DEFERRAL_CALL_REPLAY_WORDS}u; ++deferral_replay_idx) {{"
             ));
             ctx.append_replay_value("deferral_replay[deferral_replay_idx]");
             ctx.write_line("}");
-        } else if count_residuals {
+        } else {
             ctx.count_fixed_replay_values(
                 DEFERRAL_CALL_REPLAY_WORDS
                     .try_into()
@@ -166,10 +165,9 @@ impl ExtInstr for DeferralOutputInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rd = ctx.read_var(self.rd_reg);
         let rs = ctx.read_var(self.rs_reg);
-        let checkpoint = ctx.is_checkpoint_preflight();
-        let count_residuals = ctx.counts_checkpoint_residuals();
+        let is_preflight = ctx.is_preflight();
         let output_words = "deferral_output_words";
-        if checkpoint {
+        if is_preflight {
             ctx.write_line(&format!(
                 "if (unlikely({rs} > OPENVM_MEM_SIZE - {DEFERRAL_OUTPUT_KEY_BYTES}u)) {{"
             ));
@@ -207,7 +205,7 @@ impl ExtInstr for DeferralOutputInstr {
         );
         ctx.trace_chip_if_nonzero(output, "deferral_num_rows - 1u");
         ctx.trace_chip(poseidon2, "deferral_num_rows");
-        if checkpoint {
+        if is_preflight {
             ctx.write_line(&format!(
                 "for (uint32_t deferral_replay_idx = 0u; deferral_replay_idx <= {output_words}; ++deferral_replay_idx) {{"
             ));
@@ -215,7 +213,7 @@ impl ExtInstr for DeferralOutputInstr {
                 "deferral_replay_idx == 0u ? (uint64_t){output_words} : peek_mem_u64(state, {rd} + (uint64_t)(deferral_replay_idx - 1u) * 8ull)"
             ));
             ctx.write_line("}");
-        } else if count_residuals {
+        } else {
             // Each non-header Deferral row contains four guest u64 words.
             // Count only after the checked host call has succeeded.
             ctx.count_replay_values("1ull + 4ull * ((uint64_t)deferral_num_rows - 1ull)");
@@ -727,12 +725,8 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn is_checkpoint_preflight(&self) -> bool {
+        fn is_preflight(&self) -> bool {
             self.checkpoint
-        }
-
-        fn counts_checkpoint_residuals(&self) -> bool {
-            self.checkpoint || self.trace_result
         }
 
         fn read_var(&mut self, var: Variable) -> String {
@@ -782,7 +776,9 @@ mod tests {
         }
 
         fn count_replay_values(&mut self, count: &str) {
-            self.operations.push(format!("count_replay({count})"));
+            if self.trace_result {
+                self.operations.push(format!("count_replay({count})"));
+            }
         }
 
         fn append_replay_value(&mut self, value: &str) {

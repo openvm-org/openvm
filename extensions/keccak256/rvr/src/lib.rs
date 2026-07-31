@@ -50,14 +50,14 @@ impl ExtInstr for KeccakfInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let buf = ctx.read_var(self.buffer_ptr_reg);
         ctx.reserve_preflight_timestamp_slots("25u");
-        let checkpoint = ctx.is_checkpoint_preflight();
-        if checkpoint {
+        let is_preflight = ctx.is_preflight();
+        if is_preflight {
             ctx.reserve_replay_values("25u");
-        } else if ctx.counts_checkpoint_residuals() {
+        } else {
             ctx.count_fixed_replay_values(25);
         }
         ctx.emit_call("rvr_ext_keccakf", &["state", &buf]);
-        if checkpoint {
+        if is_preflight {
             ctx.append_replay_memory_u64_range(&buf, "25u");
         }
     }
@@ -98,12 +98,12 @@ impl ExtInstr for XorinInstr {
         let len = ctx.read_var(self.len_reg);
         let words = format!("((uint32_t)(({len} + 7ull) / 8ull))");
         ctx.reserve_preflight_timestamp_slots(&format!("{words} * 3u"));
-        let checkpoint = ctx.is_checkpoint_preflight();
-        if checkpoint {
+        let is_preflight = ctx.is_preflight();
+        if is_preflight {
             ctx.reserve_replay_values(&words);
         }
         ctx.emit_checked_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
-        if !checkpoint {
+        if !is_preflight {
             // Metered execution counts the dynamic postimage only after the
             // checked extension call has succeeded. Other modes ignore this.
             ctx.reserve_replay_values(&words);
@@ -240,12 +240,8 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn is_checkpoint_preflight(&self) -> bool {
+        fn is_preflight(&self) -> bool {
             self.record_checkpoint
-        }
-
-        fn counts_checkpoint_residuals(&self) -> bool {
-            self.count_residuals
         }
 
         fn read_var(&mut self, var: Variable) -> String {
