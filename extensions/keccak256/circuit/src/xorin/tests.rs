@@ -299,9 +299,28 @@ fn xorin_wrong_output_negative_test() {
 }
 
 #[test]
-fn xorin_wrong_len_limb_negative_test() {
+fn xorin_wrong_len_negative_test() {
     run_xorin_chip_negative_test(|cols| {
-        cols.instruction.len_limb += F::ONE;
+        // is_padding_bytes has the form 0...01...1; turn the last active block into padding.
+        let last_active = (0..KECCAK_RATE_MEM_OPS)
+            .rev()
+            .find(|&i| cols.sponge.is_padding_bytes[i] == F::ZERO)
+            .expect("at least one active block");
+        cols.sponge.is_padding_bytes[last_active] = F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_buffer_ptr_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.buffer_ptr_limbs[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_input_ptr_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.input_ptr_limbs[0] += F::ONE;
     });
 }
 
