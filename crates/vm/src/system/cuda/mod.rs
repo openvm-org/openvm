@@ -79,13 +79,7 @@ impl SystemChipInventoryGPU {
         program.ensure_replay_inputs(transcript, replay_plan, &self.program.device_ctx)?;
         let program_ctx = {
             let _span = tracing::info_span!("program_trace_gen").entered();
-            // SAFETY: replay_plan owns this same-context buffer through the
-            // entire system tracegen call. Memory tracegen below synchronizes
-            // the same stream before returning.
-            unsafe {
-                self.program
-                    .generate_proving_ctx_from_device(replay_plan.program_frequencies())
-            }
+            self.program.generate_proving_ctx_from_plan(replay_plan)?
         };
 
         let (from_state, to_state, exit_code) = replay_plan.connector_boundary();

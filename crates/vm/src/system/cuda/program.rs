@@ -4,18 +4,17 @@ use openvm_circuit::system::program::ProgramExecutionCols;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 #[cfg(test)]
 use openvm_cuda_common::pinned;
-use openvm_cuda_common::{
-    copy::MemCopyH2D,
-    d_buffer::{DeviceBuffer, DeviceBufferView},
-    stream::GpuDeviceCtx,
-};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::prover::{
     AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
 };
 use p3_field::PrimeCharacteristicRing;
 
-use crate::cuda_abi::program;
+use crate::{
+    arch::cuda::postflight::{GpuPostflightError, GpuPostflightPlan},
+    cuda_abi::program,
+};
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
@@ -94,41 +93,45 @@ impl ProgramChipGPU {
         }
     }
 
-    /// Generates the mutable frequency column directly from dense raw-u32
-    /// frequencies already resident on this chip's CUDA stream.
-    ///
+    /// Generates the mutable frequency column from a validated postflight plan.
+    pub(super) fn generate_proving_ctx_from_plan(
+        &self,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        let filtered_exec_freqs = replay_plan.program_frequencies_on(&self.device_ctx)?;
+        // SAFETY: the plan owns this typed allocation on the context just
+        // validated above. A later drop enqueues its free on the same stream.
+        Ok(unsafe { self.generate_proving_ctx_from_buffer(filtered_exec_freqs) })
+    }
+
     /// # Safety
     ///
-    /// `filtered_exec_freqs` must point to a valid device allocation on
-    /// `self.device_ctx`, and its owner must outlive the frequency-fill work
-    /// newly submitted to that stream. This method launches asynchronously.
-    pub(crate) unsafe fn generate_proving_ctx_from_device(
+    /// `filtered_exec_freqs` must be allocated on `self.device_ctx`. Its owner
+    /// must not enqueue deallocation ahead of this method's asynchronous work.
+    unsafe fn generate_proving_ctx_from_buffer(
         &self,
-        filtered_exec_freqs: DeviceBufferView,
+        filtered_exec_freqs: &DeviceBuffer<u32>,
     ) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
-        assert_eq!(
-            filtered_exec_freqs.size % size_of::<u32>(),
-            0,
-            "device program frequencies must be a dense u32 array"
-        );
-        let filtered_len = filtered_exec_freqs.size / size_of::<u32>();
+        let filtered_len = filtered_exec_freqs.len();
         let height = cached.height();
         assert!(
             filtered_len <= height,
             "device program frequencies len={filtered_len} > cached trace height={height}"
         );
         let buffer = DeviceBuffer::<F>::with_capacity_on(height, &self.device_ctx);
-        {
-            program::fill_frequencies_from_view(
+        // SAFETY: the caller guarantees that the typed input allocation uses
+        // this chip's stream and remains ordered before any deallocation.
+        unsafe {
+            program::fill_frequencies(
                 filtered_exec_freqs,
                 filtered_len,
                 &buffer,
                 height,
                 self.device_ctx.stream.as_raw(),
             )
-            .expect("program_fill_frequencies failed");
         }
+        .expect("program_fill_frequencies failed");
         AirProvingContext {
             cached_mains: vec![cached],
             common_main: DeviceMatrix::new(Arc::new(buffer), height, 1),
@@ -319,7 +322,7 @@ mod tests {
         let legacy = chip.generate_proving_ctx_from_host_for_test(frequencies);
         // SAFETY: d_frequencies remains alive through the D2H synchronization
         // below on the same device context.
-        let direct = unsafe { chip.generate_proving_ctx_from_device(d_frequencies.view()) };
+        let direct = unsafe { chip.generate_proving_ctx_from_buffer(&d_frequencies) };
 
         assert_eq!(legacy.common_main.height(), direct.common_main.height());
         assert_eq!(legacy.common_main.width(), direct.common_main.width());

@@ -756,7 +756,6 @@ pub mod program {
 
     /// Converts raw u32 execution frequencies to field elements on device,
     /// zero-filling `[filtered_len, height)`.
-    #[cfg(test)]
     pub unsafe fn fill_frequencies(
         d_freqs: &DeviceBuffer<u32>,
         filtered_len: usize,
@@ -766,24 +765,6 @@ pub mod program {
     ) -> Result<(), CudaError> {
         CudaError::from_result(_program_fill_frequencies(
             d_freqs.as_ptr(),
-            filtered_len,
-            d_out.as_mut_ptr(),
-            height,
-            stream,
-        ))
-    }
-
-    /// Same conversion as [`fill_frequencies`], borrowing an initialized
-    /// device prefix owned by another segment object.
-    pub unsafe fn fill_frequencies_from_view(
-        d_freqs: DeviceBufferView,
-        filtered_len: usize,
-        d_out: &DeviceBuffer<F>,
-        height: usize,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_program_fill_frequencies(
-            d_freqs.ptr.cast(),
             filtered_len,
             d_out.as_mut_ptr(),
             height,

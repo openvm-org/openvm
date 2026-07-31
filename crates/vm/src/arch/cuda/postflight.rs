@@ -938,8 +938,12 @@ impl GpuPostflightPlan {
 
     /// Dense execution frequencies in cached-program row order. Static program
     /// gaps are omitted and unexecuted defined instructions remain zero.
-    pub fn program_frequencies(&self) -> DeviceBufferView {
-        self.program_frequencies.view()
+    pub(crate) fn program_frequencies_on(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Result<&DeviceBuffer<u32>, GpuPostflightError> {
+        ensure_same_context(&self.device_ctx, device_ctx)?;
+        Ok(&self.program_frequencies)
     }
 
     /// Connector inputs derived from the same host events uploaded into this
