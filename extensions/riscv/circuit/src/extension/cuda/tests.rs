@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         cuda::postflight::GpuPostflightError,
-        rvr::{cuda::PreflightReplayProgram, PreflightEndpoint, PreflightLimits},
+        rvr::{PreflightEndpoint, PreflightLimits},
         PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
@@ -35,25 +35,11 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::Rv64ImPreflightGpuTracegen;
 use crate::{
-    adapters::RV64_REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder, Rv64ImConfig,
-    Rv64ImGpuBuilder, Rv64MultiplicationChipGpu,
+    adapters::RV64_REGISTER_NUM_LIMBS, preflight::PreflightReplayProgram, Rv64IConfig,
+    Rv64IGpuBuilder, Rv64ImConfig, Rv64ImGpuBuilder, Rv64MultiplicationChipGpu,
 };
 
 type F = BabyBear;
-
-#[test]
-fn checkpoint_opcode_families_match_rv64_tracegen_coverage() {
-    let bases = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
-    let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
-
-    for opcode in 0..=u16::MAX as u32 {
-        assert_eq!(
-            bases.owns(opcode),
-            Rv64ImPreflightGpuTracegen::supports_opcode(opcode) || opcode == terminate,
-            "checkpoint opcode ownership disagrees at {opcode:#x}"
-        );
-    }
-}
 
 fn reg(index: usize) -> usize {
     index * RV64_REGISTER_NUM_LIMBS

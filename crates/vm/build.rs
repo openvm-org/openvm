@@ -17,7 +17,7 @@ fn main() {
             .flag("-Xcompiler=-Wno-maybe-uninitialized");
         builder.emit_link_directives();
 
-        let mut system_builder = builder
+        builder
             .clone()
             .include("cuda/rvr/include")
             .watch("cuda/rvr/include")
@@ -30,13 +30,8 @@ fn main() {
                 "cuda/src/system/poseidon2.cu",
                 "cuda/src/system/program.cu",
                 "cuda/src/system/postflight.cu",
-            ]);
-        if cfg!(feature = "rvr") {
-            system_builder = system_builder
-                .watch("cuda/rvr")
-                .file("cuda/src/system/rvr_checkpoint_replay.cu");
-        }
-        system_builder.build();
+            ])
+            .build();
 
         #[cfg(any(test, feature = "test-utils"))]
         {

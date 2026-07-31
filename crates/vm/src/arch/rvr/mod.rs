@@ -17,8 +17,6 @@ mod abi_consts;
 pub mod bridge;
 mod cache;
 pub mod compile;
-#[cfg(feature = "cuda")]
-pub mod cuda;
 pub mod debug;
 mod execute;
 mod initial_image;

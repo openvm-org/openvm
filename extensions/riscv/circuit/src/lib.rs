@@ -72,6 +72,9 @@ pub use store::*;
 mod extension;
 pub use extension::*;
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub mod preflight;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};

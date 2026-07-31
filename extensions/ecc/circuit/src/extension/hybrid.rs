@@ -7,6 +7,8 @@ use openvm_algebra_circuit::{
     cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
     ModularExtension, Rv64ModularHybridBuilder,
 };
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_circuit::arch::rvr::PreflightExecution;
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -30,22 +32,20 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{program::Program, LocalOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_riscv_circuit::preflight::PreflightReplayProgram;
+#[cfg(feature = "rvr")]
+use openvm_riscv_circuit::preflight::{
+    PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+};
 use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
-#[cfg(feature = "rvr")]
-use {
-    crate::CurveConfig,
-    openvm_circuit::arch::rvr::cuda::{
-        PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
-    },
-};
-#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
-use {
-    openvm_circuit::arch::rvr::{cuda::PreflightReplayProgram, PreflightExecution},
-    openvm_stark_backend::p3_field::PrimeField32,
-};
 
+#[cfg(feature = "rvr")]
+use crate::CurveConfig;
 use crate::{
     get_ec_addne_chip, get_ec_double_chip,
     weierstrass_chip::{
@@ -325,8 +325,6 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             fp2,
         )?;
         Self::register_postflight_access_schedules(&mut registry, weierstrass)?;
-        registry
-            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
         PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
@@ -345,12 +343,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        vm.postflight(
-            program,
-            execution,
-            num_insns,
-            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
-        )
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(

@@ -30,6 +30,8 @@ use index::{
 
 #[cfg(any(test, feature = "test-utils"))]
 mod testing;
+#[cfg(test)]
+pub(crate) use testing::PREDECESSOR_SEED_BIT_FOR_TEST;
 
 pub(crate) const PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const PREDECESSOR_INDEX_MASK: u32 = !PREDECESSOR_SEED_BIT;

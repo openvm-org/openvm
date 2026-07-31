@@ -23,8 +23,6 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::memory_manager::MemTracker;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 #[cfg(all(feature = "cuda", feature = "metrics"))]
 use openvm_instructions::VmOpcode;
 use openvm_instructions::{
@@ -62,14 +60,11 @@ use tracing::{info_span, instrument};
 
 #[cfg(feature = "cuda")]
 use super::cuda::postflight::{
-    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    GpuPostflightBoundary, GpuPostflightContext, GpuPostflightError, GpuPostflightPlan,
+    GpuPostflightProgram, GpuPostflightTranscript,
 };
 #[cfg(any(not(feature = "rvr"), feature = "test-utils"))]
 use super::execution_mode::PreflightCtx;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::cuda::{PostflightOpcodeBases, PreflightReplayProgram};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use super::rvr::PreflightExecution;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile::compile_preflight,
@@ -1570,105 +1565,47 @@ where
     }
 }
 
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-impl<VB> VirtualMachine<BabyBearPoseidon2GpuEngine, VB>
-where
-    VB: VmBuilder<BabyBearPoseidon2GpuEngine, SystemChipInventory = SystemChipInventoryGPU>,
-{
-    /// Expands one compact preflight execution against the segment's
-    /// already-uploaded immutable memory image into the read-only replay data
-    /// consumed by system and instruction trace generation.
-    #[doc(hidden)]
-    #[instrument(name = "postflight", skip_all)]
-    pub fn postflight(
-        &self,
-        program: &PreflightReplayProgram,
-        execution: &PreflightExecution,
-        num_insns: u32,
-        opcodes: PostflightOpcodeBases,
-    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        with_gpu_memory_metrics("postflight", || {
-            let system = &self.chip_complex.system;
-            program.program().validate_system_inputs(
-                &system.program.device_ctx,
-                &system.memory_inventory.device_ctx,
-                &system.memory_inventory.initial_memory,
-            )?;
-            let initial_memory = &system.memory_inventory.initial_memory;
-            let initial_registers =
-                initial_memory
-                    .get(RV64_REGISTER_AS as usize)
-                    .ok_or_else(|| {
-                        GpuPostflightError::InvalidTranscript(
-                            "initial register image was not transported to the GPU".to_string(),
-                        )
-                    })?;
-            let initial_main_memory =
-                initial_memory.get(RV64_MEMORY_AS as usize).ok_or_else(|| {
-                    GpuPostflightError::InvalidTranscript(
-                        "initial main-memory image was not transported to the GPU".to_string(),
-                    )
-                })?;
-            // The table contains device pointers only. Chronology reads the
-            // already-uploaded segment-start images without copying their bytes.
-            let initial_memory_images = initial_memory
-                .iter()
-                .map(|image| image.view())
-                .collect::<Vec<_>>();
-            program.postflight(
-                execution,
-                num_insns,
-                initial_registers.view(),
-                initial_main_memory.view(),
-                &initial_memory_images,
-                opcodes,
-            )
-        })
-    }
-}
-
 #[cfg(feature = "cuda")]
 impl<VB> VirtualMachine<BabyBearPoseidon2GpuEngine, VB>
 where
     VB: VmBuilder<BabyBearPoseidon2GpuEngine, SystemChipInventory = SystemChipInventoryGPU>,
 {
+    /// Validates and borrows the fixed GPU program and segment-start memory for postflight.
+    pub fn gpu_postflight_context<'a>(
+        &'a self,
+        program: &'a GpuPostflightProgram,
+    ) -> Result<GpuPostflightContext<'a>, GpuPostflightError> {
+        let system = &self.chip_complex.system;
+        GpuPostflightContext::new(
+            program,
+            &system.program.device_ctx,
+            &system.memory_inventory.device_ctx,
+            &system.memory_inventory.initial_memory,
+        )
+    }
+
     /// Derives the standard GPU replay indexes from history produced by
     /// interpreter preflight.
-    #[doc(hidden)]
-    #[instrument(name = "postflight", skip_all)]
     pub fn postflight_history(
         &self,
         program: &GpuPostflightProgram,
         output: &PreflightOutput,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        with_gpu_memory_metrics("postflight", || {
-            let system = &self.chip_complex.system;
-            program.validate_system_inputs(
-                &system.program.device_ctx,
-                &system.memory_inventory.device_ctx,
-                &system.memory_inventory.initial_memory,
-            )?;
-            let initial_memory = &system.memory_inventory.initial_memory;
-            let initial_memory_images = initial_memory
-                .iter()
-                .map(|image| image.view())
-                .collect::<Vec<_>>();
-            let from = output.history.program.first().ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
-                    "preflight history must contain a program event".to_string(),
-                )
-            })?;
-            let to = output.history.program.last().unwrap();
-            program.upload_history(
-                &output.history,
-                (
-                    ExecutionState::new(from.pc, from.timestamp),
-                    ExecutionState::new(to.pc, to.timestamp),
-                    output.exit_code,
-                ),
-                &initial_memory_images,
+        let context = self.gpu_postflight_context(program)?;
+        let from = output.history.program.first().ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "preflight history must contain a program event".to_string(),
             )
-        })
+        })?;
+        let to = output.history.program.last().unwrap();
+        context.upload_history(
+            &output.history,
+            GpuPostflightBoundary::new(
+                ExecutionState::new(from.pc, from.timestamp),
+                ExecutionState::new(to.pc, to.timestamp),
+                output.exit_code,
+            ),
+        )
     }
 
     #[cfg(feature = "metrics")]

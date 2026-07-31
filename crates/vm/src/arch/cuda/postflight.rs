@@ -3,7 +3,8 @@
 //! This module uploads static program metadata, builds memory chronology and
 //! opcode indexes once per segment, and exposes immutable replay inputs to
 //! system and instruction trace generators. Compiled checkpoint expansion is
-//! an optional producer in `arch::rvr::cuda`; this layer does not depend on it.
+//! an optional producer supplied by an execution extension; this layer does
+//! not depend on an instruction set.
 
 use std::{
     collections::BTreeMap,
@@ -16,11 +17,11 @@ use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::{CudaError, MemCopyError},
+    memory_manager::MemTracker,
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_AS, LocalOpcode, SystemOpcode,
-    VmOpcode, DEFERRAL_AS,
+    instruction::Instruction, program::Program, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
@@ -28,7 +29,7 @@ use rvr_state::{
     PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
 };
 use thiserror::Error;
-use tracing::info_span;
+use tracing::{info_span, span::EnteredSpan};
 
 use crate::{
     arch::{
@@ -39,17 +40,17 @@ use crate::{
     system::TouchedBlock,
 };
 
+#[cfg(all(test, feature = "rvr"))]
+mod integration_tests;
 #[cfg(any(test, feature = "test-utils"))]
 mod testing;
-#[cfg(all(test, feature = "rvr"))]
-pub(crate) use testing::{build_memory_chronology_for_test, empty_chronology_counts_for_test};
 
 /// Number of `u32` fields in a replay instruction: global opcode followed by operands `a..g`.
-pub(crate) const POSTFLIGHT_INSTRUCTION_FIELDS: usize = 8;
+pub const POSTFLIGHT_INSTRUCTION_FIELDS: usize = 8;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct GpuReplayInstruction {
+pub struct GpuReplayInstruction {
     /// Global opcode followed by the seven canonical instruction operands.
     pub words: [u32; POSTFLIGHT_INSTRUCTION_FIELDS],
 }
@@ -65,8 +66,6 @@ pub(crate) struct GpuReplayStep {
 
 // Keep Rust uploads byte-compatible with the CUDA replay instruction ABI.
 const _: () = assert!(size_of::<GpuReplayInstruction>() == size_of::<[u32; 8]>());
-// CUDA chronology stores configured address spaces starting at the register space.
-const _: () = assert!(RV64_REGISTER_AS == ADDR_SPACE_OFFSET);
 
 /// Device-side layout metadata for one configured address space.
 #[repr(C)]
@@ -212,6 +211,86 @@ pub(crate) fn upload<T>(
 
 pub(crate) type ConnectorBoundary = (ExecutionState<u32>, ExecutionState<u32>, Option<u32>);
 
+/// Architectural boundary attached to one device-resident preflight history.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GpuPostflightBoundary {
+    from: ExecutionState<u32>,
+    to: ExecutionState<u32>,
+    exit_code: Option<u32>,
+}
+
+impl GpuPostflightBoundary {
+    pub const fn new(
+        from: ExecutionState<u32>,
+        to: ExecutionState<u32>,
+        exit_code: Option<u32>,
+    ) -> Self {
+        Self {
+            from,
+            to,
+            exit_code,
+        }
+    }
+
+    const fn connector_boundary(self) -> ConnectorBoundary {
+        (self.from, self.to, self.exit_code)
+    }
+}
+
+/// Device-resident program and memory history before chronology and opcode indexing.
+///
+/// Producers own how these append-only logs are built. Finalization has one
+/// implementation in [`GpuPostflightContext::finalize_device_history`].
+pub struct GpuUnindexedHistory {
+    program: DeviceBuffer<PreflightProgramEvent>,
+    memory: DeviceBuffer<PreflightMemoryEvent>,
+    field_values: DeviceBuffer<PreflightFieldBlock>,
+    write_masks: DeviceBuffer<u8>,
+    error: DeviceBuffer<u32>,
+}
+
+impl GpuUnindexedHistory {
+    pub fn new(
+        program: DeviceBuffer<PreflightProgramEvent>,
+        memory: DeviceBuffer<PreflightMemoryEvent>,
+        field_values: DeviceBuffer<PreflightFieldBlock>,
+        write_masks: DeviceBuffer<u8>,
+        error: DeviceBuffer<u32>,
+    ) -> Result<Self, GpuPostflightError> {
+        if write_masks.len() != memory.len() {
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "device history has {} memory events but {} write masks",
+                memory.len(),
+                write_masks.len()
+            )));
+        }
+        if error.len() != 1 {
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "device history error buffer has {} elements, expected one",
+                error.len()
+            )));
+        }
+        Ok(Self {
+            program,
+            memory,
+            field_values,
+            write_masks,
+            error,
+        })
+    }
+}
+
+/// Validated access to the fixed program and segment-start memory used by GPU postflight.
+///
+/// The borrowed initial-memory owners remain alive until all producer work and
+/// common chronology/indexing have been submitted and synchronized.
+pub struct GpuPostflightContext<'a> {
+    program: &'a GpuPostflightProgram,
+    initial_memory: &'a [Arc<DeviceBuffer<u8>>],
+    memory_metrics: MemTracker,
+    _span: EnteredSpan,
+}
+
 pub struct GpuPostflightProgram {
     instructions: DeviceBuffer<GpuReplayInstruction>,
     dense_program_rows: DeviceBuffer<u32>,
@@ -228,6 +307,76 @@ pub struct GpuPostflightProgram {
     pc_base: u32,
     device_ctx: GpuDeviceCtx,
     identity: Arc<()>,
+}
+
+impl<'a> GpuPostflightContext<'a> {
+    pub(crate) fn new(
+        program: &'a GpuPostflightProgram,
+        program_device_ctx: &GpuDeviceCtx,
+        memory_device_ctx: &GpuDeviceCtx,
+        initial_memory: &'a [Arc<DeviceBuffer<u8>>],
+    ) -> Result<Self, GpuPostflightError> {
+        program.validate_system_inputs(program_device_ctx, memory_device_ctx, initial_memory)?;
+        Ok(Self {
+            program,
+            initial_memory,
+            memory_metrics: MemTracker::start_and_reset_peak("postflight"),
+            _span: info_span!("postflight").entered(),
+        })
+    }
+
+    /// Returns the immutable segment-start image for one configured address space.
+    pub fn memory_image(&self, address_space: u32) -> Result<DeviceBufferView, GpuPostflightError> {
+        self.initial_memory
+            .get(address_space as usize)
+            .map(|image| image.view())
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(format!(
+                    "initial-memory address space {address_space} was not transported to the GPU"
+                ))
+            })
+    }
+
+    /// Runs common memory chronology and opcode indexing over producer-owned device logs.
+    pub fn finalize_device_history(
+        self,
+        history: GpuUnindexedHistory,
+        boundary: GpuPostflightBoundary,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let initial_memory_images = self
+            .initial_memory
+            .iter()
+            .map(|image| image.view())
+            .collect::<Vec<_>>();
+        self.program.index_device_history(
+            history,
+            &initial_memory_images,
+            boundary.connector_boundary(),
+        )
+    }
+
+    pub(crate) fn upload_history(
+        self,
+        history: &PreflightHistory,
+        boundary: GpuPostflightBoundary,
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let initial_memory_images = self
+            .initial_memory
+            .iter()
+            .map(|image| image.view())
+            .collect::<Vec<_>>();
+        self.program.upload_history(
+            history,
+            boundary.connector_boundary(),
+            &initial_memory_images,
+        )
+    }
+}
+
+impl Drop for GpuPostflightContext<'_> {
+    fn drop(&mut self) {
+        self.memory_metrics.emit_metrics();
+    }
 }
 
 fn validated_history_write_masks(
@@ -286,16 +435,20 @@ fn validated_history_write_masks(
 impl GpuPostflightProgram {
     /// Uploads the immutable program metadata used by history-driven
     /// postflight and trace generation.
-    #[doc(hidden)]
     pub fn upload<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
     ) -> Result<Self, GpuPostflightError> {
-        Self::upload_validated(program, memory_config, device_ctx, |_| Ok(()))
+        Self::upload_with_instruction_validation(program, memory_config, device_ctx, |_| Ok(()))
     }
 
-    pub(crate) fn upload_validated<F: PrimeField32>(
+    /// Uploads fixed program data after producer-owned instruction validation.
+    ///
+    /// The validator sees the exact canonical instruction representation that
+    /// is uploaded, allowing an extension-owned replay producer to reject
+    /// unsupported instruction layouts without moving ISA semantics into the VM.
+    pub fn upload_with_instruction_validation<F: PrimeField32>(
         program: &Program<F>,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
@@ -406,11 +559,7 @@ impl GpuPostflightProgram {
         let write_masks = upload(&write_masks, &self.device_ctx)?;
         let error = [0u32].to_device_on(&self.device_ctx)?;
         self.index_device_history(
-            program_log,
-            memory_log,
-            field_values,
-            write_masks,
-            error,
+            GpuUnindexedHistory::new(program_log, memory_log, field_values, write_masks, error)?,
             initial_memory_images,
             boundary,
         )
@@ -421,30 +570,32 @@ impl GpuPostflightProgram {
     ///
     /// Producers may build the logs differently, but chronology and program
     /// indexing deliberately have one owner and one validation path.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn index_device_history(
         &self,
-        program_log: DeviceBuffer<PreflightProgramEvent>,
-        memory_log: DeviceBuffer<PreflightMemoryEvent>,
-        field_values: DeviceBuffer<PreflightFieldBlock>,
-        write_masks: DeviceBuffer<u8>,
-        error: DeviceBuffer<u32>,
+        history: GpuUnindexedHistory,
         initial_memory_images: &[DeviceBufferView],
         boundary: ConnectorBoundary,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        let GpuUnindexedHistory {
+            program: program_log,
+            memory: memory_log,
+            field_values,
+            write_masks,
+            error,
+        } = history;
         let (initial_write_log, field_initial_values, memory_index) =
             info_span!("postflight_memory_chronology").in_scope(|| {
-                build_gpu_memory_chronology(
-                    &memory_log,
-                    &write_masks,
-                    &field_values,
-                    initial_memory_images,
-                    self.address_space_height,
-                    self.cell_pointer_max_bits(),
-                    self.memory_address_spaces.view(),
-                    &error,
-                    self.device_ctx(),
-                )
+                build_gpu_memory_chronology(GpuMemoryChronologyInput {
+                    memory: &memory_log,
+                    write_masks: &write_masks,
+                    field_values: &field_values,
+                    initial_memory: initial_memory_images,
+                    address_space_height: self.address_space_height,
+                    pointer_max_bits: self.cell_pointer_max_bits(),
+                    address_spaces: self.memory_address_spaces.view(),
+                    error: &error,
+                    device_ctx: self.device_ctx(),
+                })
             })?;
         drop(write_masks);
 
@@ -475,7 +626,8 @@ impl GpuPostflightProgram {
         Ok((transcript, plan))
     }
 
-    pub(crate) const fn device_ctx(&self) -> &GpuDeviceCtx {
+    /// CUDA device and stream that own this uploaded program.
+    pub const fn device_ctx(&self) -> &GpuDeviceCtx {
         &self.device_ctx
     }
 
@@ -496,11 +648,13 @@ impl GpuPostflightProgram {
         validate_initial_memory_lengths(&self.memory_config, &byte_lengths)
     }
 
-    pub(crate) const fn timestamp_max_bits(&self) -> u32 {
+    /// Configured timestamp width validated when this program was uploaded.
+    pub const fn timestamp_max_bits(&self) -> u32 {
         self.timestamp_max_bits
     }
 
-    pub(crate) const fn cell_pointer_max_bits(&self) -> u32 {
+    /// Pointer width for address-space-native memory cells.
+    pub const fn cell_pointer_max_bits(&self) -> u32 {
         self.cell_pointer_max_bits
     }
 }
@@ -629,17 +783,20 @@ impl GpuChronologyCounts {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build_gpu_memory_chronology(
-    memory: &DeviceBuffer<PreflightMemoryEvent>,
-    write_masks: &DeviceBuffer<u8>,
-    field_values: &DeviceBuffer<PreflightFieldBlock>,
-    initial_memory: &[DeviceBufferView],
+struct GpuMemoryChronologyInput<'a> {
+    memory: &'a DeviceBuffer<PreflightMemoryEvent>,
+    write_masks: &'a DeviceBuffer<u8>,
+    field_values: &'a DeviceBuffer<PreflightFieldBlock>,
+    initial_memory: &'a [DeviceBufferView],
     address_space_height: u32,
     pointer_max_bits: u32,
     address_spaces: DeviceBufferView,
-    error: &DeviceBuffer<u32>,
-    device_ctx: &GpuDeviceCtx,
+    error: &'a DeviceBuffer<u32>,
+    device_ctx: &'a GpuDeviceCtx,
+}
+
+fn build_gpu_memory_chronology(
+    input: GpuMemoryChronologyInput<'_>,
 ) -> Result<
     (
         DeviceBuffer<PreflightInitialWrite>,
@@ -648,6 +805,17 @@ fn build_gpu_memory_chronology(
     ),
     GpuPostflightError,
 > {
+    let GpuMemoryChronologyInput {
+        memory,
+        write_masks,
+        field_values,
+        initial_memory,
+        address_space_height,
+        pointer_max_bits,
+        address_spaces,
+        error,
+        device_ctx,
+    } = input;
     // Every history producer assigns the k-th FIELD32 event in memory-log order
     // reference k and allocates exactly one sidecar entry per such event.
     // That dense unique mapping is the race-freedom invariant for in-place GPU
@@ -734,7 +902,7 @@ fn build_gpu_memory_chronology(
             address_spaces,
             initial_memory.view(),
             field_values.view(),
-            RV64_REGISTER_AS,
+            ADDR_SPACE_OFFSET,
             counts.non_register_begin,
             &sorted_keys,
             &workspace,
@@ -1027,52 +1195,5 @@ impl GpuPostflightPlan {
     /// before launching any opcode kernel to reject unported instructions.
     pub fn executed_opcodes(&self) -> impl Iterator<Item = u32> + '_ {
         self.opcode_ranges.keys().copied()
-    }
-}
-
-#[cfg(test)]
-mod validation_tests {
-    use openvm_instructions::PUBLIC_VALUES_AS;
-
-    use super::*;
-
-    fn configured_byte_lengths(config: &MemoryConfig) -> Vec<usize> {
-        config
-            .addr_spaces
-            .iter()
-            .map(|address_space| address_space.num_cells * address_space.layout.size())
-            .collect()
-    }
-
-    #[test]
-    fn field_cells_are_restricted_to_deferral_address_space() {
-        let mut config = MemoryConfig::default();
-        assert!(validate_field_address_spaces(&config).is_ok());
-
-        config.addr_spaces[PUBLIC_VALUES_AS as usize].layout = MemoryCellType::field32();
-        assert!(matches!(
-            validate_field_address_spaces(&config),
-            Err(GpuPostflightError::InvalidMemoryConfig(_))
-        ));
-    }
-
-    #[test]
-    fn initial_memory_must_match_every_configured_address_space() {
-        let config = MemoryConfig::default();
-        let mut byte_lengths = configured_byte_lengths(&config);
-        assert!(validate_initial_memory_lengths(&config, &byte_lengths).is_ok());
-
-        byte_lengths.pop();
-        assert!(matches!(
-            validate_initial_memory_lengths(&config, &byte_lengths),
-            Err(GpuPostflightError::InvalidTranscript(_))
-        ));
-
-        let mut byte_lengths = configured_byte_lengths(&config);
-        byte_lengths[PUBLIC_VALUES_AS as usize] -= 1;
-        assert!(matches!(
-            validate_initial_memory_lengths(&config, &byte_lengths),
-            Err(GpuPostflightError::InvalidTranscript(_))
-        ));
     }
 }

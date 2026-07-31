@@ -3,10 +3,7 @@ use std::{any::Any, collections::BTreeMap};
 use openvm_algebra_circuit::AlgebraPreflightGpuTracegen;
 use openvm_bigint_circuit::Int256PreflightGpuTracegen;
 #[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::{
-    cuda::{PostflightAccessRegistry, PreflightReplayProgram},
-    PreflightExecution,
-};
+use openvm_circuit::arch::rvr::PreflightExecution;
 use openvm_circuit::arch::{
     cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
@@ -18,6 +15,8 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
 use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
 use openvm_keccak256_circuit::Keccak256PreflightGpuTracegen;
+#[cfg(feature = "rvr")]
+use openvm_riscv_circuit::preflight::{PostflightAccessRegistry, PreflightReplayProgram};
 use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_sha2_circuit::Sha2PreflightGpuTracegen;
 use openvm_stark_backend::{
@@ -102,8 +101,6 @@ impl SdkVmGpuBuilder {
         if config.deferral.is_some() {
             DeferralPreflightGpuTracegen::register_postflight_access_schedules(&mut registry)?;
         }
-        let native = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
-        registry.validate_no_native_collisions(native)?;
         PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             &vm.config().as_ref().memory_config,
@@ -126,12 +123,7 @@ impl SdkVmGpuBuilder {
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let result = vm.postflight(
-            program,
-            execution,
-            num_insns,
-            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
-        );
+        let result = Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns);
         #[cfg(feature = "metrics")]
         if let Ok((_, replay_plan)) = &result {
             vm.emit_preflight_opcode_counts(replay_plan);

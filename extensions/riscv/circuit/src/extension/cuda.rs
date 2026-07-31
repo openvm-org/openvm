@@ -1,9 +1,7 @@
 use std::{any::Any, sync::Arc};
 
 #[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::cuda::PostflightOpcodeBases;
-#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
-use openvm_circuit::arch::rvr::{cuda::PreflightReplayProgram, PreflightExecution};
+use openvm_circuit::arch::rvr::PreflightExecution;
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -40,6 +38,8 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 
+#[cfg(feature = "rvr")]
+use crate::preflight::PreflightReplayProgram;
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
     Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BitwiseLogicAir,
@@ -63,6 +63,12 @@ use crate::{
     Rv64StoreDoublewordAir, Rv64StoreDoublewordChipGpu, Rv64StoreHalfwordAir,
     Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
+
+#[cfg(feature = "rvr")]
+include!(concat!(
+    env!("OUT_DIR"),
+    "/rv64_checkpoint_replay_opcodes.rs"
+));
 
 pub struct Rv64ImGpuProverExt;
 
@@ -113,42 +119,11 @@ pub struct Rv64ImPreflightGpuTracegen<'a> {
 }
 
 impl<'a> Rv64ImPreflightGpuTracegen<'a> {
-    #[cfg(feature = "rvr")]
-    #[doc(hidden)]
-    pub fn postflight_opcode_bases() -> PostflightOpcodeBases {
-        PostflightOpcodeBases {
-            base_alu: Self::opcode(BaseAluOpcode::ADD),
-            shift: Self::opcode(ShiftOpcode::SLL),
-            less_than: Self::opcode(LessThanOpcode::SLT),
-            load_store: Self::opcode(Rv64LoadStoreOpcode::LOADD),
-            branch_equal: Self::opcode(BranchEqualOpcode::BEQ),
-            branch_less_than: Self::opcode(BranchLessThanOpcode::BLT),
-            jal_lui: Self::opcode(Rv64JalLuiOpcode::JAL),
-            jalr: Self::opcode(Rv64JalrOpcode::JALR),
-            auipc: Self::opcode(Rv64AuipcOpcode::AUIPC),
-            mul: Self::opcode(MulOpcode::MUL),
-            mulh: Self::opcode(MulHOpcode::MULH),
-            divrem: Self::opcode(DivRemOpcode::DIV),
-            base_alu_w: Self::opcode(BaseAluWOpcode::ADDW),
-            shift_w: Self::opcode(ShiftWOpcode::SLLW),
-            mul_w: Self::opcode(MulWOpcode::MULW),
-            divrem_w: Self::opcode(DivRemWOpcode::DIVW),
-            base_alu_imm: Self::opcode(BaseAluImmOpcode::ADDI),
-            shift_imm: Self::opcode(ShiftImmOpcode::SLLI),
-            less_than_imm: Self::opcode(LessThanImmOpcode::SLTI),
-            base_alu_w_imm: Self::opcode(BaseAluWImmOpcode::ADDIW),
-            shift_w_imm: Self::opcode(ShiftWImmOpcode::SLLIW),
-            hint_store: Self::opcode(Rv64HintStoreOpcode::HINT_STORED),
-            phantom: SystemOpcode::PHANTOM.global_opcode().as_usize() as u32,
-            terminate: SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
-        }
-    }
-
     /// Checkpoint replay for RV64IM and phantom execution. Loads and stores
     /// first become unresolved block intents; the VM chronology pass resolves
     /// those intents before the ordinary transcript indexes and unchanged
     /// trace generators consume them.
-    #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+    #[cfg(feature = "rvr")]
     pub fn postflight<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &PreflightReplayProgram,
@@ -158,12 +133,8 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        vm.postflight(
-            program,
-            execution,
-            num_insns,
-            Self::postflight_opcode_bases(),
-        )
+        let context = vm.gpu_postflight_context(program.program())?;
+        program.postflight(context, execution, num_insns)
     }
 
     pub fn new(
@@ -215,81 +186,16 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// Returns whether the standard RV64/system replay path owns `opcode`.
     #[doc(hidden)]
     pub fn owns_opcode(opcode: u32) -> bool {
-        opcode == SystemOpcode::TERMINATE.global_opcode().as_usize() as u32
-            || Self::supports_opcode(opcode)
+        Self::replay_opcodes().any(|candidate| candidate == opcode)
+    }
+
+    /// Opcodes implemented by the native RV64 replay kernel.
+    pub(crate) fn replay_opcodes() -> impl Iterator<Item = u32> {
+        RV64_REPLAY_OPCODES.iter().copied()
     }
 
     fn supports_opcode(opcode: u32) -> bool {
-        [
-            BaseAluOpcode::ADD.global_opcode(),
-            BaseAluOpcode::SUB.global_opcode(),
-            BaseAluOpcode::XOR.global_opcode(),
-            BaseAluOpcode::OR.global_opcode(),
-            BaseAluOpcode::AND.global_opcode(),
-            BaseAluWOpcode::ADDW.global_opcode(),
-            BaseAluWOpcode::SUBW.global_opcode(),
-            LessThanOpcode::SLT.global_opcode(),
-            LessThanOpcode::SLTU.global_opcode(),
-            ShiftOpcode::SLL.global_opcode(),
-            ShiftOpcode::SRL.global_opcode(),
-            ShiftOpcode::SRA.global_opcode(),
-            ShiftWOpcode::SLLW.global_opcode(),
-            ShiftWOpcode::SRLW.global_opcode(),
-            ShiftWOpcode::SRAW.global_opcode(),
-            BaseAluWImmOpcode::ADDIW.global_opcode(),
-            ShiftWImmOpcode::SLLIW.global_opcode(),
-            ShiftWImmOpcode::SRLIW.global_opcode(),
-            ShiftWImmOpcode::SRAIW.global_opcode(),
-            BranchEqualOpcode::BEQ.global_opcode(),
-            BranchEqualOpcode::BNE.global_opcode(),
-            BranchLessThanOpcode::BLT.global_opcode(),
-            BranchLessThanOpcode::BLTU.global_opcode(),
-            BranchLessThanOpcode::BGE.global_opcode(),
-            BranchLessThanOpcode::BGEU.global_opcode(),
-            Rv64JalLuiOpcode::JAL.global_opcode(),
-            Rv64JalLuiOpcode::LUI.global_opcode(),
-            Rv64JalrOpcode::JALR.global_opcode(),
-            Rv64AuipcOpcode::AUIPC.global_opcode(),
-            BaseAluImmOpcode::ADDI.global_opcode(),
-            ShiftImmOpcode::SLLI.global_opcode(),
-            ShiftImmOpcode::SRLI.global_opcode(),
-            ShiftImmOpcode::SRAI.global_opcode(),
-            LessThanImmOpcode::SLTI.global_opcode(),
-            LessThanImmOpcode::SLTIU.global_opcode(),
-            BaseAluImmOpcode::XORI.global_opcode(),
-            BaseAluImmOpcode::ORI.global_opcode(),
-            BaseAluImmOpcode::ANDI.global_opcode(),
-            Rv64LoadStoreOpcode::LOADB.global_opcode(),
-            Rv64LoadStoreOpcode::LOADBU.global_opcode(),
-            Rv64LoadStoreOpcode::LOADH.global_opcode(),
-            Rv64LoadStoreOpcode::LOADHU.global_opcode(),
-            Rv64LoadStoreOpcode::LOADW.global_opcode(),
-            Rv64LoadStoreOpcode::LOADWU.global_opcode(),
-            Rv64LoadStoreOpcode::LOADD.global_opcode(),
-            // Store replay accepts the AIR-supported main-memory and public-values spaces.
-            Rv64LoadStoreOpcode::STOREB.global_opcode(),
-            Rv64LoadStoreOpcode::STOREH.global_opcode(),
-            Rv64LoadStoreOpcode::STOREW.global_opcode(),
-            Rv64LoadStoreOpcode::STORED.global_opcode(),
-            MulOpcode::MUL.global_opcode(),
-            MulWOpcode::MULW.global_opcode(),
-            MulHOpcode::MULH.global_opcode(),
-            MulHOpcode::MULHSU.global_opcode(),
-            MulHOpcode::MULHU.global_opcode(),
-            DivRemOpcode::DIV.global_opcode(),
-            DivRemOpcode::DIVU.global_opcode(),
-            DivRemOpcode::REM.global_opcode(),
-            DivRemOpcode::REMU.global_opcode(),
-            DivRemWOpcode::DIVW.global_opcode(),
-            DivRemWOpcode::DIVUW.global_opcode(),
-            DivRemWOpcode::REMW.global_opcode(),
-            DivRemWOpcode::REMUW.global_opcode(),
-            Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
-            Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
-            SystemOpcode::PHANTOM.global_opcode(),
-        ]
-        .into_iter()
-        .any(|candidate| candidate.as_usize() as u32 == opcode)
+        Self::replay_opcodes().any(|candidate| candidate == opcode)
     }
 
     fn mark_generated(&mut self, opcodes: impl IntoIterator<Item = u32>) {

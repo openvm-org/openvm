@@ -23,6 +23,12 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{program::Program, LocalOpcode};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_riscv_circuit::preflight::PreflightReplayProgram;
+#[cfg(feature = "rvr")]
+use openvm_riscv_circuit::preflight::{
+    PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+};
 use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_stark_backend::{
     prover::{AirProvingContext, ProvingContext},
@@ -32,19 +38,10 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
 };
 #[cfg(feature = "rvr")]
-use {
-    openvm_circuit::arch::{
-        rvr::cuda::{PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan},
-        MEMORY_BLOCK_BYTES,
-    },
-    openvm_instructions::riscv::RV64_MEMORY_AS,
-};
+use {openvm_circuit::arch::MEMORY_BLOCK_BYTES, openvm_instructions::riscv::RV64_MEMORY_AS};
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
-    openvm_circuit::arch::{
-        rvr::{cuda::PreflightReplayProgram, PreflightExecution},
-        MemoryConfig,
-    },
+    openvm_circuit::arch::{rvr::PreflightExecution, MemoryConfig},
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_stark_backend::p3_field::PrimeField32,
 };
@@ -180,8 +177,6 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     ) -> Result<PreflightReplayProgram, GpuPostflightError> {
         let mut registry = PostflightAccessRegistry::default();
         Self::register_postflight_access_schedules(&mut registry)?;
-        registry
-            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
         PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
@@ -200,12 +195,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        vm.postflight(
-            program,
-            execution,
-            num_insns,
-            Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
-        )
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(

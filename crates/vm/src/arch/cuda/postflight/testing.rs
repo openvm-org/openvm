@@ -74,8 +74,24 @@ impl GpuPostflightProgram {
         Ok((transcript, plan))
     }
 
-    #[cfg(all(test, feature = "rvr"))]
-    pub(crate) fn synthetic_for_test(
+    #[cfg(feature = "rvr")]
+    #[cfg(test)]
+    pub(super) fn upload_history_with_initial_memory_for_test(
+        &self,
+        history: &PreflightHistory,
+        boundary: GpuPostflightBoundary,
+        initial_memory_images: &[DeviceBufferView],
+    ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        self.upload_history(
+            history,
+            boundary.connector_boundary(),
+            initial_memory_images,
+        )
+    }
+
+    #[cfg(feature = "rvr")]
+    #[cfg(test)]
+    pub(super) fn synthetic_for_test(
         opcodes: &[u32],
         pc_base: u32,
         timestamp_max_bits: u32,
@@ -134,11 +150,12 @@ impl GpuPostflightProgram {
         })
     }
 
-    #[cfg(all(test, feature = "rvr"))]
-    pub(crate) fn index_program_log_for_test(
+    #[cfg(feature = "rvr")]
+    #[cfg(test)]
+    pub(super) fn index_program_log_for_test(
         &self,
         program_log: &[PreflightProgramEvent],
-        boundary: ConnectorBoundary,
+        boundary: GpuPostflightBoundary,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let segment_identity = Arc::new(());
         let transcript = GpuPostflightTranscript {
@@ -158,7 +175,7 @@ impl GpuPostflightProgram {
         let plan = GpuPostflightPlan::build(
             self,
             &transcript,
-            boundary,
+            boundary.connector_boundary(),
             self.identity.clone(),
             segment_identity,
         )?;
@@ -201,8 +218,9 @@ impl GpuPostflightTranscript {
             .collect())
     }
 
-    #[cfg(all(test, feature = "rvr"))]
-    pub(crate) fn memory_predecessors_host(&self) -> Result<Vec<u32>, MemCopyError> {
+    #[cfg(feature = "rvr")]
+    #[cfg(test)]
+    pub(super) fn memory_predecessors_host(&self) -> Result<Vec<u32>, MemCopyError> {
         self.memory_predecessors.to_host_on(&self.device_ctx)
     }
 }
@@ -217,14 +235,21 @@ impl GpuPostflightPlan {
             .collect())
     }
 
-    #[cfg(all(test, feature = "rvr"))]
-    pub(crate) fn program_frequencies_host(&self) -> Result<Vec<u32>, MemCopyError> {
+    #[cfg(test)]
+    pub(super) const fn connector_boundary_for_test(&self) -> GpuPostflightBoundary {
+        let (from, to, exit_code) = self.connector_boundary();
+        GpuPostflightBoundary::new(from, to, exit_code)
+    }
+
+    #[cfg(feature = "rvr")]
+    #[cfg(test)]
+    pub(super) fn program_frequencies_host(&self) -> Result<Vec<u32>, MemCopyError> {
         self.program_frequencies.to_host_on(&self.device_ctx)
     }
 }
 
 #[cfg(all(test, feature = "rvr"))]
-pub(crate) type ChronologyOutputForTest = (
+pub type ChronologyOutputForTest = (
     Vec<PreflightMemoryEvent>,
     Vec<PreflightInitialWrite>,
     Vec<PreflightFieldBlock>,
@@ -234,7 +259,7 @@ pub(crate) type ChronologyOutputForTest = (
 );
 
 #[cfg(all(test, feature = "rvr"))]
-pub(crate) fn build_memory_chronology_for_test(
+pub(super) fn build_memory_chronology_for_test(
     memory: &[PreflightMemoryEvent],
     write_masks: &[u8],
     field_values: &[PreflightFieldBlock],
@@ -264,17 +289,17 @@ pub(crate) fn build_memory_chronology_for_test(
         .collect::<Vec<_>>();
     let address_spaces = upload(&address_spaces, &device_ctx)?;
     let error = [0u32].to_device_on(&device_ctx)?;
-    let (seeds, field_seeds, index) = build_gpu_memory_chronology(
-        &memory,
-        &write_masks,
-        &field_values,
-        &initial_memory_views,
-        config.addr_space_height as u32,
-        config.pointer_max_bits as u32,
-        address_spaces.view(),
-        &error,
-        &device_ctx,
-    )?;
+    let (seeds, field_seeds, index) = build_gpu_memory_chronology(GpuMemoryChronologyInput {
+        memory: &memory,
+        write_masks: &write_masks,
+        field_values: &field_values,
+        initial_memory: &initial_memory_views,
+        address_space_height: config.addr_space_height as u32,
+        pointer_max_bits: config.pointer_max_bits as u32,
+        address_spaces: address_spaces.view(),
+        error: &error,
+        device_ctx: &device_ctx,
+    })?;
     let mut touched = index.touched_blocks.to_host_on(&device_ctx)?;
     touched.truncate(index.num_touched_blocks);
     Ok((
@@ -288,7 +313,7 @@ pub(crate) fn build_memory_chronology_for_test(
 }
 
 #[cfg(all(test, feature = "rvr"))]
-pub(crate) fn empty_chronology_counts_for_test(
+pub(super) fn empty_chronology_counts_for_test(
     count_field_metadata: bool,
 ) -> Result<Vec<u32>, GpuPostflightError> {
     let device_ctx = GpuDeviceCtx::for_current_device()?;

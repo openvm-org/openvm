@@ -101,7 +101,7 @@ mod tests {
     use openvm_circuit::{
         arch::{
             cuda::postflight::GpuPostflightProgram,
-            rvr::{cuda::PreflightReplayProgram, PreflightEndpoint, PreflightLimits},
+            rvr::{PreflightEndpoint, PreflightLimits},
             PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
         },
         utils::{test_gpu_engine, test_system_config},
@@ -117,7 +117,10 @@ mod tests {
         bls12_381::BLS12_381_COMPLEX_STRUCT_NAME, bn254::BN254_COMPLEX_STRUCT_NAME,
     };
     use openvm_pairing_transpiler::PairingPhantom;
-    use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
+    use openvm_riscv_circuit::{
+        preflight::{PostflightAccessRegistry, PreflightReplayProgram},
+        Rv64ImPreflightGpuTracegen,
+    };
     use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64JalLuiOpcode};
     use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, StarkEngine};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -260,9 +263,10 @@ mod tests {
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
-        let gpu_program = PreflightReplayProgram::upload(
+        let gpu_program = PreflightReplayProgram::upload_with_postflight_access_registry(
             &program,
             &config.modular.system.memory_config,
+            &PostflightAccessRegistry::default(),
             &vm.engine.device().device_ctx,
         )
         .unwrap();
@@ -273,14 +277,9 @@ mod tests {
         assert_eq!(first.endpoint, PreflightEndpoint::Suspended);
         assert!(first.state.streams.hint_stream.remaining() > 8);
         let hint_bytes = first.state.streams.hint_stream.remaining();
-        let (transcript, replay_plan) = vm
-            .postflight(
-                &gpu_program,
-                &first,
-                first.retired,
-                Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
-            )
-            .unwrap();
+        let (transcript, replay_plan) =
+            Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
+                .unwrap();
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
@@ -304,14 +303,9 @@ mod tests {
             second.state.streams.hint_stream.remaining(),
             hint_bytes - u64::BITS as usize / 8
         );
-        let (transcript, replay_plan) = vm
-            .postflight(
-                &gpu_program,
-                &second,
-                second.retired,
-                Rv64ImPreflightGpuTracegen::postflight_opcode_bases(),
-            )
-            .unwrap();
+        let (transcript, replay_plan) =
+            Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
+                .unwrap();
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,

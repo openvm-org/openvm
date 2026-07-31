@@ -10,8 +10,8 @@
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
     rvr::{
-        cuda::PreflightReplayProgram, PreflightEndpoint, PreflightExecution, PreflightInstance,
-        PreflightTranscript, RvrMeteredInstance,
+        PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightTranscript,
+        RvrMeteredInstance,
     },
 };
 #[cfg(not(feature = "rvr"))]
@@ -27,6 +27,8 @@ use openvm_circuit::{
     system::memory::{merkle::public_values::UserPublicValuesProof, online::GuestMemory},
 };
 use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+#[cfg(feature = "rvr")]
+use openvm_riscv_circuit::preflight::PreflightReplayProgram;
 #[cfg(not(feature = "rvr"))]
 use openvm_stark_backend::Val;
 use openvm_stark_backend::{proof::Proof, StarkEngine};

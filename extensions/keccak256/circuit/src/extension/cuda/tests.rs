@@ -1,17 +1,11 @@
 use openvm_circuit::{
     arch::{
-        cuda::postflight::GpuPostflightProgram,
-        rvr::{
-            cuda::{
-                PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
-                PreflightReplayProgram,
-            },
-            PreflightLimits,
-        },
+        cuda::postflight::GpuPostflightProgram, rvr::PreflightLimits, MemoryConfig,
         PreflightHistory, PreflightMemoryLog, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
@@ -20,7 +14,13 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
+use openvm_riscv_circuit::{
+    preflight::{
+        PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+        PreflightReplayProgram,
+    },
+    Rv64ImPreflightGpuTracegen,
+};
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -90,9 +90,14 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     let native_opcode = BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32;
     let mut collision = PostflightAccessRegistry::default();
     collision.register(native_opcode, schedule).unwrap();
-    let collision = collision
-        .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())
-        .unwrap_err();
+    let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
+    let collision = PreflightReplayProgram::upload_with_postflight_access_registry(
+        &Program::<F>::from_instructions(&[]),
+        &MemoryConfig::default(),
+        &collision,
+        &device_ctx,
+    )
+    .unwrap_err();
     assert!(collision.to_string().contains("both native"), "{collision}");
 }
 
@@ -212,9 +217,10 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         "{malformed}"
     );
 
-    let unclaimed_program = PreflightReplayProgram::upload(
+    let unclaimed_program = PreflightReplayProgram::upload_with_postflight_access_registry(
         &program,
         &config.system.memory_config,
+        &PostflightAccessRegistry::default(),
         &vm.engine.device().device_ctx,
     )
     .unwrap();

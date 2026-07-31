@@ -5368,9 +5368,11 @@ dependencies = [
  "rand 0.9.2",
  "rvr-openvm-ext-riscv",
  "rvr-openvm-lift",
+ "rvr-state",
  "serde",
  "strum",
  "test-case",
+ "tracing",
 ]
 
 [[package]]

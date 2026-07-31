@@ -3,10 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::cuda::{
-    PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
-};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{
@@ -25,6 +21,12 @@ use openvm_circuit::{
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_instructions::{program::Program, LocalOpcode};
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
+#[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
+use openvm_riscv_circuit::preflight::PreflightReplayProgram;
+#[cfg(feature = "rvr")]
+use openvm_riscv_circuit::preflight::{
+    PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
+};
 use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::{
@@ -32,10 +34,7 @@ use openvm_stark_sdk::{
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
-    openvm_circuit::arch::{
-        rvr::{cuda::PreflightReplayProgram, PreflightExecution},
-        MemoryConfig,
-    },
+    openvm_circuit::arch::{rvr::PreflightExecution, MemoryConfig},
     openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_stark_backend::p3_field::PrimeField32,
 };
@@ -139,8 +138,6 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     ) -> Result<PreflightReplayProgram, GpuPostflightError> {
         let mut registry = PostflightAccessRegistry::default();
         Self::register_postflight_access_schedules(&mut registry)?;
-        registry
-            .validate_no_native_collisions(Rv64ImPreflightGpuTracegen::postflight_opcode_bases())?;
         PreflightReplayProgram::upload_with_postflight_access_registry(
             program,
             memory_config,
@@ -159,8 +156,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        let opcodes = Rv64ImPreflightGpuTracegen::postflight_opcode_bases();
-        vm.postflight(program, execution, num_insns, opcodes)
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(

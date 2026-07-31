@@ -23,6 +23,172 @@ use openvm_cuda_common::{
     stream::cudaStream_t,
 };
 
+#[cfg(feature = "rvr")]
+use crate::preflight::PostflightEventCount;
+
+#[cfg(feature = "rvr")]
+pub mod rvr_checkpoint_replay {
+    use super::*;
+
+    extern "C" {
+        fn _rvr_checkpoint_count(
+            instructions: DeviceBufferView,
+            pc_base: u32,
+            initial_registers: DeviceBufferView,
+            initial_memory: DeviceBufferView,
+            anchors: DeviceBufferView,
+            replay_values: DeviceBufferView,
+            schedule_dispatch: DeviceBufferView,
+            schedules: DeviceBufferView,
+            spans: DeviceBufferView,
+            static_values: DeviceBufferView,
+            register_as: u32,
+            memory_as: u32,
+            immediate_as: u32,
+            deferral_as: u32,
+            byte_pointer_max_bits: u32,
+            cell_pointer_max_bits: u32,
+            initial_pc: u32,
+            initial_timestamp: u32,
+            endpoint_kind: u32,
+            event_counts: *mut PostflightEventCount,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rvr_checkpoint_emit(
+            instructions: DeviceBufferView,
+            pc_base: u32,
+            initial_registers: DeviceBufferView,
+            initial_memory: DeviceBufferView,
+            anchors: DeviceBufferView,
+            replay_values: DeviceBufferView,
+            memory_offsets: DeviceBufferView,
+            schedule_dispatch: DeviceBufferView,
+            schedules: DeviceBufferView,
+            spans: DeviceBufferView,
+            static_values: DeviceBufferView,
+            register_as: u32,
+            memory_as: u32,
+            immediate_as: u32,
+            deferral_as: u32,
+            byte_pointer_max_bits: u32,
+            cell_pointer_max_bits: u32,
+            initial_pc: u32,
+            initial_timestamp: u32,
+            endpoint_kind: u32,
+            program: DeviceBufferView,
+            memory: DeviceBufferView,
+            write_masks: DeviceBufferView,
+            field_values: DeviceBufferView,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn count(
+        instructions: DeviceBufferView,
+        pc_base: u32,
+        initial_registers: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        anchors: DeviceBufferView,
+        replay_values: DeviceBufferView,
+        schedule_dispatch: DeviceBufferView,
+        schedules: DeviceBufferView,
+        spans: DeviceBufferView,
+        static_values: DeviceBufferView,
+        address_spaces: [u32; 4],
+        byte_pointer_max_bits: u32,
+        cell_pointer_max_bits: u32,
+        initial_pc: u32,
+        initial_timestamp: u32,
+        endpoint_kind: u32,
+        event_counts: &DeviceBuffer<PostflightEventCount>,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_checkpoint_count(
+            instructions,
+            pc_base,
+            initial_registers,
+            initial_memory,
+            anchors,
+            replay_values,
+            schedule_dispatch,
+            schedules,
+            spans,
+            static_values,
+            address_spaces[0],
+            address_spaces[1],
+            address_spaces[2],
+            address_spaces[3],
+            byte_pointer_max_bits,
+            cell_pointer_max_bits,
+            initial_pc,
+            initial_timestamp,
+            endpoint_kind,
+            event_counts.as_mut_ptr(),
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    pub unsafe fn emit(
+        instructions: DeviceBufferView,
+        pc_base: u32,
+        initial_registers: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        anchors: DeviceBufferView,
+        replay_values: DeviceBufferView,
+        memory_offsets: DeviceBufferView,
+        schedule_dispatch: DeviceBufferView,
+        schedules: DeviceBufferView,
+        spans: DeviceBufferView,
+        static_values: DeviceBufferView,
+        address_spaces: [u32; 4],
+        byte_pointer_max_bits: u32,
+        cell_pointer_max_bits: u32,
+        initial_pc: u32,
+        initial_timestamp: u32,
+        endpoint_kind: u32,
+        program: DeviceBufferView,
+        memory: DeviceBufferView,
+        write_masks: DeviceBufferView,
+        field_values: DeviceBufferView,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_checkpoint_emit(
+            instructions,
+            pc_base,
+            initial_registers,
+            initial_memory,
+            anchors,
+            replay_values,
+            memory_offsets,
+            schedule_dispatch,
+            schedules,
+            spans,
+            static_values,
+            address_spaces[0],
+            address_spaces[1],
+            address_spaces[2],
+            address_spaces[3],
+            byte_pointer_max_bits,
+            cell_pointer_max_bits,
+            initial_pc,
+            initial_timestamp,
+            endpoint_kind,
+            program,
+            memory,
+            write_masks,
+            field_values,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+}
+
 pub mod auipc_cuda {
     use super::*;
 

@@ -4,6 +4,9 @@ use crate::arch::{
     VmField,
 };
 
+#[cfg(test)]
+pub(crate) const PREDECESSOR_SEED_BIT_FOR_TEST: u32 = PREDECESSOR_SEED_BIT;
+
 impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new_for_test(
         program: &'a Program<F>,
@@ -62,7 +65,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     }
 
     #[cfg(feature = "cuda")]
-    pub(crate) fn replay_steps_for_test(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
+    pub fn replay_steps_for_test(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
         self.steps.iter().map(|step| {
             let program_index = step.0;
             (program_index, self.memory_starts[program_index as usize])
@@ -70,7 +73,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     }
 
     #[cfg(feature = "cuda")]
-    pub(crate) fn opcode_ranges_for_test(&self) -> &BTreeMap<u32, Range<usize>> {
+    pub fn opcode_ranges_for_test(&self) -> &BTreeMap<u32, Range<usize>> {
         &self.opcode_ranges
     }
 
