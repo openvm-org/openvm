@@ -1,15 +1,20 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
+use openvm_circuit::system::program::ProgramExecutionCols;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, pinned, stream::GpuDeviceCtx};
+#[cfg(test)]
+use openvm_cuda_common::pinned;
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::prover::{
     AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
 };
 use p3_field::PrimeCharacteristicRing;
 
-use crate::cuda_abi::program;
+use crate::{
+    arch::cuda::postflight::{GpuPostflightError, GpuPostflightPlan},
+    cuda_abi::program,
+};
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
@@ -87,6 +92,52 @@ impl ProgramChipGPU {
             trace,
         }
     }
+
+    /// Generates the mutable frequency column from a validated postflight plan.
+    pub(super) fn generate_proving_ctx_from_plan(
+        &self,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        let filtered_exec_freqs = replay_plan.program_frequencies_on(&self.device_ctx)?;
+        // SAFETY: the plan owns this typed allocation on the context just
+        // validated above. A later drop enqueues its free on the same stream.
+        Ok(unsafe { self.generate_proving_ctx_from_buffer(filtered_exec_freqs) })
+    }
+
+    /// # Safety
+    ///
+    /// `filtered_exec_freqs` must be allocated on `self.device_ctx`. Its owner
+    /// must not enqueue deallocation ahead of this method's asynchronous work.
+    unsafe fn generate_proving_ctx_from_buffer(
+        &self,
+        filtered_exec_freqs: &DeviceBuffer<u32>,
+    ) -> AirProvingContext<GpuBackend> {
+        let cached = self.cached.clone().expect("Cached program must be loaded");
+        let filtered_len = filtered_exec_freqs.len();
+        let height = cached.height();
+        assert!(
+            filtered_len <= height,
+            "device program frequencies len={filtered_len} > cached trace height={height}"
+        );
+        let buffer = DeviceBuffer::<F>::with_capacity_on(height, &self.device_ctx);
+        // SAFETY: the caller guarantees that the typed input allocation uses
+        // this chip's stream and remains ordered before any deallocation.
+        unsafe {
+            program::fill_frequencies(
+                filtered_exec_freqs,
+                filtered_len,
+                &buffer,
+                height,
+                self.device_ctx.stream.as_raw(),
+            )
+        }
+        .expect("program_fill_frequencies failed");
+        AirProvingContext {
+            cached_mains: vec![cached],
+            common_main: DeviceMatrix::new(Arc::new(buffer), height, 1),
+            public_values: vec![],
+        }
+    }
 }
 
 impl Default for ProgramChipGPU {
@@ -95,8 +146,12 @@ impl Default for ProgramChipGPU {
     }
 }
 
-impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
-    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
+impl ProgramChipGPU {
+    #[cfg(test)]
+    pub(crate) fn generate_proving_ctx_from_host_for_test(
+        &self,
+        filtered_exec_freqs: Vec<u32>,
+    ) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
         let height = cached.height();
         let filtered_len = filtered_exec_freqs.len();
@@ -151,13 +206,17 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::F};
+    use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
     use openvm_instructions::{
         instruction::Instruction,
         program::{Program, DEFAULT_PC_STEP},
         LocalOpcode,
         SystemOpcode::*,
     };
-    use openvm_stark_backend::{prover::TraceCommitter, StarkEngine};
+    use openvm_stark_backend::{
+        prover::{MatrixDimensions, TraceCommitter},
+        StarkEngine,
+    };
 
     use super::ProgramChipGPU;
     use crate::{
@@ -238,5 +297,46 @@ mod tests {
         ];
         let program = Program::new_without_debug_infos_with_option(&instructions, 0);
         test_cached_committed_trace_data(program);
+    }
+
+    #[test]
+    fn test_cuda_program_device_frequencies_match_legacy_upload() {
+        let instructions = vec![
+            Instruction::from_isize(SUB, 0, 0, 1, 1, 1),
+            Instruction::from_isize(JAL, 2, DEFAULT_PC_STEP as isize, 0, 1, 0),
+            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let program = Program::from_instructions(&instructions);
+        let gpu_engine = test_gpu_engine();
+        let gpu_device = gpu_engine.device();
+        let cached_trace = ProgramChipGPU::generate_cached_trace(program, &gpu_device.device_ctx);
+        let cached = ProgramChipGPU::get_committed_trace(cached_trace, gpu_device);
+        let mut chip = ProgramChipGPU::new(gpu_device.device_ctx.clone());
+        chip.cached = Some(cached);
+
+        let frequencies = vec![7, 0, 1];
+        let d_frequencies = frequencies
+            .as_slice()
+            .to_device_on(&gpu_device.device_ctx)
+            .unwrap();
+        let legacy = chip.generate_proving_ctx_from_host_for_test(frequencies);
+        // SAFETY: d_frequencies remains alive through the D2H synchronization
+        // below on the same device context.
+        let direct = unsafe { chip.generate_proving_ctx_from_buffer(&d_frequencies) };
+
+        assert_eq!(legacy.common_main.height(), direct.common_main.height());
+        assert_eq!(legacy.common_main.width(), direct.common_main.width());
+        assert_eq!(
+            legacy
+                .common_main
+                .buffer()
+                .to_host_on(&gpu_device.device_ctx)
+                .unwrap(),
+            direct
+                .common_main
+                .buffer()
+                .to_host_on(&gpu_device.device_ctx)
+                .unwrap()
+        );
     }
 }

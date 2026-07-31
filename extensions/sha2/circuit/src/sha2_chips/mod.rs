@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 pub use block_hasher_chip::*;
 pub use main_chip::*;
-pub use trace::*;
+pub(crate) use trace::*;
 
 #[cfg(test)]
 mod test_utils;

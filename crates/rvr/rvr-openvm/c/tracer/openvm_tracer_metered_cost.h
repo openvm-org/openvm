@@ -5,6 +5,12 @@
 
 #include "openvm_state.h"
 
+static __attribute__((always_inline)) inline void
+trace_write_other_block_u64(
+    RvState* restrict state [[maybe_unused]],
+    uint32_t address_space [[maybe_unused]], uint32_t pointer [[maybe_unused]],
+    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {}
+
 /* Memory page accounting does not contribute to scalar metered cost. */
 static __attribute__((always_inline)) inline void read_mem_u64_range(
     RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,

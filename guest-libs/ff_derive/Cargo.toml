@@ -14,7 +14,7 @@ license.workspace = true
 bits = []
 rvr = ["openvm-algebra-circuit/rvr"]
 # Internal feature for testing only.
-cuda = ["openvm-algebra-circuit/cuda"]
+cuda = ["openvm-algebra-circuit/cuda", "openvm-algebra-circuit/test-utils"]
 
 [lib]
 proc-macro = true

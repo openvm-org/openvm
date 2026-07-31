@@ -3,7 +3,6 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
-pub mod adapters;
 pub mod call;
 pub mod canonicity;
 pub mod count;

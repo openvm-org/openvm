@@ -1,23 +1,16 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::{array, borrow::Borrow};
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
@@ -160,124 +153,14 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct AddSubCoreRecord<const NUM_LIMBS: usize> {
-    pub b: [u16; NUM_LIMBS],
-    pub c: [u16; NUM_LIMBS],
-    // Use u8 instead of usize for better packing
-    pub local_opcode: u8,
-}
-
 #[derive(Clone, Copy, derive_new::new)]
-pub struct AddSubExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct AddSubExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct AddSubFiller<
-    A,
-    const NUM_LIMBS: usize,
-    const LIMB_BITS: usize,
-    const RANGE_CHECK_TOP_LIMB: bool,
-> {
-    adapter: A,
+pub struct AddSubFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for AddSubExecutor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
-        >,
-    for<'buf> RA: RecordArena<
-        'buf,
-        EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut AddSubCoreRecord<NUM_LIMBS>),
-    >,
-{
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert!(matches!(
-            local_opcode,
-            BaseAluOpcode::ADD | BaseAluOpcode::SUB
-        ));
-        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let rd = run_add_sub::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
-
-        core_record.local_opcode = local_opcode as u8;
-
-        self.adapter
-            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
-    TraceFiller<F> for AddSubFiller<A, NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // AddSubCoreCols::width() elements
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid AddSubCoreRecord written by the executor
-        // during trace generation
-        let record: &AddSubCoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut AddSubCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
-        // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
-        // This requires:
-        // - Cols and Record structs should be repr(C) and we write in reverse order (to ensure
-        //   non-overlapping)
-        // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
-        //   otherwise)
-
-        let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
-        let a = run_add_sub::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
-        core_row.opcode_sub_flag = F::from_bool(record.local_opcode == BaseAluOpcode::SUB as u8);
-        core_row.opcode_add_flag = F::from_bool(record.local_opcode == BaseAluOpcode::ADD as u8);
-
-        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
-        for &a_val in &a[..range_limb_count] {
-            self.range_checker_chip.add_count(a_val as u32, LIMB_BITS);
-        }
-        core_row.c = record.c.map(F::from_u16);
-        core_row.b = record.b.map(F::from_u16);
-        core_row.a = a.map(F::from_u16);
-    }
 }
 
 #[inline(always)]

@@ -25,7 +25,7 @@ use crate::{
         memory::{
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            persistent::{group_touched_memory_by_leaf, PersistentBoundaryChip},
+            persistent::{group_sorted_touched_memory_by_leaf, PersistentBoundaryChip},
         },
         poseidon2::Poseidon2PeripheryChip,
         TouchedMemory,
@@ -159,15 +159,12 @@ impl<F: VmField> MemoryController<F> {
         }
     }
 
-    // @dev: Memory is complicated and allowed to break all the rules (e.g., 1 arena per chip) and
-    // there's no need for any memory chip to implement the Chip trait. We do it when convenient,
-    // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
-    // _somehow_.
-    pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
+    /// Generates the memory proving context from final blocks strictly ordered by
+    /// `(address_space, pointer)`, as produced by postflight.
+    pub(crate) fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         &mut self,
-        touched_memory: TouchedMemory<F>,
+        final_memory: &TouchedMemory<F>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
-        let final_memory = touched_memory;
         let MemoryInterface {
             boundary_chip,
             merkle_chip,
@@ -175,7 +172,7 @@ impl<F: VmField> MemoryController<F> {
         } = &mut self.interface_chip;
 
         let hasher = self.hasher_chip.as_ref().unwrap();
-        let final_memory_by_leaf = group_touched_memory_by_leaf(&final_memory);
+        let final_memory_by_leaf = group_sorted_touched_memory_by_leaf(final_memory);
         let dirty_leaves =
             boundary_chip.finalize(initial_memory, &final_memory_by_leaf, hasher.as_ref());
 
@@ -204,7 +201,7 @@ impl<F: VmField> MemoryController<F> {
         );
 
         vec![
-            boundary_chip.generate_proving_ctx(()),
+            boundary_chip.generate_proving_ctx(),
             merkle_chip.generate_proving_ctx(),
         ]
     }
@@ -231,6 +228,10 @@ impl<F> SharedMemoryHelper<F> {
             timestamp_lt_air,
             _marker: PhantomData,
         }
+    }
+
+    pub fn timestamp_max_bits(&self) -> usize {
+        self.timestamp_lt_air.max_bits
     }
 }
 

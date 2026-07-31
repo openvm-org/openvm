@@ -19,6 +19,13 @@ pub mod utils;
 
 pub use phantom::*;
 
+/// Bytes in one u16 memory cell.
+pub const U16_CELL_SIZE: usize = size_of::<u16>();
+/// u16 cells in one memory-bus block.
+pub const BLOCK_FE_WIDTH: usize = 4;
+/// Bytes in one memory-bus block.
+pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
+
 /// Public values address space.
 pub const PUBLIC_VALUES_AS: u32 = 3;
 /// Deferral output address space.

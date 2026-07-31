@@ -25,6 +25,21 @@ pub struct MemoryTester<F: VmField> {
     pub(super) controller: MemoryController<F>,
 }
 
+pub(crate) trait PostflightTestMemory<F: VmField> {
+    fn tracing_memory(&mut self) -> &mut TracingMemory;
+    fn write_block(&mut self, address_space: usize, pointer: usize, value: [F; BLOCK_FE_WIDTH]);
+}
+
+impl<F: VmField> PostflightTestMemory<F> for MemoryTester<F> {
+    fn tracing_memory(&mut self) -> &mut TracingMemory {
+        &mut self.memory
+    }
+
+    fn write_block(&mut self, address_space: usize, pointer: usize, value: [F; BLOCK_FE_WIDTH]) {
+        self.write(address_space, pointer, value);
+    }
+}
+
 impl<F: VmField> MemoryTester<F> {
     pub fn new(controller: MemoryController<F>, memory: TracingMemory) -> Self {
         let chip = MemoryDummyChip::new(MemoryDummyAir::new(controller.memory_bus));
@@ -161,6 +176,26 @@ where
 {
     let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
     rng.random_range(0..num_aligned_regions) * len
+}
+
+pub fn gen_distinct_register_pointers<R, const N: usize>(rng: &mut R, len: usize) -> [usize; N]
+where
+    R: Rng + ?Sized,
+{
+    let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
+    assert!(N <= num_aligned_regions);
+
+    let mut pointers = [0; N];
+    for index in 0..N {
+        loop {
+            let pointer = gen_register_pointer(rng, len);
+            if !pointers[..index].contains(&pointer) {
+                pointers[index] = pointer;
+                break;
+            }
+        }
+    }
+    pointers
 }
 
 pub fn gen_nonzero_register_pointer<R>(rng: &mut R, len: usize) -> usize

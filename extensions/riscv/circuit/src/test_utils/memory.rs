@@ -1,5 +1,5 @@
 use std::array;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
         memory::{gen_nonzero_register_pointer, gen_register_pointer},
         TestBuilder,
     },
-    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+    MemoryConfig, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -20,26 +20,12 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::adapters::{
-        Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, Rv64StoreByteAdapterRecord,
-        Rv64StoreMultiByteAdapterRecord, WORD_ACCESS_WIDTH,
-    },
-    crate::load::{LoadByteRecord, LoadRecord},
-    crate::store::{StoreByteRecord, StoreRecord},
-    openvm_circuit::arch::{
-        testing::{default_var_range_checker_bus, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    openvm_circuit::arch::testing::default_var_range_checker_bus,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
-#[cfg(feature = "cuda")]
-use crate::adapters::{
-    Rv64LoadByteAdapterExecutor, Rv64LoadMultiByteAdapterExecutor, Rv64StoreByteAdapterExecutor,
-    Rv64StoreMultiByteAdapterExecutor,
-};
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
@@ -109,10 +95,10 @@ fn random_memory_access(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
@@ -163,7 +149,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     let enabled_write = access.a != 0;
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -191,10 +177,10 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
@@ -248,7 +234,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.execute(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -282,7 +268,7 @@ pub(crate) fn store_memory_config() -> MemoryConfig {
     mem_config
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
@@ -294,63 +280,9 @@ pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
 //
 //  Ensure GPU tracegen is equivalent to CPU tracegen.
 // ////////////////////////////////////////////////////////////////////////////////////
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
     Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
     ))
-}
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_load_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
-    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>::new(),
-        );
-}
-
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
-    type Record<'a> = (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>::new(
-            ),
-        );
-}
-
-// Byte and multi-byte adapters have different row widths, so record transfer must use the
-// matching layout.
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_load_byte_records<G, C, A, E>(
-    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
-) {
-    type Record<'a> = (&'a mut Rv64LoadByteAdapterRecord, &'a mut LoadByteRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadByteAdapterExecutor>::new(),
-        );
-}
-
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_store_byte_records<G, C, A, E>(
-    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
-) {
-    type Record<'a> = (&'a mut Rv64StoreByteAdapterRecord, &'a mut StoreByteRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreByteAdapterExecutor>::new(),
-        );
 }

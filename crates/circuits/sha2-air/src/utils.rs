@@ -52,9 +52,10 @@ pub fn u32_into_bits<C: Sha2BlockHasherSubairConfig>(num: u32) -> Vec<u32> {
 
 /// Convert a list of limbs in little endian into a Word
 pub fn le_limbs_into_word<C: Sha2BlockHasherSubairConfig>(limbs: &[u32]) -> C::Word {
-    let mut limbs = limbs.to_vec();
-    limbs.reverse();
-    be_limbs_into_word::<C>(&limbs)
+    let limb_bits = C::WORD_BITS / limbs.len();
+    limbs.iter().rev().fold(C::Word::from(0), |acc, &limb| {
+        (acc << limb_bits) | limb.into()
+    })
 }
 
 /// Convert a list of limbs in big endian into a Word

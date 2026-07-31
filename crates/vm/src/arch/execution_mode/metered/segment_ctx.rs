@@ -13,6 +13,8 @@ pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
+    /// Values required to replay this segment from preflight.
+    pub num_preflight_replay_values: u32,
     pub trace_heights: Vec<u32>,
 }
 
@@ -129,10 +131,18 @@ pub struct SegmentationCtx {
     config: SegmentationConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
+    /// Replay values already accumulated in the current segment.
+    ///
+    /// This is zero for the interpreter and is carried across compiled
+    /// segment-boundary suspension so resumed metered execution keeps exact
+    /// replay sizing.
+    pub(crate) num_preflight_replay_values: u32,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
     checkpoint_instret: u64,
+    /// Preflight replay-value count at the last safe block boundary.
+    checkpoint_replay_values: u32,
     /// AIRs whose heights can change between segments.
     variable_airs: Vec<VariableAir>,
     /// Proving-memory contribution from AIRs whose heights are fixed.
@@ -242,8 +252,10 @@ impl SegmentationCtx {
             instrets_until_check: u64::from(SEGMENT_CHECK_INSNS),
             config,
             instret: 0,
+            num_preflight_replay_values: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
+            checkpoint_replay_values: 0,
             variable_airs,
             constant_counts: ProvingMemoryCounts::new(
                 constant_main_with_rot,
@@ -560,10 +572,13 @@ impl SegmentationCtx {
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-        let (segment_instret, segment_heights) = if self.checkpoint_instret > instret_start {
+        let (segment_instret, segment_heights, segment_replay_values) = if self.checkpoint_instret
+            > instret_start
+        {
             (
                 self.checkpoint_instret,
                 self.checkpoint_trace_heights.clone(),
+                self.checkpoint_replay_values,
             )
         } else {
             let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
@@ -571,11 +586,20 @@ impl SegmentationCtx {
                 "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
             );
             // No valid checkpoint, use current values
-            (instret, trace_heights.to_vec())
+            (
+                instret,
+                trace_heights.to_vec(),
+                self.num_preflight_replay_values,
+            )
         };
 
         let num_insns = segment_instret - instret_start;
-        self.create_segment::<false>(instret_start, num_insns, segment_heights);
+        self.create_segment::<false>(
+            instret_start,
+            num_insns,
+            segment_replay_values,
+            segment_heights,
+        );
     }
 
     /// Initialize state for a new segment
@@ -588,6 +612,10 @@ impl SegmentationCtx {
                 .checked_sub(last_segment.trace_heights[air.air_id])
                 .unwrap();
         }
+        self.num_preflight_replay_values = self
+            .num_preflight_replay_values
+            .checked_sub(last_segment.num_preflight_replay_values)
+            .expect("segment preflight replay values exceed the running count");
     }
 
     /// Updates the checkpoint with current safe state
@@ -595,6 +623,7 @@ impl SegmentationCtx {
     pub(crate) fn update_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
         self.checkpoint_trace_heights.copy_from_slice(trace_heights);
         self.checkpoint_instret = instret;
+        self.checkpoint_replay_values = self.num_preflight_replay_values;
     }
 
     /// Try segment if there is at least one instruction
@@ -608,7 +637,12 @@ impl SegmentationCtx {
             .map_or(0, |s| s.instret_start + s.num_insns);
 
         let num_insns = self.instret - instret_start;
-        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
+        self.create_segment::<true>(
+            instret_start,
+            num_insns,
+            self.num_preflight_replay_values,
+            trace_heights.to_vec(),
+        );
     }
 
     /// Push a new segment with logging
@@ -617,6 +651,7 @@ impl SegmentationCtx {
         &mut self,
         instret_start: u64,
         num_insns: u64,
+        num_preflight_replay_values: u32,
         trace_heights: Vec<u32>,
     ) {
         debug_assert!(
@@ -634,6 +669,7 @@ impl SegmentationCtx {
         self.segments.push(Segment {
             instret_start,
             num_insns,
+            num_preflight_replay_values,
             trace_heights,
         });
     }
@@ -814,15 +850,21 @@ mod tests {
     #[test]
     fn test_check_and_segment_uses_last_safe_checkpoint() {
         let mut ctx = small_segmentation_ctx();
+        ctx.num_preflight_replay_values = 5;
         ctx.update_checkpoint(10, &[2]);
 
         let mut trace_heights = vec![8];
+        ctx.num_preflight_replay_values = 8;
         assert!(ctx.check_and_segment(15, &mut trace_heights));
 
         assert_eq!(ctx.segments.len(), 1);
         assert_eq!(ctx.segments[0].instret_start, 0);
         assert_eq!(ctx.segments[0].num_insns, 10);
+        assert_eq!(ctx.segments[0].num_preflight_replay_values, 5);
         assert_eq!(ctx.segments[0].trace_heights, vec![2]);
+
+        ctx.initialize_segment(&mut trace_heights);
+        assert_eq!(ctx.num_preflight_replay_values, 3);
     }
 
     fn scan_test_ctx(initial_heights: &[u32], is_constant: &[bool]) -> SegmentationCtx {
@@ -897,6 +939,7 @@ mod tests {
         ctx.segments.push(Segment {
             instret_start: 0,
             num_insns: 50,
+            num_preflight_replay_values: 0,
             trace_heights: vec![5, 8, 9, 4],
         });
         let mut trace_heights = vec![5, 8, 12, 10];

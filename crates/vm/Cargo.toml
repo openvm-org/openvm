@@ -20,7 +20,7 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform.workspace = true
 rvr-openvm-ir = { workspace = true, optional = true }
-rvr-state = { workspace = true, optional = true }
+rvr-state.workspace = true
 rvr-openvm = { workspace = true, optional = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 
@@ -35,6 +35,7 @@ tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 backtrace.workspace = true
+bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
@@ -48,6 +49,7 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 nix = { workspace = true, optional = true }
 bytesize.workspace = true
 
@@ -96,9 +98,9 @@ rvr = [
     "dep:rvr-openvm",
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ir",
-    "dep:rvr-state",
     "dep:libloading",
     "dep:tempfile",
+    "dep:sha2",
     "dep:nix",
     "openvm-circuit-derive/rvr",
 ]

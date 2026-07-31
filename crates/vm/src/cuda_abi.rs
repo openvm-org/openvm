@@ -57,27 +57,295 @@ pub mod phantom {
     use super::*;
 
     extern "C" {
-        fn _phantom_tracegen(
+        fn _phantom_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
-            d_records: DeviceBufferView,
+            d_instructions: DeviceBufferView,
+            pc_base: u32,
+            d_program: DeviceBufferView,
+            d_memory: DeviceBufferView,
+            d_steps: DeviceBufferView,
+            step_start: usize,
+            num_steps: usize,
+            d_error: *mut u32,
+            phantom_opcode: u32,
             stream: cudaStream_t,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen(
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         width: usize,
-        d_records: &DeviceBuffer<u8>,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program: DeviceBufferView,
+        d_memory: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        d_error: *mut u32,
+        phantom_opcode: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_phantom_tracegen(
+        CudaError::from_result(_phantom_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.view(),
+            d_instructions,
+            pc_base,
+            d_program,
+            d_memory,
+            d_steps,
+            step_start,
+            num_steps,
+            d_error,
+            phantom_opcode,
+            stream,
+        ))
+    }
+}
+
+pub mod postflight {
+    use super::*;
+
+    extern "C" {
+        fn _postflight_memory_chronology_get_temp_bytes(
+            num_entries: usize,
+            h_temp_bytes_out: *mut usize,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _postflight_memory_chronology_sort_and_count(
+            memory: DeviceBufferView,
+            write_masks: DeviceBufferView,
+            field_values: DeviceBufferView,
+            address_spaces: DeviceBufferView,
+            address_space_offset: u32,
+            address_space_height: u32,
+            pointer_max_bits: u32,
+            field_address_space: u32,
+            count_field_metadata: u32,
+            workspace: *mut u64,
+            sorted_keys: *mut u64,
+            counts: *mut u32,
+            temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _postflight_memory_chronology_resolve(
+            memory: DeviceBufferView,
+            write_masks: DeviceBufferView,
+            address_spaces: DeviceBufferView,
+            initial_memory: DeviceBufferView,
+            field_values: DeviceBufferView,
+            register_address_space: u32,
+            non_register_begin: u32,
+            sorted_keys: *const u64,
+            workspace: *mut u64,
+            predecessors: *mut u32,
+            seeds: DeviceBufferView,
+            field_seeds: DeviceBufferView,
+            field_begin: u32,
+            field_end: u32,
+            field_seed_base: u32,
+            touched: DeviceBufferView,
+            temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _postflight_program_index_get_temp_bytes(
+            num_steps: usize,
+            h_temp_bytes_out: *mut usize,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _postflight_program_index(
+            instructions: DeviceBufferView,
+            dense_program_rows: DeviceBufferView,
+            pc_base: u32,
+            program: DeviceBufferView,
+            memory: DeviceBufferView,
+            active_opcodes: DeviceBufferView,
+            timestamp_max_bits: u32,
+            endpoint_kind: u32,
+            resume_pc: u32,
+            final_timestamp: u32,
+            terminate_opcode: u32,
+            opcode_keys_in: *mut u32,
+            opcode_keys_out: *mut u32,
+            steps_in: *mut std::ffi::c_void,
+            steps_out: *mut std::ffi::c_void,
+            ranges: *mut u32,
+            program_frequencies: *mut u32,
+            temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn memory_chronology_get_temp_bytes(
+        num_entries: usize,
+        h_temp_bytes_out: &mut usize,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_postflight_memory_chronology_get_temp_bytes(
+            num_entries,
+            h_temp_bytes_out,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn memory_chronology_sort_and_count(
+        memory: DeviceBufferView,
+        write_masks: DeviceBufferView,
+        field_values: DeviceBufferView,
+        address_spaces: DeviceBufferView,
+        address_space_offset: u32,
+        address_space_height: u32,
+        pointer_max_bits: u32,
+        field_address_space: u32,
+        count_field_metadata: bool,
+        workspace: &DeviceBuffer<u64>,
+        sorted_keys: &DeviceBuffer<u64>,
+        counts: &DeviceBuffer<u32>,
+        temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_postflight_memory_chronology_sort_and_count(
+            memory,
+            write_masks,
+            field_values,
+            address_spaces,
+            address_space_offset,
+            address_space_height,
+            pointer_max_bits,
+            field_address_space,
+            u32::from(count_field_metadata),
+            workspace.as_mut_ptr(),
+            sorted_keys.as_mut_ptr(),
+            counts.as_mut_ptr(),
+            temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn memory_chronology_resolve(
+        memory: DeviceBufferView,
+        write_masks: DeviceBufferView,
+        address_spaces: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        field_values: DeviceBufferView,
+        register_address_space: u32,
+        non_register_begin: u32,
+        sorted_keys: &DeviceBuffer<u64>,
+        workspace: &DeviceBuffer<u64>,
+        predecessors: &DeviceBuffer<u32>,
+        seeds: DeviceBufferView,
+        field_seeds: DeviceBufferView,
+        field_begin: u32,
+        field_end: u32,
+        field_seed_base: u32,
+        touched: DeviceBufferView,
+        temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_postflight_memory_chronology_resolve(
+            memory,
+            write_masks,
+            address_spaces,
+            initial_memory,
+            field_values,
+            register_address_space,
+            non_register_begin,
+            sorted_keys.as_ptr(),
+            workspace.as_mut_ptr(),
+            predecessors.as_mut_ptr(),
+            seeds,
+            field_seeds,
+            field_begin,
+            field_end,
+            field_seed_base,
+            touched,
+            temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    pub unsafe fn program_index_get_temp_bytes(
+        num_steps: usize,
+        h_temp_bytes_out: &mut usize,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_postflight_program_index_get_temp_bytes(
+            num_steps,
+            h_temp_bytes_out,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn program_index(
+        instructions: DeviceBufferView,
+        dense_program_rows: DeviceBufferView,
+        pc_base: u32,
+        program: DeviceBufferView,
+        memory: DeviceBufferView,
+        active_opcodes: DeviceBufferView,
+        timestamp_max_bits: u32,
+        endpoint_kind: u32,
+        resume_pc: u32,
+        final_timestamp: u32,
+        terminate_opcode: u32,
+        opcode_keys_in: &DeviceBuffer<u32>,
+        opcode_keys_out: &DeviceBuffer<u32>,
+        steps_in: *mut std::ffi::c_void,
+        steps_out: *mut std::ffi::c_void,
+        ranges: &DeviceBuffer<u32>,
+        program_frequencies: &DeviceBuffer<u32>,
+        temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_postflight_program_index(
+            instructions,
+            dense_program_rows,
+            pc_base,
+            program,
+            memory,
+            active_opcodes,
+            timestamp_max_bits,
+            endpoint_kind,
+            resume_pc,
+            final_timestamp,
+            terminate_opcode,
+            opcode_keys_in.as_mut_ptr(),
+            opcode_keys_out.as_mut_ptr(),
+            steps_in,
+            steps_out,
+            ranges.as_mut_ptr(),
+            program_frequencies.as_mut_ptr(),
+            temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
+            error.as_mut_ptr(),
             stream,
         ))
     }
@@ -190,6 +458,17 @@ pub mod poseidon2 {
 pub mod inventory {
     use super::*;
 
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct MergeMetadata {
+        pub out_num_records: usize,
+        pub touched_path_sum: u64,
+        pub dirty_leaves: usize,
+        pub dirty_path_sum: u64,
+    }
+
+    const _: () = assert!(std::mem::size_of::<MergeMetadata>() == 4 * std::mem::size_of::<u64>());
+
     extern "C" {
         fn _inventory_merge_records_get_temp_bytes(
             d_flags: *mut u32,
@@ -201,6 +480,7 @@ pub mod inventory {
         fn _inventory_merge_records(
             d_in_records: *const u32,
             in_num_records: usize,
+            address_height: usize,
             d_initial_mem: *const *const std::ffi::c_void,
             d_tmp_records: *mut u32,
             d_out_records: *mut u32,
@@ -208,15 +488,17 @@ pub mod inventory {
             d_positions: *mut u32,
             d_temp_storage: *mut std::ffi::c_void,
             temp_storage_bytes: usize,
-            out_num_records: *mut usize,
+            metadata: *mut MergeMetadata,
+            collect_merkle_metadata: u32,
             stream: cudaStream_t,
         ) -> i32;
     }
 
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn merge_records(
-        d_in_records: &DeviceBuffer<u32>,
+        d_in_records: DeviceBufferView,
         in_num_records: usize,
+        address_height: usize,
         d_initial_mem: &DeviceBuffer<*const std::ffi::c_void>,
         d_tmp_records: &DeviceBuffer<u32>,
         d_out_records: &DeviceBuffer<u32>,
@@ -224,12 +506,14 @@ pub mod inventory {
         d_positions: &DeviceBuffer<u32>,
         d_temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
-        d_out_num_records: &DeviceBuffer<usize>,
+        d_metadata: &DeviceBuffer<MergeMetadata>,
+        collect_merkle_metadata: bool,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_inventory_merge_records(
-            d_in_records.as_ptr(),
+            d_in_records.ptr.cast(),
             in_num_records,
+            address_height,
             d_initial_mem.as_ptr(),
             d_tmp_records.as_mut_ptr(),
             d_out_records.as_mut_ptr(),
@@ -237,7 +521,8 @@ pub mod inventory {
             d_positions.as_mut_ptr(),
             d_temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
-            d_out_num_records.as_mut_ptr(),
+            d_metadata.as_mut_ptr(),
+            collect_merkle_metadata as u32,
             stream,
         ))
     }

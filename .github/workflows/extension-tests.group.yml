@@ -40,7 +40,7 @@ jobs:
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - name: Init rvr FFI submodules
-        if: ${{ inputs.mode != 'cuda' && inputs.mode != 'default' }}
+        if: ${{ inputs.mode != 'default' }}
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
@@ -66,7 +66,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Install clang-22 and lld (required for rvr)
-        if: ${{ inputs.mode != 'cuda' && inputs.mode != 'default' }}
+        if: ${{ inputs.mode != 'default' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y lsb-release wget software-properties-common gnupg
@@ -109,11 +109,14 @@ jobs:
             echo "::group::Running circuit tests for $extension"
             pushd "extensions/$extension/circuit"
             if [[ "${{ inputs.mode }}" == "cuda" ]]; then
-              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features=cuda,touchemall --profile=heavy --no-tests=pass
+              cuda_features="cuda,touchemall,rvr,test-utils"
+              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features="$cuda_features" --profile=heavy --no-tests=pass
             else
               test_threads=(--test-threads=32)
               if [[ "$extension" == "algebra" ]]; then
                 test_threads=(--test-threads=4)
+              elif [[ "$extension" == "riscv" ]]; then
+                test_threads=(--test-threads=16)
               fi
 
               case "${{ inputs.mode }}" in
@@ -178,6 +181,12 @@ jobs:
               echo "::endgroup::"
             fi
           done
+
+      - name: Run VM CUDA and RVR phantom integration tests
+        if: inputs.mode == 'cuda' && inputs.cuda_group == 'riscv'
+        working-directory: crates/vm
+        run: |
+          CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast test_cuda_phantom --features=parallel,cuda,rvr --profile=heavy --no-tests=pass
 
       - name: sccache stats
         if: always()

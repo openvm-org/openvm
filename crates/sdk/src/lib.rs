@@ -27,11 +27,11 @@ use openvm_circuit::arch::{
 pub use openvm_circuit::{self, arch::ExecutionOutcome};
 use openvm_circuit::{
     arch::{
-        execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
-        MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
-        VmExecutor, U16_CELL_SIZE,
+        execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
+        InitFileGenerator, MeteredExecutor, VirtualMachine, VirtualMachineError, VmBuilder,
+        VmExecutionConfig, VmExecutor, VmState, U16_CELL_SIZE,
     },
-    system::memory::merkle::public_values::extract_public_values,
+    system::memory::{merkle::public_values::extract_public_values, online::GuestMemory},
 };
 use openvm_continuations::CommitBytes;
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
@@ -56,7 +56,9 @@ use crate::compiled::load_metered_artifact_metadata;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
-    prover::{AggProver, AppProver, DeferralAggProver, DeferralHookCommits, StarkProver},
+    prover::{
+        vm::new_local_vm, AggProver, AppProver, DeferralAggProver, DeferralHookCommits, StarkProver,
+    },
     types::AppExecutionCommit,
 };
 #[cfg(feature = "evm-prove")]
@@ -101,8 +103,12 @@ mod error;
 mod stdin;
 #[cfg(feature = "rvr")]
 pub use compiled::CompiledExePureWithInstretTracking;
-pub use compiled::{CompiledExeMetered, CompiledExeMeteredCost, CompiledExePure};
+pub use compiled::{
+    CompiledExeMetered, CompiledExeMeteredCost, CompiledExePreflight, CompiledExePure,
+    PreflightOutput,
+};
 pub use error::SdkError;
+pub use openvm_sdk_config::SegmentProver;
 pub use stdin::*;
 
 pub const OPENVM_VERSION: &str = concat!(
@@ -480,10 +486,14 @@ where
 impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    VB: ContinuationProverBuilder<E> + Clone,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
 {
+    fn app_vm(&self) -> Result<VirtualMachine<E, VB>, SdkError> {
+        let app_pk = self.app_pk();
+        new_local_vm(self.app_vm_builder.clone(), &app_pk.app_vm_pk).map_err(SdkError::from)
+    }
+
     /// Compile `app_exe` and execute it, returning the user public values as bytes.
     pub fn compile_and_execute(
         &self,
@@ -510,7 +520,7 @@ where
                 .map(|elf_path| self.guest_debug_map(elf_path, &exe))
                 .transpose()?;
             self.executor
-                .rvr_instance(&exe, guest_debug_map.as_ref())
+                .instance_with_debug_map(&exe, guest_debug_map.as_ref())
                 .map(CompiledExePure::new)
                 .map_err(VirtualMachineError::from)
                 .map_err(SdkError::from)
@@ -539,7 +549,7 @@ where
             .map(|elf_path| self.guest_debug_map(elf_path, &exe))
             .transpose()?;
         self.executor
-            .rvr_instret_tracking_instance(&exe, guest_debug_map.as_ref())
+            .instret_tracking_instance(&exe, guest_debug_map.as_ref())
             .map(CompiledExePureWithInstretTracking::new)
             .map_err(VirtualMachineError::from)
             .map_err(SdkError::from)
@@ -596,6 +606,64 @@ where
         Ok(public_values)
     }
 
+    /// Compile `app_exe` for bounded preflight execution.
+    #[tracing::instrument(name = "sdk.compile_preflight", level = "info", skip_all)]
+    pub fn compile_preflight(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePreflight<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        #[cfg(feature = "rvr")]
+        {
+            let guest_debug_map = input
+                .elf_path
+                .as_deref()
+                .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+                .transpose()?;
+            self.executor
+                .preflight_instance_with_debug_map(&exe, guest_debug_map.as_ref())
+                .map(CompiledExePreflight::new)
+                .map_err(VirtualMachineError::from)
+                .map_err(SdkError::from)
+        }
+        #[cfg(not(feature = "rvr"))]
+        self.executor
+            .preflight_instance(&exe)
+            .map(CompiledExePreflight::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Run preflight for exactly one metered segment from `state`.
+    #[tracing::instrument(name = "sdk.execute_preflight", level = "info", skip_all)]
+    pub fn execute_preflight(
+        &self,
+        compiled: &CompiledExePreflight<'_>,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<PreflightOutput, SdkError> {
+        compiled
+            .execute_segment(state, segment)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Load a previously saved preflight-mode artifact.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_preflight(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePreflight<'_>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .load_preflight_instance(lib_path, &exe)
+            .map(CompiledExePreflight::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
     /// Executes with segmentation for proof generation.
     /// Returns both user public values and segments with instruction counts and trace heights.
     pub fn compile_and_execute_metered(
@@ -615,10 +683,8 @@ where
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMetered<'_>, SdkError> {
         let input = self.compile_input(app_exe)?;
-        let app_prover = self.app_prover(input.executable)?;
-
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
+        let exe = self.convert_to_exe(input.executable)?;
+        let vm = self.app_vm()?;
 
         let ctx = vm.build_metered_ctx(&exe);
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
@@ -631,7 +697,7 @@ where
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
-            .metered_rvr_instance(
+            .metered_instance_with_debug_map(
                 &exe,
                 &executor_idx_to_air_idx,
                 ctx.trace_heights.len(),
@@ -715,10 +781,8 @@ where
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
         let input = self.compile_input(app_exe)?;
-        let app_prover = self.app_prover(input.executable)?;
-
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
+        let exe = self.convert_to_exe(input.executable)?;
+        let vm = self.app_vm()?;
 
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
@@ -731,7 +795,7 @@ where
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
-            .metered_cost_rvr_instance(
+            .metered_cost_instance_with_debug_map(
                 &exe,
                 &executor_idx_to_air_idx,
                 &ctx.widths,
@@ -754,9 +818,8 @@ where
         lib_path: &Path,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
+        let exe = self.convert_to_exe(app_exe)?;
+        let vm = self.app_vm()?;
 
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();

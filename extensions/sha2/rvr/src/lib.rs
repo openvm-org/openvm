@@ -62,6 +62,16 @@ impl ExtInstr for Sha256Instr {
         let st = ctx.read_var(self.state_ptr_reg);
         let inp = ctx.read_var(self.input_ptr_reg);
         ctx.emit_call("rvr_ext_sha256", &["state", &dst, &st, &inp]);
+        // The FFI keeps pure and metered execution on one memcpy-based path. In compact
+        // checkpoint mode its range wrappers mutate memory and dirty pages but deliberately emit
+        // no per-access metadata, so preserve the remaining AIR clock schedule here. The four
+        // post-compression words are the only values an independent replay chunk cannot derive
+        // from its starting checkpoint.
+        ctx.advance_timestamp(16);
+        let state_bytes = Sha256Config::HASH_WORDS * Sha256Config::WORD_U8S;
+        for offset in (0..state_bytes).step_by(size_of::<u64>()) {
+            ctx.append_replay_value(&format!("peek_mem_u64(state, {dst} + {offset}ull)"));
+        }
     }
 
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
@@ -74,6 +84,10 @@ impl ExtInstr for Sha256Instr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -103,6 +117,11 @@ impl ExtInstr for Sha512Instr {
         let st = ctx.read_var(self.state_ptr_reg);
         let inp = ctx.read_var(self.input_ptr_reg);
         ctx.emit_call("rvr_ext_sha512", &["state", &dst, &st, &inp]);
+        ctx.advance_timestamp(32);
+        let state_bytes = Sha512Config::HASH_WORDS * Sha512Config::WORD_U8S;
+        for offset in (0..state_bytes).step_by(size_of::<u64>()) {
+            ctx.append_replay_value(&format!("peek_mem_u64(state, {dst} + {offset}ull)"));
+        }
     }
 
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
@@ -115,6 +134,10 @@ impl ExtInstr for Sha512Instr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -198,5 +221,183 @@ impl RvrExtension for Sha2Extension {
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
         SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rvr_openvm_ir::{MemWidth, PageAddressSpace};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct TestEmitCtx {
+        operations: Vec<String>,
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn read_var(&mut self, var: Variable) -> String {
+            self.operations.push(format!("read(r{});", var.index()));
+            format!("r{}", var.index())
+        }
+
+        fn peek_var(&mut self, _var: Variable) -> String {
+            unreachable!()
+        }
+
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.operations.push(format!("advance({slots});"));
+        }
+
+        fn write_var(&mut self, _var: Variable, _val: &str) {
+            unreachable!()
+        }
+
+        fn write_line(&mut self, _s: &str) {
+            unreachable!()
+        }
+
+        fn emit_trap(&mut self) {
+            unreachable!()
+        }
+
+        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+            unreachable!()
+        }
+
+        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
+            unreachable!()
+        }
+
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_timestamp_slots(&mut self, _slots: &str) {
+            unreachable!()
+        }
+
+        fn append_replay_value(&mut self, value: &str) {
+            self.operations.push(format!("replay_value({value});"));
+        }
+
+        fn emit_call(&mut self, name: &str, args: &[&str]) {
+            self.operations
+                .push(format!("{name}({});", args.join(", ")));
+        }
+
+        fn emit_call_without_page_flush(&mut self, _name: &str, _args: &[&str]) {
+            unreachable!()
+        }
+
+        fn emit_call_expr(&mut self, _ret_ty: &str, _name: &str, _args: &[&str]) -> String {
+            unreachable!()
+        }
+
+        fn emit_call_with_trace_result(
+            &mut self,
+            _ret_ty: &str,
+            _name: &str,
+            _args: &[&str],
+        ) -> Option<String> {
+            unreachable!()
+        }
+
+        fn trace_chip(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_chip_if_nonzero(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_page_access(
+            &mut self,
+            _addr: &str,
+            _width: MemWidth,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+
+        fn trace_page_access_u64_range(
+            &mut self,
+            _base_addr: &str,
+            _num_dwords: &str,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+    }
+
+    fn assert_checkpoint_shape(
+        instr: &dyn ExtInstr,
+        ffi_name: &str,
+        remaining_slots: u32,
+        expected_replay_values: usize,
+    ) {
+        assert!(instr.supports_preflight());
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+        assert_eq!(
+            ctx.operations
+                .iter()
+                .filter(|operation| operation.starts_with("read("))
+                .count(),
+            3
+        );
+        assert_eq!(
+            ctx.operations
+                .iter()
+                .filter(|operation| operation.starts_with(ffi_name))
+                .count(),
+            1
+        );
+        assert_eq!(
+            ctx.operations
+                .iter()
+                .filter(|operation| operation.as_str() == format!("advance({remaining_slots});"))
+                .count(),
+            1
+        );
+        let replay_values = ctx
+            .operations
+            .iter()
+            .filter(|operation| operation.starts_with("replay_value(peek_mem_u64("))
+            .collect::<Vec<_>>();
+        assert_eq!(replay_values.len(), expected_replay_values);
+        for (index, operation) in replay_values.into_iter().enumerate() {
+            assert!(operation.contains(&format!("+ {}ull", index * size_of::<u64>())));
+        }
+    }
+
+    #[test]
+    fn sha256_checkpoint_emits_exact_schedule_and_replay_values() {
+        assert_checkpoint_shape(
+            &Sha256Instr {
+                dst_ptr_reg: Variable::new(1),
+                state_ptr_reg: Variable::new(2),
+                input_ptr_reg: Variable::new(3),
+                block_hasher_chip_idx: None,
+            },
+            "rvr_ext_sha256(",
+            16,
+            4,
+        );
+    }
+
+    #[test]
+    fn sha512_checkpoint_emits_exact_schedule_and_replay_values() {
+        assert_checkpoint_shape(
+            &Sha512Instr {
+                dst_ptr_reg: Variable::new(1),
+                state_ptr_reg: Variable::new(2),
+                input_ptr_reg: Variable::new(3),
+                block_hasher_chip_idx: None,
+            },
+            "rvr_ext_sha512(",
+            32,
+            8,
+        );
     }
 }

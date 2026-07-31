@@ -2,23 +2,15 @@
 //! The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.
 //! The runtime executor will execute different phantom instructions that may
 //! affect trace generation based on the operand.
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::{borrow::Borrow, sync::Arc};
 
-use openvm_circuit_primitives::{
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, VmOpcode,
-};
+use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -27,19 +19,15 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::online::{GuestMemory, TracingMemory};
-use crate::{
-    arch::{
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
-        ExecutionState, PcIncOrSet, PhantomSubExecutor, PreflightExecutor, RecordArena, Streams,
-        TraceFiller, VmChipWrapper, VmStateMut,
-    },
-    system::memory::MemoryAuxColsFactory,
-};
+use super::memory::online::GuestMemory;
+use crate::arch::{ExecutionBridge, ExecutionState, PcIncOrSet, PhantomSubExecutor, Streams};
 
 mod execution;
 #[cfg(test)]
 mod tests;
+mod trace;
+
+pub(crate) use trace::generate_trace_from_postflight;
 
 /// PhantomAir still needs columns for each nonzero operand in a phantom instruction.
 /// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction]
@@ -96,126 +84,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct PhantomRecord {
-    pub pc: u32,
-    pub operands: [u32; NUM_PHANTOM_OPERANDS],
-    pub timestamp: u32,
-}
-
-/// `PhantomChip` is a special executor because it is stateful and stores all the phantom
-/// sub-executors.
+/// Stateful executor that stores and dispatches all phantom sub-executors.
 #[derive(Clone, derive_new::new)]
 pub struct PhantomExecutor {
     pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>>,
-    phantom_opcode: VmOpcode,
-}
-
-pub struct PhantomFiller;
-pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
-
-impl<F, RA> PreflightExecutor<F, RA> for PhantomExecutor
-where
-    F: PrimeField32,
-    for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,
-{
-    fn execute(
-        &self,
-        state: VmStateMut<TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
-        let pc = *state.pc;
-        record.pc = pc;
-        record.timestamp = state.memory.timestamp;
-        let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
-        record.operands = [a, b, c];
-
-        debug_assert_eq!(instruction.opcode, self.phantom_opcode);
-        let discriminant = PhantomDiscriminant(c as u16);
-        if let Some(sys) = SysPhantom::from_repr(discriminant.0) {
-            tracing::trace!("pc: {pc:#x} | system phantom: {sys:?}");
-            match sys {
-                SysPhantom::DebugPanic => {
-                    #[cfg(all(
-                        feature = "metrics",
-                        any(debug_assertions, feature = "perf-metrics")
-                    ))]
-                    {
-                        let metrics = state.metrics;
-                        metrics.update_backtrace(pc);
-                        if let Some(mut backtrace) = metrics.prev_backtrace.take() {
-                            backtrace.resolve();
-                            eprintln!("openvm program failure; backtrace:\n{backtrace:?}");
-                        } else {
-                            eprintln!("openvm program failure; no backtrace");
-                        }
-                    }
-                    return Err(ExecutionError::Fail {
-                        pc,
-                        msg: "DebugPanic",
-                    });
-                }
-                #[cfg(feature = "perf-metrics")]
-                SysPhantom::CtStart => {
-                    let metrics = state.metrics;
-                    if let Some(info) = metrics.debug_infos.get(pc) {
-                        metrics.cycle_tracker.start(info.dsl_instruction.clone());
-                    }
-                }
-                #[cfg(feature = "perf-metrics")]
-                SysPhantom::CtEnd => {
-                    let metrics = state.metrics;
-                    if let Some(info) = metrics.debug_infos.get(pc) {
-                        metrics.cycle_tracker.end(info.dsl_instruction.clone());
-                    }
-                }
-                _ => {}
-            }
-        } else {
-            let sub_executor = self.phantom_executors.get(&discriminant).unwrap();
-            sub_executor
-                .phantom_execute(
-                    &state.memory.data,
-                    state.streams,
-                    state.rng,
-                    discriminant,
-                    a,
-                    b,
-                    (c >> 16) as u16,
-                )
-                .map_err(|err| ExecutionError::Phantom {
-                    pc,
-                    discriminant,
-                    inner: err,
-                })?;
-        }
-        *state.pc += DEFAULT_PC_STEP;
-        state.memory.increment_timestamp();
-
-        Ok(())
-    }
-
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", SystemOpcode::PHANTOM)
-    }
-}
-
-impl<F: Field> TraceFiller<F> for PhantomFiller {
-    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
-        // SAFETY: assume that row has size PhantomCols::<F>::width()
-        let record: &PhantomRecord = unsafe { get_record_from_slice(&mut row_slice, ()) };
-        let row: &mut PhantomCols<F> = row_slice.borrow_mut();
-        // SAFETY: must assign in reverse order of column struct to prevent overwriting
-        // borrowed data
-        row.is_valid = F::ONE;
-        row.timestamp = F::from_u32(record.timestamp);
-        row.operands[2] = F::from_u32(record.operands[2]);
-        row.operands[1] = F::from_u32(record.operands[1]);
-        row.operands[0] = F::from_u32(record.operands[0]);
-        row.pc = F::from_u32(record.pc)
-    }
 }
 
 pub struct NopPhantomExecutor;

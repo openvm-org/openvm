@@ -1,15 +1,19 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
-    system::memory::online::{GuestMemory, TracingMemory},
+    arch::{
+        execution_mode::ExecutionCtxTrait, ExecutionError, PostflightError, VmStateMut,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS, PUBLIC_VALUES_AS,
+    PUBLIC_VALUES_AS,
 };
+use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -54,6 +58,49 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
+#[inline(always)]
+pub(crate) fn checked_register_pointer(pointer: u32) -> Result<u8, PostflightError> {
+    if pointer > u8::MAX as u32 || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+        return Err(PostflightError::new(
+            "RV64 register pointer is outside the register domain",
+        ));
+    }
+    Ok(pointer as u8)
+}
+
+#[inline(always)]
+pub(crate) fn checked_register_u16_pointer(pointer: u32) -> Result<u32, PostflightError> {
+    checked_register_pointer(pointer)?;
+    Ok(pointer >> 1)
+}
+
+pub(crate) struct ReplayComputation<const NUM_LIMBS: usize, M> {
+    pub output: [u8; NUM_LIMBS],
+    pub metadata: M,
+}
+
+pub(crate) struct ReplayResult<const NUM_LIMBS: usize, M> {
+    pub inputs: [[u8; NUM_LIMBS]; 2],
+    pub output: [u8; NUM_LIMBS],
+    pub metadata: M,
+}
+
+/// Validate a guest byte pointer used as the start of a memory-bus block.
+///
+/// OpenVM memory is an equipartition into [`BLOCK_FE_WIDTH`]-cell blocks. In
+/// the RV64 u16 address spaces that makes every proof-visible block start
+/// [`MEMORY_BLOCK_BYTES`]-byte aligned.
+#[inline(always)]
+pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, ExecutionError> {
+    if !ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "memory block pointer must be eight-byte aligned",
+        });
+    }
+    Ok(ptr)
+}
+
 /// Supported load/store access widths in bytes.
 pub(crate) const BYTE_ACCESS_WIDTH: usize = 1;
 pub(crate) const HALFWORD_ACCESS_WIDTH: usize = 2;
@@ -74,13 +121,6 @@ pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;
 /// Number of columns in the byte-shift selector encoding.
 pub(crate) const BYTE_SHIFT_SELECTOR_WIDTH: usize = 3;
 const SHIFT_SELECTOR_MAX_DEGREE: u32 = 2;
-
-#[inline(always)]
-pub(crate) fn rv64_register_pointer(pointer: u32) -> u8 {
-    debug_assert!(pointer <= u32::from(u8::MAX));
-    debug_assert_eq!(pointer as usize % RV64_REGISTER_NUM_LIMBS, 0);
-    pointer as u8
-}
 
 /// Encodes one selector case for each byte shift, reserving the zero point for invalid rows.
 pub(crate) fn shift_encoder() -> Encoder {
@@ -234,6 +274,18 @@ pub fn byte_ptr_to_u16_ptr_value(byte_ptr: u32) -> u32 {
     byte_ptr >> 1
 }
 
+#[inline(always)]
+pub(crate) fn checked_byte_ptr_to_u16_ptr_value(
+    byte_ptr: u32,
+) -> Result<u32, openvm_circuit::arch::PostflightError> {
+    if byte_ptr & 1 != 0 {
+        return Err(openvm_circuit::arch::PostflightError::new(
+            "u16 memory-bus pointer must be two-byte aligned",
+        ));
+    }
+    Ok(byte_ptr >> 1)
+}
+
 /// Converts a `u64` to `u32`, requiring the upper 32 bits to be zero.
 #[inline(always)]
 pub fn u64_to_u32_checked(value: u64) -> u32 {
@@ -259,25 +311,34 @@ pub fn rv64_address_add_imm(base: u32, imm_extended: u32) -> u64 {
 }
 
 #[inline(always)]
+pub(crate) fn checked_rv64_memory_address(
+    pc: u32,
+    base: u32,
+    imm_extended: u32,
+    access_width: usize,
+) -> Result<u32, ExecutionError> {
+    debug_assert!(access_width <= MEM_SIZE);
+    let address = rv64_address_add_imm(base, imm_extended);
+    if address > (MEM_SIZE - access_width) as u64 {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "effective address exceeds implemented memory address space",
+        });
+    }
+    Ok(address as u32)
+}
+
+#[inline(always)]
 pub fn rv64_bytes_to_u16_block(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
     std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
 }
 
-pub(crate) const RV64_BYTE_MASK: u16 = (1 << RV64_BYTE_BITS) - 1;
 pub(crate) const RV64_BYTE_SIGN_BIT: u16 = 1 << (RV64_BYTE_BITS - 1);
 pub(crate) const RV64_U16_SIGN_BIT: u16 = 1 << (U16_BITS - 1);
 
 #[inline(always)]
 pub(crate) fn u16_cell_byte(cell: u16, byte_idx: usize) -> u16 {
     u16::from(cell.to_le_bytes()[byte_idx])
-}
-
-#[inline(always)]
-pub(crate) fn set_u16_cell_byte(cell: u16, byte_idx: usize, byte: u16) -> u16 {
-    debug_assert!(byte <= RV64_BYTE_MASK);
-    let mut bytes = cell.to_le_bytes();
-    bytes[byte_idx] = byte as u8;
-    u16::from_le_bytes(bytes)
 }
 
 /// Converts a low-32-bit value to one zero-extended RV64 u16 block.
@@ -402,28 +463,6 @@ pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const
 }
 
 #[inline(always)]
-pub fn memory_read_deferral<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
-where
-    F: PrimeField32,
-{
-    // SAFETY: address space `DEFERRAL_AS` has cell type `F`
-    unsafe { memory.read::<F, N>(DEFERRAL_AS, ptr) }
-}
-
-#[inline(always)]
-pub fn timed_write_deferral<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory,
-    ptr: u32,
-    vals: [F; BLOCK_SIZE],
-) -> (u32, [F; BLOCK_SIZE])
-where
-    F: PrimeField32,
-{
-    // SAFETY: deferral address space has cell type `F`
-    unsafe { memory.write::<F, BLOCK_SIZE>(DEFERRAL_AS, ptr, vals) }
-}
-
-#[inline(always)]
 pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
     debug_assert!(
         address_space == RV64_REGISTER_AS
@@ -433,22 +472,6 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
 
     // SAFETY: reads raw storage bytes at VM byte pointers.
     unsafe { memory.read_bytes::<N>(address_space, ptr) }
-}
-
-#[inline(always)]
-pub fn memory_read_u16<const N: usize>(
-    memory: &GuestMemory,
-    address_space: u32,
-    ptr: u32,
-) -> [u16; N] {
-    debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS,
-    );
-
-    // SAFETY: these address spaces are u16-celled and `ptr` is an AS-native cell pointer.
-    unsafe { memory.read::<u16, N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -466,148 +489,6 @@ pub fn memory_write<const N: usize>(
 
     // SAFETY: writes raw storage bytes at VM byte pointers.
     unsafe { memory.write_bytes::<N>(address_space, ptr, data) }
-}
-
-/// Timestamped raw-byte read at VM byte pointer `ptr`.
-#[inline(always)]
-pub fn timed_read<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-) -> (u32, [u8; N]) {
-    debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS
-    );
-
-    // SAFETY: reads raw storage bytes at VM byte pointers.
-    unsafe { memory.read_bytes::<N>(address_space, ptr) }
-}
-
-#[inline(always)]
-pub fn timed_write<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-    data: [u8; N],
-) -> (u32, [u8; N]) {
-    debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS
-    );
-
-    // SAFETY: writes raw storage bytes at VM byte pointers.
-    unsafe { memory.write_bytes::<N>(address_space, ptr, data) }
-}
-
-/// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
-/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
-#[inline(always)]
-pub fn tracing_read<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-    prev_timestamp: &mut u32,
-) -> [u8; N] {
-    let (t_prev, data) = timed_read(memory, address_space, ptr);
-    *prev_timestamp = t_prev;
-    data
-}
-
-/// Timestamped u16-cell read at an AS-native pointer.
-#[inline(always)]
-pub fn timed_read_u16<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-) -> (u32, [u16; N]) {
-    debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS
-    );
-
-    // SAFETY: these address spaces are u16-celled.
-    unsafe { memory.read::<u16, N>(address_space, ptr) }
-}
-
-/// u16-typed counterpart to [`tracing_read`].
-#[inline(always)]
-pub fn tracing_read_u16<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-    prev_timestamp: &mut u32,
-) -> [u16; N] {
-    let (t_prev, data) = timed_read_u16(memory, address_space, ptr);
-    *prev_timestamp = t_prev;
-    data
-}
-
-/// Timestamped u16-cell write at an AS-native pointer.
-#[inline(always)]
-pub fn timed_write_u16<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-    data: [u16; N],
-) -> (u32, [u16; N]) {
-    debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS
-    );
-    // SAFETY: see `timed_read_u16`.
-    unsafe { memory.write::<u16, N>(address_space, ptr, data) }
-}
-
-/// u16-typed counterpart to [`tracing_write`].
-#[inline(always)]
-pub fn tracing_write_u16<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-    data: [u16; N],
-    prev_timestamp: &mut u32,
-    prev_data: &mut [u16; N],
-) {
-    let (t_prev, data_prev) = timed_write_u16(memory, address_space, ptr, data);
-    *prev_timestamp = t_prev;
-    *prev_data = data_prev;
-}
-
-/// Reads an RV64 register, records the memory access, and returns the low 32 bits. Debug-asserts
-/// the returned value fits in `pointer_max_bits` (which, for `pointer_max_bits <= 32`, also
-/// implies the upper 32 bits are zero).
-#[inline(always)]
-pub fn tracing_read_reg_ptr(
-    memory: &mut TracingMemory,
-    ptr: u32,
-    prev_timestamp: &mut u32,
-    pointer_max_bits: usize,
-) -> u32 {
-    let bytes = tracing_read(memory, RV64_REGISTER_AS, ptr, prev_timestamp);
-    let val = rv64_bytes_to_u32(bytes);
-    debug_assert!((val as u64) < (1u64 << pointer_max_bits));
-    val
-}
-
-/// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
-/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
-#[inline(always)]
-pub fn tracing_write<const N: usize>(
-    memory: &mut TracingMemory,
-    address_space: u32,
-    ptr: u32,
-    data: [u8; N],
-    prev_timestamp: &mut u32,
-    prev_data: &mut [u8; N],
-) {
-    let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
-    *prev_timestamp = t_prev;
-    *prev_data = data_prev;
 }
 
 #[inline(always)]
@@ -656,4 +537,37 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
 #[inline(always)]
 pub fn read_rv64_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
     u64_to_u32_checked(read_rv64_register(memory, ptr))
+}
+
+#[cfg(test)]
+mod pointer_tests {
+    use super::{checked_register_u16_pointer, validate_memory_block_byte_ptr};
+
+    #[test]
+    fn memory_block_pointer_uses_the_eight_byte_equipartition() {
+        for pointer in [0, 8] {
+            assert_eq!(
+                validate_memory_block_byte_ptr(12, pointer).unwrap(),
+                pointer
+            );
+        }
+        for pointer in [2, 4, 6] {
+            let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
+            assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+        }
+    }
+
+    #[test]
+    fn register_pointer_uses_the_rv64_register_domain() {
+        assert_eq!(checked_register_u16_pointer(0).unwrap(), 0);
+        assert_eq!(checked_register_u16_pointer(31 * 8).unwrap(), 31 * 4);
+
+        for pointer in [2, 32 * 8] {
+            let error = checked_register_u16_pointer(pointer).unwrap_err();
+            assert!(
+                error.to_string().contains("outside the register domain"),
+                "{error}"
+            );
+        }
+    }
 }

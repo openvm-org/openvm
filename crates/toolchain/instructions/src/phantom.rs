@@ -3,8 +3,7 @@ use strum::FromRepr;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PhantomDiscriminant(pub u16);
 
-/// Phantom instructions owned by the system. These are handled in the `ExecutionSegment`, as
-/// opposed to the `PhantomChip`.
+/// Phantom instructions owned by the system and handled directly by an execution segment.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
 pub enum SysPhantom {

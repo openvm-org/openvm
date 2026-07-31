@@ -16,7 +16,7 @@ use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, AirIndex, ExtensionRegistry, TraceChipIndex,
 };
 
-use super::debug::GuestDebugMap;
+use super::{cache::NativeArtifactCache, debug::GuestDebugMap};
 use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
@@ -382,6 +382,27 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
     )
 }
 
+/// Compile a `VmExe` for preflight execution.
+pub(crate) fn compile_preflight<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::Preflight,
+            extensions,
+            chips: None,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
+            keep_artifacts: false,
+        },
+    )
+}
+
 /// Compile a VmExe with per-chip metered execution.
 pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
@@ -460,6 +481,10 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
         "loading rvr artifact with execution-kind validation only; \
          caller is responsible for matching exe, config, and code version"
     );
+    open_compiled(lib_path)
+}
+
+fn open_compiled(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
     let lib = unsafe {
         libloading::Library::new(lib_path)
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
@@ -473,6 +498,26 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
         execution_kind,
         num_airs,
     })
+}
+
+fn validate_compiled(
+    compiled: &RvrCompiled,
+    expected_kind: RvrExecutionKind,
+    expected_num_airs: Option<u32>,
+) -> Result<(), CompileError> {
+    if compiled.execution_kind != expected_kind {
+        return Err(CompileError::LibLoad(format!(
+            "generated RVR execution kind mismatch: expected {expected_kind:?}, found {:?}",
+            compiled.execution_kind
+        )));
+    }
+    if compiled.num_airs != expected_num_airs {
+        return Err(CompileError::LibLoad(format!(
+            "generated RVR AIR count mismatch: expected {expected_num_airs:?}, found {:?}",
+            compiled.num_airs
+        )));
+    }
+    Ok(())
 }
 
 fn load_execution_kind(lib: &libloading::Library) -> Result<RvrExecutionKind, CompileError> {
@@ -494,7 +539,9 @@ fn load_num_airs(
 ) -> Result<Option<u32>, CompileError> {
     if matches!(
         execution_kind,
-        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+        RvrExecutionKind::Pure
+            | RvrExecutionKind::PureWithInstretTracking
+            | RvrExecutionKind::Preflight
     ) {
         return Ok(None);
     }
@@ -547,7 +594,9 @@ fn compile_impl<F: PrimeField32>(
     project.pc_base = u64::from(exe.program.pc_base);
 
     match opts.execution_kind {
-        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {}
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::Preflight => {}
         RvrExecutionKind::Metered
         | RvrExecutionKind::MeteredSegment
         | RvrExecutionKind::MeteredCost => {
@@ -607,7 +656,9 @@ fn compile_impl<F: PrimeField32>(
                         ));
                     }
                 }
-                RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {
+                RvrExecutionKind::Pure
+                | RvrExecutionKind::PureWithInstretTracking
+                | RvrExecutionKind::Preflight => {
                     unreachable!()
                 }
             }
@@ -652,32 +703,80 @@ fn compile_impl<F: PrimeField32>(
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();
 
-    compile_generated_project(
-        output_dir,
-        &project.make_args_with_extensions(
-            &ext_staticlibs,
-            &ext_sources,
-            &vendor_sources,
-            &ext_cflags,
-            opts.extensions.requires_cxx_linker(),
-        ),
-        &toolchain,
-    )?;
+    let make_args = project.make_args_with_extensions(
+        &ext_staticlibs,
+        &ext_sources,
+        &vendor_sources,
+        &ext_cflags,
+        opts.extensions.requires_cxx_linker(),
+    );
+    let library_name = make_library_name(&make_args)?;
+    let cache = NativeArtifactCache::configured(opts.execution_kind, opts.native_debug_info);
+    let cache_key = cache.as_ref().and_then(|cache| {
+        cache
+            .project_key(output_dir, &make_args, opts.execution_kind, &toolchain)
+            .map_err(|error| {
+                tracing::warn!(%error, "failed to fingerprint RVR native project; compiling normally");
+            })
+            .ok()
+    });
 
-    let lib_path = find_shared_lib(output_dir)?;
-    let lib = unsafe {
-        libloading::Library::new(&lib_path)
-            .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
-    };
-    let execution_kind = load_execution_kind(&lib)?;
-    if execution_kind != opts.execution_kind {
-        return Err(CompileError::LibLoad(format!(
-            "generated RVR execution kind mismatch: expected {:?}, found {execution_kind:?}",
-            opts.execution_kind
-        )));
+    if let (Some(cache), Some(key)) = (&cache, &cache_key) {
+        match cache.lookup(key, &library_name) {
+            Ok(Some(lib_path)) => match open_compiled(&lib_path).and_then(|compiled| {
+                validate_compiled(&compiled, opts.execution_kind, project.num_airs)?;
+                Ok(compiled)
+            }) {
+                Ok(mut compiled) => {
+                    tracing::info!(key = %key, "reused cached RVR native artifact");
+                    compiled.artifact_dir =
+                        Some(finish_artifact_dir(temp_dir, opts.keep_artifacts));
+                    return Ok(compiled);
+                }
+                Err(error) => {
+                    tracing::warn!(key = %key, %error, "rejected cached RVR native artifact");
+                    cache.quarantine_key(key);
+                }
+            },
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(key = %key, %error, "failed to read RVR native cache; compiling normally");
+            }
+        }
     }
-    let num_airs = load_num_airs(&lib, execution_kind)?;
-    let artifact_dir = if opts.keep_artifacts {
+
+    compile_generated_project(output_dir, &make_args, &toolchain)?;
+
+    let lib_path = output_dir.join(&library_name);
+    let mut compiled = open_compiled(&lib_path)?;
+    validate_compiled(&compiled, opts.execution_kind, project.num_airs)?;
+    if let (Some(cache), Some(key)) = (&cache, &cache_key) {
+        if let Err(error) = cache.publish(key, &library_name, &lib_path) {
+            tracing::warn!(key = %key, %error, "failed to publish RVR native artifact cache entry");
+        }
+    }
+    compiled.artifact_dir = Some(finish_artifact_dir(temp_dir, opts.keep_artifacts));
+    Ok(compiled)
+}
+
+fn make_library_name(make_args: &[String]) -> Result<String, CompileError> {
+    let name = make_args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("LIB="))
+        .ok_or(CompileError::InvalidOptions(
+            "generated RVR project is missing its library name",
+        ))?;
+    let path = Path::new(name);
+    if path.components().count() != 1 || path.file_name().is_none() {
+        return Err(CompileError::InvalidOptions(
+            "generated RVR library name must be a single path component",
+        ));
+    }
+    Ok(name.to_string())
+}
+
+fn finish_artifact_dir(temp_dir: tempfile::TempDir, keep: bool) -> ArtifactDir {
+    if keep {
         let path = temp_dir.keep();
         tracing::info!(
             path = %path.display(),
@@ -686,15 +785,7 @@ fn compile_impl<F: PrimeField32>(
         ArtifactDir::Kept(path)
     } else {
         ArtifactDir::Temp(temp_dir)
-    };
-
-    Ok(RvrCompiled {
-        lib,
-        lib_path,
-        artifact_dir: Some(artifact_dir),
-        execution_kind,
-        num_airs,
-    })
+    }
 }
 
 pub fn ensure_toolchain_available() -> Result<rvr_openvm::RuntimeToolchain, CompileError> {
@@ -776,6 +867,15 @@ fn compile_generated_project(
         .arg(format!("HOST_OS={}", toolchain.host_os))
         .env("CC", &toolchain.compiler)
         .env("LINKER", &toolchain.linker)
+        .env_remove("MAKEFLAGS")
+        .env_remove("GNUMAKEFLAGS")
+        .env_remove("MFLAGS")
+        .env_remove("MAKEFILES")
+        .env_remove("MAKEOVERRIDES")
+        .env_remove("EXT_SRCS")
+        .env_remove("VENDOR_SRCS")
+        .env_remove("EXT_LIBS")
+        .env_remove("EXT_CFLAGS")
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
         .spawn()
@@ -862,26 +962,4 @@ fn read_make_failure(stdout_path: &Path, stderr_path: &Path) -> String {
     } else {
         message
     }
-}
-
-fn find_shared_lib(dir: &Path) -> Result<PathBuf, CompileError> {
-    fs::read_dir(dir)
-        .map_err(|source| CompileError::CProject {
-            path: dir.to_path_buf(),
-            source,
-        })?
-        .flatten()
-        .map(|entry| entry.path())
-        .find(|path| {
-            matches!(
-                path.extension().and_then(|e| e.to_str()),
-                Some("so" | "dylib")
-            )
-        })
-        .ok_or_else(|| {
-            CompileError::LibLoad(format!(
-                "no shared library (.so/.dylib) found in {}",
-                dir.display()
-            ))
-        })
 }

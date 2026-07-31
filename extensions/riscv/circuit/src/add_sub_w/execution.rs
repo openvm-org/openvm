@@ -24,7 +24,7 @@ pub(super) struct AddSubWPreCompute {
     c: u8,
 }
 
-impl<A> AddSubWExecutor<A> {
+impl AddSubWExecutor {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -56,10 +56,14 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for AddSubWExecutor<A>
+impl<F> InterpreterExecutor<F> for AddSubWExecutor
 where
     F: PrimeField32,
 {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", BaseAluWOpcode::from_usize(opcode - self.offset))
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<AddSubWPreCompute>()
@@ -98,7 +102,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for AddSubWExecutor<A>
+impl<F> InterpreterMeteredExecutor<F> for AddSubWExecutor
 where
     F: PrimeField32,
 {

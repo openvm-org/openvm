@@ -3,11 +3,11 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor, VmAirWrapper, VmChipWrapper,
+        ExecutionBridge, VmAirWrapper, VmChipWrapper,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
@@ -30,19 +30,16 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::{adapters::Rv64RdWriteAdapterRecord, Rv64JalLuiChipGpu, Rv64JalLuiCoreRecord},
-    openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
-    },
+    crate::Rv64JalLuiChipGpu,
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         rv64_u16_block_to_bytes, Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols,
-        Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller,
         RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV_J_TYPE_IMM_BITS,
     },
     jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
@@ -67,16 +64,8 @@ fn create_harness_fields(
         )),
         Rv64JalLuiCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
-        crate::adapters::Rv64RdWriteAdapterExecutor::new(),
-    ));
-    let chip = VmChipWrapper::<F, _>::new(
-        Rv64JalLuiFiller::new(
-            Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller::new()),
-            range_checker_chip,
-        ),
-        memory_helper,
-    );
+    let executor = Rv64JalLuiExecutor::new();
+    let chip = VmChipWrapper::<F, _>::new(Rv64JalLuiFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -99,23 +88,27 @@ fn create_harness(
         tester.range_checker(),
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: Rv64JalLuiOpcode,
     imm: Option<i32>,
     initial_pc: Option<u32>,
     rd_ptr: Option<usize>,
-) where
-    Rv64JalLuiExecutor: PreflightExecutor<F, RA>,
-{
+) {
     let is_jal = opcode == JAL;
     let imm = imm.unwrap_or_else(|| {
         if is_jal {
@@ -145,7 +138,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
     tester.execute_with_pc(
         executor,
-        arena,
+        preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -185,7 +178,7 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -236,7 +229,7 @@ fn run_negative_jal_lui_test_with_rd_ptr(
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         opcode,
         initial_imm,
@@ -390,7 +383,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
     tester.execute_with_pc(
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &Instruction::large_from_isize(
             LUI.global_opcode(),
             rd_ptr as isize,
@@ -542,7 +535,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         LUI,
         Some((1 << 20) - 1),
@@ -552,7 +545,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         JAL,
         Some((1i32 << (RV_J_TYPE_IMM_BITS - 1)) - 1),
@@ -579,7 +572,7 @@ fn jal_x0_write_suppression_test() {
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
         &mut rng,
         JAL,
         Some((1 << 19) + 2),
@@ -618,11 +611,11 @@ fn get_signed_imm_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalLuiChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -635,9 +628,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
     let gpu_chip = Rv64JalLuiChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(JAL, 100)]
 #[test_case(LUI, 100)]
 fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
@@ -650,7 +649,7 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
         set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             opcode,
             None,
@@ -658,18 +657,6 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
             None,
         );
     }
-
-    type Record<'a> = (
-        &'a mut Rv64RdWriteAdapterRecord,
-        &'a mut Rv64JalLuiCoreRecord,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64CondRdWriteAdapterExecutor>::new(),
-        );
 
     tester
         .build()

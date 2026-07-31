@@ -34,27 +34,33 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
 
     __device__ BitwiseLogicImmCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, BitwiseLogicImmCoreRecord<NUM_LIMBS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint8_t const (&b)[NUM_LIMBS],
+        uint8_t const (&c_low)[2],
+        uint8_t imm_sign,
+        uint8_t local_opcode
+    ) {
         // Sign-extended byte limbs of the immediate.
-        uint8_t sign_byte = record.imm_sign * uint8_t((1u << LIMB_BITS) - 1u);
+        uint8_t sign_byte = imm_sign * uint8_t((1u << LIMB_BITS) - 1u);
         uint8_t c[NUM_LIMBS];
-        c[0] = record.c_low[0];
-        c[1] = record.c_low[1] + record.imm_sign * 0xf8;
+        c[0] = c_low[0];
+        c[1] = c_low[1] + imm_sign * 0xf8;
 #pragma unroll
         for (size_t i = 2; i < NUM_LIMBS; i++) {
             c[i] = sign_byte;
         }
 
         uint8_t a[NUM_LIMBS];
-        switch (record.local_opcode) {
+        switch (local_opcode) {
         case 1:
-            run_xor<NUM_LIMBS>(record.b, c, a);
+            run_xor<NUM_LIMBS>(b, c, a);
             break;
         case 2:
-            run_or<NUM_LIMBS>(record.b, c, a);
+            run_or<NUM_LIMBS>(b, c, a);
             break;
         case 3:
-            run_and<NUM_LIMBS>(record.b, c, a);
+            run_and<NUM_LIMBS>(b, c, a);
             break;
         default:
 #pragma unroll
@@ -64,18 +70,24 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
         }
 
         // Adding 0xf8 forces c_low[1] into the 3-bit range.
-        bitwise_lookup.add_range(record.c_low[0], record.c_low[1] + 0xf8);
+        bitwise_lookup.add_range(c_low[0], c_low[1] + 0xf8);
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
-            bitwise_lookup.add_xor(record.b[i], c[i]);
+            bitwise_lookup.add_xor(b[i], c[i]);
         }
 
-        COL_WRITE_VALUE(row, Cols, opcode_and_flag, record.local_opcode == 3);
-        COL_WRITE_VALUE(row, Cols, opcode_or_flag, record.local_opcode == 2);
-        COL_WRITE_VALUE(row, Cols, opcode_xor_flag, record.local_opcode == 1);
-        COL_WRITE_VALUE(row, Cols, imm_sign, record.imm_sign);
-        COL_WRITE_ARRAY(row, Cols, c_low, record.c_low);
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_VALUE(row, Cols, opcode_and_flag, local_opcode == 3);
+        COL_WRITE_VALUE(row, Cols, opcode_or_flag, local_opcode == 2);
+        COL_WRITE_VALUE(row, Cols, opcode_xor_flag, local_opcode == 1);
+        COL_WRITE_VALUE(row, Cols, imm_sign, imm_sign);
+        COL_WRITE_ARRAY(row, Cols, c_low, c_low);
+        COL_WRITE_ARRAY(row, Cols, b, b);
         COL_WRITE_ARRAY(row, Cols, a, a);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, BitwiseLogicImmCoreRecord<NUM_LIMBS> record) {
+        fill_trace_row(
+            row, record.b, record.c_low, record.imm_sign, record.local_opcode
+        );
     }
 };

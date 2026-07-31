@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder},
-    BLOCK_FE_WIDTH, U16_CELL_SIZE,
+    BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_riscv_circuit::adapters::{RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
@@ -23,16 +23,18 @@ pub fn rv64_write_heap_default<const NUM_LIMBS: usize>(
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let (reg1, _) =
-        tester.write_heap_default::<NUM_LIMBS>(RV64_REGISTER_NUM_LIMBS, 128, addr1_writes);
+    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(RV64_REGISTER_NUM_LIMBS);
+    let pointer1 = tester.get_default_pointer(128);
+    write_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
         0
     } else {
-        let (reg2, _) =
-            tester.write_heap_default::<NUM_LIMBS>(RV64_REGISTER_NUM_LIMBS, 128, addr2_writes);
+        let pointer2 = tester.get_default_pointer(128);
+        write_heap(tester, reg2, pointer2, addr2_writes);
         reg2
     };
-    let (reg3, _) = tester.write_heap_pointer_default(RV64_REGISTER_NUM_LIMBS, 128);
+    let pointer3 = tester.get_default_pointer(128);
+    write_ptr_reg(tester, 1, reg3, pointer3 as u64);
 
     Instruction::from_isize(
         VmOpcode::from_usize(opcode_with_offset),
@@ -50,16 +52,18 @@ pub fn rv64_write_u16_heap_default<const NUM_LIMBS: usize>(
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let (reg1, _) =
-        write_u16_heap_default::<NUM_LIMBS>(tester, RV64_REGISTER_NUM_LIMBS, 128, addr1_writes);
+    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(RV64_REGISTER_NUM_LIMBS);
+    let pointer1 = tester.get_default_pointer(128);
+    write_u16_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
         0
     } else {
-        let (reg2, _) =
-            write_u16_heap_default::<NUM_LIMBS>(tester, RV64_REGISTER_NUM_LIMBS, 128, addr2_writes);
+        let pointer2 = tester.get_default_pointer(128);
+        write_u16_heap(tester, reg2, pointer2, addr2_writes);
         reg2
     };
-    let (reg3, _) = tester.write_heap_pointer_default(RV64_REGISTER_NUM_LIMBS, 128);
+    let pointer3 = tester.get_default_pointer(128);
+    write_ptr_reg(tester, 1, reg3, pointer3 as u64);
 
     Instruction::from_isize(
         VmOpcode::from_usize(opcode_with_offset),
@@ -78,22 +82,18 @@ pub fn rv64_write_heap_default_with_increment<const NUM_LIMBS: usize>(
     pointer_increment: usize,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let (reg1, _) = tester.write_heap_default::<NUM_LIMBS>(
-        RV64_REGISTER_NUM_LIMBS,
-        pointer_increment,
-        addr1_writes,
-    );
+    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(RV64_REGISTER_NUM_LIMBS);
+    let pointer1 = tester.get_default_pointer(pointer_increment);
+    write_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
         0
     } else {
-        let (reg2, _) = tester.write_heap_default::<NUM_LIMBS>(
-            RV64_REGISTER_NUM_LIMBS,
-            pointer_increment,
-            addr2_writes,
-        );
+        let pointer2 = tester.get_default_pointer(pointer_increment);
+        write_heap(tester, reg2, pointer2, addr2_writes);
         reg2
     };
-    let (reg3, _) = tester.write_heap_pointer_default(RV64_REGISTER_NUM_LIMBS, pointer_increment);
+    let pointer3 = tester.get_default_pointer(pointer_increment);
+    write_ptr_reg(tester, 1, reg3, pointer3 as u64);
 
     Instruction::from_isize(
         VmOpcode::from_usize(opcode_with_offset),
@@ -105,16 +105,34 @@ pub fn rv64_write_heap_default_with_increment<const NUM_LIMBS: usize>(
     )
 }
 
-fn write_u16_heap_default<const NUM_LIMBS: usize>(
+fn write_heap<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
-    reg_increment: usize,
-    pointer_increment: usize,
+    register: usize,
+    pointer: usize,
     writes: Vec<[BabyBear; NUM_LIMBS]>,
-) -> (usize, usize) {
+) {
+    write_ptr_reg(tester, 1, register, pointer as u64);
+    for (i, &write) in writes.iter().enumerate() {
+        let byte_ptr = pointer + i * NUM_LIMBS;
+        for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            tester.write_bytes::<MEMORY_BLOCK_BYTES>(
+                2,
+                byte_ptr + j,
+                write[j..j + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+        }
+    }
+}
+
+fn write_u16_heap<const NUM_LIMBS: usize>(
+    tester: &mut impl TestBuilder<BabyBear>,
+    register: usize,
+    pointer: usize,
+    writes: Vec<[BabyBear; NUM_LIMBS]>,
+) {
     const { assert!(NUM_LIMBS.is_multiple_of(BLOCK_FE_WIDTH)) };
 
-    let (register, pointer) = tester.write_heap_pointer_default(reg_increment, pointer_increment);
-
+    write_ptr_reg(tester, 1, register, pointer as u64);
     for (i, &write) in writes.iter().enumerate() {
         let byte_ptr = pointer + i * NUM_LIMBS * U16_CELL_SIZE;
         for j in (0..NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
@@ -126,8 +144,6 @@ fn write_u16_heap_default<const NUM_LIMBS: usize>(
             );
         }
     }
-
-    (register, pointer)
 }
 
 pub fn rv64_heap_branch_default<const NUM_LIMBS: usize>(
@@ -137,13 +153,14 @@ pub fn rv64_heap_branch_default<const NUM_LIMBS: usize>(
     imm: isize,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let (reg1, _) =
-        tester.write_heap_default::<NUM_LIMBS>(RV64_REGISTER_NUM_LIMBS, 128, addr1_writes);
+    let [reg1, reg2] = tester.get_default_registers::<2>(RV64_REGISTER_NUM_LIMBS);
+    let pointer1 = tester.get_default_pointer(128);
+    write_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
         0
     } else {
-        let (reg2, _) =
-            tester.write_heap_default::<NUM_LIMBS>(RV64_REGISTER_NUM_LIMBS, 128, addr2_writes);
+        let pointer2 = tester.get_default_pointer(128);
+        write_heap(tester, reg2, pointer2, addr2_writes);
         reg2
     };
 

@@ -11,6 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
+pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
@@ -26,7 +27,7 @@ use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_A
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
-        Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
+        ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
         memory::{
@@ -66,9 +67,6 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 //   Digest  the output of one Poseidon2 compression (VM_DIGEST_WIDTH cells); also
 //           one merkle leaf.
 
-/// Host byte width of one u16-celled storage cell.
-pub const U16_CELL_SIZE: usize = size_of::<u16>();
-
 // TODO: replace with `p3_util::log2_strict_usize` once p3-util is bumped to
 // >= 0.4.3 (where it becomes `const fn`).
 pub(crate) const fn const_log2_strict_usize(value: usize) -> usize {
@@ -83,12 +81,6 @@ pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
 pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
     ptr_bits + U16_CELL_SIZE_BITS
 }
-
-/// Cells per memory-bus block.
-pub const BLOCK_FE_WIDTH: usize = 4;
-
-/// Bytes per memory-bus block.
-pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
@@ -146,8 +138,7 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 /// around Rust orphan rules.
 pub trait VmBuilder<E: StarkEngine>: Sized {
     type VmConfig: VmConfig<E::SC>;
-    type RecordArena: Arena;
-    type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
+    type SystemChipInventory: SystemChipComplex<E::PB>;
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
     /// [VmCircuitConfig::create_airs].
@@ -157,10 +148,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
         device_ctx: &EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    >;
+    ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError>;
 }
 
 impl<SC, VC> VmConfig<SC> for VC
@@ -412,10 +400,13 @@ pub enum MemoryCellType {
 }
 
 impl MemoryCellType {
-    pub fn field32() -> Self {
-        Self::F {
-            size: size_of::<u32>() as u8,
-        }
+    /// Field cells encoded canonically as 32-bit words in memory history.
+    pub const FIELD32: Self = Self::F {
+        size: size_of::<u32>() as u8,
+    };
+
+    pub const fn field32() -> Self {
+        Self::FIELD32
     }
 }
 

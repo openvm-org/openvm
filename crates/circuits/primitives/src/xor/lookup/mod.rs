@@ -168,8 +168,8 @@ impl<const M: usize> XorLookupChip<M> {
     }
 }
 
-impl<R, SC: StarkProtocolConfig, const M: usize> Chip<R, CpuBackend<SC>> for XorLookupChip<M> {
-    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
+impl<SC: StarkProtocolConfig, const M: usize> Chip<CpuBackend<SC>> for XorLookupChip<M> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let trace_row_maj = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(trace_row_maj)
     }

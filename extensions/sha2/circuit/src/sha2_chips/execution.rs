@@ -23,6 +23,10 @@ struct Sha2PreCompute {
 }
 
 impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C> {
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", C::OPCODE)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<Sha2PreCompute>()
     }
@@ -114,19 +118,20 @@ unsafe fn execute_e12_impl<C: Sha2Config, CTX: ExecutionCtxTrait, const IS_E1: b
     let state_u32 = rv64_bytes_to_u32(state);
     let input_u32 = rv64_bytes_to_u32(input);
 
-    // state is in 4-byte little-endian words
-    let mut state_data = Vec::with_capacity(C::STATE_BYTES);
-    for i in 0..C::STATE_READS {
-        state_data.extend_from_slice(&exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
-            RV64_MEMORY_AS,
-            state_u32 + (i * SHA2_READ_SIZE) as u32,
-        ));
-    }
     let mut input_block = Vec::with_capacity(C::BLOCK_BYTES);
     for i in 0..C::BLOCK_READS {
         input_block.extend_from_slice(&exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
             RV64_MEMORY_AS,
             input_u32 + (i * SHA2_READ_SIZE) as u32,
+        ));
+    }
+    // State is in 4-byte little-endian words. Input reads precede state reads to match the
+    // timestamp schedule constrained by Sha2MainAir.
+    let mut state_data = Vec::with_capacity(C::STATE_BYTES);
+    for i in 0..C::STATE_READS {
+        state_data.extend_from_slice(&exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
+            RV64_MEMORY_AS,
+            state_u32 + (i * SHA2_READ_SIZE) as u32,
         ));
     }
 
