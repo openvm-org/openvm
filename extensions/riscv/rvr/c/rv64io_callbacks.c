@@ -27,6 +27,15 @@ void openvm_hint_read_words(uint64_t* words, uint32_t num_words) {
   g_rv64io_host_callbacks.hint_read_words(openvm_get_io_ctx(), words, num_words);
 }
 
+bool openvm_hint_storew(uint64_t dest_addr) {
+  return g_rv64io_host_callbacks.hint_storew(openvm_get_io_ctx(), dest_addr);
+}
+
+bool openvm_hint_buffer(uint64_t dest_addr, uint32_t num_words) {
+  return g_rv64io_host_callbacks.hint_buffer(openvm_get_io_ctx(), dest_addr,
+                                             num_words);
+}
+
 bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
                    uint64_t effective_addr, uint8_t width) {
   void* ctx = openvm_get_io_ctx();

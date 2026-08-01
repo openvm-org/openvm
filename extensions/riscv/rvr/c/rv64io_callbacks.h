@@ -17,6 +17,8 @@ static_assert(alignof(Rv64RevealPlan) == 8);
 typedef struct {
   bool (*hint_prepare)(void* ctx, uint64_t dest_addr, uint32_t num_words);
   void (*hint_read_words)(void* ctx, uint64_t* words, uint32_t num_words);
+  bool (*hint_storew)(void* ctx, uint64_t dest_addr);
+  bool (*hint_buffer)(void* ctx, uint64_t dest_addr, uint32_t num_words);
   bool (*reveal_prepare)(void* ctx, uint64_t src_val, uint64_t base_addr,
                          uint64_t effective_addr, uint8_t width,
                          Rv64RevealPlan* plan);
@@ -33,6 +35,8 @@ void register_rv64io_host_callbacks(const Rv64IoHostCallbacks* cb);
  * execution time by `Rv64IoRuntimeHooks`. */
 bool openvm_hint_prepare(uint64_t dest_addr, uint32_t num_words);
 void openvm_hint_read_words(uint64_t* words, uint32_t num_words);
+bool openvm_hint_storew(uint64_t dest_addr);
+bool openvm_hint_buffer(uint64_t dest_addr, uint32_t num_words);
 bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
                    uint64_t effective_addr, uint8_t width);
 
