@@ -30,8 +30,8 @@ struct HintStoreReplayInput {
     mem_ptr_ptr: u32,
     num_words_ptr: Option<u32>,
     mem_ptr: u32,
-    mem_ptr_read: U16Access,
-    num_words_read: Option<U16Access>,
+    mem_ptr_prev_timestamp: u32,
+    num_words_prev_timestamp: Option<u32>,
 }
 
 /// Generates the RV64 hint-store trace directly from immutable preflight history.
@@ -152,13 +152,13 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
             )
         })?;
 
-    let (num_words, num_words_read) = if let Some(num_words_ptr) = num_words_ptr {
+    let (num_words, num_words_prev_timestamp) = if let Some(num_words_ptr) = num_words_ptr {
         let access = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(num_words_ptr))?;
         let count = u16_block_to_u64(access.value);
         let count = validate_hint_buffer_num_words(from_pc, count)
             .map(u32::from)
             .map_err(|error| PostflightError::new(error.to_string()))?;
-        (count, Some(access))
+        (count, Some(access.previous_timestamp))
     } else {
         replay.advance_timestamp(1)?;
         (1, None)
@@ -185,8 +185,8 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
             mem_ptr_ptr,
             num_words_ptr,
             mem_ptr,
-            mem_ptr_read,
-            num_words_read,
+            mem_ptr_prev_timestamp: mem_ptr_read.previous_timestamp,
+            num_words_prev_timestamp,
         },
     ))
 }
@@ -203,18 +203,18 @@ fn fill_row<F: PrimeField32>(
     let timestamp = input.from_timestamp + 3 * local_index;
     if local_index == 0 {
         mem_helper.fill(
-            input.mem_ptr_read.previous_timestamp,
-            input.mem_ptr_read.timestamp,
+            input.mem_ptr_prev_timestamp,
+            input.from_timestamp,
             cols.mem_ptr_aux_cols.as_mut(),
         );
     } else {
         mem_helper.fill_zero(cols.mem_ptr_aux_cols.as_mut());
     }
     if local_index == 0 {
-        if let Some(num_words_read) = &input.num_words_read {
+        if let Some(previous_timestamp) = input.num_words_prev_timestamp {
             mem_helper.fill(
-                num_words_read.previous_timestamp,
-                num_words_read.timestamp,
+                previous_timestamp,
+                input.from_timestamp + 1,
                 cols.num_words_aux_cols.as_mut(),
             );
             cols.num_words_ptr = F::from_u32(input.num_words_ptr.unwrap());

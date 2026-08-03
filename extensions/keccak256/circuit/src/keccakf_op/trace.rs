@@ -1,7 +1,7 @@
 use core::convert::TryInto;
 use std::{
     borrow::BorrowMut,
-    sync::{Arc, Mutex},
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use openvm_circuit::{
@@ -9,7 +9,10 @@ use openvm_circuit::{
     system::memory::{MemoryAuxColsFactory, SharedMemoryHelper},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, U16_BITS};
+use openvm_circuit_primitives::{
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
+    U16_BITS,
+};
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -38,7 +41,7 @@ pub struct KeccakfOpChip<F> {
     pub(crate) shared_preimages: Arc<Mutex<Vec<KeccakfPreimage>>>,
 }
 
-struct KeccakfTraceInput {
+struct KeccakfReplay {
     pc: u32,
     timestamp: u32,
     rd_ptr: u32,
@@ -56,64 +59,58 @@ pub(crate) struct KeccakfPreimage {
 }
 
 impl<F: PrimeField32> KeccakfOpChip<F> {
-    fn fill_trace_inputs(
+    fn fill_trace_row(
         &self,
+        range_checker: &VariableRangeCheckerChip,
         mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut [F],
-        inputs: &[KeccakfTraceInput],
+        row: &mut [F],
+        replay: &KeccakfReplay,
     ) {
-        let width = KeccakfOpCols::<F>::width();
-        trace
-            .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
-            .zip(inputs.par_iter())
-            .for_each(|(row, input)| {
-                row.fill(F::ZERO);
+        row.fill(F::ZERO);
+        let local: &mut KeccakfOpCols<F> = row.borrow_mut();
 
-                let local: &mut KeccakfOpCols<F> = row.borrow_mut();
+        local.pc = F::from_u32(replay.pc);
+        local.is_valid = F::ONE;
+        local.timestamp = F::from_u32(replay.timestamp);
+        local.rd_ptr = F::from_u32(replay.rd_ptr);
+        local.buffer_ptr_limbs = ptr_to_field_u16_limbs(replay.buffer_ptr);
 
-                local.pc = F::from_u32(input.pc);
-                local.is_valid = F::ONE;
-                local.timestamp = F::from_u32(input.timestamp);
-                local.rd_ptr = F::from_u32(input.rd_ptr);
-                local.buffer_ptr_limbs = ptr_to_field_u16_limbs(input.buffer_ptr);
+        // Pack consecutive pairs of state bytes into u16 cells.
+        for (dst, bytes) in local
+            .preimage
+            .iter_mut()
+            .zip(replay.preimage_buffer_bytes.chunks_exact(2))
+        {
+            *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
+        }
+        for (dst, bytes) in local
+            .postimage
+            .iter_mut()
+            .zip(replay.postimage_buffer_bytes.chunks_exact(2))
+        {
+            *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
+        }
 
-                // Pack consecutive pairs of state bytes into u16 cells.
-                for (dst, bytes) in local
-                    .preimage
-                    .iter_mut()
-                    .zip(input.preimage_buffer_bytes.chunks_exact(2))
-                {
-                    *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
-                }
-                for (dst, bytes) in local
-                    .postimage
-                    .iter_mut()
-                    .zip(input.postimage_buffer_bytes.chunks_exact(2))
-                {
-                    *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
-                }
+        let mut timestamp = replay.timestamp;
+        mem_helper.fill(
+            replay.rd_prev_timestamp,
+            replay.timestamp,
+            local.rd_aux.as_mut(),
+        );
+        timestamp += 1;
+        for (aux, &previous_timestamp) in local
+            .buffer_word_aux
+            .iter_mut()
+            .zip(&replay.buffer_prev_timestamps)
+        {
+            mem_helper.fill(previous_timestamp, timestamp, aux);
+            timestamp += 1;
+        }
 
-                let mut timestamp = input.timestamp;
-                mem_helper.fill(
-                    input.rd_prev_timestamp,
-                    input.timestamp,
-                    local.rd_aux.as_mut(),
-                );
-                timestamp += 1;
-                for (aux, &previous_timestamp) in local
-                    .buffer_word_aux
-                    .iter_mut()
-                    .zip(&input.buffer_prev_timestamps)
-                {
-                    mem_helper.fill(previous_timestamp, timestamp, aux);
-                    timestamp += 1;
-                }
-
-                self.range_checker_chip.add_count(
-                    ptr_bound_from_ptr(input.buffer_ptr, self.pointer_max_bits),
-                    U16_BITS,
-                );
-            });
+        range_checker.add_count(
+            ptr_bound_from_ptr(replay.buffer_ptr, self.pointer_max_bits),
+            U16_BITS,
+        );
     }
 }
 
@@ -123,29 +120,48 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(KeccakfOpcode::KECCAKF.global_opcode());
-    let inputs = steps
-        .par_iter()
-        .map(|&step| replay_input(postflight, step, chip.pointer_max_bits))
-        .collect::<Result<Vec<_>, _>>()?;
     let width = KeccakfOpCols::<F>::width();
-    let height = next_power_of_two_or_zero(inputs.len() * NUM_OP_ROWS_PER_INS);
+    let height = next_power_of_two_or_zero(steps.len() * NUM_OP_ROWS_PER_INS);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
-    chip.fill_trace_inputs(&chip.mem_helper.as_borrowed(), &mut trace.values, &inputs);
-    *chip.shared_preimages.lock().unwrap() = inputs
-        .iter()
-        .map(|input| KeccakfPreimage {
-            timestamp: input.timestamp,
-            bytes: input.preimage_buffer_bytes,
+    let temporary_range_checker =
+        Arc::new(VariableRangeCheckerChip::new(chip.range_checker_chip.bus()));
+    let temporary_mem_helper = SharedMemoryHelper::new(
+        temporary_range_checker.clone(),
+        chip.mem_helper.timestamp_max_bits(),
+    );
+    let mem_helper = temporary_mem_helper.as_borrowed();
+    let preimages = trace.values[..steps.len() * width * NUM_OP_ROWS_PER_INS]
+        .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
+        .zip(steps.par_iter().copied())
+        .map(|(row, step)| {
+            let replay = replay_step(postflight, step, chip.pointer_max_bits)?;
+            chip.fill_trace_row(temporary_range_checker.as_ref(), &mem_helper, row, &replay);
+            Ok(KeccakfPreimage {
+                timestamp: replay.timestamp,
+                bytes: replay.preimage_buffer_bytes,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, PostflightError>>()?;
+    if chip.range_checker_chip.count.len() != temporary_range_checker.count.len() {
+        return Err(PostflightError::new("KECCAKF range-checker shape mismatch"));
+    }
+    for (destination, source) in chip
+        .range_checker_chip
+        .count
+        .iter()
+        .zip(&temporary_range_checker.count)
+    {
+        destination.fetch_add(source.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+    *chip.shared_preimages.lock().unwrap() = preimages;
     Ok(trace)
 }
 
-fn replay_input<F: PrimeField32>(
+fn replay_step<F: PrimeField32>(
     postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
-) -> Result<KeccakfTraceInput, PostflightError> {
+) -> Result<KeccakfReplay, PostflightError> {
     let instruction = postflight.instruction(step);
     if instruction.b != F::ZERO
         || instruction.c != F::ZERO
@@ -218,7 +234,7 @@ fn replay_input<F: PrimeField32>(
         .ok_or_else(|| PostflightError::new("KECCAKF program counter overflow"))?;
     replay.finish(next_pc)?;
 
-    Ok(KeccakfTraceInput {
+    Ok(KeccakfReplay {
         pc,
         timestamp,
         rd_ptr,
