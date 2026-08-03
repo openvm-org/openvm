@@ -162,6 +162,71 @@ static __attribute__((always_inline)) inline void write_mem_u64(
   memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
 
+/* ── Relative-address memory access ─────────────────────────────── */
+
+/* Keep the RISC-V base register and signed immediate separate until these
+ * helpers are inlined so the host compiler can fold the displacement into
+ * its addressing mode. Unsigned addition preserves RISC-V wrapping. */
+static __attribute__((always_inline)) inline uint64_t relative_addr(
+    uint64_t base, int32_t offset) {
+  return base + (uint64_t)(int64_t)offset;
+}
+
+static __attribute__((always_inline)) inline uint8_t read_mem_u8_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_u8(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline int8_t read_mem_i8_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_i8(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline uint16_t read_mem_u16_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_u16(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline int16_t read_mem_i16_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_i16(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline int32_t read_mem_i32_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_i32(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline uint32_t read_mem_u32_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_u32(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline uint64_t read_mem_u64_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset) {
+  return read_mem_u64(memory, relative_addr(base, offset));
+}
+
+static __attribute__((always_inline)) inline void write_mem_u8_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset, uint8_t val) {
+  write_mem_u8(memory, relative_addr(base, offset), val);
+}
+
+static __attribute__((always_inline)) inline void write_mem_u16_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset, uint16_t val) {
+  write_mem_u16(memory, relative_addr(base, offset), val);
+}
+
+static __attribute__((always_inline)) inline void write_mem_u32_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset, uint32_t val) {
+  write_mem_u32(memory, relative_addr(base, offset), val);
+}
+
+static __attribute__((always_inline)) inline void write_mem_u64_rel(
+    uint8_t* restrict memory, uint64_t base, int32_t offset, uint64_t val) {
+  write_mem_u64(memory, relative_addr(base, offset), val);
+}
+
 /* ── Word-aligned range memory access ────────────────────────────── */
 
 /* Data-only range helpers used to implement the execution-mode interfaces.

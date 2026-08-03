@@ -367,23 +367,23 @@ impl<'a> EmitContext<'a> {
 
     fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str) {
         match (width, signed) {
-            (1, false) => ("read_mem_u8", "uint32_t"),
-            (1, true) => ("read_mem_i8", "int32_t"),
-            (2, false) => ("read_mem_u16", "uint32_t"),
-            (2, true) => ("read_mem_i16", "int32_t"),
-            (4, false) => ("read_mem_u32", "uint32_t"),
-            (4, true) => ("read_mem_i32", "int32_t"),
-            (8, _) => ("read_mem_u64", "uint64_t"),
+            (1, false) => ("read_mem_u8_rel", "uint32_t"),
+            (1, true) => ("read_mem_i8_rel", "int32_t"),
+            (2, false) => ("read_mem_u16_rel", "uint32_t"),
+            (2, true) => ("read_mem_i16_rel", "int32_t"),
+            (4, false) => ("read_mem_u32_rel", "uint32_t"),
+            (4, true) => ("read_mem_i32_rel", "int32_t"),
+            (8, _) => ("read_mem_u64_rel", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
 
     fn write_mem_helper(width: u8) -> (&'static str, &'static str) {
         match width {
-            1 => ("write_mem_u8", "uint8_t"),
-            2 => ("write_mem_u16", "uint16_t"),
-            4 => ("write_mem_u32", "uint32_t"),
-            8 => ("write_mem_u64", "uint64_t"),
+            1 => ("write_mem_u8_rel", "uint8_t"),
+            2 => ("write_mem_u16_rel", "uint16_t"),
+            4 => ("write_mem_u32_rel", "uint32_t"),
+            8 => ("write_mem_u64_rel", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
@@ -423,7 +423,9 @@ impl<'a> EmitContext<'a> {
         self.uses_raw_memory = true;
 
         self.emit_memory_bounds_trap(&addr, width);
-        self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
+        self.write_line(&format!(
+            "{var_ty} {var} = {read_func}(memory, {base}, {offset});"
+        ));
         self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width, sp_relative);
@@ -457,7 +459,7 @@ impl<'a> EmitContext<'a> {
         }
         self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         self.write_line(&format!(
-            "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+            "{write_func}(memory, {base}, {offset}, ({cast_ty})({val}));"
         ));
         if self.mode.uses_preflight_local() {
             self.write_line(&format!(
@@ -1294,7 +1296,7 @@ mod tests {
             .expect("typed trap");
         let read = ctx
             .buf()
-            .find("read_mem_u32(memory, addr + 0x00000003u)")
+            .find("read_mem_u32_rel(memory, addr, 3)")
             .expect("raw read");
         assert!(bounds < trap && trap < read);
     }
@@ -1348,6 +1350,10 @@ mod tests {
         assert!(ctx
             .buf()
             .contains("trace_sp_memory_access_span(&trace_memory, sp - 0x00000008u, 8u);"));
+        assert!(ctx.buf().contains("read_mem_u8_rel(memory, sp, 4)"));
+        assert!(ctx
+            .buf()
+            .contains("write_mem_u64_rel(memory, sp, -8, (uint64_t)(value))"));
         assert!(!ctx.buf().contains("trace_memory_access_leaf(&trace_memory"));
         assert!(!ctx.buf().contains("trace_memory_access_span(&trace_memory"));
     }
