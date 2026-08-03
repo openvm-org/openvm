@@ -415,6 +415,8 @@ pub struct MerkleVerifyBusMessage<T> {
     /// The idx of the merkle proof in the proof, might have additional bits (so not 0 at the root)
     /// It will be the same for all the rows in the hashing leaves part.
     pub merkle_idx_bit_src: T,
+    /// The query occurrence within the WHIR round.
+    pub query_idx: T,
     /// Merkle idx suffix after shifting right max(0, height - k) bits
     pub current_idx_bit_src: T,
     /// The total depth of the merkle proof including the leaves part, equal to merkle_proof.len()

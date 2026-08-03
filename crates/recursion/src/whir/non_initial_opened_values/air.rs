@@ -200,6 +200,7 @@ where
             MerkleVerifyBusMessage {
                 value: local.value_hash.map(Into::into),
                 merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                query_idx: local.query_idx.into(),
                 current_idx_bit_src: local.merkle_idx_bit_src.into(),
                 // There are two parts: hashing leaves (depth k) and merkle proof
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1)

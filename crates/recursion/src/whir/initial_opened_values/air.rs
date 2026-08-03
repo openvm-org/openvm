@@ -311,6 +311,7 @@ where
             local.proof_idx,
             MerkleVerifyBusMessage {
                 merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                query_idx: local.query_idx.into(),
                 current_idx_bit_src: local.merkle_idx_bit_src.into(),
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1),
                 height: AB::Expr::ZERO,

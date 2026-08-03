@@ -43,6 +43,7 @@ pub struct MerkleVerifyRecord {
     pub start_row: u32,
     pub num_rows: u32,
     pub depth: u16,
+    pub query_idx: u16,
     pub merkle_idx: u32,
     pub commit_major: u16,
     pub commit_minor: u16,

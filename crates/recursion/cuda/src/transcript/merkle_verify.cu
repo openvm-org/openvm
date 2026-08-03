@@ -11,6 +11,7 @@
 
 template <typename T> struct MerkleVerifyCols {
     T proof_idx;
+    T query_idx;
     T is_valid;
     T is_last_merkle;
 
@@ -118,6 +119,9 @@ __global__ void cukernel_merkle_verify_tracegen(
         RowSlice row(d_trace + global_row, trace_height);
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, proof_idx, Fp(static_cast<uint32_t>(record.proof_idx))
+        );
+        COL_WRITE_VALUE(
+            row, MerkleVerifyCols, query_idx, Fp(static_cast<uint32_t>(record.query_idx))
         );
         COL_WRITE_VALUE(row, MerkleVerifyCols, is_valid, Fp::one());
         COL_WRITE_VALUE(
