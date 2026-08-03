@@ -398,7 +398,7 @@ static __attribute__((always_inline)) inline void write_mem_u64_range(
 /* Peeking at a value does not create a VM memory access. */
 static __attribute__((always_inline)) inline uint64_t peek_mem_u64(
     RvState* restrict state, uint64_t addr) {
-  return read_mem_u64(state->memory, addr);
+  return read_mem_u64(state->memory, addr, 0);
 }
 
 static __attribute__((always_inline)) inline void peek_mem_u64_range(

@@ -256,7 +256,7 @@ static __attribute__((always_inline)) inline void write_mem_u64_range(
 
 static __attribute__((always_inline)) inline uint64_t peek_mem_u64(
     RvState* restrict state, uint64_t address) {
-  return read_mem_u64(state->memory, address);
+  return read_mem_u64(state->memory, address, 0);
 }
 
 static __attribute__((always_inline)) inline void peek_mem_u64_range(

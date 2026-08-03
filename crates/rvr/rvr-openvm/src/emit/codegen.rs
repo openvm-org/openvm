@@ -198,10 +198,6 @@ pub(super) fn hex_u64(value: u64) -> String {
     format!("0x{value:016x}ull")
 }
 
-pub(super) fn hex_u32(value: u32) -> String {
-    format!("0x{value:08x}u")
-}
-
 #[cfg(test)]
 mod tests {
     use rvr_openvm_ir::{CfgEffect, ExtInstr, Variable};
