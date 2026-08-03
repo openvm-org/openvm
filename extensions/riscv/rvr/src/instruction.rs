@@ -9,6 +9,8 @@ pub(crate) type Reg = Variable;
 
 pub(crate) const ZERO: Reg = Reg::new(0);
 pub(crate) const RA: Reg = Reg::new(1);
+// RISC-V register x2 is `sp`, the stack pointer.
+pub(crate) const SP: Reg = Reg::new(2);
 
 /// Decode an OpenVM RV64 register operand into its architectural register.
 pub(crate) fn decode_reg(value: u32) -> Reg {

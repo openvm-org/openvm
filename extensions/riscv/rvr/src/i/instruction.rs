@@ -5,7 +5,7 @@ use rvr_openvm_ir::{
     ExtEmitCtx, ExtInstr, MemWidth,
 };
 
-use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
+use crate::instruction::{hex_u64, reg_operand, Reg, RA, SP, ZERO};
 
 /// RV64I arithmetic or logical operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,8 +203,13 @@ impl ExtInstr for Rv64IInstr {
                 base,
                 offset,
             } => {
+                let is_sp_relative = *base == SP;
                 let base = ctx.read_var(*base);
-                let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                let value = if is_sp_relative {
+                    ctx.read_sp_mem(&base, *offset, width.bytes(), *signed)
+                } else {
+                    ctx.read_mem(&base, *offset, width.bytes(), *signed)
+                };
                 if *rd == ZERO {
                     // Pure execution still has to perform the potentially
                     // trapping load, but has no register write that would use
@@ -222,9 +227,14 @@ impl ExtInstr for Rv64IInstr {
                 src,
                 offset,
             } => {
+                let is_sp_relative = *base == SP;
                 let base = ctx.read_var(*base);
                 let value = ctx.read_var(*src);
-                ctx.write_mem(&base, *offset, &value, width.bytes());
+                if is_sp_relative {
+                    ctx.write_sp_mem(&base, *offset, &value, width.bytes());
+                } else {
+                    ctx.write_mem(&base, *offset, &value, width.bytes());
+                }
             }
             Self::Const { rd, value, .. } => ctx.write_var(*rd, &hex_u64(*value)),
         }
@@ -428,12 +438,26 @@ mod tests {
             unreachable!()
         }
 
-        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+        fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+            self.operations
+                .push(format!("read:{base}:{offset}:{width}:{signed}"));
             "loaded".to_string()
         }
 
-        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
-            unreachable!()
+        fn read_sp_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+            self.operations
+                .push(format!("read-sp:{base}:{offset}:{width}:{signed}"));
+            "loaded".to_string()
+        }
+
+        fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+            self.operations
+                .push(format!("write:{base}:{offset}:{val}:{width}"));
+        }
+
+        fn write_sp_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+            self.operations
+                .push(format!("write-sp:{base}:{offset}:{val}:{width}"));
         }
 
         fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
@@ -502,10 +526,58 @@ mod tests {
     fn load_appends_only_architectural_destination_results() {
         let mut enabled = RecordingCtx::default();
         load(Reg::new(3)).emit_c(&mut enabled);
-        assert_eq!(enabled.operations, ["append:loaded", "write:r3=loaded"]);
+        assert_eq!(
+            enabled.operations,
+            ["read-sp:r2:4:4:true", "append:loaded", "write:r3=loaded"]
+        );
 
         let mut x0 = RecordingCtx::default();
         load(ZERO).emit_c(&mut x0);
-        assert_eq!(x0.operations, ["line:(void)loaded;", "write:r0=loaded"]);
+        assert_eq!(
+            x0.operations,
+            [
+                "read-sp:r2:4:4:true",
+                "line:(void)loaded;",
+                "write:r0=loaded"
+            ]
+        );
+    }
+
+    #[test]
+    fn memory_accesses_select_the_sp_cache_only_for_x2() {
+        let mut ctx = RecordingCtx::default();
+        Rv64IInstr::Load {
+            width: MemWidth::Byte,
+            signed: false,
+            rd: Reg::new(3),
+            base: Reg::new(4),
+            offset: -1,
+        }
+        .emit_c(&mut ctx);
+        Rv64IInstr::Store {
+            width: MemWidth::Double,
+            base: SP,
+            src: Reg::new(5),
+            offset: 8,
+        }
+        .emit_c(&mut ctx);
+        Rv64IInstr::Store {
+            width: MemWidth::Word,
+            base: Reg::new(6),
+            src: Reg::new(7),
+            offset: 12,
+        }
+        .emit_c(&mut ctx);
+
+        assert_eq!(
+            ctx.operations,
+            [
+                "read:r4:-1:1:false",
+                "append:loaded",
+                "write:r3=loaded",
+                "write-sp:r2:8:r5:8",
+                "write:r6:12:r7:4",
+            ]
+        );
     }
 }
