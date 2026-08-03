@@ -1,7 +1,4 @@
-use openvm_circuit::{
-    arch::BLOCK_FE_WIDTH,
-    system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-};
+use openvm_circuit::system::memory::offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols};
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
@@ -25,14 +22,10 @@ pub struct XorinInstructionCols<T> {
     pub buffer_reg_ptr: T,
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
-    pub buffer_ptr: T,
-    /// Low 32 bits of the `rs0` register as u16 cells.
+    /// Low 32 bits of the buffer register as u16 cells.
     pub buffer_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
-    pub input_ptr: T,
-    /// Low 32 bits of the `rs1` register as u16 cells.
+    /// Low 32 bits of the input register as u16 cells.
     pub input_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
-    pub len: T,
-    pub len_limb: T,
     pub start_timestamp: T,
 }
 
@@ -53,7 +46,8 @@ pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
-    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; KECCAK_RATE_MEM_OPS],
+    // Only store write timestamp auxiliaries; previous data comes from preimage_buffer_bytes.
+    pub buffer_bytes_write_base_aux: [MemoryBaseAuxCols<T>; KECCAK_RATE_MEM_OPS],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

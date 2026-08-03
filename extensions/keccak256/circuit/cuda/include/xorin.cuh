@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include "primitives/constants.h"
 #include "system/memory/offline_checker.cuh"
 
@@ -17,14 +16,10 @@ struct XorinInstructionCols {
     T buffer_reg_ptr;
     T input_reg_ptr;
     T len_reg_ptr;
-    T buffer_ptr;
-    // Low 32 bits of [buffer_reg_ptr:8]_1 as u16 cells.
+    // Low 32 bits of the buffer register as u16 cells.
     T buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
-    T input_ptr;
-    // Low 32 bits of [input_reg_ptr:8]_1 as u16 cells.
+    // Low 32 bits of the input register as u16 cells.
     T input_ptr_limbs[RV64_PTR_U16_LIMBS];
-    T len;
-    T len_limb;
     T start_timestamp;
 };
 
@@ -41,8 +36,7 @@ struct XorinMemoryCols {
     MemoryReadAuxCols<T> register_aux_cols[XORIN_REGISTER_READS];
     MemoryReadAuxCols<T> input_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
     MemoryReadAuxCols<T> buffer_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>
-        buffer_bytes_write_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
+    MemoryBaseAuxCols<T> buffer_bytes_write_base_aux[keccak256::KECCAK_RATE_MEM_OPS];
 };
 
 template <typename T>
@@ -50,24 +44,6 @@ struct XorinVmCols {
     XorinSpongeCols<T> sponge;
     XorinInstructionCols<T> instruction;
     XorinMemoryCols<T> mem_oc;
-};
-
-struct XorinVmRecord {
-    uint32_t from_pc;
-    uint32_t timestamp;
-    uint32_t rd_ptr;
-    uint32_t rs1_ptr;
-    uint32_t rs2_ptr;
-    uint32_t buffer;
-    uint32_t input;
-    uint32_t len;
-    uint8_t buffer_limbs[XORIN_RATE_BYTES];
-    uint8_t input_limbs[XORIN_RATE_BYTES];
-    MemoryReadAuxRecord register_aux_cols[XORIN_REGISTER_READS];
-    MemoryReadAuxRecord input_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryReadAuxRecord buffer_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryWriteBytesAuxRecord<program::DEFAULT_BLOCK_SIZE>
-        buffer_write_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
 };
 
 } // namespace xorin
