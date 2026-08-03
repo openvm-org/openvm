@@ -74,8 +74,22 @@ pub trait ExtEmitCtx {
     /// Read guest memory and return a C expression for the loaded value.
     fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String;
 
+    /// Read guest memory through the SP-relative metering cache.
+    ///
+    /// Contexts without a specialized cache can use the regular memory path.
+    fn read_sp_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+        self.read_mem(base, offset, width, signed)
+    }
+
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
+
+    /// Write guest memory through the SP-relative metering cache.
+    ///
+    /// Contexts without a specialized cache can use the regular memory path.
+    fn write_sp_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+        self.write_mem(base, offset, val, width)
+    }
 
     /// Write one naturally aligned eight-byte main-memory block.
     ///
