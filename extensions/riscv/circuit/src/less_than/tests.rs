@@ -162,6 +162,7 @@ struct LessThanPrankValues<const NUM_LIMBS: usize> {
     pub c_msb: Option<i32>,
     pub diff_marker: Option<[u32; NUM_LIMBS]>,
     pub diff_val: Option<u32>,
+    pub opcode_mode: Option<u32>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -205,6 +206,9 @@ fn run_negative_less_than_test(
         if let Some(diff_val) = prank_vals.diff_val {
             cols.diff_val = F::from_u32(diff_val);
         }
+        if let Some(opcode_mode) = prank_vals.opcode_mode {
+            cols.opcode_mode = F::from_u32(opcode_mode);
+        }
         cols.cmp_result = F::from_bool(prank_cmp_result);
 
         *trace = RowMajorMatrix::new(values, trace.width());
@@ -245,6 +249,42 @@ fn rv64_lt_wrong_eq_negative_test() {
     let prank_vals = Default::default();
     run_negative_less_than_test(SLT, b, c, true, prank_vals, false);
     run_negative_less_than_test(SLTU, b, c, true, prank_vals, false);
+}
+
+#[test]
+fn rv64_lt_opcode_mode_negative_tests() {
+    let b = [145, 34, 25, 205, 255, 255, 255, 255];
+    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+
+    // An SLT row claiming to be SLTU, and vice versa.
+    for (opcode, wrong_mode) in [(SLT, 1), (SLTU, 2)] {
+        run_negative_less_than_test(
+            opcode,
+            b,
+            c,
+            false,
+            LessThanPrankValues {
+                opcode_mode: Some(wrong_mode),
+                ..Default::default()
+            },
+            true,
+        );
+    }
+
+    // Out-of-range modes: 0 disables the row, 3 breaks the mode.
+    for mode in [0, 3] {
+        run_negative_less_than_test(
+            SLT,
+            b,
+            c,
+            false,
+            LessThanPrankValues {
+                opcode_mode: Some(mode),
+                ..Default::default()
+            },
+            true,
+        );
+    }
 }
 
 #[test]
