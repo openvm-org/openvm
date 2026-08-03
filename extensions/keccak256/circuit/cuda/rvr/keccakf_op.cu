@@ -115,7 +115,7 @@ __global__ void keccakf_op_replay_tracegen(
         return;
     }
 
-    ReplayPreviousValue write_previous[KECCAK_WIDTH_MEM_OPS];
+    uint32_t write_previous_timestamps[KECCAK_WIDTH_MEM_OPS];
     uint64_t state[KECCAK_WIDTH_MEM_OPS];
     for (uint32_t i = 0; i < KECCAK_WIDTH_MEM_OPS; i++) {
         size_t write_idx = rd_idx + 1 + i;
@@ -124,6 +124,7 @@ __global__ void keccakf_op_replay_tracegen(
             return;
         }
         auto const &write = memory[write_idx];
+        ReplayPreviousValue previous;
         if (write.timestamp != from.timestamp + 1 + i || !preflight_is_write(write) ||
             preflight_address_space(write) != memory_as ||
             write.pointer != buffer_ptr / 2 + i * BLOCK_FE_WIDTH ||
@@ -133,12 +134,13 @@ __global__ void keccakf_op_replay_tracegen(
                 predecessors[write_idx],
                 memory,
                 seeds,
-                write_previous[i]
+                previous
             )) {
             preflight_set_error(error, KECCAKF_REPLAY_ERROR);
             return;
         }
-        state[i] = keccakf_replay_u64(write_previous[i].value);
+        write_previous_timestamps[i] = previous.timestamp;
+        state[i] = keccakf_replay_u64(previous.value);
         preimages[idx * KECCAK_WIDTH_MEM_OPS + i] = state[i];
     }
     size_t event_end = rd_idx + 1 + KECCAK_WIDTH_MEM_OPS;
@@ -173,7 +175,7 @@ __global__ void keccakf_op_replay_tracegen(
     for (uint32_t i = 0; i < KECCAK_WIDTH_MEM_OPS; i++) {
         mem_helper.fill(
             KECCAKF_OP_SLICE(buffer_word_aux[i]),
-            write_previous[i].timestamp,
+            write_previous_timestamps[i],
             from.timestamp + 1 + i
         );
     }

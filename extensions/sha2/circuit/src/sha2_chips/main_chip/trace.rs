@@ -1,9 +1,13 @@
+use std::sync::{atomic::Ordering, Arc};
+
 use openvm_circuit::{
     arch::{Postflight, PostflightError},
-    system::memory::{offline_checker::pack_u8_block_bytes, MemoryAuxColsFactory},
+    system::memory::{
+        offline_checker::pack_u8_block_bytes, MemoryAuxColsFactory, SharedMemoryHelper,
+    },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::U16_BITS;
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, U16_BITS};
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
@@ -22,13 +26,47 @@ where
     C: Sha2Config,
 {
     let steps = postflight.steps(C::OPCODE.global_opcode());
-    let replay_rows = steps
-        .par_iter()
-        .map(|&step| {
-            crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(chip.generate_trace_from_replays(&replay_rows))
+    let height = next_power_of_two_or_zero(steps.len());
+    let mut trace =
+        RowMajorMatrix::new(F::zero_vec(height * C::MAIN_CHIP_WIDTH), C::MAIN_CHIP_WIDTH);
+    let temporary_range_checker =
+        Arc::new(VariableRangeCheckerChip::new(chip.range_checker_chip.bus()));
+    let temporary_mem_helper = SharedMemoryHelper::new(
+        temporary_range_checker.clone(),
+        chip.mem_helper.timestamp_max_bits(),
+    );
+    let mem_helper = temporary_mem_helper.as_borrowed();
+    trace.values[..steps.len() * C::MAIN_CHIP_WIDTH]
+        .par_chunks_exact_mut(C::MAIN_CHIP_WIDTH)
+        .zip(steps.par_iter().copied())
+        .enumerate()
+        .try_for_each(|(row_index, (row, step))| {
+            let replay = crate::replay_sha2_from_postflight::<F, C>(
+                postflight,
+                step,
+                chip.pointer_max_bits,
+            )?;
+            chip.fill_trace_row_from_replay(
+                temporary_range_checker.as_ref(),
+                &mem_helper,
+                row,
+                row_index,
+                &replay,
+            );
+            Ok::<(), PostflightError>(())
+        })?;
+    if chip.range_checker_chip.count.len() != temporary_range_checker.count.len() {
+        return Err(PostflightError::new("SHA-2 range-checker shape mismatch"));
+    }
+    for (destination, source) in chip
+        .range_checker_chip
+        .count
+        .iter()
+        .zip(&temporary_range_checker.count)
+    {
+        destination.fetch_add(source.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+    Ok(trace)
 }
 
 #[cfg(test)]
@@ -53,6 +91,7 @@ where
     Ok(chip.generate_trace_from_replays(&replay_rows))
 }
 
+#[cfg(test)]
 impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
     fn generate_trace_from_replays(&self, replay_rows: &[Sha2ReplayRow]) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(replay_rows.len());
@@ -64,7 +103,13 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             .zip(replay_rows.par_iter())
             .enumerate()
             .for_each(|(row_index, (row, replay))| {
-                self.fill_trace_row_from_replay(&mem_helper, row, row_index, replay);
+                self.fill_trace_row_from_replay(
+                    self.range_checker_chip.as_ref(),
+                    &mem_helper,
+                    row,
+                    row_index,
+                    replay,
+                );
             });
         trace
     }
@@ -73,6 +118,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
 impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
     fn fill_trace_row_from_replay(
         &self,
+        range_checker: &VariableRangeCheckerChip,
         mem_helper: &MemoryAuxColsFactory<F>,
         row_slice: &mut [F],
         row_idx: usize,
@@ -107,8 +153,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         );
 
         for ptr in [replay.dst_ptr, replay.state_ptr, replay.input_ptr] {
-            self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+            range_checker.add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
 
         // fill in the register reads aux

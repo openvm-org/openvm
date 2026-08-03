@@ -385,10 +385,11 @@ __global__ void deferral_output_replay_tracegen(
         return;
     }
 
-    ReplayPreviousValue key_previous[OUTPUT_TOTAL_MEMORY_OPS];
+    uint32_t key_previous_timestamps[OUTPUT_TOTAL_MEMORY_OPS];
     uint8_t output_key[OUTPUT_TOTAL_BYTES];
 #pragma unroll
     for (size_t i = 0; i < OUTPUT_TOTAL_MEMORY_OPS; i++) {
+        ReplayPreviousValue previous;
         if (!deferral_output_replay_event(
                 event_start + 2 + i,
                 from.timestamp + 2 + i,
@@ -398,9 +399,10 @@ __global__ void deferral_output_replay_tracegen(
                 memory,
                 seeds,
                 predecessors,
-                key_previous[i],
+                previous,
                 error
             )) return;
+        key_previous_timestamps[i] = previous.timestamp;
         deferral_output_replay_bytes(
             memory[event_start + 2 + i].value, output_key + i * MEMORY_BLOCK_BYTES
         );
@@ -469,7 +471,7 @@ __global__ void deferral_output_replay_tracegen(
         for (size_t i = 0; i < OUTPUT_TOTAL_MEMORY_OPS; i++)
             mem_helper.fill(row.slice_from(COL_INDEX(DeferralOutputCols,
                                                      output_commit_and_len_aux) + i * read_stride),
-                            key_previous[i].timestamp, from.timestamp + 2 + i);
+                            key_previous_timestamps[i], from.timestamp + 2 + i);
         uint32_t output_commit_rcs[DIGEST_SIZE];
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; i++) {
