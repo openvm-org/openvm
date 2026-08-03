@@ -88,6 +88,8 @@ pub(crate) fn hash_output_raw<F: VmField>(
     let mut output_chunks = output_ref.chunks_exact(SPONGE_BYTES_PER_ROW);
     let last_chunk = output_chunks.next_back().unwrap();
 
+    // Deferral outputs remain byte-oriented at the host API and in memory. Pack each complete
+    // byte row into u16 sponge cells only at the hashing boundary.
     for chunk in output_chunks {
         let f_chunk: [F; DIGEST_SIZE] = le_bytes_to_u16_cells(chunk);
         state[..DIGEST_SIZE].copy_from_slice(&f_chunk);

@@ -50,9 +50,9 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
-pub struct DeferralCallReads<B, F> {
+pub struct DeferralCallReads<C, F> {
     // Commit to a specific deferral input, passed in by the user as a pointer
-    pub input_commit: [B; COMMIT_NUM_U16S],
+    pub input_commit: [C; COMMIT_NUM_U16S],
 
     // Deferral address space accumulators immediately prior to the current deferral call
     pub old_input_acc: [F; DIGEST_SIZE],
@@ -61,12 +61,12 @@ pub struct DeferralCallReads<B, F> {
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
-pub struct DeferralCallWrites<B, F> {
+pub struct DeferralCallWrites<C, F> {
     // Output key for raw output + its length in bytes. These cells are written as one
     // contiguous heap write, with layout [output_commit || output_len_le]. Note output_len
     // **must** be divisible by SPONGE_BYTES_PER_ROW.
-    pub output_commit: [B; COMMIT_NUM_U16S],
-    pub output_len: [B; F_NUM_U16S],
+    pub output_commit: [C; COMMIT_NUM_U16S],
+    pub output_len: [C; F_NUM_U16S],
 
     // Deferral address space accumulators after incorporating the current deferral call
     pub new_input_acc: [F; DIGEST_SIZE],
@@ -76,6 +76,8 @@ pub struct DeferralCallWrites<B, F> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DeferralCallReadsBytes<F> {
+    // Execution and preflight records preserve proof-visible memory bytes. Trace generation
+    // packs these bytes into the u16-shaped DeferralCallReads columns above.
     pub input_commit: [u8; crate::utils::COMMIT_NUM_BYTES],
     pub old_input_acc: [F; DIGEST_SIZE],
     pub old_output_acc: [F; DIGEST_SIZE],
@@ -84,6 +86,8 @@ pub struct DeferralCallReadsBytes<F> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DeferralCallWritesBytes<F> {
+    // As with reads, this record mirrors byte-addressed memory; the filler performs the u16
+    // packing used by the AIR columns.
     pub output_commit: [u8; crate::utils::COMMIT_NUM_BYTES],
     pub output_len: [u8; crate::utils::F_NUM_BYTES],
     pub new_input_acc: [F; DIGEST_SIZE],

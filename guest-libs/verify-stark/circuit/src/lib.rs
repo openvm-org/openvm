@@ -113,6 +113,9 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             output_commit_bus,
             def_idx: self.def_idx,
         };
+        // The embedded recursion circuit retains its independently shaped range-checker AIR.
+        // Deferral output cells require a 16-bit table, so keep this scoped AIR adjacent to the
+        // output AIR rather than changing every recursion circuit's proving shape.
         let output_range_air = RangeCheckerAir::<U16_BITS> {
             bus: bus_inventory.range_checker_bus,
         };

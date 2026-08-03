@@ -27,6 +27,11 @@ static constexpr uint32_t OUTPUT_KEY_WORDS =
     DEFERRAL_OUTPUT_KEY_BYTES / WORD_SIZE;
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
 static constexpr uint32_t ACCUMULATOR_WORDS = 2u * DIGEST_MEMORY_OPS;
+/* Each sponge lane carries one u16 cell. */
+static constexpr uint32_t DEFERRAL_OUTPUT_ROW_BYTES =
+    DEFERRAL_DIGEST_SIZE * (uint32_t)sizeof(uint16_t);
+static constexpr uint32_t DEFERRAL_OUTPUT_ROW_WORDS =
+    DEFERRAL_OUTPUT_ROW_BYTES / WORD_SIZE;
 typedef struct DeferralCallReplay {
   uint64_t output_key[OUTPUT_KEY_WORDS];
   uint64_t accumulators[ACCUMULATOR_WORDS];
@@ -37,7 +42,7 @@ static constexpr uint64_t MAIN_MEMORY_PAGE_BYTES =
 /* Reserve one page for the extra page touched by an unaligned chunk. */
 static constexpr uint64_t OUTPUT_ROWS_PER_PAGE_BUFFER =
     ((uint64_t)TRACER_MEM_PAGE_BUF_CAP - 1ull) * MAIN_MEMORY_PAGE_BYTES /
-    DEFERRAL_DIGEST_SIZE;
+    DEFERRAL_OUTPUT_ROW_BYTES;
 static_assert(OUTPUT_ROWS_PER_PAGE_BUFFER > 0u,
               "main-memory page buffer must hold one deferral output row");
 
@@ -112,7 +117,7 @@ bool rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
   uint64_t output_len_u64 = key_words[COMMIT_WORDS];
   if (unlikely(output_len_u64 > UINT32_MAX)) return false;
   uint32_t output_len = (uint32_t)output_len_u64;
-  if (unlikely((output_len & (DEFERRAL_DIGEST_SIZE - 1u)) != 0u ||
+  if (unlikely((output_len & (DEFERRAL_OUTPUT_ROW_BYTES - 1u)) != 0u ||
                output_len > OPENVM_MEM_SIZE - output_ptr)) {
     return false;
   }
@@ -136,12 +141,12 @@ bool rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
    * it before the variable-size output so each output chunk starts empty. */
   flush_main_memory_page_buffer(state);
 
-  /* Write raw output to guest memory in DEFERRAL_DIGEST_SIZE-byte rows. Each
+  /* Write raw output to guest memory in DEFERRAL_OUTPUT_ROW_BYTES-byte rows. Each
    * chunk spans at most TRACER_MEM_PAGE_BUF_CAP pages at arbitrary alignment,
    * then drains while preserving the instruction counter and current
    * segmentation checkpoint. */
-  uint32_t num_data_rows = output_len / DEFERRAL_DIGEST_SIZE;
-  uint64_t row_words[DIGEST_MEMORY_OPS];
+  uint32_t num_data_rows = output_len / DEFERRAL_OUTPUT_ROW_BYTES;
+  uint64_t row_words[DEFERRAL_OUTPUT_ROW_WORDS];
   for (uint64_t chunk_start = 0; chunk_start < num_data_rows;
        chunk_start += OUTPUT_ROWS_PER_PAGE_BUFFER) {
     uint64_t chunk_end = chunk_start + OUTPUT_ROWS_PER_PAGE_BUFFER;
@@ -149,15 +154,15 @@ bool rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
       chunk_end = num_data_rows;
     }
     for (uint64_t row_idx = chunk_start; row_idx < chunk_end; row_idx++) {
-      uint64_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
-      /* row_idx is less than output_len / DEFERRAL_DIGEST_SIZE, so this slice
+      uint64_t row_byte_base = row_idx * DEFERRAL_OUTPUT_ROW_BYTES;
+      /* row_idx is less than output_len / DEFERRAL_OUTPUT_ROW_BYTES, so this slice
        * stays within output_raw. */
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-      memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
+      memcpy(row_words, output_raw + row_byte_base, DEFERRAL_OUTPUT_ROW_BYTES);
 #pragma clang diagnostic pop
       write_mem_u64_range(state, output_ptr + row_byte_base, row_words,
-                          DIGEST_MEMORY_OPS);
+                          DEFERRAL_OUTPUT_ROW_WORDS);
     }
     flush_main_memory_page_buffer(state);
   }

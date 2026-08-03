@@ -38,8 +38,9 @@ pub const DEFERRAL_COMMIT_NUM_BYTES: usize = VM_DIGEST_WIDTH * core::mem::size_o
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize =
     DEFERRAL_COMMIT_NUM_BYTES + core::mem::size_of::<u64>();
 const DEFERRAL_OUTPUT_KEY_WORDS: usize = DEFERRAL_OUTPUT_KEY_BYTES / size_of::<u64>();
-/// OUTPUT writes one sponge-rate row per guest word (`DIGEST_SIZE = 8` bytes).
-const DEFERRAL_OUTPUT_ROW_BYTES: usize = size_of::<u64>();
+/// OUTPUT absorbs one u16 cell per digest lane, so each sponge row is 16 bytes.
+const DEFERRAL_OUTPUT_ROW_BYTES: usize = VM_DIGEST_WIDTH * size_of::<u16>();
+const DEFERRAL_OUTPUT_ROW_WORDS: usize = DEFERRAL_OUTPUT_ROW_BYTES / size_of::<u64>();
 const DEFERRAL_ACCUMULATOR_WORDS: usize = 2 * VM_DIGEST_WIDTH * size_of::<u32>() / size_of::<u64>();
 const DEFERRAL_CALL_REPLAY_WORDS: usize = DEFERRAL_OUTPUT_KEY_WORDS + DEFERRAL_ACCUMULATOR_WORDS;
 const DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
@@ -180,7 +181,7 @@ impl ExtInstr for DeferralOutputInstr {
             ctx.emit_trap();
             ctx.write_line("}");
             ctx.write_line("uint32_t deferral_output_len = (uint32_t)deferral_output_len_u64;");
-            // Output rows are one guest word. Reject a partial row before
+            // Output rows contain one u16 cell per sponge lane. Reject a partial row before
             // reserving timestamp slots or mutating guest memory.
             ctx.write_line(&format!(
                 "if (unlikely((deferral_output_len & {}u) != 0u)) {{",
@@ -214,9 +215,11 @@ impl ExtInstr for DeferralOutputInstr {
             ));
             ctx.write_line("}");
         } else {
-            // Each non-header Deferral row contains four guest u64 words.
+            // Preflight records the output-word count followed by every written guest word.
             // Count only after the checked host call has succeeded.
-            ctx.count_replay_values("1ull + 4ull * ((uint64_t)deferral_num_rows - 1ull)");
+            ctx.count_replay_values(&format!(
+                "1ull + {DEFERRAL_OUTPUT_ROW_WORDS}ull * ((uint64_t)deferral_num_rows - 1ull)"
+            ));
         }
     }
 
@@ -1203,7 +1206,7 @@ mod tests {
                 "trap",
                 "}",
                 "uint32_t deferral_output_len = (uint32_t)deferral_output_len_u64;",
-                "if (unlikely((deferral_output_len & 7u) != 0u)) {",
+                "if (unlikely((deferral_output_len & 15u) != 0u)) {",
                 "trap",
                 "}",
                 "uint32_t deferral_output_words = deferral_output_len / 8u;",
@@ -1261,7 +1264,7 @@ mod tests {
                 "}",
                 "trace_nonzero(4294967295, deferral_num_rows - 1u)",
                 "trace(4294967295, deferral_num_rows)",
-                "count_replay(1ull + 4ull * ((uint64_t)deferral_num_rows - 1ull))",
+                "count_replay(1ull + 2ull * ((uint64_t)deferral_num_rows - 1ull))",
             ]
         );
         let checked_call = metered
