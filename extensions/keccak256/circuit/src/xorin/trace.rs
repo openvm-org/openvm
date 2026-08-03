@@ -2,9 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::*,
-    system::memory::{
-        offline_checker::MemoryReadAuxRecord, MemoryAuxColsFactory,
-    },
+    system::memory::{offline_checker::MemoryReadAuxRecord, MemoryAuxColsFactory},
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::U16_BITS;

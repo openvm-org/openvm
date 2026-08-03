@@ -22,9 +22,9 @@ pub struct XorinInstructionCols<T> {
     pub buffer_reg_ptr: T,
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
-    /// Low 32 bits of the `rs0` register as u16 cells.
+    /// Low 32 bits of the buffer register as u16 cells.
     pub buffer_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
-    /// Low 32 bits of the `rs1` register as u16 cells.
+    /// Low 32 bits of the input register as u16 cells.
     pub input_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
     pub start_timestamp: T,
 }

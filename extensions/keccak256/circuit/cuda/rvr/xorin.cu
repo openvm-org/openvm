@@ -34,7 +34,7 @@ static __device__ bool xorin_replay_event(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<PreflightInitialWrite> seeds,
     DeviceBufferConstView<uint32_t> predecessors,
-    ReplayPreviousValue &previous,
+    uint32_t &previous_timestamp,
     uint32_t *error
 ) {
     if (event_idx >= memory.len() || event_idx >= predecessors.len()) {
@@ -42,6 +42,7 @@ static __device__ bool xorin_replay_event(
         return false;
     }
     auto const &event = memory[event_idx];
+    ReplayPreviousValue previous;
     if (event.timestamp != timestamp || preflight_address_space(event) != address_space ||
         event.pointer != pointer || preflight_is_write(event) != is_write ||
         !replay_previous_value(
@@ -50,6 +51,7 @@ static __device__ bool xorin_replay_event(
         preflight_set_error(error, XORIN_REPLAY_ERROR);
         return false;
     }
+    previous_timestamp = previous.timestamp;
     return true;
 }
 
@@ -122,7 +124,7 @@ __global__ void xorin_replay_tracegen(
     }
 
     size_t event_idx = step.memory_start;
-    ReplayPreviousValue register_previous[XORIN_REGISTER_READS];
+    uint32_t register_previous_timestamps[XORIN_REGISTER_READS];
     uint32_t register_ptrs[XORIN_REGISTER_READS] = {
         buffer_reg_ptr, input_reg_ptr, len_reg_ptr
     };
@@ -138,7 +140,7 @@ __global__ void xorin_replay_tracegen(
                 memory,
                 seeds,
                 predecessors,
-                register_previous[i],
+                register_previous_timestamps[i],
                 error
             )) {
             return;
@@ -174,9 +176,9 @@ __global__ void xorin_replay_tracegen(
 
     uint8_t buffer_bytes[XORIN_RATE_BYTES] = {};
     uint8_t input_bytes[XORIN_RATE_BYTES] = {};
-    ReplayPreviousValue buffer_read_previous[keccak256::KECCAK_RATE_MEM_OPS];
-    ReplayPreviousValue input_read_previous[keccak256::KECCAK_RATE_MEM_OPS];
-    ReplayPreviousValue buffer_write_previous[keccak256::KECCAK_RATE_MEM_OPS];
+    uint32_t buffer_read_previous_timestamps[keccak256::KECCAK_RATE_MEM_OPS];
+    uint32_t input_read_previous_timestamps[keccak256::KECCAK_RATE_MEM_OPS];
+    uint32_t buffer_write_previous_timestamps[keccak256::KECCAK_RATE_MEM_OPS];
 
     for (uint32_t i = 0; i < num_blocks; i++) {
         if (!xorin_replay_event(
@@ -188,7 +190,7 @@ __global__ void xorin_replay_tracegen(
                 memory,
                 seeds,
                 predecessors,
-                buffer_read_previous[i],
+                buffer_read_previous_timestamps[i],
                 error
             )) {
             return;
@@ -206,7 +208,7 @@ __global__ void xorin_replay_tracegen(
                 memory,
                 seeds,
                 predecessors,
-                input_read_previous[i],
+                input_read_previous_timestamps[i],
                 error
             )) {
             return;
@@ -224,7 +226,7 @@ __global__ void xorin_replay_tracegen(
                 memory,
                 seeds,
                 predecessors,
-                buffer_write_previous[i],
+                buffer_write_previous_timestamps[i],
                 error
             )) {
             return;
@@ -277,24 +279,24 @@ __global__ void xorin_replay_tracegen(
     for (size_t i = 0; i < XORIN_REGISTER_READS; i++) {
         mem_helper.fill(
             XORIN_SLICE(mem_oc.register_aux_cols[i].base),
-            register_previous[i].timestamp,
+            register_previous_timestamps[i],
             from.timestamp + static_cast<uint32_t>(i)
         );
     }
     for (uint32_t i = 0; i < num_blocks; i++) {
         mem_helper.fill(
             XORIN_SLICE(mem_oc.buffer_bytes_read_aux_cols[i].base),
-            buffer_read_previous[i].timestamp,
+            buffer_read_previous_timestamps[i],
             from.timestamp + XORIN_REGISTER_READS + i
         );
         mem_helper.fill(
             XORIN_SLICE(mem_oc.input_bytes_read_aux_cols[i].base),
-            input_read_previous[i].timestamp,
+            input_read_previous_timestamps[i],
             from.timestamp + XORIN_REGISTER_READS + num_blocks + i
         );
         mem_helper.fill(
             XORIN_SLICE(mem_oc.buffer_bytes_write_base_aux[i]),
-            buffer_write_previous[i].timestamp,
+            buffer_write_previous_timestamps[i],
             from.timestamp + XORIN_REGISTER_READS + 2 * num_blocks + i
         );
     }
