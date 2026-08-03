@@ -116,6 +116,24 @@ fn create_test_harness(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
+fn xorin_test_pointers(
+    rng: &mut StdRng,
+    len: usize,
+    input_ptr_offset: Option<usize>,
+) -> (usize, usize) {
+    if len == 0 {
+        // Main-memory pointers are unused for an all-padding row and need not be aligned.
+        return (1, 3);
+    }
+    if let Some(offset) = input_ptr_offset {
+        assert!(offset.is_multiple_of(MEMORY_BLOCK_BYTES));
+        let buffer_ptr = gen_pointer(rng, len + offset);
+        (buffer_ptr, buffer_ptr + offset)
+    } else {
+        (gen_pointer(rng, len), gen_pointer(rng, len))
+    }
+}
+
 fn set_and_execute<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
@@ -123,6 +141,7 @@ fn set_and_execute<E: Executor<F> + Clone>(
     rng: &mut StdRng,
     opcode: XorinOpcode,
     buffer_length: Option<usize>,
+    input_ptr_offset: Option<usize>,
 ) {
     const MAX_LEN: usize = KECCAK_RATE_BYTES;
 
@@ -143,16 +162,13 @@ fn set_and_execute<E: Executor<F> + Clone>(
 
     let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
-    // Align buffer/input pointers to MEMORY_BLOCK_BYTES-byte blocks for memory bus compatibility
-    let num_blocks = buffer_length.div_ceil(MEMORY_BLOCK_BYTES);
-    let aligned_len = num_blocks * MEMORY_BLOCK_BYTES;
-    let buffer_ptr = gen_pointer(rng, aligned_len);
-    let input_ptr = gen_pointer(rng, aligned_len);
+    let num_blocks = buffer_length / MEMORY_BLOCK_BYTES;
+    let (buffer_ptr, input_ptr) = xorin_test_pointers(rng, buffer_length, input_ptr_offset);
 
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
     let rand_input_arr_f = rand_input_arr.map(F::from_u8);
 
-    // Write memory in MEMORY_BLOCK_BYTES-byte blocks; for the last partial block, pad with zeros
+    // Initialize buffer before input so overlapping ranges have a deterministic final image.
     for i in 0..num_blocks {
         let start = MEMORY_BLOCK_BYTES * i;
         let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
@@ -165,7 +181,11 @@ fn set_and_execute<E: Executor<F> + Clone>(
             buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
         );
+    }
 
+    for i in 0..num_blocks {
+        let start = MEMORY_BLOCK_BYTES * i;
+        let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
         let mut input_chunk = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &v) in rand_input_arr_f[start..end].iter().enumerate() {
             input_chunk[j] = v;
@@ -207,9 +227,20 @@ fn set_and_execute<E: Executor<F> + Clone>(
         ),
     );
 
+    // Input initialization happens after buffer initialization and may overlap it.
+    let mut preimage_buffer = rand_buffer_arr;
+    for (input_index, &byte) in rand_input_arr[..buffer_length].iter().enumerate() {
+        if let Some(buffer_index) = (input_ptr + input_index)
+            .checked_sub(buffer_ptr)
+            .filter(|&index| index < buffer_length)
+        {
+            preimage_buffer[buffer_index] = byte;
+        }
+    }
+
     let mut expected_output = [0u8; MAX_LEN];
     for i in 0..buffer_length {
-        expected_output[i] = rand_buffer_arr[i] ^ rand_input_arr[i];
+        expected_output[i] = preimage_buffer[i] ^ rand_input_arr[i];
     }
 
     let mut output_buffer = [F::from_u8(0); MAX_LEN];
@@ -244,8 +275,31 @@ fn xorin_chip_positive_tests() {
             &mut rng,
             XorinOpcode::XORIN,
             buffer_length,
+            None,
         );
     }
+
+    for input_ptr_offset in [0, MEMORY_BLOCK_BYTES] {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            XorinOpcode::XORIN,
+            Some(3 * MEMORY_BLOCK_BYTES),
+            Some(input_ptr_offset),
+        );
+    }
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        XorinOpcode::XORIN,
+        Some(0),
+        None,
+    );
 
     let tester = tester
         .build()
@@ -269,6 +323,7 @@ fn run_xorin_chip_negative_test(prank: impl Fn(&mut XorinVmCols<F>)) {
         &mut rng,
         XorinOpcode::XORIN,
         buffer_length,
+        None,
     );
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
@@ -299,9 +354,44 @@ fn xorin_wrong_output_negative_test() {
 }
 
 #[test]
-fn xorin_wrong_len_limb_negative_test() {
+fn xorin_wrong_len_negative_test() {
     run_xorin_chip_negative_test(|cols| {
-        cols.instruction.len_limb += F::ONE;
+        // is_padding_bytes has the form 0...01...1; turn the last active block into padding.
+        let last_active = (0..KECCAK_RATE_MEM_OPS)
+            .rev()
+            .find(|&i| cols.sponge.is_padding_bytes[i] == F::ZERO)
+            .expect("at least one active block");
+        cols.sponge.is_padding_bytes[last_active] = F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_buffer_ptr_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.buffer_ptr_limbs[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_input_ptr_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.input_ptr_limbs[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_preimage_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.sponge.preimage_buffer_bytes[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_write_timestamp_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.mem_oc.buffer_bytes_write_base_aux[0]
+            .timestamp_lt_aux
+            .diff_decomp[0] += F::ONE;
     });
 }
 
@@ -444,17 +534,14 @@ fn cuda_set_and_execute(
     preflight: &mut TestPreflight<F>,
     rng: &mut StdRng,
     len: Option<usize>,
+    input_ptr_offset: Option<usize>,
 ) {
     let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
-    if len == 0 {
-        return;
-    }
 
     let [buffer_reg, input_reg, len_reg] =
         gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let buffer_ptr = gen_pointer(rng, len);
-    let input_ptr = gen_pointer(rng, len);
+    let (buffer_ptr, input_ptr) = xorin_test_pointers(rng, len, input_ptr_offset);
 
     tester.write_bytes(
         1,
@@ -511,6 +598,7 @@ fn test_xorin_cuda_tracegen() {
             &mut harness.preflight,
             &mut rng,
             None,
+            None,
         );
     }
 
@@ -521,8 +609,29 @@ fn test_xorin_cuda_tracegen() {
             &mut harness.preflight,
             &mut rng,
             Some(len),
+            None,
         );
     }
+
+    for input_ptr_offset in [0, MEMORY_BLOCK_BYTES] {
+        cuda_set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            Some(3 * MEMORY_BLOCK_BYTES),
+            Some(input_ptr_offset),
+        );
+    }
+
+    cuda_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        Some(0),
+        None,
+    );
 
     tester
         .build()
@@ -547,6 +656,7 @@ fn test_xorin_cuda_tracegen_single() {
         &mut harness.preflight,
         &mut rng,
         Some(16),
+        None,
     );
 
     tester
