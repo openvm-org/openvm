@@ -9,7 +9,9 @@ use openvm_circuit::arch::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_cuda_common::{
+    common::set_device_by_id, copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx,
+};
 use openvm_mod_circuit_builder::{device_program::serialize_field_expr, FieldExpressionFiller};
 use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterFiller};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
@@ -90,6 +92,62 @@ fn validate_launch_config(
         )));
     }
     Ok(launch)
+}
+
+fn field_expr_launch_config(
+    kernel: cuda_abi::FieldExprReplayKernelConfig,
+    height: usize,
+    aux_words_per_thread: usize,
+    max_scratch_words: usize,
+) -> Result<cuda_abi::FieldExprReplayLaunchConfig, GpuPostflightError> {
+    if height == 0
+        || aux_words_per_thread == 0
+        || kernel.max_grid_blocks == 0
+        || kernel.block_threads == 0
+    {
+        return Err(GpuPostflightError::InvalidTranscript(format!(
+            "invalid field-expression kernel config: height={height}, aux={aux_words_per_thread}, max_grid={}, block={}",
+            kernel.max_grid_blocks, kernel.block_threads,
+        )));
+    }
+    let scratch_words_per_block = kernel
+        .block_threads
+        .checked_mul(aux_words_per_thread)
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch scratch size overflow".to_string(),
+            )
+        })?;
+    let row_blocks = height.div_ceil(kernel.block_threads);
+    let scratch_limited_blocks = max_scratch_words / scratch_words_per_block;
+    let grid_blocks = row_blocks
+        .min(kernel.max_grid_blocks)
+        .min(scratch_limited_blocks);
+    let active_threads = grid_blocks
+        .checked_mul(kernel.block_threads)
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch thread count overflow".to_string(),
+            )
+        })?;
+    let scratch_words = active_threads
+        .checked_mul(aux_words_per_thread)
+        .ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "field-expression launch scratch size overflow".to_string(),
+            )
+        })?;
+    validate_launch_config(
+        cuda_abi::FieldExprReplayLaunchConfig {
+            grid_blocks,
+            block_threads: kernel.block_threads,
+            scratch_words,
+            active_threads,
+            local_bytes_per_thread: kernel.local_bytes_per_thread,
+        },
+        aux_words_per_thread,
+        max_scratch_words,
+    )
 }
 
 pub struct FieldExprReplayChip<const NUM_READS: usize, const BLOCKS: usize> {
@@ -228,6 +286,8 @@ struct FieldExprReplayChipGpu<const NUM_READS: usize, const BLOCKS: usize> {
     timestamp_max_bits: usize,
     width: usize,
     aux_words_per_thread: usize,
+    /// Device-dependent occupancy and kernel attributes, queried once at construction.
+    kernel_config: cuda_abi::FieldExprReplayKernelConfig,
 }
 
 impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_READS, BLOCKS> {
@@ -297,10 +357,12 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
                 "field-expression trace width overflow".to_string(),
             )
         })?;
+        set_device_by_id(range_checker.device_ctx.device_id as i32)?;
         let program = serialized
             .blob
             .as_slice()
             .to_device_on(&range_checker.device_ctx)?;
+        let kernel_config = cuda_abi::field_expr_replay_kernel_config::<NUM_READS, BLOCKS>()?;
         Ok(Self {
             range_checker,
             program,
@@ -310,6 +372,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             timestamp_max_bits,
             width,
             aux_words_per_thread: serialized.aux_words_per_thread,
+            kernel_config,
         })
     }
 
@@ -365,14 +428,9 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         let delta = DeviceBuffer::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
         let max_scratch_words = MAX_FIELD_EXPR_SCRATCH_BYTES / size_of::<u32>();
-        let launch = validate_launch_config(
-            unsafe {
-                cuda_abi::field_expr_replay_launch_config::<NUM_READS, BLOCKS>(
-                    height,
-                    self.aux_words_per_thread,
-                    max_scratch_words,
-                )?
-            },
+        let launch = field_expr_launch_config(
+            self.kernel_config,
+            height,
             self.aux_words_per_thread,
             max_scratch_words,
         )?;
@@ -408,5 +466,45 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         }
         .commit()?;
         Ok(AirProvingContext::simple_no_pis(trace))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KERNEL: cuda_abi::FieldExprReplayKernelConfig = cuda_abi::FieldExprReplayKernelConfig {
+        max_grid_blocks: 8,
+        block_threads: 128,
+        local_bytes_per_thread: 32,
+    };
+
+    #[test]
+    fn launch_config_caps_grid_by_rows() {
+        let launch = field_expr_launch_config(KERNEL, 129, 4, 4096).unwrap();
+        assert_eq!(launch.grid_blocks, 2);
+        assert_eq!(launch.active_threads, 256);
+        assert_eq!(launch.scratch_words, 1024);
+    }
+
+    #[test]
+    fn launch_config_caps_grid_by_scratch() {
+        let launch = field_expr_launch_config(KERNEL, 4096, 4, 1536).unwrap();
+        assert_eq!(launch.grid_blocks, 3);
+        assert_eq!(launch.active_threads, 384);
+        assert_eq!(launch.scratch_words, 1536);
+    }
+
+    #[test]
+    fn launch_config_caps_grid_by_occupancy() {
+        let launch = field_expr_launch_config(KERNEL, 4096, 4, 4096).unwrap();
+        assert_eq!(launch.grid_blocks, 8);
+        assert_eq!(launch.active_threads, 1024);
+        assert_eq!(launch.scratch_words, 4096);
+    }
+
+    #[test]
+    fn launch_config_rejects_insufficient_scratch() {
+        assert!(field_expr_launch_config(KERNEL, 1, 4, 0).is_err());
     }
 }
