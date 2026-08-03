@@ -194,8 +194,8 @@ fn generate_trace_from_postflights<
     local_opcodes: &[Rv64WeierstrassOpcode],
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let pointer_max_bits = chip.inner.adapter().pointer_max_bits();
-    let mut projection = Vec::new();
-    for postflight in postflights {
+    let mut selected_steps = Vec::new();
+    for (postflight_index, postflight) in postflights.iter().enumerate() {
         let mut selected = Vec::new();
         for &local_opcode in local_opcodes {
             let local_opcode = local_opcode as usize;
@@ -207,33 +207,21 @@ fn generate_trace_from_postflights<
                     .steps(VmOpcode::from_usize(global_opcode))
                     .iter()
                     .copied()
-                    .map(|step| (step, local_opcode)),
+                    .map(|step| (postflight_index, step, local_opcode)),
             );
         }
-        selected.sort_unstable_by_key(|&(step, _)| postflight.timestamp(step));
-        projection.extend(
-            selected
-                .par_iter()
-                .map(|&(step, local_opcode)| {
-                    project_step::<F, NUM_READS, BLOCKS>(
-                        postflight,
-                        step,
-                        local_opcode,
-                        pointer_max_bits,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        );
+        selected.sort_unstable_by_key(|&(_, step, _)| postflight.timestamp(step));
+        selected_steps.extend(selected);
     }
 
     let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
     let width = adapter_width
         .checked_add(BaseAir::<F>::width(&chip.inner.expr))
         .ok_or_else(|| PostflightError::new("Weierstrass trace width overflow"))?;
-    let height = if projection.is_empty() {
+    let height = if selected_steps.is_empty() {
         0
     } else {
-        projection
+        selected_steps
             .len()
             .checked_next_power_of_two()
             .ok_or_else(|| PostflightError::new("Weierstrass trace height overflow"))?
@@ -251,10 +239,16 @@ fn generate_trace_from_postflights<
         chip.mem_helper.timestamp_max_bits(),
     );
     let mem_helper = temporary_mem_helper.as_borrowed();
-    trace.values[..projection.len() * width]
+    trace.values[..selected_steps.len() * width]
         .par_chunks_exact_mut(width)
-        .zip(projection.par_iter())
-        .try_for_each(|(row, input)| {
+        .zip(selected_steps.par_iter().copied())
+        .try_for_each(|(row, (postflight_index, step, local_opcode))| {
+            let input = project_step::<F, NUM_READS, BLOCKS>(
+                &postflights[postflight_index],
+                step,
+                local_opcode,
+                pointer_max_bits,
+            )?;
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let read_bytes =
                 vec_heap_u16_blocks_to_bytes(input.heap_reads.iter().flatten().flatten());
@@ -262,7 +256,7 @@ fn generate_trace_from_postflights<
             chip.inner
                 .fill_trace_row_from_execution_data(
                     temporary_range_checker.as_ref(),
-                    input.local_opcode as usize,
+                    local_opcode,
                     &read_bytes,
                     Some(&write_bytes),
                     core_row,
@@ -276,15 +270,15 @@ fn generate_trace_from_postflights<
                 temporary_range_checker.as_ref(),
                 &mem_helper,
                 adapter_row,
-                input,
+                &input,
             );
             Ok::<_, PostflightError>(())
         })?;
-    if projection.len() < height {
+    if selected_steps.len() < height {
         let mut dummy_row = F::zero_vec(width);
         chip.inner
             .fill_dummy_core_row(&mut dummy_row[adapter_width..]);
-        trace.values[projection.len() * width..]
+        trace.values[selected_steps.len() * width..]
             .par_chunks_exact_mut(width)
             .for_each(|row| row.copy_from_slice(&dummy_row));
     }

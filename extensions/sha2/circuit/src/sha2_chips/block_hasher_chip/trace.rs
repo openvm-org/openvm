@@ -13,9 +13,18 @@ use crate::{
     INNER_OFFSET,
 };
 
-struct Sha2BlockTraceInput<'a> {
-    message_bytes: &'a [u8],
-    prev_state: &'a [u8],
+struct Sha2BlockReplay {
+    message_bytes: Vec<u8>,
+    prev_state: Vec<u8>,
+}
+
+impl From<crate::Sha2ReplayRow> for Sha2BlockReplay {
+    fn from(replay: crate::Sha2ReplayRow) -> Self {
+        Self {
+            message_bytes: replay.message_bytes,
+            prev_state: replay.prev_state,
+        }
+    }
 }
 
 pub(crate) fn generate_trace_from_postflight<F, C>(
@@ -31,6 +40,7 @@ where
         .par_iter()
         .map(|&step| {
             crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
+                .map(Sha2BlockReplay::from)
         })
         .collect::<Result<Vec<_>, _>>()?;
     chip.generate_trace_from_replays(&replay_rows)
@@ -48,11 +58,14 @@ where
     let mut replay_rows = Vec::new();
     for postflight in postflights {
         for &step in postflight.steps(C::OPCODE.global_opcode()) {
-            replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
+            replay_rows.push(Sha2BlockReplay::from(crate::replay_sha2_from_postflight::<
+                F,
+                C,
+            >(
                 postflight,
                 step,
                 chip.pointer_max_bits,
-            )?);
+            )?));
         }
     }
     chip.generate_trace_from_replays(&replay_rows)
@@ -65,7 +78,7 @@ where
 {
     fn generate_trace_from_replays(
         &self,
-        replay_rows: &[crate::Sha2ReplayRow],
+        replay_rows: &[Sha2BlockReplay],
     ) -> Result<RowMajorMatrix<F>, PostflightError> {
         let rows_used = replay_rows
             .len()
@@ -76,65 +89,58 @@ where
             F::zero_vec(height * C::BLOCK_HASHER_WIDTH),
             C::BLOCK_HASHER_WIDTH,
         );
-        let inputs = replay_rows
-            .iter()
-            .map(|replay| Sha2BlockTraceInput {
-                message_bytes: &replay.message_bytes,
-                prev_state: &replay.prev_state,
-            })
-            .collect::<Vec<_>>();
-        self.fill_trace_from_inputs(&mut trace, &inputs);
+        self.fill_trace_from_replays(&mut trace, replay_rows);
         Ok(trace)
     }
 
-    fn fill_trace_from_inputs(
+    fn fill_trace_from_replays(
         &self,
         trace_matrix: &mut RowMajorMatrix<F>,
-        inputs: &[Sha2BlockTraceInput<'_>],
+        replay_rows: &[Sha2BlockReplay],
     ) {
-        if inputs.is_empty() {
+        if replay_rows.is_empty() {
             return;
         }
 
-        let rows_used = inputs.len() * C::ROWS_PER_BLOCK;
+        let rows_used = replay_rows.len() * C::ROWS_PER_BLOCK;
         let trace = &mut trace_matrix.values[..];
-        let prev_hashes = inputs
-            .par_iter()
-            .map(|input| {
-                (0..C::HASH_WORDS)
-                    .map(|i| {
-                        input.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
-                            .iter()
-                            .rev()
-                            .fold(C::Word::from(0), |word, &byte| {
-                                (word << 8) | u32::from(byte).into()
-                            })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
+        let mut prev_hashes = vec![C::Word::from(0); replay_rows.len() * C::HASH_WORDS];
+        prev_hashes
+            .par_chunks_exact_mut(C::HASH_WORDS)
+            .zip(replay_rows.par_iter())
+            .for_each(|(prev_hash, replay)| {
+                for (i, word) in prev_hash.iter_mut().enumerate() {
+                    *word = replay.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
+                        .iter()
+                        .rev()
+                        .fold(C::Word::from(0), |word, &byte| {
+                            (word << 8) | u32::from(byte).into()
+                        });
+                }
+            });
 
         // zip the prev_hashes with the next block's prev_hash
-        let prev_hashes_and_next_block_prev_hashes = prev_hashes.par_iter().zip(
-            prev_hashes[1..]
-                .par_iter()
-                .chain(prev_hashes[..1].par_iter()),
-        );
+        let prev_hashes_and_next_block_prev_hashes =
+            prev_hashes.par_chunks_exact(C::HASH_WORDS).zip(
+                prev_hashes[C::HASH_WORDS..]
+                    .par_chunks_exact(C::HASH_WORDS)
+                    .chain(prev_hashes[..C::HASH_WORDS].par_chunks_exact(C::HASH_WORDS)),
+            );
 
         // fill in used rows
         trace[..rows_used * C::BLOCK_HASHER_WIDTH]
             .par_chunks_exact_mut(C::BLOCK_HASHER_WIDTH * C::ROWS_PER_BLOCK)
             .zip(
-                inputs
+                replay_rows
                     .par_iter()
                     .zip(prev_hashes_and_next_block_prev_hashes),
             )
             .enumerate()
             .for_each(
-                |(block_idx, (block_slice, (input, (prev_hash, next_block_prev_hash))))| {
+                |(block_idx, (block_slice, (replay, (prev_hash, next_block_prev_hash))))| {
                     self.fill_block_trace(
                         block_slice,
-                        input.message_bytes,
+                        &replay.message_bytes,
                         block_idx + 1, // 1-indexed
                         prev_hash,
                         next_block_prev_hash,
@@ -150,7 +156,7 @@ where
         let num_blocks = rows_used / C::ROWS_PER_BLOCK;
         let first_dummy_row_cols_const = self.fill_first_dummy_row(
             &mut trace[rows_used * C::BLOCK_HASHER_WIDTH..(rows_used + 1) * C::BLOCK_HASHER_WIDTH],
-            &prev_hashes[0],
+            &prev_hashes[..C::HASH_WORDS],
             num_blocks,
         );
 
@@ -164,7 +170,7 @@ where
                     &mut Sha2RoundColsRefMut::from::<C>(
                         &mut row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
                     ),
-                    &prev_hashes[0],
+                    &prev_hashes[..C::HASH_WORDS],
                     Some(
                         first_dummy_row_cols_const
                             .work_vars
