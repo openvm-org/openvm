@@ -202,7 +202,7 @@ impl XorinVmAir {
 
         // Constrain read of buffer bytes
         // Timestamp increases by <= (136/8) = 17
-        for (i, (input, mem_aux)) in izip!(
+        for (i, (buffer_block, mem_aux)) in izip!(
             local
                 .sponge
                 .preimage_buffer_bytes
@@ -222,14 +222,14 @@ impl XorinVmAir {
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     pack_u8_block::<AB>(&[
-                        input[0].into(),
-                        input[1].into(),
-                        input[2].into(),
-                        input[3].into(),
-                        input[4].into(),
-                        input[5].into(),
-                        input[6].into(),
-                        input[7].into(),
+                        buffer_block[0].into(),
+                        buffer_block[1].into(),
+                        buffer_block[2].into(),
+                        buffer_block[3].into(),
+                        buffer_block[4].into(),
+                        buffer_block[5].into(),
+                        buffer_block[6].into(),
+                        buffer_block[7].into(),
                     ]),
                     timestamp.clone(),
                     mem_aux,

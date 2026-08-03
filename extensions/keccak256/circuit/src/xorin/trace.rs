@@ -70,7 +70,7 @@ impl XorinVmFiller {
 
         let mut timestamp = input.timestamp;
         let input_len = input.len as usize;
-        let num_reads = input_len.div_ceil(MEMORY_BLOCK_BYTES);
+        let num_reads = input_len / MEMORY_BLOCK_BYTES;
 
         for t in 0..3 {
             mem_helper.fill(
@@ -100,8 +100,6 @@ impl XorinVmFiller {
             timestamp += 1;
         }
 
-        // Fill all bytes that are covered by active 8-byte memory blocks.
-        let bytes_covered = num_reads * MEMORY_BLOCK_BYTES;
         for i in 0..input_len {
             trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(input.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_u8(input.input_limbs[i]);
@@ -110,11 +108,6 @@ impl XorinVmFiller {
             let b_val = input.buffer_limbs[i] as u32;
             let c_val = input.input_limbs[i] as u32;
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
-        }
-        for i in input_len..bytes_covered {
-            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(input.buffer_limbs[i]);
-            trace_row.sponge.input_bytes[i] = F::from_u8(input.input_limbs[i]);
-            trace_row.sponge.postimage_buffer_bytes[i] = F::from_u8(input.buffer_limbs[i]);
         }
 
         for t in 0..num_reads {

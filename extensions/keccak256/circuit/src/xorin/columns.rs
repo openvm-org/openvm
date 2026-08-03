@@ -46,7 +46,7 @@ pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
-    // Only store timestamp for write. preimage_buffer_bytes contains previous data.
+    // Only store write timestamp auxiliaries; previous data comes from preimage_buffer_bytes.
     pub buffer_bytes_write_base_aux: [MemoryBaseAuxCols<T>; KECCAK_RATE_MEM_OPS],
 }
 
