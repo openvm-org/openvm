@@ -133,6 +133,7 @@ pub fn generate_trace(
 
         cols.is_valid = F::ONE;
         cols.proof_idx = F::from_usize(proof_idx);
+        cols.query_idx = F::from_usize(query_idx);
         cols.commit_major = F::from_usize(commit_major);
         cols.commit_minor = F::from_usize(commit_minor);
         cols.total_depth = F::from_usize(depth + k + 1);
@@ -425,6 +426,7 @@ pub mod cuda {
                         start_row: total_rows as u32,
                         num_rows: num_rows as u32,
                         depth: log.depth as u16,
+                        query_idx: log.query_idx as u16,
                         merkle_idx: log.merkle_idx as u32,
                         commit_major: log.commit_major as u16,
                         commit_minor: log.commit_minor as u16,
