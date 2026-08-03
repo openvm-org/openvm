@@ -215,6 +215,7 @@ mod tests {
     use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent};
 
     use super::*;
+    use crate::utils::SPONGE_BYTES_PER_ROW;
 
     fn output_replay_count_error(
         device_ctx: &GpuDeviceCtx,
