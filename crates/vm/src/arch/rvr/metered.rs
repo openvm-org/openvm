@@ -41,6 +41,7 @@ struct RvrMeteredInstanceInner<'a> {
     initial_image: RvrInitialImage,
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     compiled: RvrCompiled,
+    uses_deferral_address_space: bool,
 }
 
 pub struct RvrMeteredInstance<'a> {
@@ -138,13 +139,21 @@ pub struct SegmentationState {
 }
 
 impl SegmentationState {
-    pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
+    pub fn new(
+        ctx: MeteredCtx,
+        system_config: &SystemConfig,
+        uses_deferral_address_space: bool,
+    ) -> Self {
         let memory_dimensions = system_config.memory_config.memory_dimensions();
         Self {
             ctx,
             mem_page_buf: vec![PageTouch::default(); MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![PageTouch::default(); PV_PAGE_BUF_CAP],
-            deferral_page_buf: vec![PageTouch::default(); DEFERRAL_PAGE_BUF_CAP],
+            deferral_page_buf: if uses_deferral_address_space {
+                vec![PageTouch::default(); DEFERRAL_PAGE_BUF_CAP]
+            } else {
+                Vec::new()
+            },
             drained_mem_page_touches: Vec::new(),
             address_height: memory_dimensions.address_height,
         }
@@ -182,7 +191,11 @@ impl SegmentationState {
 
     /// Get the AS_DEFERRAL page buffer used by generated C.
     pub fn deferral_page_buf_ptr(&mut self) -> *mut PageTouch {
-        self.deferral_page_buf.as_mut_ptr()
+        if self.deferral_page_buf.is_empty() {
+            std::ptr::null_mut()
+        } else {
+            self.deferral_page_buf.as_mut_ptr()
+        }
     }
 
     pub fn deferral_page_buf_cap(&self) -> u32 {
@@ -496,6 +509,7 @@ impl<'a> RvrMeteredInstance<'a> {
         initial_image: RvrInitialImage,
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
         compiled: RvrCompiled,
+        uses_deferral_address_space: bool,
     ) -> Self {
         RvrMeteredInstance {
             inner: RvrMeteredInstanceInner {
@@ -503,6 +517,7 @@ impl<'a> RvrMeteredInstance<'a> {
                 initial_image,
                 runtime_hooks,
                 compiled,
+                uses_deferral_address_space,
             },
         }
     }
@@ -516,6 +531,7 @@ impl<'a> RvrMeteredInstance<'a> {
                 initial_image: self.inner.initial_image,
                 runtime_hooks: self.inner.runtime_hooks,
                 compiled: self.inner.compiled,
+                uses_deferral_address_space: self.inner.uses_deferral_address_space,
             },
         }
     }
@@ -552,7 +568,11 @@ impl<'a> RvrMeteredInstance<'a> {
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
+        let seg_state = SegmentationState::new(
+            ctx,
+            &self.inner.system_config,
+            self.inner.uses_deferral_address_space,
+        );
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -583,6 +603,7 @@ impl<'a> RvrMeteredSegmentInstance<'a> {
         initial_image: RvrInitialImage,
         runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
         compiled: RvrCompiled,
+        uses_deferral_address_space: bool,
     ) -> Self {
         RvrMeteredSegmentInstance {
             inner: RvrMeteredInstanceInner {
@@ -590,6 +611,7 @@ impl<'a> RvrMeteredSegmentInstance<'a> {
                 initial_image,
                 runtime_hooks,
                 compiled,
+                uses_deferral_address_space,
             },
         }
     }
@@ -629,7 +651,11 @@ impl<'a> RvrMeteredSegmentInstance<'a> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
+        let seg_state = SegmentationState::new(
+            ctx,
+            &self.inner.system_config,
+            self.inner.uses_deferral_address_space,
+        );
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(
@@ -671,7 +697,9 @@ mod tests {
         utils::{test_cpu_engine, test_system_config},
     };
 
-    fn make_segmentation_state() -> SegmentationState {
+    fn make_segmentation_state_with_deferral(
+        uses_deferral_address_space: bool,
+    ) -> SegmentationState {
         let system_config = test_system_config();
         let num_airs = 6;
         let mut air_names = (0..num_airs)
@@ -701,7 +729,11 @@ mod tests {
             &system_config,
             test_cpu_engine().proving_memory_config(),
         );
-        SegmentationState::new(ctx, &system_config)
+        SegmentationState::new(ctx, &system_config, uses_deferral_address_space)
+    }
+
+    fn make_segmentation_state() -> SegmentationState {
+        make_segmentation_state_with_deferral(true)
     }
 
     #[test]
@@ -928,6 +960,47 @@ mod tests {
         assert_eq!(metering.mem_page_buf, original_mem_ptr);
         assert_eq!(metering.mem_page_buf_len, 5);
         assert_eq!(seg_state.mem_page_buf.len(), original_mem_len);
+    }
+
+    #[test]
+    fn test_deferral_page_buffer_is_allocated_only_when_enabled() {
+        let mut disabled = make_segmentation_state_with_deferral(false);
+        assert!(disabled.deferral_page_buf.is_empty());
+        assert!(disabled.deferral_page_buf_ptr().is_null());
+        assert_eq!(disabled.deferral_page_buf_cap(), 0);
+
+        let mut enabled = make_segmentation_state_with_deferral(true);
+        assert_eq!(enabled.deferral_page_buf.len(), DEFERRAL_PAGE_BUF_CAP);
+        assert!(!enabled.deferral_page_buf_ptr().is_null());
+        assert_eq!(
+            enabled.deferral_page_buf_cap(),
+            DEFERRAL_PAGE_BUF_CAP as u32
+        );
+
+        assert_eq!(disabled.mem_page_buf.len(), enabled.mem_page_buf.len());
+        assert_eq!(disabled.pv_page_buf.len(), enabled.pv_page_buf.len());
+    }
+
+    #[test]
+    fn test_disabled_deferral_page_buffer_can_grow_from_zero() {
+        let mut seg_state = make_segmentation_state_with_deferral(false);
+        let mut metering = MeteringState {
+            trace_heights: seg_state.trace_heights_ptr(),
+            mem_page_buf: seg_state.mem_page_buf_ptr(),
+            pv_page_buf: seg_state.pv_page_buf_ptr(),
+            deferral_page_buf: seg_state.deferral_page_buf_ptr(),
+            seg_state: &mut seg_state,
+            deferral_page_buf_cap: 0,
+            ..Default::default()
+        };
+
+        unsafe { metered_page_buffer_resize(&mut metering, DEFERRAL_AS, 1) };
+        assert!(metering.deferral_page_buf_cap >= 1);
+        assert!(!metering.deferral_page_buf.is_null());
+        assert_eq!(
+            seg_state.deferral_page_buf.len(),
+            metering.deferral_page_buf_cap as usize
+        );
     }
 
     #[test]

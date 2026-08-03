@@ -27,11 +27,13 @@ pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 const MAX_PV_PAGES_PER_INSN: usize = 2;
 
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
-/// The C tracer does not bounds-check this buffer. A reveal can span two pages.
+/// A reveal can span two pages. The C tracer verifies capacity and grows this
+/// cold-path buffer before an overflowing append.
 pub const PV_PAGE_BUF_CAP: usize = 1 << 12;
 
 /// Maximum AS_DEFERRAL page buffer entries per segment check interval.
-/// No bounds checks in C. Deferral CALL records two reads and two writes.
+/// Deferral CALL records two reads and two writes. The C tracer verifies
+/// capacity and grows this cold-path buffer before an overflowing append.
 const MAX_DEFERRAL_PAGES_PER_INSN: usize = 4;
 pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 12;
 
