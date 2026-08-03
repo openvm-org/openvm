@@ -53,6 +53,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let rd_hi = rd_data[1];
             let is_sign_extend = (rd_hi >> (U16_BITS - 1)) & 1;
             let sign_check = 2u32 * (rd_hi as u32) - (is_sign_extend as u32) * (1 << U16_BITS);
+            // Bump the range-checker multiplicity for the LUI 4-bit check.
             let imm_low_4 = if is_jal {
                 0
             } else {
@@ -80,7 +81,6 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
             core_row.imm = instruction.c;
             core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
-            core_row.imm_low_4 = F::from_u8(imm_low_4);
             core_row.is_jal = F::from_bool(is_jal);
             core_row.is_lui = F::from_bool(!is_jal);
             core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
