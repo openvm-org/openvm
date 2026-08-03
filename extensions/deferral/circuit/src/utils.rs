@@ -29,7 +29,7 @@ pub const SPONGE_BYTES_PER_ROW: usize = U16_CELL_SIZE * DIGEST_SIZE;
 pub const SPONGE_ROW_MEMORY_OPS: usize = num_byte_memory_ops(SPONGE_BYTES_PER_ROW);
 /// Number of memory-bus messages for a `DIGEST_SIZE`-cell DEFERRAL_AS chunk.
 pub const DIGEST_F_MEMORY_OPS: usize = num_f_memory_ops(DIGEST_SIZE);
-pub const COMMIT_MEMORY_OPS: usize = num_byte_memory_ops(COMMIT_NUM_BYTES);
+pub const COMMIT_MEMORY_OPS: usize = num_f_memory_ops(COMMIT_NUM_U16S);
 pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_f_memory_ops(OUTPUT_TOTAL_NUM_U16S);
 
 pub(crate) fn checked_u16_pointer(
