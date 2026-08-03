@@ -44,6 +44,7 @@ typedef struct {
     uint32_t start_row;
     uint32_t num_rows;
     uint16_t depth;
+    uint16_t query_idx;
     uint32_t merkle_idx;
     uint16_t commit_major;
     uint16_t commit_minor;
