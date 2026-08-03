@@ -199,8 +199,8 @@ template <typename T> struct DeferralCallAdapterCols {
     T rd_ptr;
     T rs_ptr;
 
-    T rd_val[RV64_PTR_U16S];
-    T rs_val[RV64_PTR_U16S];
+    T rd_val[RV64_PTR_U16_LIMBS];
+    T rs_val[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
@@ -231,8 +231,8 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.timestamp, record.from_timestamp);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rd_ptr, record.rd_ptr);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rs_ptr, record.rs_ptr);
-    Fp rd_val_u16s[RV64_PTR_U16S];
-    Fp rs_val_u16s[RV64_PTR_U16S];
+    Fp rd_val_u16s[RV64_PTR_U16_LIMBS];
+    Fp rs_val_u16s[RV64_PTR_U16_LIMBS];
     u32_bytes_to_le_u16_cells(rd_val_u16s, record.rd_val);
     u32_bytes_to_le_u16_cells(rs_val_u16s, record.rs_val);
     COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rd_val, rd_val_u16s);

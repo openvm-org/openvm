@@ -5,6 +5,7 @@
 
 #include "fp.h"
 #include "primitives/constants.h"
+#include "primitives/utils.cuh"
 #include "system/memory/params.cuh"
 
 namespace deferral {
@@ -18,7 +19,6 @@ inline constexpr size_t COMMIT_NUM_BYTES = DIGEST_SIZE * F_NUM_BYTES;
 inline constexpr size_t OUTPUT_LEN_NUM_BYTES = sizeof(uint64_t);
 inline constexpr size_t OUTPUT_TOTAL_BYTES = COMMIT_NUM_BYTES + OUTPUT_LEN_NUM_BYTES;
 inline constexpr uint32_t U16_MASK = (1u << U16_BITS) - 1;
-inline constexpr size_t RV64_PTR_U16S = RV64_WORD_NUM_LIMBS / U16_CELL_SIZE;
 
 // u16 cell-shape constants for the packed column/key layout.
 inline constexpr size_t F_NUM_U16S = F_NUM_BYTES / U16_CELL_SIZE;
@@ -61,44 +61,24 @@ __device__ __host__ inline void pack_u8_pairs_le(T (&out)[OUT], uint8_t const (&
 
 template <typename T>
 __device__ __host__ inline void u32_bytes_to_le_u16_cells(
-    T (&out)[RV64_PTR_U16S],
+    T (&out)[riscv::RV64_PTR_U16_LIMBS],
     uint8_t const (&bytes)[RV64_WORD_NUM_LIMBS]
 ) {
     pack_u8_pairs_le(out, bytes);
-}
-
-template <typename T, size_t OUT>
-__device__ __host__ inline void u32_to_le_u16_cells(T (&out)[OUT], uint32_t value) {
-    static_assert(OUT * U16_CELL_SIZE == sizeof(uint32_t));
-    for (size_t i = 0; i < OUT; ++i) {
-        out[i] = T(static_cast<uint32_t>((value >> (U16_BITS * i)) & U16_MASK));
-    }
-}
-
-template <size_t NUM_U16_CELLS>
-__device__ __host__ inline uint32_t scale_u16_high_cell(
-    uint32_t high_u16,
-    size_t address_bits
-) {
-    return high_u16 << static_cast<uint32_t>(U16_BITS * NUM_U16_CELLS - address_bits);
 }
 
 __device__ __host__ inline uint32_t scale_output_len(
     uint16_t const (&output_len)[F_NUM_U16S],
     size_t address_bits
 ) {
-    return scale_u16_high_cell<F_NUM_U16S>(
-        static_cast<uint32_t>(output_len[F_NUM_U16S - 1]), address_bits
-    );
+    return ptr_bound_from_high_u16(output_len[F_NUM_U16S - 1], address_bits);
 }
 
 __device__ __host__ inline uint32_t scale_rv64_ptr_from_u32_bytes(
     uint8_t const (&bytes)[RV64_WORD_NUM_LIMBS],
     size_t address_bits
 ) {
-    return scale_u16_high_cell<RV64_PTR_U16S>(
-        static_cast<uint32_t>(u16_from_bytes_le(bytes[2], bytes[3])), address_bits
-    );
+    return ptr_bound_from_high_u16(u16_from_bytes_le(bytes[2], bytes[3]), address_bits);
 }
 
 } // namespace deferral

@@ -48,8 +48,8 @@ template <typename T> struct DeferralOutputCols {
     T deferral_idx;
 
     // Low 32 bits of heap pointers, packed as u16 cells.
-    T rd_val[RV64_PTR_U16S];
-    T rs_val[RV64_PTR_U16S];
+    T rd_val[RV64_PTR_U16_LIMBS];
+    T rs_val[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 

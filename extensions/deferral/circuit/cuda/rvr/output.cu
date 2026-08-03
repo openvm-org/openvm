@@ -419,10 +419,8 @@ __global__ void deferral_output_replay_tracegen(
     bool is_first = section_idx == 0;
     bool is_last = section_idx + 1 == call.num_rows;
     Histogram count_buffer(count_ptr, num_def_circuits);
-    MemoryAuxColsFactory mem_helper(
-        VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-    );
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+    MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
@@ -436,10 +434,10 @@ __global__ void deferral_output_replay_tracegen(
     COL_WRITE_VALUE(row, DeferralOutputCols, rd_ptr, rd_ptr);
     COL_WRITE_VALUE(row, DeferralOutputCols, rs_ptr, rs_ptr);
     COL_WRITE_VALUE(row, DeferralOutputCols, deferral_idx, deferral_idx);
-    Fp rd_u16s[RV64_PTR_U16S];
-    Fp rs_u16s[RV64_PTR_U16S];
+    Fp rd_u16s[RV64_PTR_U16_LIMBS];
+    Fp rs_u16s[RV64_PTR_U16_LIMBS];
 #pragma unroll
-    for (size_t i = 0; i < RV64_PTR_U16S; i++) {
+    for (size_t i = 0; i < RV64_PTR_U16_LIMBS; i++) {
         rd_u16s[i] = Fp(memory[event_start].value[i]);
         rs_u16s[i] = Fp(memory[event_start + 1].value[i]);
     }
@@ -465,13 +463,11 @@ __global__ void deferral_output_replay_tracegen(
     if (is_first) {
         count_buffer.add_count(deferral_idx);
         range_checker.add_count(
-            scale_u16_high_cell<RV64_PTR_U16S>(memory[event_start].value[1], address_bits),
+            ptr_bound_from_high_u16(memory[event_start].value[1], address_bits),
             U16_BITS
         );
         range_checker.add_count(
-            scale_u16_high_cell<RV64_PTR_U16S>(
-                memory[event_start + 1].value[1], address_bits
-            ),
+            ptr_bound_from_high_u16(memory[event_start + 1].value[1], address_bits),
             U16_BITS
         );
 #pragma unroll
