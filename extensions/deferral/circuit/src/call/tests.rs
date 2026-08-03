@@ -11,7 +11,7 @@ use openvm_circuit::arch::{
     },
     Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{

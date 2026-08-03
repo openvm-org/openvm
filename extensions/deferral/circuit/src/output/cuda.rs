@@ -22,7 +22,6 @@ use super::DeferralOutputCols;
 use crate::{
     cuda_abi::output::{self, DeferralOutputReplayCall},
     poseidon2::{DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer},
-    utils::SPONGE_BYTES_PER_ROW,
 };
 
 #[derive(new)]
