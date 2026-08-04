@@ -3,7 +3,7 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{
         execution_mode::ExecutionCtxTrait, ExecutionError, PostflightError, VmStateMut,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
+        BLOCK_FE_WIDTH, DEFAULT_RV64_MEMORY_BYTE_CAPACITY, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
     },
     system::memory::online::GuestMemory,
 };
@@ -16,7 +16,6 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     PUBLIC_VALUES_AS,
 };
-use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
@@ -321,9 +320,12 @@ pub(crate) fn checked_rv64_memory_address(
     imm_extended: u32,
     access_width: usize,
 ) -> Result<u32, ExecutionError> {
-    debug_assert!(access_width <= MEM_SIZE);
+    // Bound by the *circuit* memory capacity (2^32 bytes), not the guest platform's
+    // `MEM_SIZE`: the RV64 memory address space supports the full 2^32-byte range.
+    // TODO: use `MemoryConfig::pointer_max_bits` once execution state carries the memory config.
+    debug_assert!(access_width <= DEFAULT_RV64_MEMORY_BYTE_CAPACITY);
     let address = rv64_address_add_imm(base, imm_extended);
-    if address > (MEM_SIZE - access_width) as u64 {
+    if address > (DEFAULT_RV64_MEMORY_BYTE_CAPACITY - access_width) as u64 {
         return Err(ExecutionError::Fail {
             pc,
             msg: "effective address exceeds implemented memory address space",

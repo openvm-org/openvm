@@ -12,9 +12,9 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::LocalOpcode;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::PUBLIC_VALUES_AS;
+use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -111,6 +111,34 @@ fn rand_store_byte_test() {
             None,
         );
     }
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
+fn positive_storeb_max_address_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, bitwise) = create_store_byte_harness(&mut tester);
+    // The default config exposes the full 2^32-byte memory AS; deterministically store to the
+    // last addressable byte (byte address 2^32 - 1).
+    let rs1 = u32::MAX.to_le_bytes();
+    set_and_execute_store(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        STOREB,
+        Some([rs1[0], rs1[1], rs1[2], rs1[3], 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        Some(RV64_MEMORY_AS as usize),
+    );
     tester
         .build()
         .load(harness)

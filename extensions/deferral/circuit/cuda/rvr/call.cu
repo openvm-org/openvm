@@ -500,6 +500,7 @@ __global__ void deferral_call_replay_tracegen(
     }
 
     Histogram count_buffer(count_ptr, num_def_circuits);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
@@ -507,7 +508,9 @@ __global__ void deferral_call_replay_tracegen(
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
-    deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
+    deferral_call_adapter_tracegen(
+        row, record.adapter, bitwise_buffer, mem_helper, range_checker, address_bits
+    );
     deferral_call_core_tracegen(
         row.slice_from(COL_INDEX(DeferralCallCols, core)),
         record.core,

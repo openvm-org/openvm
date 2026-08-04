@@ -419,6 +419,7 @@ __global__ void deferral_output_replay_tracegen(
     bool is_first = section_idx == 0;
     bool is_last = section_idx + 1 == call.num_rows;
     Histogram count_buffer(count_ptr, num_def_circuits);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
@@ -490,6 +491,26 @@ __global__ void deferral_output_replay_tracegen(
         sponge_inputs[0] = Fp(deferral_idx);
         sponge_inputs[1] = Fp(output_len);
         COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
+
+        // Convert the heap `input` (rs_val) base byte pointer to AS-native u16 cell pointer limbs
+        // and emit the matching range-check counts. Mirrors the first-row branch of the host
+        // `DeferralOutputFiller`.
+        const uint32_t heap_cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            input_ptr,
+            address_bits,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
+        );
+        COL_WRITE_VALUE(row, DeferralOutputCols, input_cell_carry, Fp(conv_carry));
+        COL_WRITE_ARRAY(row, DeferralOutputCols, input_add_carry, add_carries);
+
+        // The output write cell pointer is unconstrained on the first row (its constraints are
+        // gated by `is_write_row`); match the host trace, which leaves it zero.
+        COL_FILL_ZERO(row, DeferralOutputCols, write_cell_ptr);
     } else {
         COL_FILL_ZERO(row, DeferralOutputCols, rd_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, rs_aux);
@@ -522,6 +543,23 @@ __global__ void deferral_output_replay_tracegen(
         COL_WRITE_ARRAY(aux, MemoryWriteAuxColsDef, prev_data, packed_previous);
         mem_helper.fill(aux, write_previous.timestamp,
                         from.timestamp + 7 + section_idx - 1);
+
+        // Input-conversion carries are only populated on the first row; match the host trace,
+        // which leaves them zero on write rows.
+        COL_WRITE_VALUE(row, DeferralOutputCols, input_cell_carry, Fp::zero());
+        COL_FILL_ZERO(row, DeferralOutputCols, input_add_carry);
+
+        // Output write cell pointer for this row = `(output_ptr + (section_idx - 1) * DIGEST_SIZE)
+        // / 2`, witnessed as little-endian 16-bit cell-pointer limbs `[lo16, hi16]` and
+        // range-checked. Mirrors the write-row branch of the host `DeferralOutputFiller`.
+        const uint32_t write_byte_ptr = output_ptr + (section_idx - 1) * DIGEST_SIZE;
+        const uint32_t write_cell = write_byte_ptr >> 1;
+        const uint32_t write_cell_lo = write_cell & 0xffffu;
+        const uint32_t write_cell_hi = write_cell >> openvm::U16_BITS;
+        range_checker.add_count(write_cell_lo, openvm::U16_BITS);
+        range_checker.add_count(write_cell_hi, POINTER_MAX_BITS - openvm::U16_BITS);
+        const Fp write_cell_limbs[2] = {Fp(write_cell_lo), Fp(write_cell_hi)};
+        COL_WRITE_ARRAY(row, DeferralOutputCols, write_cell_ptr, write_cell_limbs);
     }
 
     Fp prev_capacity[DIGEST_SIZE] = {};

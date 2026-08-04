@@ -121,6 +121,34 @@ fn rand_load_doubleword_test() {
 }
 
 #[test]
+fn positive_loadd_max_address_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
+    let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
+    // The default config exposes the full 2^32-byte memory AS; deterministically load the last
+    // addressable doubleword (byte address 2^32 - 8).
+    let rs1 = (u32::MAX - 7).to_le_bytes();
+    set_and_execute_load(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        LOADD,
+        Some([rs1[0], rs1[1], rs1[2], rs1[3], 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        None,
+    );
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
 fn positive_loadd_pointer_limb_boundary_cross_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());

@@ -2,6 +2,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "riscv-adapters/vec_heap.cuh"
 #include "arch/rvr/replay.cuh"
 #include "system/memory/params.cuh"
@@ -19,6 +20,11 @@ struct Rv64IsEqualModU16AdapterCols {
     T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
+    // Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
+    T rs_cell_carry[NUM_READS];
+    // Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to each
+    // base cell pointer (block `j`'s carry into the high cell limb).
+    T reads_add_carry[NUM_READS][BLOCKS_PER_READ];
     T rd_ptr;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
@@ -303,12 +309,22 @@ __global__ void modular_is_eq_replay_tracegen(
             rs_prev_timestamp[read],
             from.timestamp + static_cast<uint32_t>(read)
         );
-        range_checker.add_count(
-            ptr_bound_from_high_u16(
-                static_cast<uint16_t>(rs_val[read] >> U16_BITS), pointer_max_bits
-            ),
-            U16_BITS
+        // Byte -> cell conversion carry plus one add-carry per heap block, with the matching
+        // range-check counts. Mirrors the host filler in algebra's trace.rs.
+        uint32_t add_carries[BLOCKS];
+        uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            rs_val[read],
+            pointer_max_bits,
+            BLOCKS,
+            MEMORY_BLOCK_BYTES / U16_CELL_SIZE,
+            add_carries
         );
+        row[offsetof(AdapterCols, rs_cell_carry) + read] = Fp(conv_carry);
+        for (size_t block = 0; block < BLOCKS; block++) {
+            row[offsetof(AdapterCols, reads_add_carry) + read * BLOCKS + block] =
+                Fp(add_carries[block]);
+        }
         for (size_t block = 0; block < BLOCKS; block++) {
             size_t aux_index = read * BLOCKS + block;
             memory_aux.fill(

@@ -117,6 +117,34 @@ fn rand_store_doubleword_test() {
 }
 
 #[test]
+fn positive_stored_max_address_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, bitwise) = create_store_doubleword_harness(&mut tester);
+    // The default config exposes the full 2^32-byte memory AS; deterministically store to the
+    // last addressable doubleword (byte address 2^32 - 8).
+    let rs1 = (u32::MAX - 7).to_le_bytes();
+    set_and_execute_store(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        STORED,
+        Some([rs1[0], rs1[1], rs1[2], rs1[3], 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        Some(RV64_MEMORY_AS as usize),
+    );
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
 fn positive_stored_pointer_limb_boundary_cross_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());

@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -18,7 +19,12 @@ template <typename T> struct Rv64LoadMultiByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
+    // Carry (`byte_hi & 1`) for converting the aligned heap *byte* pointer into AS-native u16
+    // *cell* pointer limbs.
     T mem_ptr_carry;
+    // Carry into the high cell limb when adding the block stride (in u16 cells) to the first
+    // block's cell pointer to address the second block.
+    T block1_add_carry;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
 };
@@ -108,20 +114,26 @@ struct Rv64LoadAdapter {
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
+        // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
         range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
-        range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
-
-        uint32_t block1_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
-        bool carry = crosses && block1_low_sum == (1u << U16_BITS);
-        COL_WRITE_VALUE(row, Rv64LoadMultiByteAdapterCols, mem_ptr_carry, carry);
+        // Byte -> cell pointer conversion for the first block; the AIR range-checks `cell_hi`
+        // with `enabled = is_valid`.
+        CellPtr mem_cell = byte_ptr_limbs_to_cell_ptr_limbs_value(aligned_limb, ptr_limbs[1]);
+        COL_WRITE_VALUE(row, Rv64LoadMultiByteAdapterCols, mem_ptr_carry, mem_cell.carry);
+        range_checker.add_count(mem_cell.limbs[1], cell_ptr_hi_bits(pointer_max_bits));
+        // Second-block cell pointer carry and low-limb range check (AIR `enabled = cross`).
         if (crosses) {
-            range_checker.add_count(
-                (block1_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
-                U16_BITS - 3
+            CellPtr block1_cell = add_const_u16_limbs_value(
+                mem_cell.limbs[0],
+                mem_cell.limbs[1],
+                uint32_t(MEMORY_BLOCK_BYTES / U16_CELL_SIZE)
             );
-        }
-        if (carry) {
-            range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
+            COL_WRITE_VALUE(
+                row, Rv64LoadMultiByteAdapterCols, block1_add_carry, block1_cell.carry
+            );
+            range_checker.add_count(block1_cell.limbs[0], U16_BITS);
+        } else {
+            COL_WRITE_VALUE(row, Rv64LoadMultiByteAdapterCols, block1_add_carry, 0);
         }
     }
 };
@@ -137,6 +149,9 @@ template <typename T> struct Rv64LoadByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
+    // Carry (`byte_hi & 1`) for converting the aligned heap *byte* pointer into AS-native u16
+    // *cell* pointer limbs.
+    T mem_ptr_carry;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
 };
@@ -218,7 +233,13 @@ struct Rv64LoadByteAdapter {
         COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
-        range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
-        range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
+        uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
+        // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
+        range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
+        // Byte -> cell pointer conversion for the heap block; the AIR range-checks `cell_hi`
+        // with `enabled = is_valid`.
+        CellPtr mem_cell = byte_ptr_limbs_to_cell_ptr_limbs_value(aligned_limb, ptr_limbs[1]);
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, mem_ptr_carry, mem_cell.carry);
+        range_checker.add_count(mem_cell.limbs[1], cell_ptr_hi_bits(pointer_max_bits));
     }
 };

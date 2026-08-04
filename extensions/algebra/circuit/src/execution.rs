@@ -13,7 +13,6 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
-use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -382,7 +381,9 @@ unsafe fn execute_e12_impl<
     )?;
 
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+        debug_assert!(
+            address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
+        );
         from_fn(|i| {
             exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
         })
@@ -394,7 +395,9 @@ unsafe fn execute_e12_impl<
         field_operation::<FIELD_TYPE, BLOCKS, OP>(read_data)
     };
 
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+    debug_assert!(
+        rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
+    );
 
     for (i, block) in output_data.into_iter().enumerate() {
         exec_state.vm_write_bytes(
@@ -426,7 +429,9 @@ unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
     )?;
 
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+        debug_assert!(
+            address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
+        );
         from_fn(|i| {
             exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
         })
@@ -439,7 +444,9 @@ unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
         &read_data_dyn.0,
     );
 
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+    debug_assert!(
+        rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
+    );
 
     let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
@@ -476,7 +483,9 @@ unsafe fn execute_e12_setup_impl<
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)),
     )?;
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+        debug_assert!(
+            address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
+        );
         from_fn(|i| {
             exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
         })
@@ -505,7 +514,9 @@ unsafe fn execute_e12_setup_impl<
         &read_data_dyn.0,
     );
 
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+    debug_assert!(
+        rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
+    );
 
     let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
