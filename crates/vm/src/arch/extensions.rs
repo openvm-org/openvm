@@ -796,6 +796,40 @@ pub enum ChipInventoryError {
     MissingChip { actual: usize, expected: usize },
     #[error("Missing executor chip. Number of executors with associated chips is {actual}, expected number is {expected}")]
     MissingExecutor { actual: usize, expected: usize },
+    #[error("Failed to initialize prover chip `{name}`: {source}")]
+    ProverChipInitialization {
+        name: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+}
+
+impl ChipInventoryError {
+    pub fn prover_chip_initialization(
+        name: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::ProverChipInitialization {
+            name: name.into(),
+            source: Box::new(source),
+        }
+    }
+}
+
+#[cfg(test)]
+mod chip_inventory_error_tests {
+    use super::ChipInventoryError;
+
+    #[test]
+    fn prover_chip_initialization_preserves_source() {
+        let error = ChipInventoryError::prover_chip_initialization(
+            "test chip",
+            std::io::Error::other("setup failed"),
+        );
+        let source = std::error::Error::source(&error).unwrap();
+        let source = source.downcast_ref::<std::io::Error>().unwrap();
+        assert_eq!(source.to_string(), "setup failed");
+    }
 }
 
 // ======================= VM Chip Complex Implementation =============================

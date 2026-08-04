@@ -34,6 +34,36 @@ fn supports_device_modulus(modulus: &BigUint) -> bool {
     get_field_type(modulus).is_some()
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ValidatedFieldExprKernelConfig(cuda_abi::FieldExprReplayKernelConfig);
+
+fn resource_limit(resource: &'static str, requested: usize, limit: usize) -> GpuPostflightError {
+    GpuPostflightError::ResourceLimitExceeded {
+        resource,
+        requested,
+        limit,
+    }
+}
+
+fn validate_kernel_config(
+    kernel: cuda_abi::FieldExprReplayKernelConfig,
+) -> Result<ValidatedFieldExprKernelConfig, GpuPostflightError> {
+    if kernel.max_grid_blocks == 0 || kernel.block_threads == 0 || kernel.block_threads > 1024 {
+        return Err(GpuPostflightError::InvalidConfiguration(format!(
+            "field-expression kernel returned max_grid={} and block={}",
+            kernel.max_grid_blocks, kernel.block_threads,
+        )));
+    }
+    if kernel.local_bytes_per_thread > MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD {
+        return Err(resource_limit(
+            "field-expression local bytes per thread",
+            kernel.local_bytes_per_thread,
+            MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD,
+        ));
+    }
+    Ok(ValidatedFieldExprKernelConfig(kernel))
+}
+
 fn validate_launch_config(
     launch: cuda_abi::FieldExprReplayLaunchConfig,
     aux_words_per_thread: usize,
@@ -43,14 +73,14 @@ fn validate_launch_config(
         .grid_blocks
         .checked_mul(launch.block_threads)
         .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression launch thread count overflow".to_string(),
             )
         })?;
     let expected_scratch_words = expected_active_threads
         .checked_mul(aux_words_per_thread)
         .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression launch scratch size overflow".to_string(),
             )
         })?;
@@ -58,7 +88,7 @@ fn validate_launch_config(
         .scratch_words
         .checked_mul(size_of::<u32>())
         .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression launch scratch byte size overflow".to_string(),
             )
         })?;
@@ -66,7 +96,7 @@ fn validate_launch_config(
         .active_threads
         .checked_mul(launch.local_bytes_per_thread)
         .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression launch local-memory size overflow".to_string(),
             )
         })?;
@@ -75,65 +105,92 @@ fn validate_launch_config(
         || launch.active_threads != expected_active_threads
         || launch.scratch_words == 0
         || launch.scratch_words != expected_scratch_words
-        || launch.scratch_words > max_scratch_words
-        || scratch_bytes > MAX_FIELD_EXPR_SCRATCH_BYTES
-        || launch.local_bytes_per_thread > MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD
-        || local_bytes > MAX_FIELD_EXPR_LOCAL_BYTES
     {
-        return Err(GpuPostflightError::InvalidTranscript(format!(
-            "invalid field-expression launch: grid={}, block={}, active={}, scratch={} words/{} bytes, local={} bytes/thread/{} bytes total",
-            launch.grid_blocks,
-            launch.block_threads,
-            launch.active_threads,
-            launch.scratch_words,
-            scratch_bytes,
-            launch.local_bytes_per_thread,
-            local_bytes,
+        return Err(GpuPostflightError::InvalidConfiguration(format!(
+            "inconsistent field-expression launch: grid={}, block={}, active={}, scratch={} words",
+            launch.grid_blocks, launch.block_threads, launch.active_threads, launch.scratch_words,
         )));
+    }
+    if launch.scratch_words > max_scratch_words {
+        return Err(resource_limit(
+            "field-expression scratch words",
+            launch.scratch_words,
+            max_scratch_words,
+        ));
+    }
+    if scratch_bytes > MAX_FIELD_EXPR_SCRATCH_BYTES {
+        return Err(resource_limit(
+            "field-expression scratch bytes",
+            scratch_bytes,
+            MAX_FIELD_EXPR_SCRATCH_BYTES,
+        ));
+    }
+    if launch.local_bytes_per_thread > MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD {
+        return Err(resource_limit(
+            "field-expression local bytes per thread",
+            launch.local_bytes_per_thread,
+            MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD,
+        ));
+    }
+    if local_bytes > MAX_FIELD_EXPR_LOCAL_BYTES {
+        return Err(resource_limit(
+            "field-expression total local bytes",
+            local_bytes,
+            MAX_FIELD_EXPR_LOCAL_BYTES,
+        ));
     }
     Ok(launch)
 }
 
 fn field_expr_launch_config(
-    kernel: cuda_abi::FieldExprReplayKernelConfig,
+    kernel: ValidatedFieldExprKernelConfig,
     height: usize,
     aux_words_per_thread: usize,
     max_scratch_words: usize,
 ) -> Result<cuda_abi::FieldExprReplayLaunchConfig, GpuPostflightError> {
-    if height == 0
-        || aux_words_per_thread == 0
-        || kernel.max_grid_blocks == 0
-        || kernel.block_threads == 0
-    {
+    if height == 0 {
         return Err(GpuPostflightError::InvalidTranscript(format!(
-            "invalid field-expression kernel config: height={height}, aux={aux_words_per_thread}, max_grid={}, block={}",
-            kernel.max_grid_blocks, kernel.block_threads,
+            "invalid field-expression trace height {height}",
         )));
     }
-    let scratch_words_per_block = kernel
-        .block_threads
-        .checked_mul(aux_words_per_thread)
-        .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
-                "field-expression launch scratch size overflow".to_string(),
-            )
-        })?;
+    if aux_words_per_thread == 0 {
+        return Err(GpuPostflightError::InvalidConfiguration(
+            "field-expression kernel requires nonzero scratch words per thread".to_string(),
+        ));
+    }
+    let kernel = kernel.0;
+    let max_aux_words_per_thread = max_scratch_words / kernel.block_threads;
+    if aux_words_per_thread > max_aux_words_per_thread {
+        return Err(resource_limit(
+            "field-expression scratch words per thread",
+            aux_words_per_thread,
+            max_aux_words_per_thread,
+        ));
+    }
+    let scratch_words_per_block = kernel.block_threads * aux_words_per_thread;
     let row_blocks = height.div_ceil(kernel.block_threads);
     let scratch_limited_blocks = max_scratch_words / scratch_words_per_block;
+    let local_limited_blocks = if kernel.local_bytes_per_thread == 0 {
+        usize::MAX
+    } else {
+        let local_bytes_per_block = kernel.block_threads * kernel.local_bytes_per_thread;
+        MAX_FIELD_EXPR_LOCAL_BYTES / local_bytes_per_block
+    };
     let grid_blocks = row_blocks
         .min(kernel.max_grid_blocks)
-        .min(scratch_limited_blocks);
+        .min(scratch_limited_blocks)
+        .min(local_limited_blocks);
     let active_threads = grid_blocks
         .checked_mul(kernel.block_threads)
         .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression launch thread count overflow".to_string(),
             )
         })?;
     let scratch_words = active_threads
         .checked_mul(aux_words_per_thread)
         .ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression launch scratch size overflow".to_string(),
             )
         })?;
@@ -175,12 +232,22 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Result<Self, GpuPostflightError> {
         if range_checker.count.len() != chip.inner.range_checker.count.len() {
-            return Err(GpuPostflightError::InvalidTranscript(
+            return Err(GpuPostflightError::InvalidConfiguration(
                 "field-expression range-count shape mismatch".to_string(),
             ));
         }
         let pointer_max_bits = chip.inner.adapter().pointer_max_bits();
         let timestamp_max_bits = chip.mem_helper.timestamp_max_bits();
+        let pointer_max_bits_u32 = u32::try_from(pointer_max_bits).map_err(|_| {
+            GpuPostflightError::InvalidConfiguration(
+                "field-expression pointer width does not fit u32".to_string(),
+            )
+        })?;
+        let timestamp_max_bits_u32 = u32::try_from(timestamp_max_bits).map_err(|_| {
+            GpuPostflightError::InvalidConfiguration(
+                "field-expression timestamp width does not fit u32".to_string(),
+            )
+        })?;
         let modulus = chip.inner.expr.program().prime();
         // The device interpreter uses Fermat inversion. Only the field implementations in this
         // crate are trusted prime moduli; all other moduli preserve the CPU executor's extended-
@@ -191,7 +258,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
                 .as_ref()
                 .is_some_and(|cpu_chip| Arc::ptr_eq(cpu_chip, &chip.inner.range_checker))
             {
-                return Err(GpuPostflightError::InvalidTranscript(
+                return Err(GpuPostflightError::InvalidConfiguration(
                     "field-expression CPU fallback range checker is not hybrid-wired".to_string(),
                 ));
             }
@@ -206,7 +273,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
             });
         }
         let serialized = serialize_field_expr(&chip.inner).map_err(|error| {
-            GpuPostflightError::InvalidTranscript(format!(
+            GpuPostflightError::InvalidConfiguration(format!(
                 "unsupported device field expression: {error:?}"
             ))
         })?;
@@ -215,8 +282,8 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
                 chip,
                 serialized,
                 opcode_base,
-                pointer_max_bits,
-                timestamp_max_bits,
+                pointer_max_bits_u32,
+                timestamp_max_bits_u32,
                 range_checker,
             )?),
         })
@@ -282,12 +349,12 @@ struct FieldExprReplayChipGpu<const NUM_READS: usize, const BLOCKS: usize> {
     program: DeviceBuffer<u32>,
     local_opcodes: Vec<usize>,
     opcode_base: usize,
-    pointer_max_bits: usize,
-    timestamp_max_bits: usize,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
     width: usize,
     aux_words_per_thread: usize,
     /// Device-dependent occupancy and kernel attributes, queried once at construction.
-    kernel_config: cuda_abi::FieldExprReplayKernelConfig,
+    kernel_config: ValidatedFieldExprKernelConfig,
 }
 
 impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_READS, BLOCKS> {
@@ -298,8 +365,8 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         >,
         serialized: openvm_mod_circuit_builder::device_program::SerializedFieldExpr,
         opcode_base: usize,
-        pointer_max_bits: usize,
-        timestamp_max_bits: usize,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Result<Self, GpuPostflightError> {
         let num_input_bytes = chip
@@ -307,7 +374,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .num_inputs()
             .checked_mul(chip.inner.expr.program().canonical_num_limbs())
             .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
+                GpuPostflightError::InvalidConfiguration(
                     "field-expression input width overflow".to_string(),
                 )
             })?;
@@ -315,10 +382,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .checked_mul(BLOCKS)
             .and_then(|blocks| blocks.checked_mul(openvm_circuit::arch::MEMORY_BLOCK_BYTES))
             .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript("VecHeap input width overflow".to_string())
+                GpuPostflightError::InvalidConfiguration("VecHeap input width overflow".to_string())
             })?;
         if num_input_bytes != expected_input_bytes {
-            return Err(GpuPostflightError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidConfiguration(format!(
                 "field-expression input width {num_input_bytes} does not match VecHeap width {expected_input_bytes}"
             )));
         }
@@ -330,30 +397,32 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .len()
             .checked_mul(chip.inner.expr.program().canonical_num_limbs())
             .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
+                GpuPostflightError::InvalidConfiguration(
                     "field-expression output width overflow".to_string(),
                 )
             })?;
         let expected_output_bytes = BLOCKS
             .checked_mul(openvm_circuit::arch::MEMORY_BLOCK_BYTES)
             .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript("VecHeap output width overflow".to_string())
+                GpuPostflightError::InvalidConfiguration(
+                    "VecHeap output width overflow".to_string(),
+                )
             })?;
         if num_output_bytes != expected_output_bytes {
-            return Err(GpuPostflightError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidConfiguration(format!(
                 "field-expression output width {num_output_bytes} does not match VecHeap width {expected_output_bytes}"
             )));
         }
         let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
         let core_width = BaseAir::<F>::width(&chip.inner.expr);
         if serialized.core_width != core_width {
-            return Err(GpuPostflightError::InvalidTranscript(format!(
+            return Err(GpuPostflightError::InvalidConfiguration(format!(
                 "serialized field-expression width {} does not match AIR width {core_width}",
                 serialized.core_width
             )));
         }
         let width = adapter_width.checked_add(core_width).ok_or_else(|| {
-            GpuPostflightError::InvalidTranscript(
+            GpuPostflightError::InvalidConfiguration(
                 "field-expression trace width overflow".to_string(),
             )
         })?;
@@ -362,7 +431,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             .blob
             .as_slice()
             .to_device_on(&range_checker.device_ctx)?;
-        let kernel_config = cuda_abi::field_expr_replay_kernel_config::<NUM_READS, BLOCKS>()?;
+        let kernel_config = validate_kernel_config(cuda_abi::field_expr_replay_kernel_config::<
+            NUM_READS,
+            BLOCKS,
+        >()?)?;
         Ok(Self {
             range_checker,
             program,
@@ -397,7 +469,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             replay_plan,
             self.opcode_base,
             &self.local_opcodes,
-            self.pointer_max_bits,
+            self.pointer_max_bits as usize,
             device_ctx,
         )?;
         if projection.is_empty() {
@@ -412,18 +484,11 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         projection: DeviceVecHeapProjection<NUM_READS, BLOCKS>,
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
-        let pointer_max_bits = u32::try_from(self.pointer_max_bits).map_err(|_| {
-            GpuPostflightError::InvalidTranscript(
-                "field-expression pointer width does not fit u32".to_string(),
-            )
-        })?;
-        let timestamp_max_bits = u32::try_from(self.timestamp_max_bits).map_err(|_| {
-            GpuPostflightError::InvalidTranscript(
-                "field-expression timestamp width does not fit u32".to_string(),
-            )
-        })?;
-        let (height, _) =
-            checked_trace_shape(projection.len(), self.width, self.timestamp_max_bits)?;
+        let (height, _) = checked_trace_shape(
+            projection.len(),
+            self.width,
+            self.timestamp_max_bits as usize,
+        )?;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, self.width, device_ctx);
         let delta = DeviceBuffer::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
@@ -445,8 +510,8 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
                 &scratch,
                 self.aux_words_per_thread,
                 launch,
-                pointer_max_bits,
-                timestamp_max_bits,
+                self.pointer_max_bits,
+                self.timestamp_max_bits,
                 transcript.error_ptr(),
                 device_ctx.stream.as_raw(),
             )?;
@@ -479,9 +544,13 @@ mod tests {
         local_bytes_per_thread: 32,
     };
 
+    fn kernel() -> ValidatedFieldExprKernelConfig {
+        validate_kernel_config(KERNEL).unwrap()
+    }
+
     #[test]
     fn launch_config_caps_grid_by_rows() {
-        let launch = field_expr_launch_config(KERNEL, 129, 4, 4096).unwrap();
+        let launch = field_expr_launch_config(kernel(), 129, 4, 4096).unwrap();
         assert_eq!(launch.grid_blocks, 2);
         assert_eq!(launch.active_threads, 256);
         assert_eq!(launch.scratch_words, 1024);
@@ -489,7 +558,7 @@ mod tests {
 
     #[test]
     fn launch_config_caps_grid_by_scratch() {
-        let launch = field_expr_launch_config(KERNEL, 4096, 4, 1536).unwrap();
+        let launch = field_expr_launch_config(kernel(), 4096, 4, 1536).unwrap();
         assert_eq!(launch.grid_blocks, 3);
         assert_eq!(launch.active_threads, 384);
         assert_eq!(launch.scratch_words, 1536);
@@ -497,7 +566,7 @@ mod tests {
 
     #[test]
     fn launch_config_caps_grid_by_occupancy() {
-        let launch = field_expr_launch_config(KERNEL, 4096, 4, 4096).unwrap();
+        let launch = field_expr_launch_config(kernel(), 4096, 4, 4096).unwrap();
         assert_eq!(launch.grid_blocks, 8);
         assert_eq!(launch.active_threads, 1024);
         assert_eq!(launch.scratch_words, 4096);
@@ -505,6 +574,63 @@ mod tests {
 
     #[test]
     fn launch_config_rejects_insufficient_scratch() {
-        assert!(field_expr_launch_config(KERNEL, 1, 4, 0).is_err());
+        assert!(matches!(
+            field_expr_launch_config(kernel(), 1, 4, 0),
+            Err(GpuPostflightError::ResourceLimitExceeded {
+                resource: "field-expression scratch words per thread",
+                requested: 4,
+                limit: 0,
+            })
+        ));
+    }
+
+    #[test]
+    fn launch_config_caps_grid_by_total_local_memory() {
+        let kernel = validate_kernel_config(cuda_abi::FieldExprReplayKernelConfig {
+            max_grid_blocks: 1024,
+            block_threads: 128,
+            local_bytes_per_thread: MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD,
+        })
+        .unwrap();
+        let launch = field_expr_launch_config(
+            kernel,
+            1 << 20,
+            1,
+            MAX_FIELD_EXPR_SCRATCH_BYTES / size_of::<u32>(),
+        )
+        .unwrap();
+        assert_eq!(launch.grid_blocks, 512);
+        assert_eq!(
+            launch.active_threads * launch.local_bytes_per_thread,
+            MAX_FIELD_EXPR_LOCAL_BYTES
+        );
+    }
+
+    #[test]
+    fn kernel_config_rejects_invalid_block_size() {
+        assert!(matches!(
+            validate_kernel_config(cuda_abi::FieldExprReplayKernelConfig {
+                max_grid_blocks: 8,
+                block_threads: 0,
+                local_bytes_per_thread: 32,
+            }),
+            Err(GpuPostflightError::InvalidConfiguration(_))
+        ));
+    }
+
+    #[test]
+    fn kernel_config_rejects_excessive_local_memory() {
+        assert!(matches!(
+            validate_kernel_config(cuda_abi::FieldExprReplayKernelConfig {
+                max_grid_blocks: 8,
+                block_threads: 128,
+                local_bytes_per_thread: MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD + 1,
+            }),
+            Err(GpuPostflightError::ResourceLimitExceeded {
+                resource: "field-expression local bytes per thread",
+                requested,
+                limit: MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD,
+            }) if requested == MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD + 1
+        ));
     }
 }

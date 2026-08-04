@@ -129,14 +129,13 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
         device_ctx: GpuDeviceCtx,
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
-        let replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
-            .expect("valid Weierstrass field-expression replay configuration");
-        Self {
+    ) -> Result<Self, GpuPostflightError> {
+        let replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)?;
+        Ok(Self {
             cpu,
             device_ctx,
             replay: Some(replay),
-        }
+        })
     }
 
     fn local_opcodes() -> Result<[usize; 2], GpuPostflightError> {
@@ -531,7 +530,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization(
+                        "Weierstrass add-ne replay",
+                        source,
+                    )
+                })?;
                 inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
                     let trace =
                         generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
@@ -554,7 +559,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization(
+                        "Weierstrass double replay",
+                        source,
+                    )
+                })?;
                 inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
@@ -582,7 +593,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization(
+                        "Weierstrass add-ne replay",
+                        source,
+                    )
+                })?;
                 inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
                     let trace =
                         generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
@@ -605,7 +622,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization(
+                        "Weierstrass double replay",
+                        source,
+                    )
+                })?;
                 inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
