@@ -929,7 +929,7 @@ mod is_equal_tests {
         let (b, c, opcode) = if is_setup {
             (
                 modulus_limbs,
-                [F::ZERO; TOTAL_LIMBS],
+                c.unwrap_or([F::ZERO; TOTAL_LIMBS]),
                 offset + Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize,
             )
         } else {
@@ -1021,6 +1021,43 @@ mod is_equal_tests {
     #[test]
     fn test_modular_is_equal_48limb() {
         test_is_equal::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>(17, BLS12_381_MODULUS.clone(), 100);
+    }
+
+    #[test]
+    fn setup_is_equal_allows_noncanonical_right_operand() {
+        const BLOCKS: usize = MODULAR_BLOCKS_32;
+        const LIMBS: usize = NUM_LIMBS_32_U16;
+        let mut rng = create_seeded_rng();
+        let mut tester = VmChipTestBuilder::default();
+        let modulus = secp256k1_coord_prime();
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let modulus_limbs =
+            biguint_to_limbs::<LIMBS>(modulus.clone(), U16_BITS).map(|limb| limb as u16);
+        let mut harness =
+            create_harness::<BLOCKS, LIMBS>(&mut tester, &modulus, modulus_limbs, offset);
+        let modulus_limbs = modulus_limbs.map(F::from_u16);
+
+        for right_operand in [modulus_limbs, [F::from_u16(u16::MAX); LIMBS]] {
+            set_and_execute_is_equal(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.preflight,
+                &mut rng,
+                &modulus,
+                modulus_limbs,
+                offset,
+                true,
+                None,
+                Some(right_operand),
+            );
+        }
+
+        tester
+            .build()
+            .load(harness)
+            .finalize()
+            .simple_test()
+            .expect("setup rows with non-canonical right operands should verify");
     }
 
     #[test]
@@ -1201,7 +1238,7 @@ mod is_equal_tests {
                 opcode_offset,
                 i == 0, // the first test is a setup test
                 None,
-                None,
+                (i == 0).then_some(modulus_limbs),
             );
         }
 

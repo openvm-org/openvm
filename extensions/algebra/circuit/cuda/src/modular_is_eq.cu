@@ -279,10 +279,14 @@ __global__ void modular_is_eq_replay_tracegen(
         memory, heap_event_start, 1, shared_modulus, c_less
     );
     bool setup_b_is_modulus = is_setup && b_diff == LIMBS;
-    if ((!is_setup && (!b_less || b_diff == LIMBS)) || !c_less || c_diff == LIMBS ||
+    if ((!is_setup && (!b_less || b_diff == LIMBS || !c_less || c_diff == LIMBS)) ||
         (is_setup && !setup_b_is_modulus)) {
         preflight_set_error(error, MODULAR_IS_EQ_REPLAY_ERROR);
         return;
+    }
+    if (is_setup) {
+        b_diff = LIMBS;
+        if (c_diff == LIMBS) c_diff = 0;
     }
 
     VariableRangeChecker range_checker(range_checker_counts, range_checker_bins);
@@ -335,11 +339,11 @@ __global__ void modular_is_eq_replay_tracegen(
     core[offsetof(CoreCols, is_valid)] = Fp::one();
     core[offsetof(CoreCols, is_setup)] = Fp(static_cast<uint32_t>(is_setup));
     core[offsetof(CoreCols, cmp_result)] = Fp(static_cast<uint32_t>(equal));
-    uint32_t c_mark = b_diff == c_diff ? 1 : 2;
+    uint32_t c_mark = !is_setup && b_diff == c_diff ? 1 : 2;
     core[offsetof(CoreCols, c_lt_mark)] = Fp(c_mark);
     uint16_t c_diff_value =
         modular_is_eq_limb<BLOCKS>(memory, heap_event_start, 1, c_diff);
-    core[offsetof(CoreCols, c_lt_diff)] = Fp(shared_modulus[c_diff] - c_diff_value);
+    core[offsetof(CoreCols, c_lt_diff)] = Fp(shared_modulus[c_diff]) - Fp(c_diff_value);
     if (!is_setup) {
         uint16_t b_diff_value =
             modular_is_eq_limb<BLOCKS>(memory, heap_event_start, 0, b_diff);

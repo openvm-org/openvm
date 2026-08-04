@@ -304,28 +304,38 @@ impl<const READ_LIMBS: usize, const LIMB_BITS: usize> ModularIsEqualFiller<READ_
         core_row: &mut [F],
     ) -> Result<(), PostflightError> {
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
-        let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
-        let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+        let (b_cmp, mut b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (c_cmp, mut c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
 
         if !is_setup && !b_cmp {
             return Err(PostflightError::new(
                 "modular equality left operand is not less than the modulus",
             ));
         }
-        if !c_cmp {
+        if !is_setup && !c_cmp {
             return Err(PostflightError::new(
                 "modular equality right operand is not less than the modulus",
             ));
         }
+        if is_setup {
+            // Setup constrains b to equal the modulus, so it must not contribute a marker.
+            // Its second memory read is not required to be less than the modulus; choose its
+            // highest differing limb, or limb zero when there is no difference.
+            b_diff_idx = READ_LIMBS;
+            c_diff_idx = (0..READ_LIMBS)
+                .rev()
+                .find(|&i| c[i] != self.modulus_limbs[i])
+                .unwrap_or(0);
+        }
 
         // Writing in reverse order
-        cols.c_lt_mark = if b_diff_idx == c_diff_idx {
+        cols.c_lt_mark = if !is_setup && b_diff_idx == c_diff_idx {
             F::ONE
         } else {
             F::TWO
         };
 
-        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - c[c_diff_idx]);
+        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx]) - F::from_u16(c[c_diff_idx]);
         if !is_setup {
             cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - b[b_diff_idx]);
             range_checker.add_count(
@@ -616,8 +626,10 @@ unsafe fn execute_e12_impl<
         debug_assert!(b_cmp, "{:?} >= modulus {:?}", b, pre_compute.modulus_limbs);
     }
 
-    let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
-    debug_assert!(c_cmp, "{:?} >= modulus {:?}", c, pre_compute.modulus_limbs);
+    if !IS_SETUP {
+        let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
+        debug_assert!(c_cmp, "{:?} >= modulus {:?}", c, pre_compute.modulus_limbs);
+    }
 
     // Compute result (RV64: 8-byte result register)
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
