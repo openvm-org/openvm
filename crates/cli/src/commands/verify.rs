@@ -82,6 +82,14 @@ enum VerifySubCommand {
         )]
         proof: Option<PathBuf>,
 
+        #[arg(
+            long,
+            action,
+            help = "Additionally verify the STARK proof with the formally verified Lean verifier (requires a build with the 'lean-verifier' feature)",
+            help_heading = "OpenVM Options"
+        )]
+        lean_verified: bool,
+
         #[command(flatten)]
         cargo_args: SingleTargetCargoArgs,
     },
@@ -190,6 +198,7 @@ impl VerifyCmd {
                 agg_vk,
                 app_baseline,
                 proof,
+                lean_verified,
                 cargo_args,
             } => {
                 let (manifest_path, _) =
@@ -228,7 +237,21 @@ impl VerifyCmd {
                 if stark_proof.version != format!("v{OPENVM_VERSION}") {
                     eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", stark_proof.version);
                 }
-                Sdk::verify_proof(agg_vk, expected_app_commit, &stark_proof.try_into()?)?;
+                let vm_stark_proof = stark_proof.try_into()?;
+                if *lean_verified {
+                    #[cfg(feature = "lean-verifier")]
+                    {
+                        println!("Verifying STARK proof with the Lean verifier");
+                        Sdk::verify_proof_with_lean_verifier(&agg_vk, &vm_stark_proof)?;
+                        println!("Lean verifier accepted the proof");
+                    }
+                    #[cfg(not(feature = "lean-verifier"))]
+                    eyre::bail!(
+                        "--lean-verified requires cargo-openvm built with the 'lean-verifier' \
+                         feature (cargo install --features lean-verifier ...)"
+                    );
+                }
+                Sdk::verify_proof(agg_vk, expected_app_commit, &vm_stark_proof)?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm {
