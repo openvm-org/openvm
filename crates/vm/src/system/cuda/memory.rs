@@ -3,10 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::{
-        memory::{
-            persistent::{BLOCKS_PER_LEAF, LOW_LEAF_BITS},
-            AddressMap,
-        },
+        memory::{persistent::BLOCKS_PER_LEAF, AddressMap},
         TouchedBlock, TouchedMemory,
     },
 };

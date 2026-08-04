@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "riscv/reveal_replay.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
@@ -22,6 +23,9 @@ template <typename T> struct RevealCols {
     T imm;
     T imm_sign;
     T dst_ptr_low_limb;
+    // Carry (`byte_hi & 1`) for converting the aligned reveal *byte* pointer into AS-native u16
+    // *cell* pointer limbs.
+    T dst_ptr_carry;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
 };
 
@@ -69,7 +73,12 @@ struct Reveal {
         ptr_to_u16_limbs(dst_ptr_limbs, dst_ptr);
         COL_WRITE_VALUE(row, RevealCols, dst_ptr_low_limb, dst_ptr_limbs[0]);
         range_checker.add_count(dst_ptr_limbs[0] >> 3, U16_BITS - 3);
-        range_checker.add_count(dst_ptr_limbs[1], pointer_max_bits - U16_BITS);
+        // Byte -> cell pointer conversion for the public-values block; the AIR range-checks
+        // `cell_hi` with `enabled = is_valid`.
+        CellPtr dst_cell_ptr =
+            byte_ptr_limbs_to_cell_ptr_limbs_value(dst_ptr_limbs[0], dst_ptr_limbs[1]);
+        COL_WRITE_VALUE(row, RevealCols, dst_ptr_carry, dst_cell_ptr.carry);
+        range_checker.add_count(dst_cell_ptr.limbs[1], cell_ptr_hi_bits(pointer_max_bits));
 
         COL_WRITE_ARRAY(row, RevealCols, write_aux.prev_data, input.write_prev_data);
         mem_helper.fill(

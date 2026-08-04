@@ -33,7 +33,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{rngs::StdRng, Rng};
+use rand::rngs::StdRng;
 use test_case::test_case;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {

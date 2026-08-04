@@ -134,11 +134,16 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
         access.base_ptr,
         u16_block_to_bytes(read_data[0]).map(F::from_u8),
     );
-    tester.write_bytes(
-        mem_as,
-        access.base_ptr + MEMORY_BLOCK_BYTES,
-        u16_block_to_bytes(read_data[1]).map(F::from_u8),
-    );
+    // The second block only exists (and is only read) when the access crosses; skip seeding it
+    // when the first block is the last one in the address space (non-crossing top-of-memory
+    // accesses).
+    if access.base_ptr + MEMORY_BLOCK_BYTES < (1usize << tester.address_bits()) {
+        tester.write_bytes(
+            mem_as,
+            access.base_ptr + MEMORY_BLOCK_BYTES,
+            u16_block_to_bytes(read_data[1]).map(F::from_u8),
+        );
+    }
 
     let enabled_write = access.a != 0;
     tester.execute(
@@ -206,11 +211,16 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
         access.base_ptr,
         u16_block_to_bytes(prev_data[0]).map(F::from_u8),
     );
-    tester.write_bytes(
-        mem_as,
-        access.base_ptr + MEMORY_BLOCK_BYTES,
-        u16_block_to_bytes(prev_data[1]).map(F::from_u8),
-    );
+    // See the load helper: the second block does not exist for non-crossing accesses at the top
+    // of the address space.
+    let has_second_block = access.base_ptr + MEMORY_BLOCK_BYTES < (1usize << tester.address_bits());
+    if has_second_block {
+        tester.write_bytes(
+            mem_as,
+            access.base_ptr + MEMORY_BLOCK_BYTES,
+            u16_block_to_bytes(prev_data[1]).map(F::from_u8),
+        );
+    }
     tester.write_bytes(
         REGISTER_AS as usize,
         access.a,
@@ -241,10 +251,12 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     );
     // The second block is either rewritten by the crossing store or untouched; both must match
     // the model.
-    assert_eq!(
-        u16_block_to_bytes(write_data[1]).map(F::from_u8),
-        tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr + MEMORY_BLOCK_BYTES)
-    );
+    if has_second_block {
+        assert_eq!(
+            u16_block_to_bytes(write_data[1]).map(F::from_u8),
+            tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr + MEMORY_BLOCK_BYTES)
+        );
+    }
 }
 
 pub(crate) fn store_memory_config() -> MemoryConfig {

@@ -120,8 +120,9 @@ fn xorin_test_pointers(
     input_ptr_offset: Option<usize>,
 ) -> (usize, usize) {
     if len == 0 {
-        // Main-memory pointers are unused for an all-padding row and need not be aligned.
-        return (1, 3);
+        // Main-memory pointers are never dereferenced for an all-padding row, but the AIR still
+        // converts them to cell pointers on every enabled row, so they must be 2-byte aligned.
+        return (2, 4);
     }
     if let Some(offset) = input_ptr_offset {
         assert!(offset.is_multiple_of(MEMORY_BLOCK_BYTES));
