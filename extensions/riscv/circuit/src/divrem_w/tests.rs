@@ -3,8 +3,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness,
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
         ExecutionBridge,
     },
@@ -178,12 +178,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     });
 
     // Write full 8-byte registers. Upper bytes are arbitrary and remain adapter-constrained.
-    let rs1_ptr = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
-    let mut rs2_ptr = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
-    while rs2_ptr == rs1_ptr {
-        rs2_ptr = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
-    }
-    let rd_ptr = rng.random_range(1..32) * REGISTER_NUM_LIMBS;
+    let [rs1_ptr, rs2_ptr, rd_ptr] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));

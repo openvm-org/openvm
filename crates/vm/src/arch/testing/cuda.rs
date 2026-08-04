@@ -391,10 +391,7 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Tests generate register pointers across the full AS-native pointer range.
-        mem_config.addr_spaces[REGISTER_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
-        Self::new(mem_config, default_var_range_checker_bus())
+        Self::new(MemoryConfig::default(), default_var_range_checker_bus())
     }
 }
 

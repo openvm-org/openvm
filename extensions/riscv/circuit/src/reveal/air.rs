@@ -23,7 +23,10 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{byte_ptr_to_u16_ptr, expand_to_block, PTR_U16_LIMBS, U16_BITS};
+use crate::adapters::{
+    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    PTR_U16_LIMBS, U16_BITS,
+};
 
 const REVEAL_TIMESTAMP_DELTA: usize = 3;
 
@@ -52,6 +55,10 @@ pub struct RevealCols<T> {
     pub imm_sign: T,
     /// Low u16 limb of the aligned reveal address.
     pub dst_ptr_low_limb: T,
+    /// Carry bit (the parity of the high byte-pointer limb) used to convert the aligned reveal
+    /// *byte* pointer into AS-native u16 *cell* pointer limbs. See
+    /// `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`.
+    pub dst_ptr_carry: T,
     /// Witness for the public-values write.
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
@@ -90,7 +97,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(cols.base_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.base_ptr),
                 ),
                 expand_to_block(&cols.base_ptr_limbs),
                 timestamp.clone(),
@@ -104,22 +111,29 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
         builder.assert_bool(low_carry.clone());
         let dst_ptr_high_limb = cols.base_ptr_limbs[1] + low_carry - cols.imm_sign;
 
-        // Enforce 8-byte alignment and the configured pointer bound.
+        // Enforce 8-byte alignment. The byte -> cell conversion below range-checks the high limb,
+        // which is what bounds the reveal address by `pointer_max_bits`.
         let block_bytes = AB::F::from_usize(MEMORY_BLOCK_BYTES);
         self.range_bus
             .range_check(cols.dst_ptr_low_limb * block_bytes.inverse(), U16_BITS - 3)
             .eval(builder, is_valid.clone());
-        self.range_bus
-            .range_check(dst_ptr_high_limb.clone(), self.pointer_max_bits - U16_BITS)
-            .eval(builder, is_valid.clone());
-        let dst_ptr = cols.dst_ptr_low_limb + dst_ptr_high_limb * AB::F::from_u32(1 << U16_BITS);
+        // Convert the aligned reveal *byte* pointer to AS-native u16 *cell* pointer limbs without
+        // composing the 32-bit byte pointer into a single field element.
+        let dst_ptr_cell_limbs = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            [cols.dst_ptr_low_limb.into(), dst_ptr_high_limb],
+            cols.dst_ptr_carry,
+            self.pointer_max_bits,
+            is_valid.clone(),
+        );
 
         // Read the source register, then write it to public values.
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(cols.src_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.src_ptr),
                 ),
                 cols.src_data.map(Into::into),
                 timestamp.clone() + AB::Expr::ONE,
@@ -128,10 +142,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .eval(builder, is_valid.clone());
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    AB::F::from_u32(PUBLIC_VALUES_AS),
-                    byte_ptr_to_u16_ptr::<AB>(dst_ptr),
-                ),
+                MemoryAddress::new(AB::F::from_u32(PUBLIC_VALUES_AS), dst_ptr_cell_limbs),
                 cols.src_data.map(Into::into),
                 timestamp.clone() + AB::Expr::TWO,
                 &cols.write_aux,

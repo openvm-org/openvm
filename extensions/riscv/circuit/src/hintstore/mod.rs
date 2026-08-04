@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr, PTR_BITS,
+    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
     PTR_U16_LIMBS, U16_BITS,
 };
 
@@ -82,10 +82,16 @@ pub struct HintStoreCols<T> {
 
     pub from_state: ExecutionState<T>,
     pub mem_ptr_ptr: T,
-    /// Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`. `mem_ptr` is a
-    /// u32 memory address, so the upper 4 bytes are known to be zero and are hardcoded
-    /// in the memory bus interaction rather than materialized as columns.
+    /// Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`, as little-endian 16-bit
+    /// *byte*-pointer limbs `[lo16, hi16]`. The byte pointer may span the full 2^32 byte address
+    /// space.
     pub mem_ptr_limbs: [T; PTR_U16_LIMBS],
+    /// Carry (`mem_ptr_limbs[1] & 1`) for converting the byte pointer to AS-native u16 *cell*
+    /// pointer limbs. See `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`.
+    pub mem_ptr_carry: T,
+    /// Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment (computed limb-wise to
+    /// avoid composing a 32-bit pointer into one field element).
+    pub mem_ptr_inc_carry: T,
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
@@ -150,9 +156,6 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
         let rem_words: AB::Expr = local_cols.rem_words.into();
         let next_rem_words: AB::Expr = next_cols.rem_words.into();
 
-        let mem_ptr: AB::Expr = u16_limbs_to_ptr(&local_cols.mem_ptr_limbs);
-        let next_mem_ptr: AB::Expr = u16_limbs_to_ptr(&next_cols.mem_ptr_limbs);
-
         // Constrain that if local is invalid, then the next state is invalid as well
         builder
             .when_transition()
@@ -173,7 +176,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.mem_ptr_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.mem_ptr_ptr),
                 ),
                 mem_ptr_data,
                 timestamp_pp(),
@@ -192,7 +195,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.num_words_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.num_words_ptr),
                 ),
                 num_words_data,
                 timestamp_pp(),
@@ -200,13 +203,19 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             )
             .eval(builder, local_cols.is_buffer_start);
 
-        // write hint
+        // write hint: convert the (aligned) heap byte pointer `mem_ptr_limbs` to AS-native cell
+        // pointer limbs without composing the full byte pointer into one field element.
+        let mem_ptr_cell_limbs = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            local_cols.mem_ptr_limbs.map(Into::into),
+            local_cols.mem_ptr_carry,
+            self.pointer_max_bits,
+            is_valid.clone(),
+        );
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    AB::F::from_u32(MEMORY_AS),
-                    byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone()),
-                ),
+                MemoryAddress::new(AB::F::from_u32(MEMORY_AS), mem_ptr_cell_limbs),
                 local_cols.data.map(Into::into),
                 timestamp_pp(),
                 &local_cols.write_aux,
@@ -231,21 +240,13 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        assert!(
-            (U16_BITS..=PTR_BITS).contains(&self.pointer_max_bits),
-            "pointer_max_bits must fit in the low 32-bit mem_ptr view"
-        );
-
-        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits.
+        // Range-check the low byte-pointer limb to 16 bits so the limb-wise `+8` increment below
+        // is sound. The high byte limb is bounded by the cell-pointer range checks in
+        // `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs` above (`cell_hi < 2^(pointer_max_bits - 16)`
+        // implies `byte_hi < 2^16`, i.e. byte pointer `< 2^32`).
         self.range_bus
-            .range_check(
-                ptr_bound_from_high_u16_expr(
-                    local_cols.mem_ptr_limbs[PTR_U16_LIMBS - 1],
-                    self.pointer_max_bits,
-                ),
-                U16_BITS,
-            )
-            .eval(builder, is_start.clone());
+            .range_check(local_cols.mem_ptr_limbs[0], U16_BITS)
+            .eval(builder, is_valid.clone());
         // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
         self.range_bus
             .range_check(
@@ -274,15 +275,22 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
         // additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address
         // at some point, which prevents this exploit.
         when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
-        // Note: we only care about the composed `next_mem_ptr` and not the individual limbs:
-        // the limbs do not need to be in the range, they can be anything that makes
-        // `next_mem_ptr` correct -- this is just a way to avoid another column for `mem_ptr`.
-        // The constraint we care about is `next.mem_ptr == local.mem_ptr + 8`. Since we increment
-        // by `8` each time, any out of bounds memory access will be rejected by the memory bus
-        // before we overflow the field.
+        // `next.mem_ptr == local.mem_ptr + 8`, computed limb-wise to avoid composing a 32-bit byte
+        // pointer into one field element:
+        //   next_lo = lo + 8 - inc_carry * 2^16
+        //   next_hi = hi + inc_carry
+        // with `inc_carry` boolean. The byte limbs are canonical (each `< 2^16`, range-checked),
+        // so this pins the increment exactly.
+        let inc_carry = local_cols.mem_ptr_inc_carry;
+        when_buffer_transition.assert_bool(inc_carry);
         when_buffer_transition.assert_eq(
-            next_mem_ptr.clone() - mem_ptr.clone(),
-            AB::F::from_usize(REGISTER_NUM_LIMBS),
+            next_cols.mem_ptr_limbs[0],
+            local_cols.mem_ptr_limbs[0] + AB::F::from_usize(REGISTER_NUM_LIMBS)
+                - inc_carry * AB::F::from_u32(1u32 << U16_BITS),
+        );
+        when_buffer_transition.assert_eq(
+            next_cols.mem_ptr_limbs[1],
+            local_cols.mem_ptr_limbs[1] + inc_carry,
         );
         when_buffer_transition.assert_eq(
             timestamp + AB::F::from_usize(timestamp_delta),

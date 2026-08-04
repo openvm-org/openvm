@@ -43,6 +43,8 @@
 // merkle leaf l starts at ptr l * DIGEST_WIDTH.
 
 #include "poseidon2.cuh" // brings in CELLS / CELLS_OUT from stark-backend
+#include <cstddef>
+#include <cstdint>
 
 // Cells per Poseidon2 half (and per merkle leaf).
 inline constexpr size_t DIGEST_WIDTH = CELLS_OUT;
@@ -59,6 +61,18 @@ inline constexpr size_t U16_CELL_SIZE = 2;
 inline constexpr size_t BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
 // Blocks per merkle leaf.
 inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
+
+// Number of little-endian 16-bit limbs used to represent an AS-native memory pointer on the
+// memory bus.
+inline constexpr size_t POINTER_LIMBS = 2;
+inline constexpr size_t POINTER_LIMB_BITS = 16;
+
+// log2 of DIGEST_WIDTH (= CELLS_OUT = 8).
+inline constexpr size_t DIGEST_WIDTH_BITS = 3;
+
+// Number of low bits of a leaf label kept in the low limb so that
+// `low * DIGEST_WIDTH` fits in one 16-bit memory-bus pointer limb.
+inline constexpr size_t LOW_LEAF_BITS = POINTER_LIMB_BITS - DIGEST_WIDTH_BITS;
 
 // Number of bottom merkle levels omitted from large GPU subtree buffers.
 inline constexpr size_t OMITTED_BOTTOM_LEVELS = 3;
