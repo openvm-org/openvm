@@ -10,7 +10,10 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     circuit::{
-        root::commit::{MerkleTreeCols, MAX_ENCODER_DEGREE},
+        root::{
+            assert_user_pvs_shape,
+            commit::{MerkleTreeCols, MAX_ENCODER_DEGREE},
+        },
         subair::generate_cols_from_leaf_children,
     },
     utils::digests_to_poseidon2_input,
@@ -24,9 +27,7 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     // Each leaf consumes `DIGEST_SIZE` public values, which is padded and hashed before
     // being inserted into the Merkle tree. We require at least one leaf (so at least one
     // Poseidon2 hash), and a full binary tree.
-    debug_assert!(num_user_pvs >= DIGEST_SIZE);
-    debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
-    debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
+    assert_user_pvs_shape(num_user_pvs);
 
     // One selector per leaf PV chunk (each leaf consumes 1 digest).
     let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
