@@ -81,11 +81,13 @@ fn fill_heap_pointer_carries<F: PrimeField32, const BLOCKS: usize>(
     add_cols: &mut [F; BLOCKS],
 ) {
     let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-    let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
+    let (conv_carry, base_cell) =
+        byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
     range_checker.add_count(base_cell[1], cell_ptr_hi_bits(pointer_max_bits));
     *conv_col = F::from_u32(conv_carry);
     for (j, add_col) in add_cols.iter_mut().enumerate() {
-        let (add_carry, block_cell_ptr) = add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
+        let (add_carry, block_cell_ptr) =
+            add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
         range_checker.add_count(block_cell_ptr[0], U16_BITS);
         *add_col = F::from_u32(add_carry);
     }
