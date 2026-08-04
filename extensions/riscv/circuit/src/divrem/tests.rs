@@ -3,8 +3,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness,
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
         ExecutionBridge,
     },
@@ -156,12 +156,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         rng.random_range(0..(RV64_REGISTER_NUM_LIMBS - 1)),
     ));
 
-    let rs1 = gen_register_pointer(rng, 8);
-    let mut rs2 = gen_register_pointer(rng, 8);
-    while rs2 == rs1 {
-        rs2 = gen_register_pointer(rng, 8);
-    }
-    let rd = rng.random_range(1..32) * RV64_REGISTER_NUM_LIMBS;
+    let [rs1, rs2, rd] = gen_distinct_register_pointers(rng, 8);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));

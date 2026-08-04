@@ -140,6 +140,7 @@ where
             }
         };
 
+        let range_bus = inventory.range_checker().bus;
         let base_num_airs = inventory.num_airs();
         let address_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
@@ -150,7 +151,13 @@ where
 
         assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
-            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, bitwise_bus, address_bits),
+            DeferralCallAdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_bus,
+                range_bus,
+                address_bits,
+            ),
             DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
         ));
 
@@ -161,6 +168,7 @@ where
             count_bus,
             poseidon2_bus,
             bitwise_bus,
+            range_bus,
             address_bits,
         ));
 
@@ -220,7 +228,11 @@ where
         inventory.add_executor_chip_with_tracegen(
             DeferralCallChip::new(
                 DeferralCallCoreFiller::new(
-                    DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
+                    DeferralCallAdapterFiller::new(
+                        bitwise_lu.clone(),
+                        range_checker.clone(),
+                        address_bits,
+                    ),
                     count_chip.clone(),
                     poseidon2_chip.clone(),
                     bitwise_lu.clone(),
@@ -241,6 +253,7 @@ where
                     count_chip.clone(),
                     poseidon2_chip.clone(),
                     bitwise_lu,
+                    range_checker.clone(),
                     address_bits,
                 ),
                 mem_helper,

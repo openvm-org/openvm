@@ -3,7 +3,7 @@ use std::sync::{atomic::Ordering, Arc};
 use openvm_circuit::arch::{
     deferral::{DeferralResult, DeferralState},
     testing::{
-        memory::{gen_pointer, gen_register_pointer},
+        memory::{gen_distinct_register_pointers, gen_pointer},
         TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     ExecutionError, Executor, MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
@@ -32,7 +32,7 @@ use {
     super::DeferralOutputChipGpu,
     crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
     openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
+        default_bitwise_lookup_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
 };
@@ -142,11 +142,7 @@ where
     E: Executor<F> + Clone,
     T: TestBuilder<F>,
 {
-    let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
-    let mut rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
-    while rs == rd {
-        rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
-    }
+    let [rd, rs] = gen_distinct_register_pointers(rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
@@ -214,6 +210,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
         count_bus,
         poseidon2_bus,
         bitwise_bus,
+        tester.range_checker().bus(),
         tester.address_bits(),
     );
     let executor = DeferralOutputExecutor::new();
@@ -222,6 +219,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
             count_chip.clone(),
             poseidon2_chip.clone(),
             bitwise_chip.clone(),
+            tester.range_checker(),
             tester.address_bits(),
         ),
         tester.memory_helper(),
@@ -270,6 +268,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         count_bus,
         poseidon2_bus,
         bitwise_bus,
+        tester.cpu_range_checker().bus(),
         tester.address_bits(),
     );
     let executor = DeferralOutputExecutor::new();
@@ -278,6 +277,9 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_bitwise_chip,
+            // Dummy range checker: the GPU kernel already emits the AS-pointer range-check counts;
+            // using the real (hybrid) range checker here would double-count them.
+            dummy_range_checker(tester.cpu_range_checker().bus()),
             tester.address_bits(),
         ),
         tester.dummy_memory_helper(),
@@ -450,8 +452,7 @@ fn deferral_output_multi_row_trace_test() {
 
     init_streams(&mut tester, NUM_DEFERRALS);
 
-    let rd = gen_register_pointer(&mut rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_register_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let [rd, rs] = gen_distinct_register_pointers(&mut rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = 0;

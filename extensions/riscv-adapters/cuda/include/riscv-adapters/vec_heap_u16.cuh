@@ -5,6 +5,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/constants.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -25,6 +26,14 @@ struct Rv64VecHeapU16AdapterCols {
     T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
     // Low 32 bits of rd register as u16 limbs.
     T rd_val[RV64_PTR_U16_LIMBS];
+
+    // Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
+    T rs_cell_carry[NUM_READS];
+    T rd_cell_carry;
+    // Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to each
+    // base cell pointer (block `j`'s carry into the high cell limb).
+    T reads_add_carry[NUM_READS][BLOCKS_PER_READ];
+    T writes_add_carry[BLOCKS_PER_WRITE];
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> rd_read_aux;
@@ -85,16 +94,43 @@ struct Rv64VecHeapU16Adapter {
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE> record
     ) {
-        // Bound each register pointer to pointer_max_bits by narrowing the high u16 limb.
-        const size_t limb_shift_bits = RV64_PTR_BITS - pointer_max_bits;
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts. Mirrors the host filler in vec_heap_u16.rs.
+        const uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+
+#pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            range_checker.add_count(
-                (record.rs_vals[i] >> U16_BITS) << limb_shift_bits, U16_BITS
+            uint32_t add_carries[BLOCKS_PER_READ];
+            uint32_t conv_carry = compute_pointer_carries(
+                range_checker,
+                record.rs_vals[i],
+                pointer_max_bits,
+                BLOCKS_PER_READ,
+                cell_stride,
+                add_carries
             );
+            COL_WRITE_VALUE(row, Cols, rs_cell_carry[i], conv_carry);
+#pragma unroll
+            for (size_t j = 0; j < BLOCKS_PER_READ; j++) {
+                COL_WRITE_VALUE(row, Cols, reads_add_carry[i][j], add_carries[j]);
+            }
         }
-        range_checker.add_count(
-            (record.rd_val >> U16_BITS) << limb_shift_bits, U16_BITS
-        );
+        {
+            uint32_t add_carries[BLOCKS_PER_WRITE];
+            uint32_t conv_carry = compute_pointer_carries(
+                range_checker,
+                record.rd_val,
+                pointer_max_bits,
+                BLOCKS_PER_WRITE,
+                cell_stride,
+                add_carries
+            );
+            COL_WRITE_VALUE(row, Cols, rd_cell_carry, conv_carry);
+#pragma unroll
+            for (size_t j = 0; j < BLOCKS_PER_WRITE; j++) {
+                COL_WRITE_VALUE(row, Cols, writes_add_carry[j], add_carries[j]);
+            }
+        }
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;

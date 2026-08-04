@@ -29,9 +29,10 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_register_pointer, expand_to_rv64_block,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, sign_extend_imm16,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value, cell_ptr_hi_bits,
+    checked_register_pointer, expand_to_rv64_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs, rv64_address_add_imm, sign_extend_imm16, RV64_PTR_BITS,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 // Byte stores never cross a memory block, so this adapter has no second-block columns.
@@ -68,6 +69,10 @@ pub struct Rv64StoreByteAdapterCols<T> {
     pub imm_sign: T,
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
     pub mem_ptr_low_limb: T,
+    /// Carry bit (the parity of the derived high byte-pointer limb) used to convert the aligned
+    /// heap *byte* pointer into AS-native u16 *cell* pointer limbs. See
+    /// `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`.
+    pub mem_ptr_carry: T,
     pub mem_as: T,
     /// Timestamp aux for the memory write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
@@ -115,7 +120,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rs1_ptr),
                 ),
                 rs1_data,
                 timestamp_pp(),
@@ -131,21 +136,38 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
         builder.assert_bool(local_cols.imm_sign);
         let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
 
-        // Prevent mem_ptr overflow while allowing the adapter to write the containing 8-byte block.
+        // Alignment: the aligned heap byte pointer's low limb is divisible by 8, i.e.
+        // `aligned_limb / 8 < 2^13`, which also implies `aligned_limb < 2^16`. (The derived high
+        // byte limb `mem_ptr_hi` is bounded by the cell-pointer range check below.)
         let block_bytes = AB::F::from_u32(MEMORY_BLOCK_BYTES as u32);
-        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount.clone();
+        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount;
         self.range_bus
             .range_check(
                 // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
-                aligned_limb * block_bytes.inverse(),
+                aligned_limb.clone() * block_bytes.inverse(),
                 U16_BITS - 3,
             )
             .eval(builder, is_valid.clone());
-        self.range_bus
-            .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
-            .eval(builder, is_valid.clone());
 
-        let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
+        // Convert the aligned heap *byte* pointer `[aligned_limb, mem_ptr_hi]` to AS-native u16
+        // *cell* pointer limbs (cell = byte / 2) without composing the 32-bit byte pointer into
+        // one field element. This inlines `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs` with an
+        // unconditional carry bool check, since `is_valid` here is a degree-2 selector expression.
+        // The boolean carry plus the `cell_hi` range check force `mem_ptr_carry = mem_ptr_hi & 1`
+        // and bound `mem_ptr_hi < 2^(pointer_max_bits - 16)`, i.e. the byte pointer is below
+        // `2^pointer_max_bits`.
+        builder.assert_bool(local_cols.mem_ptr_carry);
+        let inv2 = AB::F::TWO.inverse();
+        let mem_ptr_cell_limbs = [
+            (aligned_limb + local_cols.mem_ptr_carry * AB::F::from_u32(1u32 << U16_BITS)) * inv2,
+            (mem_ptr_hi - local_cols.mem_ptr_carry) * inv2,
+        ];
+        self.range_bus
+            .range_check(
+                mem_ptr_cell_limbs[1].clone(),
+                cell_ptr_hi_bits(self.pointer_max_bits),
+            )
+            .eval(builder, is_valid.clone());
 
         // Constrain stores to writable u16-celled address spaces.
         builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
@@ -158,7 +180,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs2_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rs2_ptr),
                 ),
                 read_data,
                 timestamp_pp(),
@@ -170,10 +192,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
         // previous cell values for any bytes not overwritten by this store.
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    local_cols.mem_as,
-                    byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount),
-                ),
+                MemoryAddress::new(local_cols.mem_as, mem_ptr_cell_limbs),
                 write_data,
                 timestamp_pp(),
                 MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write_base_aux, prev_data),
@@ -315,10 +334,16 @@ impl Rv64StoreByteAdapterFiller {
         );
         adapter_row.mem_as = F::from_u32(mem_as);
         let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
+        let aligned_byte_limbs = ptr_to_u16_limbs(aligned_ptr).map(u32::from);
+        // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
         self.range_checker_chip
-            .add_count((ptr_limbs[0] - shift_amount as u32) >> 3, U16_BITS - 3);
+            .add_count(aligned_byte_limbs[0] >> 3, U16_BITS - 3);
+        // Byte -> cell pointer conversion for the heap block; the AIR range-checks `cell_hi`
+        // with `enabled = is_valid`.
+        let (mem_carry, cell_limbs) = byte_ptr_limbs_to_cell_ptr_limbs_value(aligned_byte_limbs);
+        adapter_row.mem_ptr_carry = F::from_u32(mem_carry);
         self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+            .add_count(cell_limbs[1], cell_ptr_hi_bits(self.pointer_max_bits));
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
         adapter_row.imm_sign = F::from_bool(imm_sign);
         adapter_row.imm = F::from_u32(imm);

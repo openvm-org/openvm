@@ -28,6 +28,11 @@ template <typename T> struct Rv64HintStoreCols {
     // Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`; the upper 4 bytes are
     // known to be zero and are hardcoded in the memory bus interaction.
     T mem_ptr_limbs[RV64_PTR_U16_LIMBS];
+    // Carry (`mem_ptr_limbs[1] & 1`) for converting the byte pointer to AS-native u16 *cell*
+    // pointer limbs.
+    T mem_ptr_carry;
+    // Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment.
+    T mem_ptr_inc_carry;
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
@@ -96,6 +101,19 @@ struct Rv64HintStore {
         COL_WRITE_VALUE(row, Rv64HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
         COL_WRITE_ARRAY(row, Rv64HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
+        // Byte -> cell pointer conversion (heap write) and the per-row range checks:
+        // cell_hi (hi_bits) and the low byte limb (16 bits, for the limb-wise `+8` increment).
+        // `mem_ptr_limbs` are the little-endian 16-bit *byte*-pointer limbs `[byte_lo, byte_hi]`.
+        uint32_t mem_carry = mem_ptr_limbs[1] & 1u;
+        uint32_t cell_hi = mem_ptr_limbs[1] >> 1;
+        uint32_t inc_carry =
+            (mem_ptr_limbs[0] + (uint32_t)RV64_REGISTER_NUM_LIMBS) >> U16_BITS;
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, mem_ptr_carry, mem_carry);
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, mem_ptr_inc_carry, inc_carry);
+        uint32_t hi_bits = (uint32_t)pointer_max_bits - U16_CELL_SIZE_BITS - U16_BITS;
+        range_checker.add_count(cell_hi, hi_bits);
+        range_checker.add_count(mem_ptr_limbs[0], U16_BITS);
+
         if (local_idx == 0) {
 #ifdef CUDA_DEBUG
             // The overflow check for mem_ptr + num_words * 8 is not needed because
@@ -103,11 +121,6 @@ struct Rv64HintStore {
             assert(MAX_HINT_BUFFER_DWORDS_BITS + 3 < pointer_max_bits);
             assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
 #endif
-
-            // Range check for mem_ptr (using pointer_max_bits).
-            uint32_t mem_ptr_shift = RV64_PTR_BITS - (uint32_t)pointer_max_bits;
-            uint32_t mem_ptr_high_u16 = record.mem_ptr >> U16_BITS;
-            range_checker.add_count(mem_ptr_high_u16 << mem_ptr_shift, U16_BITS);
 
             // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
             range_checker.add_count(record.num_words << REM_WORDS_SHIFT, U16_BITS);

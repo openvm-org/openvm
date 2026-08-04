@@ -1,13 +1,14 @@
 use std::{
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
-    iter::{once, zip},
+    iter::once,
 };
 
 use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
     },
     system::memory::{
         offline_checker::{
@@ -25,8 +26,10 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, U16_BITS,
+    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block,
+    ptr_to_field_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, u32_to_ptr_limbs, RV64_PTR_U16_LIMBS,
+    U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -54,8 +57,18 @@ pub struct Rv64VecHeapAdapterCols<
     pub rs_ptr: [T; NUM_READS],
     pub rd_ptr: T,
 
+    /// Low 32 bits of rs registers as little-endian 16-bit *byte*-pointer limbs.
     pub rs_val: [[T; RV64_PTR_U16_LIMBS]; NUM_READS],
+    /// Low 32 bits of rd register as little-endian 16-bit *byte*-pointer limbs.
     pub rd_val: [T; RV64_PTR_U16_LIMBS],
+
+    /// Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
+    pub rs_cell_carry: [T; NUM_READS],
+    pub rd_cell_carry: T,
+    /// Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to
+    /// each base cell pointer (block `j`'s carry into the high cell limb).
+    pub reads_add_carry: [[T; BLOCKS_PER_READ]; NUM_READS],
+    pub writes_add_carry: [T; BLOCKS_PER_WRITE],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T>,
@@ -104,8 +117,29 @@ impl<const NUM_READS: usize, const BLOCKS: usize>
         let cols: &mut Rv64VecHeapAdapterCols<F, NUM_READS, BLOCKS, BLOCKS> =
             adapter_row.borrow_mut();
 
-        for &ptr in input.rs_vals.iter().chain(once(&input.rd_val)) {
-            range_checker.add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+        // Byte -> cell pointer conversion carry and per-block cell-offset carry columns, plus
+        // the matching range-check counts, for each base pointer.
+        let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+        let cell_hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
+        for (&byte_ptr, conv_col, add_cols) in izip!(
+            input.rs_vals.iter().chain(once(&input.rd_val)),
+            cols.rs_cell_carry
+                .iter_mut()
+                .chain(once(&mut cols.rd_cell_carry)),
+            cols.reads_add_carry
+                .iter_mut()
+                .chain(once(&mut cols.writes_add_carry)),
+        ) {
+            let (conv_carry, base_cell) =
+                byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
+            range_checker.add_count(base_cell[1], cell_hi_bits);
+            *conv_col = F::from_u32(conv_carry);
+            for (j, add_col) in add_cols.iter_mut().enumerate() {
+                let (add_carry, block_cell_ptr) =
+                    add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
+                range_checker.add_count(block_cell_ptr[0], U16_BITS);
+                *add_col = F::from_u32(add_carry);
+            }
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS + BLOCKS;
@@ -210,7 +244,7 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs, rd
+        // Read register values for rs, rd (register pointers are small).
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux).chain(once((
             cols.rd_ptr,
             cols.rd_val,
@@ -220,7 +254,7 @@ impl<
                 .read(
                     MemoryAddress::new(
                         AB::F::from_u32(RV64_REGISTER_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                        reg_byte_ptr_to_cell_ptr_limbs::<AB>(ptr),
                     ),
                     expand_to_rv64_block(&val),
                     timestamp_pp(),
@@ -229,33 +263,50 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Each materialized pointer is stored as two u16 cells. Bound the high
-        // cell against the guest byte-pointer limit.
-        for val in cols.rs_val.iter().chain(once(&cols.rd_val)) {
-            self.range_bus
-                .range_check(
-                    ptr_bound_from_high_u16_expr(val[1], self.pointer_max_bits),
-                    U16_BITS,
-                )
-                .eval(builder, ctx.instruction.is_valid.clone());
-        }
-
-        // Compose the two u16 cells into low 32-bit heap/register pointers.
-        let rd_val_f: AB::Expr = u16_limbs_to_ptr(&cols.rd_val);
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
-
+        let byte_ptr_max_bits = self.pointer_max_bits;
         let e = AB::F::from_u32(RV64_MEMORY_AS);
-        // Reads from heap
-        for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
-            for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
+        // Cell offset (in u16 cells) between consecutive heap blocks.
+        let cell_ptr_block_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+
+        // Convert each base *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        let rs_base_cell: [[AB::Expr; 2]; NUM_READS] = from_fn(|i| {
+            eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+                builder,
+                self.range_bus,
+                cols.rs_val[i].map(Into::into),
+                cols.rs_cell_carry[i],
+                byte_ptr_max_bits,
+                ctx.instruction.is_valid.clone(),
+            )
+        });
+        let rd_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            cols.rd_val.map(Into::into),
+            cols.rd_cell_carry,
+            byte_ptr_max_bits,
+            ctx.instruction.is_valid.clone(),
+        );
+
+        // Reads from heap: block `j` is at base cell pointer + `j * cell_ptr_block_stride`.
+        for (base_cell, reads, reads_aux, add_carry) in izip!(
+            rs_base_cell,
+            ctx.reads,
+            &cols.reads_aux,
+            &cols.reads_add_carry
+        ) {
+            for (j, (read, aux, carry)) in izip!(reads, reads_aux, add_carry).enumerate() {
+                let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                    builder,
+                    self.range_bus,
+                    base_cell.clone(),
+                    j as u32 * cell_ptr_block_stride,
+                    *carry,
+                    ctx.instruction.is_valid.clone(),
+                );
                 self.memory_bridge
                     .read(
-                        MemoryAddress::new(
-                            e,
-                            byte_ptr_to_u16_ptr::<AB>(
-                                address.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
-                            ),
-                        ),
+                        MemoryAddress::new(e, block_cell_ptr),
                         pack_u8_block::<AB>(&read),
                         timestamp_pp(),
                         aux,
@@ -265,15 +316,20 @@ impl<
         }
 
         // Writes to heap
-        for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
+        for (j, (write, aux, carry)) in
+            izip!(ctx.writes, &cols.writes_aux, &cols.writes_add_carry).enumerate()
+        {
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                rd_base_cell.clone(),
+                j as u32 * cell_ptr_block_stride,
+                *carry,
+                ctx.instruction.is_valid.clone(),
+            );
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        e,
-                        byte_ptr_to_u16_ptr::<AB>(
-                            rd_val_f.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
-                        ),
-                    ),
+                    MemoryAddress::new(e, block_cell_ptr),
                     pack_u8_block::<AB>(&write),
                     timestamp_pp(),
                     aux,

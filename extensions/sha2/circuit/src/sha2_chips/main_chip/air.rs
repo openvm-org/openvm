@@ -8,11 +8,11 @@ use openvm_circuit::{
         SystemPort,
     },
 };
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, U16_BITS};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS,
+    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block,
+    reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
@@ -218,7 +218,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_REGISTER_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                        // Register byte pointers are small: `ptr / 2` in the low cell limb.
+                        reg_byte_ptr_to_cell_ptr_limbs::<AB>(ptr),
                     ),
                     bus_payload,
                     timestamp_pp(),
@@ -227,21 +228,6 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        for limbs in [
-            local.instruction.dst_ptr_limbs,
-            local.instruction.state_ptr_limbs,
-            local.instruction.input_ptr_limbs,
-        ] {
-            self.range_bus
-                .range_check(
-                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(
-                        limbs[RV64_PTR_U16_LIMBS - 1],
-                        self.ptr_max_bits,
-                    ),
-                    U16_BITS,
-                )
-                .eval(builder, *local.instruction.is_enabled);
-        }
         self.execution_bridge
             .execute_and_increment_pc(
                 AB::Expr::from_usize(C::OPCODE as usize + self.offset),
@@ -264,19 +250,34 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let input_ptr_limbs = std::array::from_fn(|i| local.instruction.input_ptr_limbs[i]);
-        let input_ptr_val = u16_limbs_to_ptr(&input_ptr_limbs);
+        // Cell offset (in u16 cells) between consecutive heap read blocks.
+        let cell_ptr_block_stride = (SHA2_READ_SIZE / 2) as u32;
+
+        // Convert the `input` base *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        let input_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.input_ptr_limbs[i].into());
+        let input_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            input_byte_limbs,
+            *local.mem.input_cell_carry,
+            self.ptr_max_bits,
+            (*local.instruction.is_enabled).into(),
+        );
         for i in 0..C::BLOCK_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.message_u16s[i * BLOCK_FE_WIDTH + j].into());
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                input_base_cell.clone(),
+                i as u32 * cell_ptr_block_stride,
+                local.mem.input_add_carry[i],
+                (*local.instruction.is_enabled).into(),
+            );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
-                        ),
-                    ),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), block_cell_ptr),
                     chunk,
                     timestamp_pp(),
                     &local.mem.input_reads[i],
@@ -284,19 +285,31 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        let state_ptr_limbs = std::array::from_fn(|i| local.instruction.state_ptr_limbs[i]);
-        let state_ptr_val = u16_limbs_to_ptr(&state_ptr_limbs);
+        // Convert the `state` base *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        let state_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.state_ptr_limbs[i].into());
+        let state_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            state_byte_limbs,
+            *local.mem.state_cell_carry,
+            self.ptr_max_bits,
+            (*local.instruction.is_enabled).into(),
+        );
         for i in 0..C::STATE_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.prev_state[i * BLOCK_FE_WIDTH + j].into());
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                state_base_cell.clone(),
+                i as u32 * cell_ptr_block_stride,
+                local.mem.state_add_carry[i],
+                (*local.instruction.is_enabled).into(),
+            );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
-                        ),
-                    ),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), block_cell_ptr),
                     chunk,
                     timestamp_pp(),
                     &local.mem.state_reads[i],
@@ -311,19 +324,34 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let dst_ptr_limbs = std::array::from_fn(|i| local.instruction.dst_ptr_limbs[i]);
-        let dst_ptr_val = u16_limbs_to_ptr(&dst_ptr_limbs);
+        // Cell offset (in u16 cells) between consecutive heap write blocks.
+        let cell_ptr_block_stride = (SHA2_WRITE_SIZE / 2) as u32;
+
+        // Convert the `dst` base *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        let dst_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.dst_ptr_limbs[i].into());
+        let dst_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            dst_byte_limbs,
+            *local.mem.dst_cell_carry,
+            self.ptr_max_bits,
+            (*local.instruction.is_enabled).into(),
+        );
         for i in 0..C::STATE_WRITES {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.new_state[i * BLOCK_FE_WIDTH + j].into());
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                dst_base_cell.clone(),
+                i as u32 * cell_ptr_block_stride,
+                local.mem.write_add_carry[i],
+                (*local.instruction.is_enabled).into(),
+            );
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_WRITE_SIZE),
-                        ),
-                    ),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), block_cell_ptr),
                     chunk,
                     timestamp_pp(),
                     &local.mem.write_aux[i],

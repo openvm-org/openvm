@@ -12,7 +12,6 @@ use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
-use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -82,8 +81,21 @@ pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
     ptr_bits + U16_CELL_SIZE_BITS
 }
 
+/// Default RV64 *byte*-pointer bit width.
+///
+/// RV64 byte addresses span 2^32 bytes, so byte pointers are 32 bits wide. This is distinct from
+/// [`POINTER_MAX_BITS`] (31), the AS-native u16-*cell* pointer width: 2^32 bytes = 2^31 u16 cells.
+pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(POINTER_MAX_BITS);
+
+const _: () = assert!(BYTE_POINTER_MAX_BITS == 32);
+
+/// Default RV64 byte-addressable memory capacity (2^32 bytes).
+///
+/// This is the *circuit* capacity of `RV64_MEMORY_AS`. The guest-visible runtime memory size
+/// (`openvm_platform::memory::MEM_SIZE`) may be smaller.
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
+pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1usize << BYTE_POINTER_MAX_BITS;
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
@@ -232,7 +244,8 @@ impl Default for MemoryConfig {
         // RV64 register, memory, and public-values address spaces use u16 storage cells.
         addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells =
+            DEFAULT_RV64_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)

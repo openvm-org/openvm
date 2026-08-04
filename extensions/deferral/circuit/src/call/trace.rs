@@ -2,18 +2,23 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use itertools::Itertools;
 use openvm_circuit::{
-    arch::{Postflight, PostflightError, U16Access, VmField, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    arch::{
+        Postflight, PostflightError, U16Access, VmField, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        U16_CELL_SIZE,
+    },
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::{compute_pointer_carries, rv64_u16_block_to_bytes};
 use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -310,6 +315,35 @@ fn fill_call_adapter<F: VmField>(
         }
     }
 
+    // Byte -> cell pointer conversion carries and per-block cell-offset carries for the heap
+    // `input`/`output` pointers, plus matching range-check counts.
+    let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+    let (input_conv, input_add) = compute_pointer_carries(
+        &filler.range_checker_chip,
+        replay.rs_val,
+        COMMIT_MEMORY_OPS,
+        heap_cell_stride,
+        filler.address_bits,
+    );
+    let (output_conv, output_add) = compute_pointer_carries(
+        &filler.range_checker_chip,
+        replay.rd_val,
+        OUTPUT_TOTAL_MEMORY_OPS,
+        heap_cell_stride,
+        filler.address_bits,
+    );
+    cols.input_cell_carry = F::from_u32(input_conv);
+    cols.output_cell_carry = F::from_u32(output_conv);
+    for (col, &c) in cols.input_commit_add_carry.iter_mut().zip(input_add.iter()) {
+        *col = F::from_u32(c);
+    }
+    for (col, &c) in cols.output_add_carry.iter_mut().zip(output_add.iter()) {
+        *col = F::from_u32(c);
+    }
+
+    // The DEFERRAL_AS accumulator cell pointers are bounded below 2^16 (see the static assert
+    // in `super`), so they need no limb decomposition, range checks, or add-carry columns.
+
     for (aux, access) in cols
         .new_output_acc_aux
         .iter_mut()
@@ -469,5 +503,6 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }

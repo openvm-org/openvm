@@ -2,6 +2,9 @@
 #include "primitives/trace_access.h"
 #include "system/memory/address.cuh"
 
+// AS-native memory-bus pointers are two little-endian 16-bit cell-pointer limbs `[lo16, hi16]`, so
+// the dummy interaction row is `[address_space, ptr_lo, ptr_hi, data[BLOCK_SIZE], timestamp,
+// count]` (width `BLOCK_SIZE + 5`), matching the host `MemoryDummyAir`.
 template <typename T, size_t BLOCK_SIZE> struct DummyMemoryInteractionCols {
     MemoryAddress<T> address;
     T data[BLOCK_SIZE];
@@ -15,11 +18,11 @@ __global__ void memory_testing_tracegen(Fp *trace, size_t height, Fp *records, s
     RowSlice row(trace + idx, height);
     if (idx < num_records) {
         auto record = reinterpret_cast<DummyMemoryInteractionCols<Fp, BLOCK_SIZE> *>(records)[idx];
-        COL_WRITE_VALUE(row, MemoryAddress, address_space, record.address.address_space);
-        COL_WRITE_VALUE(row, MemoryAddress, pointer, record.address.pointer);
-        row.write_array(2, BLOCK_SIZE, record.data);
-        row.write(2 + BLOCK_SIZE, record.timestamp);
-        row.write(2 + BLOCK_SIZE + 1, record.count);
+        row.write(0, record.address.address_space);
+        row.write_array(1, POINTER_LIMBS, record.address.pointer_limbs);
+        row.write_array(1 + POINTER_LIMBS, BLOCK_SIZE, record.data);
+        row.write(1 + POINTER_LIMBS + BLOCK_SIZE, record.timestamp);
+        row.write(1 + POINTER_LIMBS + BLOCK_SIZE + 1, record.count);
     } else if (idx < height) {
 #pragma unroll
         for (size_t i = 0; i < sizeof(DummyMemoryInteractionCols<uint8_t, BLOCK_SIZE>); i++) {
