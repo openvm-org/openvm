@@ -76,6 +76,8 @@ pub mod fs;
 #[cfg(feature = "evm-prove")]
 pub mod halo2_params;
 pub mod keygen;
+#[cfg(feature = "lean-verifier")]
+pub use openvm_fv_verifier as lean_verifier;
 pub mod prover;
 #[cfg(feature = "evm-verify")]
 mod solidity;
@@ -823,6 +825,29 @@ where
         };
         verify_vm_stark_proof_decoded(&vk, proof)?;
         Ok(())
+    }
+
+    /// Verifies an aggregate STARK proof of VM execution with the formally
+    /// verified Lean Swirl verifier (compiled from Lean to C and run as a
+    /// subprocess; see the [`lean_verifier`] module docs).
+    ///
+    /// This checks only the inner STARK proof — `(agg_vk, proof.inner,
+    /// public values)`. The [`VerificationBaseline`] checks performed by
+    /// [`verify_proof`](Self::verify_proof) (user public values proof,
+    /// deferral merkle proofs, commit baselines) are not part of the Lean
+    /// formalization, so this is a differential check on the STARK
+    /// verification itself, not a replacement: use it alongside
+    /// [`verify_proof`](Self::verify_proof).
+    ///
+    /// **Note**: Like [`verify_proof`](Self::verify_proof), this function
+    /// does not rely on `self` or the app config set in the [Sdk].
+    #[cfg(feature = "lean-verifier")]
+    pub fn verify_proof_with_lean_verifier(
+        agg_vk: &MultiStarkVerifyingKey<SC>,
+        proof: &VmStarkProof,
+    ) -> Result<(), SdkError> {
+        lean_verifier::verify_stark_proof(agg_vk, &proof.inner)
+            .map_err(|e| SdkError::Other(eyre::eyre!(e)))
     }
 
     #[cfg(feature = "evm-verify")]

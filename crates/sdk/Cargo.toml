@@ -26,6 +26,7 @@ openvm-deferral-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 openvm-verify-stark-circuit = { workspace = true }
+openvm-fv-verifier = { workspace = true, optional = true }
 openvm-static-verifier = { workspace = true, optional = true }
 halo2-base = { workspace = true, optional = true }
 
@@ -51,6 +52,7 @@ metrics = { workspace = true, optional = true }
 
 [features]
 default = ["parallel", "jemalloc"]
+lean-verifier = ["dep:openvm-fv-verifier"]
 root-prover = [
     "openvm-continuations/root-prover",
     "openvm-stark-sdk/baby-bear-bn254-poseidon2",
