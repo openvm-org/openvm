@@ -18,7 +18,8 @@ impl ExecutionCtx {
 
 impl ExecutionCtxTrait for ExecutionCtx {
     #[inline(always)]
-    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
+    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32, _is_write: bool) {
+    }
 
     #[inline(always)]
     fn should_suspend(exec_state: &mut VmExecState<GuestMemory, Self>) -> bool {

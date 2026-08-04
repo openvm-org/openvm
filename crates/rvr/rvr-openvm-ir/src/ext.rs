@@ -180,7 +180,13 @@ pub trait ExtEmitCtx {
     /// Record the pages containing one fixed-width access for metering.
     ///
     /// This records the address, not the accessed value.
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace);
+    fn trace_page_access(
+        &mut self,
+        addr: &str,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        is_write: bool,
+    );
 
     /// Record pages touched by a dword range for metering (one dword is 8 bytes).
     ///
@@ -190,5 +196,6 @@ pub trait ExtEmitCtx {
         base_addr: &str,
         num_dwords: &str,
         addr_space: PageAddressSpace,
+        is_write: bool,
     );
 }

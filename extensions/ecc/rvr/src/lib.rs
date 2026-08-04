@@ -426,6 +426,7 @@ mod tests {
             _addr: &str,
             _width: MemWidth,
             _addr_space: PageAddressSpace,
+            _is_write: bool,
         ) {
             unreachable!()
         }
@@ -435,6 +436,7 @@ mod tests {
             _base_addr: &str,
             _num_dwords: &str,
             _addr_space: PageAddressSpace,
+            _is_write: bool,
         ) {
             unreachable!()
         }
