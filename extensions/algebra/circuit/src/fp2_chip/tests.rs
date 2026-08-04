@@ -393,7 +393,8 @@ mod cuda_tests {
             tester.range_checker().device_ctx.clone(),
             offset,
             tester.range_checker(),
-        );
+        )
+        .unwrap();
 
         let address_bits = tester.address_bits();
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -448,7 +449,8 @@ mod cuda_tests {
             tester.range_checker().device_ctx.clone(),
             offset,
             tester.range_checker(),
-        );
+        )
+        .unwrap();
 
         let address_bits = tester.address_bits();
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
