@@ -929,22 +929,18 @@ static __global__ void field_expr_replay_tracegen(
 }
 
 template <size_t NUM_READS, size_t BLOCKS>
-static int field_expr_launch_config(
-    size_t height,
-    size_t aux_words,
-    size_t max_scratch_words,
-    size_t *grid_blocks,
+static int field_expr_kernel_config(
+    size_t *max_grid_blocks,
     size_t *block_threads,
-    size_t *scratch_words,
-    size_t *active_threads,
     size_t *local_bytes_per_thread
 ) {
-    if (height == 0 || aux_words == 0 || grid_blocks == nullptr ||
-        block_threads == nullptr || scratch_words == nullptr ||
-        active_threads == nullptr || local_bytes_per_thread == nullptr) {
+    if (max_grid_blocks == nullptr || block_threads == nullptr ||
+        local_bytes_per_thread == nullptr) {
         return cudaErrorInvalidValue;
     }
     static constexpr int THREADS = 128;
+    // These properties depend only on the selected device and kernel variant. The host caches
+    // them with the chip and derives height/scratch-limited launch dimensions per trace.
     int blocks_per_multiprocessor;
     cudaError_t result = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &blocks_per_multiprocessor,
@@ -965,64 +961,45 @@ static int field_expr_launch_config(
         &attributes, field_expr_replay_tracegen<NUM_READS, BLOCKS>
     );
     if (result != cudaSuccess) return result;
-
-    size_t row_blocks = (height + THREADS - 1) / THREADS;
     size_t resident_blocks =
         static_cast<size_t>(blocks_per_multiprocessor) * multiprocessors;
-    size_t scratch_limited_blocks =
-        max_scratch_words / (static_cast<size_t>(THREADS) * aux_words);
-    size_t blocks = row_blocks < resident_blocks ? row_blocks : resident_blocks;
-    blocks = blocks < scratch_limited_blocks ? blocks : scratch_limited_blocks;
-    if (blocks == 0) return cudaErrorMemoryAllocation;
-    *grid_blocks = blocks;
+    if (resident_blocks == 0) return cudaErrorInvalidValue;
+    *max_grid_blocks = resident_blocks;
     *block_threads = THREADS;
-    *active_threads = blocks * THREADS;
-    *scratch_words = *active_threads * aux_words;
     *local_bytes_per_thread = attributes.localSizeBytes;
     return cudaSuccess;
 }
 
-extern "C" int _field_expr_replay_launch_config(
+extern "C" int _field_expr_replay_kernel_config(
     size_t num_reads,
     size_t blocks,
-    size_t height,
-    size_t aux_words,
-    size_t max_scratch_words,
-    size_t *grid_blocks,
+    size_t *max_grid_blocks,
     size_t *block_threads,
-    size_t *scratch_words,
-    size_t *active_threads,
     size_t *local_bytes_per_thread
 ) {
     if (num_reads == 2 && blocks == 4)
-        return field_expr_launch_config<2, 4>(
-            height, aux_words, max_scratch_words, grid_blocks, block_threads,
-            scratch_words, active_threads, local_bytes_per_thread
+        return field_expr_kernel_config<2, 4>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
         );
     if (num_reads == 2 && blocks == 6)
-        return field_expr_launch_config<2, 6>(
-            height, aux_words, max_scratch_words, grid_blocks, block_threads,
-            scratch_words, active_threads, local_bytes_per_thread
+        return field_expr_kernel_config<2, 6>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
         );
     if (num_reads == 2 && blocks == 8)
-        return field_expr_launch_config<2, 8>(
-            height, aux_words, max_scratch_words, grid_blocks, block_threads,
-            scratch_words, active_threads, local_bytes_per_thread
+        return field_expr_kernel_config<2, 8>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
         );
     if (num_reads == 2 && blocks == 12)
-        return field_expr_launch_config<2, 12>(
-            height, aux_words, max_scratch_words, grid_blocks, block_threads,
-            scratch_words, active_threads, local_bytes_per_thread
+        return field_expr_kernel_config<2, 12>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
         );
     if (num_reads == 1 && blocks == 8)
-        return field_expr_launch_config<1, 8>(
-            height, aux_words, max_scratch_words, grid_blocks, block_threads,
-            scratch_words, active_threads, local_bytes_per_thread
+        return field_expr_kernel_config<1, 8>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
         );
     if (num_reads == 1 && blocks == 12)
-        return field_expr_launch_config<1, 12>(
-            height, aux_words, max_scratch_words, grid_blocks, block_threads,
-            scratch_words, active_threads, local_bytes_per_thread
+        return field_expr_kernel_config<1, 12>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
         );
     return cudaErrorInvalidValue;
 }

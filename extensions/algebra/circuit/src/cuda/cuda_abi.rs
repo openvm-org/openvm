@@ -43,16 +43,11 @@ declare_replay_launcher!(_modular_is_eq_replay_tracegen_l4);
 declare_replay_launcher!(_modular_is_eq_replay_tracegen_l6);
 
 unsafe extern "C" {
-    fn _field_expr_replay_launch_config(
+    fn _field_expr_replay_kernel_config(
         num_reads: usize,
         blocks: usize,
-        height: usize,
-        aux_words_per_thread: usize,
-        max_scratch_words: usize,
-        grid_blocks: *mut usize,
+        max_grid_blocks: *mut usize,
         block_threads: *mut usize,
-        scratch_words: *mut usize,
-        active_threads: *mut usize,
         local_bytes_per_thread: *mut usize,
     ) -> i32;
 
@@ -131,6 +126,13 @@ unsafe extern "C" {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldExprReplayKernelConfig {
+    pub max_grid_blocks: usize,
+    pub block_threads: usize,
+    pub local_bytes_per_thread: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FieldExprReplayLaunchConfig {
     pub grid_blocks: usize,
     pub block_threads: usize,
@@ -139,30 +141,23 @@ pub struct FieldExprReplayLaunchConfig {
     pub local_bytes_per_thread: usize,
 }
 
-pub unsafe fn field_expr_replay_launch_config<const NUM_READS: usize, const BLOCKS: usize>(
-    height: usize,
-    aux_words_per_thread: usize,
-    max_scratch_words: usize,
-) -> Result<FieldExprReplayLaunchConfig, CudaError> {
-    let mut config = FieldExprReplayLaunchConfig {
-        grid_blocks: 0,
+/// Queries the device-dependent occupancy cap and kernel attributes once for this chip variant.
+pub fn field_expr_replay_kernel_config<const NUM_READS: usize, const BLOCKS: usize>(
+) -> Result<FieldExprReplayKernelConfig, CudaError> {
+    let mut config = FieldExprReplayKernelConfig {
+        max_grid_blocks: 0,
         block_threads: 0,
-        scratch_words: 0,
-        active_threads: 0,
         local_bytes_per_thread: 0,
     };
-    CudaError::from_result(_field_expr_replay_launch_config(
-        NUM_READS,
-        BLOCKS,
-        height,
-        aux_words_per_thread,
-        max_scratch_words,
-        &mut config.grid_blocks,
-        &mut config.block_threads,
-        &mut config.scratch_words,
-        &mut config.active_threads,
-        &mut config.local_bytes_per_thread,
-    ))?;
+    unsafe {
+        CudaError::from_result(_field_expr_replay_kernel_config(
+            NUM_READS,
+            BLOCKS,
+            &mut config.max_grid_blocks,
+            &mut config.block_threads,
+            &mut config.local_bytes_per_thread,
+        ))?;
+    }
     Ok(config)
 }
 

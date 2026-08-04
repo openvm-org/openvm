@@ -83,8 +83,8 @@ pub struct ModularIsEqualReplayChipGpu<const NUM_LANES: usize, const TOTAL_LIMBS
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     d_modulus: DeviceBuffer<u16>,
     opcode_base: usize,
-    pointer_max_bits: usize,
-    timestamp_max_bits: usize,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
 }
 
 impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
@@ -96,18 +96,27 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         pointer_max_bits: usize,
         timestamp_max_bits: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
+    ) -> Result<Self, GpuPostflightError> {
+        let pointer_max_bits = u32::try_from(pointer_max_bits).map_err(|_| {
+            GpuPostflightError::InvalidConfiguration(
+                "ModularIsEqual pointer width does not fit u32".to_string(),
+            )
+        })?;
+        let timestamp_max_bits = u32::try_from(timestamp_max_bits).map_err(|_| {
+            GpuPostflightError::InvalidConfiguration(
+                "ModularIsEqual timestamp width does not fit u32".to_string(),
+            )
+        })?;
         let d_modulus = modulus_limbs
             .as_slice()
-            .to_device_on(&range_checker.device_ctx)
-            .unwrap();
-        Self {
+            .to_device_on(&range_checker.device_ctx)?;
+        Ok(Self {
             range_checker,
             d_modulus,
             opcode_base,
             pointer_max_bits,
             timestamp_max_bits,
-        }
+        })
     }
 
     pub fn generate_proving_ctx_from_postflight(
@@ -143,17 +152,11 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
                 "ModularIsEqual trace height overflow".to_string(),
             )
         })?;
-        let timestamp_limit = 1usize
-            .checked_shl(u32::try_from(self.timestamp_max_bits).map_err(|_| {
-                GpuPostflightError::InvalidTranscript(
-                    "timestamp width cannot be represented as a trace height".to_string(),
-                )
-            })?)
-            .ok_or_else(|| {
-                GpuPostflightError::InvalidTranscript(
-                    "timestamp width cannot be represented as a trace height".to_string(),
-                )
-            })?;
+        let timestamp_limit = 1usize.checked_shl(self.timestamp_max_bits).ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "timestamp width cannot be represented as a trace height".to_string(),
+            )
+        })?;
         let max_height = timestamp_limit.min(MAX_ALGEBRA_TRACE_HEIGHT);
         if height > max_height || height.checked_mul(width).is_none() {
             return Err(GpuPostflightError::InvalidTranscript(format!(
@@ -165,16 +168,6 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         delta.fill_zero_on(device_ctx)?;
         let opcode_base = u32::try_from(self.opcode_base)
             .map_err(|_| GpuPostflightError::OpcodeTooLarge(self.opcode_base))?;
-        let pointer_max_bits = u32::try_from(self.pointer_max_bits).map_err(|_| {
-            GpuPostflightError::InvalidTranscript(
-                "ModularIsEqual pointer width does not fit u32".to_string(),
-            )
-        })?;
-        let timestamp_max_bits = u32::try_from(self.timestamp_max_bits).map_err(|_| {
-            GpuPostflightError::InvalidTranscript(
-                "ModularIsEqual timestamp width does not fit u32".to_string(),
-            )
-        })?;
         unsafe {
             cuda_abi::replay_tracegen(
                 trace.buffer(),
@@ -195,8 +188,8 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
                 &self.d_modulus,
                 &delta,
                 NUM_LANES,
-                pointer_max_bits,
-                timestamp_max_bits,
+                self.pointer_max_bits,
+                self.timestamp_max_bits,
                 device_ctx.stream.as_raw(),
             )?;
         }

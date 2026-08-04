@@ -506,7 +506,8 @@ mod ec_addne_tests {
             tester.range_checker().device_ctx.clone(),
             offset,
             tester.range_checker(),
-        );
+        )
+        .unwrap();
         #[cfg(not(feature = "rvr"))]
         let hybrid_chip =
             HybridWeierstrassChip::new(gpu_cpu_chip, tester.range_checker().device_ctx.clone());
@@ -1459,7 +1460,8 @@ mod ec_double_tests {
             tester.range_checker().device_ctx.clone(),
             offset,
             tester.range_checker(),
-        );
+        )
+        .unwrap();
         #[cfg(not(feature = "rvr"))]
         let hybrid_chip =
             HybridWeierstrassChip::new(gpu_cpu_chip, tester.range_checker().device_ctx.clone());

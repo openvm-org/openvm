@@ -183,6 +183,16 @@ pub enum GpuPostflightError {
     OpcodeTooLarge(usize),
     #[error("invalid GPU postflight memory configuration: {0}")]
     InvalidMemoryConfig(String),
+    #[error("invalid GPU postflight configuration: {0}")]
+    InvalidConfiguration(String),
+    #[error(
+        "GPU postflight resource limit exceeded for {resource}: requested {requested}, limit {limit}"
+    )]
+    ResourceLimitExceeded {
+        resource: &'static str,
+        requested: usize,
+        limit: usize,
+    },
     #[error("invalid GPU postflight access schedule: {0}")]
     InvalidAccessSchedule(String),
     #[error("{0}")]
