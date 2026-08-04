@@ -1,7 +1,7 @@
 //! GPU prover extension. Preflight replay uses native GPU trace generation for recognized
 //! fields and a CPU postflight projection for other field expressions.
 
-use std::{any::Any, collections::BTreeSet, sync::Arc};
+use std::{any::Any, array, collections::BTreeSet, sync::Arc};
 
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 #[cfg(all(feature = "rvr", test))]
@@ -350,7 +350,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     ))
                 });
 
-                let modulus_limbs = std::array::from_fn(|i| {
+                let modulus_limbs = array::from_fn(|i| {
                     if i < modulus_limbs.len() {
                         modulus_limbs[i] as u16
                     } else {
@@ -463,7 +463,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     ))
                 });
 
-                let modulus_limbs = std::array::from_fn(|i| {
+                let modulus_limbs = array::from_fn(|i| {
                     if i < modulus_limbs.len() {
                         modulus_limbs[i] as u16
                     } else {
