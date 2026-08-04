@@ -103,8 +103,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             }
 
             core_row.b_msb_f = b_msb_f;
-            core_row.opcode_sltu_flag = F::from_bool(!is_slt);
-            core_row.opcode_slt_flag = F::from_bool(is_slt);
+            // 1 = SLTIU (unsigned), 2 = SLTI (signed); 0 is reserved for padding rows.
+            core_row.opcode_mode = if is_slt { F::TWO } else { F::ONE };
             core_row.cmp_result = F::from_bool(cmp_result);
             core_row.imm_sign = F::from_u8(imm_sign);
             core_row.imm_low11 = F::from_u16(imm_low11);
