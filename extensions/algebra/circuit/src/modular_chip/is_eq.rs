@@ -328,8 +328,9 @@ impl<const READ_LIMBS: usize, const LIMB_BITS: usize> ModularIsEqualFiller<READ_
                 .unwrap_or(0);
         }
 
-        // Writing in reverse order
-        cols.c_lt_mark = if !is_setup && b_diff_idx == c_diff_idx {
+        // Normal rows share one marker when both bounds differ at the same limb. Setup has no
+        // b marker, so its c marker always has value two.
+        cols.c_lt_mark = if b_diff_idx == c_diff_idx {
             F::ONE
         } else {
             F::TWO
