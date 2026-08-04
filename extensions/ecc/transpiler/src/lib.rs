@@ -19,6 +19,8 @@ pub enum WeierstrassOpcode {
     SETUP_EC_ADD_NE,
     EC_DOUBLE,
     SETUP_EC_DOUBLE,
+    EC_MUL,
+    SETUP_EC_MUL,
 }
 
 #[derive(Default)]
@@ -42,16 +44,24 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
 
         let instruction = {
             // short weierstrass ec
-            assert!(WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize);
+            assert!(
+                WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize
+            );
             let dec_insn = RType::new(instruction_u32);
             let base_funct7 = (dec_insn.funct7 as u8) % SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS;
             let curve_idx =
                 ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize;
             let curve_idx_shift = curve_idx * WeierstrassOpcode::COUNT;
-            if base_funct7 == SwBaseFunct7::SwSetup as u8 {
-                let local_opcode = match dec_insn.rs2 {
-                    0 => WeierstrassOpcode::SETUP_EC_DOUBLE,
-                    _ => WeierstrassOpcode::SETUP_EC_ADD_NE,
+            if base_funct7 == SwBaseFunct7::SwSetup as u8
+                || base_funct7 == SwBaseFunct7::SwSetupMul as u8
+            {
+                let local_opcode = if base_funct7 == SwBaseFunct7::SwSetupMul as u8 {
+                    WeierstrassOpcode::SETUP_EC_MUL
+                } else {
+                    match dec_insn.rs2 {
+                        0 => WeierstrassOpcode::SETUP_EC_DOUBLE,
+                        _ => WeierstrassOpcode::SETUP_EC_ADD_NE,
+                    }
                 };
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
@@ -66,11 +76,16 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
-                        WeierstrassOpcode::EC_ADD_NE as usize + WeierstrassOpcode::CLASS_OFFSET
+                        WeierstrassOpcode::EC_ADD_NE as usize
+                            + WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        WeierstrassOpcode::EC_DOUBLE as usize + WeierstrassOpcode::CLASS_OFFSET
+                        WeierstrassOpcode::EC_DOUBLE as usize
+                            + WeierstrassOpcode::CLASS_OFFSET
+                    }
+                    Some(SwBaseFunct7::SwMul) => {
+                        WeierstrassOpcode::EC_MUL as usize + WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };
