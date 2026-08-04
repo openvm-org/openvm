@@ -1,10 +1,14 @@
-use std::{slice::from_ref, sync::Arc};
+#[cfg(feature = "rvr")]
+use std::collections::BTreeSet;
+#[cfg(feature = "rvr")]
+use std::io;
+use std::{fs, slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::{rvr::CfgHints, ExecutionOutcome};
 #[cfg(feature = "cuda")]
 use openvm_circuit::arch::{verify_segments, VirtualMachineError};
 use openvm_continuations::prover::DeferralCircuitProver;
@@ -38,7 +42,7 @@ use crate::{
         DEFAULT_APP_L_SKIP,
     },
     prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
-    DeferralInput, Sdk, StdIn, F,
+    DeferralInput, ExecutableInput, Sdk, StdIn, F,
 };
 
 cfg_if::cfg_if! {
@@ -59,6 +63,16 @@ cfg_if::cfg_if! {
 
 /// Default deferral idx for the verify-stark deferral circuit.
 const DEFAULT_VERIFY_STARK_DEF_IDX: usize = 0;
+
+#[cfg(feature = "rvr")]
+fn generated_source(compiled: &crate::CompiledExePure<'_>) -> Result<String> {
+    let sources = tempfile::tempdir()?;
+    compiled.save_generated_sources(sources.path())?;
+    Ok(fs::read_dir(sources.path())?
+        .map(|entry| fs::read_to_string(entry?.path()))
+        .collect::<io::Result<Vec<_>>>()?
+        .concat())
+}
 
 /// Returns app, aggregation, and root params, allowing tests to override them via env vars.
 fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
@@ -550,6 +564,45 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
 
 #[cfg(feature = "rvr")]
 #[test]
+fn test_sdk_cfg_hints_affect_compilation() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf_bytes = include_bytes!("../programs/examples/fibonacci.elf");
+    let elf = Elf::decode(elf_bytes, MEM_SIZE as u32)?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let baseline = sdk.compile(exe.clone())?;
+    let baseline_source = generated_source(&baseline)?;
+    let hinted_pc = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| slot.is_some())
+        .map(|(index, _)| u64::from(exe.program.pc_base) + (index as u64) * 4)
+        .find(|pc| !baseline_source.contains(&format!("block_0x{pc:08x}")))
+        .expect("fibonacci program has a non-leader instruction");
+
+    let elf_file = tempfile::NamedTempFile::new()?;
+    fs::write(elf_file.path(), elf_bytes)?;
+    let input = ExecutableInput::ElfFileWithCfgHints {
+        elf_path: elf_file.path().to_path_buf(),
+        cfg_hints: CfgHints {
+            basic_block_starts: BTreeSet::from([hinted_pc]),
+            ..Default::default()
+        },
+    };
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+    let baseline_output = sdk.execute(&baseline, stdin.clone())?;
+    let hinted = sdk.compile(input)?;
+    let hinted_source = generated_source(&hinted)?;
+    assert!(hinted_source.contains(&format!("block_0x{hinted_pc:08x}")));
+    assert_eq!(sdk.execute(&hinted, stdin)?, baseline_output);
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
 fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
@@ -987,7 +1040,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     // Root verifier params matching pipeline_cell_count_profiling in static-verifier
     let (app_params, agg_params, root_params) = get_params();
     let cache_dir = std::env::var("OPENVM_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
-    std::fs::create_dir_all(&cache_dir)?;
+    fs::create_dir_all(&cache_dir)?;
 
     let proof_path = format!("{cache_dir}/sdk_root_proof.bin");
     let vk_path = format!("{cache_dir}/sdk_root_vk.bin");
@@ -996,14 +1049,14 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     let (root_vk, root_proof, onion_commit) =
         if Path::new(&proof_path).exists() && Path::new(&vk_path).exists() {
             eprintln!("Loading cached root proof from {cache_dir}/");
-            let proof_bytes = std::fs::read(&proof_path)?;
+            let proof_bytes = fs::read(&proof_path)?;
             let root_proof = Proof::<RootSC>::decode_from_bytes(&proof_bytes)?;
 
-            let vk_bytes = std::fs::read(&vk_path)?;
+            let vk_bytes = fs::read(&vk_path)?;
             let root_vk = bitcode::deserialize(&vk_bytes)
                 .map_err(|e| eyre::eyre!("failed to deserialize root VK: {e}"))?;
 
-            let commit_bytes: [u8; 32] = std::fs::read(&commit_path)?
+            let commit_bytes: [u8; 32] = fs::read(&commit_path)?
                 .try_into()
                 .map_err(|_| eyre::eyre!("invalid commit file"))?;
             let onion_commit = CommitBytes::new(commit_bytes).into();
@@ -1076,13 +1129,13 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
             // Cache to disk
             eprintln!("Caching root proof to {cache_dir}/");
-            std::fs::write(&proof_path, root_proof.encode_to_vec()?)?;
-            std::fs::write(
+            fs::write(&proof_path, root_proof.encode_to_vec()?)?;
+            fs::write(
                 &vk_path,
                 bitcode::serialize(&root_vk)
                     .map_err(|e| eyre::eyre!("failed to serialize root VK: {e}"))?,
             )?;
-            std::fs::write(&commit_path, CommitBytes::from(onion_commit).as_slice())?;
+            fs::write(&commit_path, CommitBytes::from(onion_commit).as_slice())?;
 
             (root_vk, root_proof, onion_commit)
         };

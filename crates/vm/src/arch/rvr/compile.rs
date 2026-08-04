@@ -1,6 +1,7 @@
 //! IR -> CProject -> make -> .so pipeline.
 
 use std::{
+    collections::HashSet,
     fs::{self, File},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -12,6 +13,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, RvrExecutionKind};
+use rvr_openvm_ir::CfgHints;
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, AirIndex, ExtensionRegistry, TraceChipIndex,
 };
@@ -312,6 +314,15 @@ pub fn build_pc_to_chip<F, E>(
         .collect()
 }
 
+/// Optional metadata supplied by the program's build pipeline.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RvrProgramMetadata<'a> {
+    /// OpenVM PC to source location mapping.
+    pub debug_map: Option<&'a GuestDebugMap>,
+    /// Additive CFG facts derived from higher-level program information.
+    pub cfg_hints: Option<&'a CfgHints>,
+}
+
 /// Options for the compilation pipeline.
 pub struct CompileOptions<'a> {
     /// Base name for generated files and library artifact.
@@ -319,8 +330,7 @@ pub struct CompileOptions<'a> {
     pub execution_kind: RvrExecutionKind,
     pub extensions: &'a ExtensionRegistry,
     pub chips: Option<&'a ChipMapping>,
-    /// Guest debug map: OpenVM PC -> SourceLoc.
-    pub guest_debug_map: Option<&'a GuestDebugMap>,
+    pub program_metadata: RvrProgramMetadata<'a>,
     /// Compile with `-g -fno-omit-frame-pointer` for profiling.
     pub native_debug_info: bool,
     /// Compile the generated C with trap-mode UBSan and bounds sanitizers.
@@ -340,24 +350,40 @@ pub fn compile_with_options<F: PrimeField32>(
     compile_impl(exe, &opts)
 }
 
-/// Compile a VmExe into a shared library for unlimited pure execution.
-pub fn compile<F: PrimeField32>(
+fn compile_default<F: PrimeField32>(
     exe: &VmExe<F>,
+    execution_kind: RvrExecutionKind,
     extensions: &ExtensionRegistry,
-    guest_debug_map: Option<&GuestDebugMap>,
+    chips: Option<&ChipMapping>,
+    program_metadata: RvrProgramMetadata<'_>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
         &CompileOptions {
             base_name: None,
-            execution_kind: RvrExecutionKind::Pure,
+            execution_kind,
             extensions,
-            chips: None,
-            guest_debug_map,
+            chips,
+            program_metadata,
             native_debug_info: cfg!(feature = "profiling"),
             sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
+    )
+}
+
+/// Compile a VmExe into a shared library for unlimited pure execution.
+pub fn compile<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    program_metadata: RvrProgramMetadata<'_>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_default(
+        exe,
+        RvrExecutionKind::Pure,
+        extensions,
+        None,
+        program_metadata,
     )
 }
 
@@ -365,20 +391,14 @@ pub fn compile<F: PrimeField32>(
 pub fn compile_with_instret_tracking<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
-    guest_debug_map: Option<&GuestDebugMap>,
+    program_metadata: RvrProgramMetadata<'_>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
+    compile_default(
         exe,
-        &CompileOptions {
-            base_name: None,
-            execution_kind: RvrExecutionKind::PureWithInstretTracking,
-            extensions,
-            chips: None,
-            guest_debug_map,
-            native_debug_info: cfg!(feature = "profiling"),
-            sanitize: DEFAULT_SANITIZE,
-            keep_artifacts: false,
-        },
+        RvrExecutionKind::PureWithInstretTracking,
+        extensions,
+        None,
+        program_metadata,
     )
 }
 
@@ -386,20 +406,14 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
 pub(crate) fn compile_preflight<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
-    guest_debug_map: Option<&GuestDebugMap>,
+    program_metadata: RvrProgramMetadata<'_>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
+    compile_default(
         exe,
-        &CompileOptions {
-            base_name: None,
-            execution_kind: RvrExecutionKind::Preflight,
-            extensions,
-            chips: None,
-            guest_debug_map,
-            native_debug_info: cfg!(feature = "profiling"),
-            sanitize: DEFAULT_SANITIZE,
-            keep_artifacts: false,
-        },
+        RvrExecutionKind::Preflight,
+        extensions,
+        None,
+        program_metadata,
     )
 }
 
@@ -408,20 +422,14 @@ pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
     chips: &ChipMapping,
-    guest_debug_map: Option<&GuestDebugMap>,
+    program_metadata: RvrProgramMetadata<'_>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
+    compile_default(
         exe,
-        &CompileOptions {
-            base_name: None,
-            execution_kind: RvrExecutionKind::Metered,
-            extensions,
-            chips: Some(chips),
-            guest_debug_map,
-            native_debug_info: cfg!(feature = "profiling"),
-            sanitize: DEFAULT_SANITIZE,
-            keep_artifacts: false,
-        },
+        RvrExecutionKind::Metered,
+        extensions,
+        Some(chips),
+        program_metadata,
     )
 }
 
@@ -430,20 +438,14 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
     chips: &ChipMapping,
-    guest_debug_map: Option<&GuestDebugMap>,
+    program_metadata: RvrProgramMetadata<'_>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
+    compile_default(
         exe,
-        &CompileOptions {
-            base_name: None,
-            execution_kind: RvrExecutionKind::MeteredSegment,
-            extensions,
-            chips: Some(chips),
-            guest_debug_map,
-            native_debug_info: cfg!(feature = "profiling"),
-            sanitize: DEFAULT_SANITIZE,
-            keep_artifacts: false,
-        },
+        RvrExecutionKind::MeteredSegment,
+        extensions,
+        Some(chips),
+        program_metadata,
     )
 }
 
@@ -452,20 +454,14 @@ pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
     chips: &ChipMapping,
-    guest_debug_map: Option<&GuestDebugMap>,
+    program_metadata: RvrProgramMetadata<'_>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
+    compile_default(
         exe,
-        &CompileOptions {
-            base_name: None,
-            execution_kind: RvrExecutionKind::MeteredCost,
-            extensions,
-            chips: Some(chips),
-            guest_debug_map,
-            native_debug_info: cfg!(feature = "profiling"),
-            sanitize: DEFAULT_SANITIZE,
-            keep_artifacts: false,
-        },
+        RvrExecutionKind::MeteredCost,
+        extensions,
+        Some(chips),
+        program_metadata,
     )
 }
 
@@ -570,15 +566,18 @@ fn compile_impl<F: PrimeField32>(
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));
 
     let ir = convert_vmexe_to_ir_with_debug(exe, opts.extensions, |pc| {
-        opts.guest_debug_map
+        opts.program_metadata
+            .debug_map
             .and_then(|debug_map| debug_map.get(pc).cloned())
     })?;
 
-    let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
+    let valid_pcs: HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
     let extra_targets = opts
         .extensions
         .extra_cfg_targets(&exe.init_memory, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets);
+    let mut hints = opts.program_metadata.cfg_hints.cloned().unwrap_or_default();
+    hints.potential_targets.extend(extra_targets);
+    let blocks = build_blocks(&ir, &hints);
 
     let temp_root = std::env::temp_dir();
     let temp_dir = tempfile::Builder::new()

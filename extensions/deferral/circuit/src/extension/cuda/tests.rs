@@ -124,7 +124,9 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
     };
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.preflight_instance(&exe).unwrap();
+    let checkpoint = executor
+        .preflight_instance(&exe, Default::default())
+        .unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Streams {
         deferrals: vec![DeferralState::new(vec![result])],
         ..Default::default()
@@ -271,7 +273,9 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.preflight_instance(&exe).unwrap();
+    let checkpoint = executor
+        .preflight_instance(&exe, Default::default())
+        .unwrap();
     let state = checkpoint.create_initial_vm_state(streams);
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())

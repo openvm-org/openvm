@@ -31,6 +31,7 @@ pub use compile::{
     build_pc_to_chip, compile, compile_metered, compile_metered_cost,
     compile_metered_segment_boundary, compile_with_instret_tracking, compile_with_options,
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
+    RvrProgramMetadata,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::ExecuteError;
@@ -48,5 +49,6 @@ pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
     default_linker, runtime_toolchain, RuntimeToolchain, RuntimeToolchainError, RvrExecutionKind,
 };
+pub use rvr_openvm_ir::CfgHints;
 
 pub use crate::arch::execution_mode::metered::segment_ctx::SegmentationLimits;

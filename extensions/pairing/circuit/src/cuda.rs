@@ -252,7 +252,9 @@ mod tests {
             Rv64PairingConfig::new(vec![curve], vec![pairing_complex_name(curve).to_string()]);
         *config.as_mut() = test_system_config();
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let checkpoint = executor.preflight_instance(&exe).unwrap();
+        let checkpoint = executor
+            .preflight_instance(&exe, Default::default())
+            .unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
