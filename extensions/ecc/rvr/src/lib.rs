@@ -6,7 +6,7 @@
 //! Modular arithmetic opcodes are handled separately by the algebra extension.
 
 use openvm_ecc_transpiler::WeierstrassOpcode::{
-    self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
+    self, EC_ADD_NE, EC_DOUBLE, EC_MUL, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE, SETUP_EC_MUL,
 };
 use openvm_instructions::{
     riscv::{NUM_REGISTERS, REGISTER_BYTES},
@@ -273,6 +273,8 @@ impl RvrExtension for EccExtension {
                 curve,
                 is_setup: local_opcode == SETUP_EC_DOUBLE,
             }),
+            // rvr has no native scalar-multiplication implementation yet.
+            EC_MUL | SETUP_EC_MUL => return None,
         };
 
         Some(LiftedInstr::Body(InstrAt {
@@ -449,8 +451,9 @@ mod tests {
     #[test]
     fn ignores_opcodes_outside_configured_curves() {
         let extension = EccExtension::new(vec![0]);
-        let opcode =
-            VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + WeierstrassOpcode::COUNT);
+        let opcode = VmOpcode::from_usize(
+            WeierstrassOpcode::CLASS_OFFSET + WeierstrassOpcode::COUNT,
+        );
         let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
 
         assert!(extension.try_lift(&insn, 0x100).is_none());
