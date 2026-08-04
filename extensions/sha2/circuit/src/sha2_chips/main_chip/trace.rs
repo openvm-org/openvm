@@ -9,13 +9,19 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, U16_BITS};
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
+use openvm_riscv_circuit::adapters::{
+    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    ptr_to_u16_limbs, u32_to_ptr_limbs,
+};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
-use crate::{replay_sha2_from_postflight, Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
+use crate::{
+    replay_sha2_from_postflight, Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow,
+    SHA2_READ_SIZE, SHA2_WRITE_SIZE,
+};
 
 pub(crate) fn generate_trace_from_postflight<F, C>(
     chip: &Sha2MainChip<F, C>,
@@ -149,9 +155,43 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             ptr_to_u16_limbs(replay.input_ptr),
         );
 
-        for ptr in [replay.dst_ptr, replay.state_ptr, replay.input_ptr] {
-            range_checker.add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
-        }
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts (one `cell_hi` count per conversion, one 16-bit low-limb count per
+        // block), registered on the caller-provided range checker so error paths stay clean.
+        // `replay` holds stable copies of the pointer values, separate from the trace row.
+        let read_cell_stride = (SHA2_READ_SIZE / 2) as u32;
+        let write_cell_stride = (SHA2_WRITE_SIZE / 2) as u32;
+        let fill_pointer_carries =
+            |byte_ptr: u32, cell_stride: u32, conv_col: &mut F, add_cols: &mut [F]| {
+                let (conv_carry, base_cell) =
+                    byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
+                range_checker.add_count(base_cell[1], cell_ptr_hi_bits(self.pointer_max_bits));
+                *conv_col = F::from_u32(conv_carry);
+                for (j, col) in add_cols.iter_mut().enumerate() {
+                    let (add_carry, block_cell_ptr) =
+                        add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
+                    range_checker.add_count(block_cell_ptr[0], U16_BITS);
+                    *col = F::from_u32(add_carry);
+                }
+            };
+        fill_pointer_carries(
+            replay.input_ptr,
+            read_cell_stride,
+            cols.mem.input_cell_carry,
+            cols.mem.input_add_carry.as_slice_mut().unwrap(),
+        );
+        fill_pointer_carries(
+            replay.state_ptr,
+            read_cell_stride,
+            cols.mem.state_cell_carry,
+            cols.mem.state_add_carry.as_slice_mut().unwrap(),
+        );
+        fill_pointer_carries(
+            replay.dst_ptr,
+            write_cell_stride,
+            cols.mem.dst_cell_carry,
+            cols.mem.write_add_carry.as_slice_mut().unwrap(),
+        );
 
         // fill in the register reads aux
         let mut timestamp = replay.timestamp;

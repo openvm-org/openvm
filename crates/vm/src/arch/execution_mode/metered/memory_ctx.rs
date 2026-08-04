@@ -115,14 +115,17 @@ impl MemoryCtx {
 
     #[inline(always)]
     fn leaf_id_range(&self, address_space: u32, ptr: u32, size: u32) -> (u32, u32) {
-        let end_ptr = ptr + size - 1;
+        // The inclusive end pointer may be up to 2^32 - 1 for u16-celled byte ranges, so compute
+        // it in u64 to avoid overflowing u32. (`size >= 1`.)
+        let end_ptr = u64::from(ptr) + u64::from(size) - 1;
         let leaf_bits = match address_space {
             PUBLIC_VALUES_AS | DEFERRAL_AS => CELLS_PER_LEAF_BITS,
             REGISTER_AS | MEMORY_AS => MEMORY_LEAF_BYTE_BITS,
             _ => panic!("unsupported metered address space {address_space}"),
         };
         let leaf_label = ptr >> leaf_bits;
-        let end_leaf_label = end_ptr >> leaf_bits;
+        // `end_leaf_label < 2^address_height` since `end_ptr < 2^BYTE_POINTER_MAX_BITS`.
+        let end_leaf_label = (end_ptr >> leaf_bits) as u32;
         let num_leaves = end_leaf_label - leaf_label + 1;
         debug_assert!(
             leaf_label < (1 << self.memory_dimensions.address_height),
@@ -404,6 +407,18 @@ mod tests {
 
     use super::*;
     use crate::{arch::MEMORY_BLOCK_BYTES, utils::test_system_config};
+
+    /// A u16-celled byte range ending at the top of the 2^32 address space (inclusive end
+    /// `= 2^32 - 1`) must not overflow when computing the inclusive end pointer. Here `ptr + size`
+    /// alone overflows `u32`, so the accounting must widen to `u64` (regression for the 2^32
+    /// memory-address change).
+    #[test]
+    fn test_update_boundary_merkle_heights_at_top_of_address_space() {
+        let system_config = test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config);
+        // Byte range [u32::MAX - 7, u32::MAX] (8 bytes ending at 2^32 - 1).
+        ctx.update_boundary_merkle_heights(MEMORY_AS, u32::MAX - 7, 8);
+    }
 
     #[test]
     fn test_range_insertion_matches_explicit_leaves() {

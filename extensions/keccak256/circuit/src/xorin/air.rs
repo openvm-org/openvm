@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
     system::memory::{
         offline_checker::{
             pack_u8_block, MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxInput,
@@ -12,13 +12,13 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, var_range::VariableRangeCheckerBus,
-    ColumnsAir, U16_BITS,
+    ColumnsAir,
 };
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    PTR_U16_LIMBS,
+    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block,
+    reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -67,7 +67,7 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 
         let start_read_timestamp = self.eval_instruction(builder, local, &mem.register_aux_cols);
 
-        let start_write_timestamp = self.constrain_input_read(
+        let (start_write_timestamp, buffer_base_cell_ptr) = self.constrain_input_read(
             builder,
             local,
             start_read_timestamp,
@@ -81,6 +81,7 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
             builder,
             local,
             start_write_timestamp,
+            buffer_base_cell_ptr,
             &mem.buffer_bytes_write_base_aux,
         );
     }
@@ -158,7 +159,8 @@ impl XorinVmAir {
                 .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(REGISTER_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                        // Register byte pointers are small: `ptr / 2` in the low cell limb.
+                        reg_byte_ptr_to_cell_ptr_limbs::<AB>(ptr),
                     ),
                     value,
                     timestamp.clone(),
@@ -167,18 +169,6 @@ impl XorinVmAir {
                 .eval(builder, is_enabled);
 
             timestamp += AB::Expr::ONE;
-        }
-
-        for top_cell in [
-            instruction.buffer_ptr_limbs[PTR_U16_LIMBS - 1],
-            instruction.input_ptr_limbs[PTR_U16_LIMBS - 1],
-        ] {
-            self.range_bus
-                .range_check(
-                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(top_cell, self.ptr_max_bits),
-                    U16_BITS,
-                )
-                .eval(builder, is_enabled);
         }
 
         timestamp
@@ -193,34 +183,54 @@ impl XorinVmAir {
         start_read_timestamp: AB::Expr,
         input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
         buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
-    ) -> AB::Expr {
+    ) -> (AB::Expr, [AB::Expr; 2]) {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
+        let mem = &local.mem_oc;
+        // Cell-pointer stride (in u16 cells) between consecutive heap blocks.
+        let cell_ptr_block_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
 
-        let buffer_ptr = u16_limbs_to_ptr(&local.instruction.buffer_ptr_limbs);
-        let input_ptr = u16_limbs_to_ptr(&local.instruction.input_ptr_limbs);
+        // Convert the base `buffer` *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        let buffer_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.buffer_ptr_limbs[i].into());
+        let buffer_base_cell_ptr = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            buffer_byte_limbs,
+            mem.buffer_cell_carry,
+            self.ptr_max_bits,
+            is_enabled.into(),
+        );
 
         // Constrain read of buffer bytes
         // Timestamp increases by <= (136/8) = 17
-        for (i, (buffer_block, mem_aux)) in izip!(
+        for (i, (buffer_block, mem_aux, add_carry)) in izip!(
             local
                 .sponge
                 .preimage_buffer_bytes
                 .chunks_exact(MEMORY_BLOCK_BYTES),
-            buffer_bytes_read_aux_cols
+            buffer_bytes_read_aux_cols,
+            mem.buffer_read_add_carry
         )
         .enumerate()
         {
-            let ptr = buffer_ptr.clone() + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
             let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
+            // The cell-offset add (and its range check) is gated by `is_enabled` (degree 1) rather
+            // than `should_read` (degree 2) to keep the constraint degree within bounds; the filler
+            // therefore registers an add-carry range check for *every* block, padding or not.
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                buffer_base_cell_ptr.clone(),
+                i as u32 * cell_ptr_block_stride,
+                add_carry,
+                is_enabled.into(),
+            );
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        AB::Expr::from_u32(MEMORY_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
-                    ),
+                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
                     pack_u8_block::<AB>(&[
                         buffer_block[0].into(),
                         buffer_block[1].into(),
@@ -239,24 +249,42 @@ impl XorinVmAir {
             timestamp += not(is_padding);
         }
 
+        // Convert the base `input` *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        let input_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.input_ptr_limbs[i].into());
+        let input_base_cell_ptr = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            input_byte_limbs,
+            mem.input_cell_carry,
+            self.ptr_max_bits,
+            is_enabled.into(),
+        );
+
         // Constrain read of input_bytes
         // Timestamp increases by at most (136/8) = 17
-        for (i, (input, mem_aux)) in izip!(
+        for (i, (input, mem_aux, add_carry)) in izip!(
             local.sponge.input_bytes.chunks_exact(MEMORY_BLOCK_BYTES),
-            input_bytes_read_aux_cols
+            input_bytes_read_aux_cols,
+            mem.input_read_add_carry
         )
         .enumerate()
         {
-            let ptr = input_ptr.clone() + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
             let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
+            // Gated by `is_enabled` (see buffer-read note); filler range-checks every block.
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                input_base_cell_ptr.clone(),
+                i as u32 * cell_ptr_block_stride,
+                add_carry,
+                is_enabled.into(),
+            );
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        AB::Expr::from_u32(MEMORY_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
-                    ),
+                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
                     pack_u8_block::<AB>(&[
                         input[0].into(),
                         input[1].into(),
@@ -275,7 +303,7 @@ impl XorinVmAir {
             timestamp += not(is_padding);
         }
 
-        timestamp
+        (timestamp, buffer_base_cell_ptr)
     }
 
     #[inline]
@@ -311,16 +339,18 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
+        buffer_base_cell_ptr: [AB::Expr; 2],
         write_base_aux: &[MemoryBaseAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
-        let buffer_ptr = u16_limbs_to_ptr(&local.instruction.buffer_ptr_limbs);
+        // Cell-pointer stride (in u16 cells) between consecutive heap blocks.
+        let cell_ptr_block_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
 
         // Constrain write of buffer bytes
         // Each block is written back to the address its buffer read came from,
         // so preimage_buffer_bytes can act as the previous data.
-        for (i, (prev, output, base_aux)) in izip!(
+        for (i, (prev, output, base_aux, add_carry)) in izip!(
             local
                 .sponge
                 .preimage_buffer_bytes
@@ -329,23 +359,29 @@ impl XorinVmAir {
                 .sponge
                 .postimage_buffer_bytes
                 .chunks_exact(MEMORY_BLOCK_BYTES),
-            write_base_aux
+            write_base_aux,
+            local.mem_oc.buffer_write_add_carry
         )
         .enumerate()
         {
             let is_padding = local.sponge.is_padding_bytes[i];
             let should_write = is_enabled * not(is_padding);
-            let ptr = buffer_ptr.clone() + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
+            // Gated by `is_enabled` (see buffer-read note); filler range-checks every block.
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                buffer_base_cell_ptr.clone(),
+                i as u32 * cell_ptr_block_stride,
+                add_carry,
+                is_enabled.into(),
+            );
 
             let prev_data = pack_u8_block::<AB>(&std::array::from_fn(|j| prev[j].into()));
             let data = pack_u8_block::<AB>(&std::array::from_fn(|j| output[j].into()));
 
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        AB::Expr::from_u32(MEMORY_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
-                    ),
+                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
                     data,
                     timestamp.clone(),
                     MemoryWriteAuxInput::from_prev_data_exprs(base_aux, prev_data),
