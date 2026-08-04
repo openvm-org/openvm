@@ -1606,7 +1606,7 @@ mod tests {
         };
         #[cfg(not(feature = "rvr"))]
         let (end_state1, end_state2) = {
-            let instance = executor.instance(&exe, Default::default())?;
+            let instance = executor.instance(&exe)?;
             let state = instance.execute_for(vec![], 10)?.into_inner();
             let state = instance.execute_from_state_for(state, 10)?.into_inner();
             let end_state1 = instance.execute_from_state(state)?;
@@ -1768,7 +1768,7 @@ mod tests {
         .unwrap();
 
         let executor = VmExecutor::new(config).unwrap();
-        let instance = executor.instance(&exe, Default::default()).unwrap();
+        let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![]).unwrap();
     }
 
@@ -1794,6 +1794,9 @@ mod tests {
         )?;
 
         let executor = VmExecutor::new(config.clone())?;
+        #[cfg(not(feature = "rvr"))]
+        let instance = executor.instance(&exe)?;
+        #[cfg(feature = "rvr")]
         let instance = executor.instance(&exe, Default::default())?;
         let state = instance.execute(vec![])?;
         let final_memory = state.memory.memory;
@@ -1859,6 +1862,9 @@ mod tests {
         )?;
 
         let executor = VmExecutor::new(config)?;
+        #[cfg(not(feature = "rvr"))]
+        let instance = executor.instance(&exe)?;
+        #[cfg(feature = "rvr")]
         let instance = executor.instance(&exe, Default::default())?;
         let input = vec![vec![0u8, 0, 0, 1]];
         match instance.execute(input.clone()) {
@@ -1936,7 +1942,7 @@ mod tests {
         )
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
-        let instance = executor.instance(&exe, Default::default()).unwrap();
+        let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![]).unwrap();
     }
 

@@ -122,7 +122,7 @@ fn prove_pairing_checkpoint(
 ) -> Result<()> {
     *config.as_mut() = test_system_config();
     let executor = VmExecutor::new(config.clone())?;
-    let checkpoint = executor.preflight_instance(&exe)?;
+    let checkpoint = executor.preflight_instance(&exe, Default::default())?;
     let pairing_pcs = exe
         .program
         .enumerate_by_pc()

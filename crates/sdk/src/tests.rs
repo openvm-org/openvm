@@ -1,8 +1,13 @@
 #[cfg(feature = "rvr")]
 use std::collections::BTreeSet;
+#[cfg(any(
+    feature = "rvr",
+    all(feature = "cell-profiling", feature = "root-prover")
+))]
+use std::fs;
 #[cfg(feature = "rvr")]
 use std::io;
-use std::{fs, slice::from_ref, sync::Arc};
+use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
@@ -35,6 +40,8 @@ use openvm_verify_stark_host::{
     VmStarkProof,
 };
 
+#[cfg(feature = "rvr")]
+use crate::ExecutableInput;
 use crate::{
     builder::GenericSdkBuilder,
     config::{
@@ -42,7 +49,7 @@ use crate::{
         DEFAULT_APP_L_SKIP,
     },
     prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
-    DeferralInput, ExecutableInput, Sdk, StdIn, F,
+    DeferralInput, Sdk, StdIn, F,
 };
 
 cfg_if::cfg_if! {

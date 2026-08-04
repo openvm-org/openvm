@@ -481,7 +481,7 @@ mod bn254 {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(get_testing_config())?;
-        let rvr = executor.instance(&exe)?;
+        let rvr = executor.instance(&exe, Default::default())?;
 
         let cases = [
             (

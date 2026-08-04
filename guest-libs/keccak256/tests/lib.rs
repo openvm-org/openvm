@@ -93,7 +93,10 @@ mod tests {
             air_test_with_min_segments(TestBuilder, config, openvm_exe, stdin, 1);
         } else {
             let executor = VmExecutor::new(config.clone())?;
+            #[cfg(not(feature = "rvr"))]
             let instance = executor.instance(&openvm_exe)?;
+            #[cfg(feature = "rvr")]
+            let instance = executor.instance(&openvm_exe, Default::default())?;
             #[allow(unused_variables)]
             let state = instance.execute(stdin.clone())?;
 

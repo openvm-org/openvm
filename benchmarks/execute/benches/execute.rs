@@ -341,7 +341,11 @@ impl BenchExecutor for PureExecution {
     }
 
     fn build_instance(exe: &VmExe<BabyBear>) -> Self::Instance {
-        Self::unwrap_instance(executor().instance(exe))
+        #[cfg(feature = "rvr")]
+        let result = executor().instance(exe, Default::default());
+        #[cfg(not(feature = "rvr"))]
+        let result = executor().instance(exe);
+        Self::unwrap_instance(result)
     }
 
     fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError> {
@@ -374,6 +378,7 @@ impl BenchExecutor for MeteredExecution {
             exe,
             &setup.executor_idx_to_air_idx,
             setup.num_airs,
+            Default::default(),
         ));
         #[cfg(not(feature = "rvr"))]
         let instance =
@@ -408,7 +413,12 @@ impl BenchExecutor for MeteredCostExecution {
     fn build_instance(exe: &VmExe<BabyBear>) -> Self::Instance {
         let (_ctx, executor_idx_to_air_idx) = metered_cost_setup();
         #[cfg(feature = "rvr")]
-        let result = executor().metered_cost_instance(exe, executor_idx_to_air_idx, &_ctx.widths);
+        let result = executor().metered_cost_instance(
+            exe,
+            executor_idx_to_air_idx,
+            &_ctx.widths,
+            Default::default(),
+        );
         #[cfg(not(feature = "rvr"))]
         let result = executor().metered_cost_instance(exe, executor_idx_to_air_idx);
         Self::unwrap_instance(result)
