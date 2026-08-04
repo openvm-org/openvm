@@ -11,6 +11,7 @@
 //! get around Rust orphan rules.
 use std::{
     any::{type_name, Any},
+    error::Error,
     sync::Arc,
 };
 
@@ -800,14 +801,14 @@ pub enum ChipInventoryError {
     ProverChipInitialization {
         name: String,
         #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        source: Box<dyn Error + Send + Sync>,
     },
 }
 
 impl ChipInventoryError {
     pub fn prover_chip_initialization(
         name: impl Into<String>,
-        source: impl std::error::Error + Send + Sync + 'static,
+        source: impl Error + Send + Sync + 'static,
     ) -> Self {
         Self::ProverChipInitialization {
             name: name.into(),
@@ -818,16 +819,18 @@ impl ChipInventoryError {
 
 #[cfg(test)]
 mod chip_inventory_error_tests {
+    use std::{error::Error, io::Error as IoError};
+
     use super::ChipInventoryError;
 
     #[test]
     fn prover_chip_initialization_preserves_source() {
         let error = ChipInventoryError::prover_chip_initialization(
             "test chip",
-            std::io::Error::other("setup failed"),
+            IoError::other("setup failed"),
         );
-        let source = std::error::Error::source(&error).unwrap();
-        let source = source.downcast_ref::<std::io::Error>().unwrap();
+        let source = Error::source(&error).unwrap();
+        let source = source.downcast_ref::<IoError>().unwrap();
         assert_eq!(source.to_string(), "setup failed");
     }
 }
