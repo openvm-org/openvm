@@ -32,7 +32,7 @@ use crate::{
     system::{
         memory::{
             merkle::public_values::{assert_public_values_shape, public_values_cells_from_bytes},
-            num_memory_airs, POINTER_MAX_BITS,
+            num_memory_airs, DEFAULT_POINTER_MAX_BITS,
         },
         SystemChipComplex,
     },
@@ -81,9 +81,6 @@ pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
 pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
     ptr_bits + U16_CELL_SIZE_BITS
 }
-
-// TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
-// execution state carries the memory config.
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
@@ -217,7 +214,7 @@ pub struct MemoryConfig {
     /// It is expected that the size of the list is `(1 << addr_space_height) + 1` and the first
     /// element is 0, which means no address space.
     pub addr_spaces: Vec<AddressSpaceHostConfig>,
-    /// Maximum bit width of AS-native OpenVM memory pointers.
+    /// Maximum bit width of pointers within each address space. Pointers index cells, not bytes.
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^timestamp_max_bits)`. Maximum allowed: 29.
     pub timestamp_max_bits: usize,
@@ -235,7 +232,7 @@ impl Default for MemoryConfig {
         addr_spaces[RV64_MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
+        Self::new(3, addr_spaces, DEFAULT_POINTER_MAX_BITS, 29, 17)
     }
 }
 
@@ -261,7 +258,7 @@ impl MemoryConfig {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 28;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
+        Self::new(3, addr_spaces, DEFAULT_POINTER_MAX_BITS, 29, 17)
     }
 }
 
