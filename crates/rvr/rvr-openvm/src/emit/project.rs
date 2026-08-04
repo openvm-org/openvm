@@ -403,6 +403,12 @@ impl CProject {
     }
 
     fn validate_block_abi(&self) -> io::Result<()> {
+        if self.profile_execution && self.hot_regs.contains(&8) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "profiled execution requires guest x8 to remain in RvState for frame-pointer sampling",
+            ));
+        }
         let used = self.hot_regs.len() + self.block_abi().extra_args();
         if used > Self::max_non_state_args() {
             return Err(io::Error::new(
@@ -1841,6 +1847,17 @@ mod tests {
         let error = project.validate_block_abi().unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
         assert!(error.to_string().contains("preserve_none supports"));
+    }
+
+    #[test]
+    fn profiling_rejects_a_hot_guest_frame_pointer() {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
+        project.profile_execution = true;
+        project.hot_regs.insert(8);
+
+        let error = project.validate_block_abi().unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains("guest x8"));
     }
 
     #[test]

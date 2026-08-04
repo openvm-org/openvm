@@ -142,6 +142,9 @@ pub trait ExtEmitCtx {
     /// Emit a C call that cannot access RVR state, without flushing page state.
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]);
 
+    /// Prepare instrumentation immediately before an inline external call.
+    fn before_call_without_page_flush(&mut self) {}
+
     /// Flush local page state, emit a C call that returns a value, then reload
     /// the page state.
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
@@ -166,6 +169,7 @@ pub trait ExtEmitCtx {
 
     /// Emit a call without flushing page state and trap if it returns `false`.
     fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        self.before_call_without_page_flush();
         self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
         self.emit_trap();
         self.write_line("}");

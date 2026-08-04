@@ -2799,11 +2799,11 @@ dependencies = [
 [[package]]
 name = "fxprof-processed-profile"
 version = "0.8.1"
-source = "git+https://github.com/mstange/samply.git?rev=c11e5a4cfc010095e7688f3e798b720ef8a9d657#c11e5a4cfc010095e7688f3e798b720ef8a9d657"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25234f20a3ec0a962a61770cfe39ecf03cb529a6e474ad8cff025ed497eda557"
 dependencies = [
  "bitflags 2.10.0",
  "debugid",
- "indexmap 2.12.1",
  "rustc-hash 2.1.1",
  "serde",
  "serde_derive",
@@ -4739,8 +4739,8 @@ dependencies = [
  "rvr-state",
  "serde",
  "serde-big-array",
- "sha2 0.10.9",
  "serde_json",
+ "sha2 0.10.9",
  "static_assertions",
  "tempfile",
  "test-case",
@@ -5105,14 +5105,12 @@ version = "2.0.0"
 dependencies = [
  "addr2line",
  "base64 0.22.1",
- "debugid",
  "eyre",
  "flate2",
  "fxprof-processed-profile",
  "object",
  "openvm-circuit",
  "reqwest",
- "samply-debugid",
  "serde_json",
  "tempfile",
 ]
@@ -5592,6 +5590,7 @@ dependencies = [
  "openvm-continuations",
  "openvm-cuda-backend",
  "openvm-deferral-circuit",
+ "openvm-execution-profile",
  "openvm-recursion-circuit",
  "openvm-sdk-config",
  "openvm-stark-backend",
@@ -7681,15 +7680,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "samply-debugid"
-version = "0.1.0"
-source = "git+https://github.com/mstange/samply.git?rev=c11e5a4cfc010095e7688f3e798b720ef8a9d657#c11e5a4cfc010095e7688f3e798b720ef8a9d657"
-dependencies = [
- "debugid",
- "uuid",
 ]
 
 [[package]]

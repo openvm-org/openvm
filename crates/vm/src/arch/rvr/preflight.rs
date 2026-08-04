@@ -20,8 +20,10 @@ use rvr_openvm_lift::RvrRuntimeExtension;
 use rvr_state::RvrCheckpoint;
 
 use super::{
-    bridge::map_rvr_execute_error, compile::CompileError, execute::execute_preflight, RvrCompiled,
-    RvrInitialImage,
+    bridge::map_rvr_execute_error,
+    compile::CompileError,
+    execute::{commit_guest_profile, execute_preflight, PreflightExecuteOptions},
+    GuestProfileConfig, RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -183,12 +185,16 @@ impl<'a> PreflightInstance<'a> {
             .create_vm_state(&self.inner.system_config, inputs)
     }
 
+    /// Whether this artifact can be passed to the profiled execution APIs.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.inner.compiled.is_profile_compatible()
+    }
+
     /// Persist the compiled shared library into `dir`.
     ///
     /// Loading requires the same VM executable and execution configuration.
     pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
-        let suffix = self.inner.compiled.execution_kind().artifact_suffix();
-        let dest_lib = self.inner.compiled.lib_file_name_with_suffix(suffix)?;
+        let dest_lib = self.inner.compiled.artifact_file_name()?;
         self.inner.compiled.save_artifact(&dir.join(dest_lib))
     }
 
@@ -212,7 +218,7 @@ impl<'a> PreflightInstance<'a> {
         state: VmState<GuestMemory>,
         limits: PreflightLimits,
     ) -> Result<PreflightExecution, ExecutionError> {
-        self.execute_from_state_inner(state, limits, false, None)
+        self.execute_from_state_inner(state, limits, false, None, None)
     }
 
     /// Executes for at most `limits.max_instructions`, suspending before a
@@ -232,7 +238,7 @@ impl<'a> PreflightInstance<'a> {
         state: VmState<GuestMemory>,
         limits: PreflightLimits,
     ) -> Result<PreflightExecution, ExecutionError> {
-        self.execute_from_state_inner(state, limits, true, None)
+        self.execute_from_state_inner(state, limits, true, None, None)
     }
 
     /// Executes one metered segment from an arbitrary segment-start state.
@@ -245,9 +251,35 @@ impl<'a> PreflightInstance<'a> {
     ) -> Result<PreflightExecution, ExecutionError> {
         let limits = limits_for_segment(segment)?;
         require_segment_boundary(
-            self.execute_from_state_inner(state, limits, true, None)?,
+            self.execute_from_state_inner(state, limits, true, None, None)?,
             segment,
         )
+    }
+
+    /// Execute one metered segment while appending samples to `profile`.
+    pub fn execute_segment_profiled(
+        &self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+        profile: &GuestProfileConfig,
+    ) -> Result<PreflightExecution, ExecutionError> {
+        if !profile.is_session() {
+            return Err(ExecutionError::RvrExecution(
+                "profiled preflight requires GuestProfileConfig::raw_session".to_string(),
+            ));
+        }
+        let limits = limits_for_segment(segment)?;
+        let staging = profile.staging_session();
+        let execution = require_segment_boundary(
+            self.execute_from_state_inner(state, limits, true, None, Some(&staging))?,
+            segment,
+        )?;
+        let capture = staging
+            .take_session_profile()
+            .map_err(|error| ExecutionError::RvrExecution(error.to_string()))?;
+        commit_guest_profile(&self.inner.compiled, profile, capture)
+            .map_err(map_rvr_execute_error)?;
+        Ok(execution)
     }
 
     /// Allocation-reusing variant of [`Self::execute_segment`].
@@ -259,7 +291,7 @@ impl<'a> PreflightInstance<'a> {
     ) -> Result<PreflightExecution, ExecutionError> {
         let limits = limits_for_segment(segment)?;
         require_segment_boundary(
-            self.execute_from_state_inner(state, limits, true, Some(reuse))?,
+            self.execute_from_state_inner(state, limits, true, Some(reuse), None)?,
             segment,
         )
     }
@@ -270,6 +302,7 @@ impl<'a> PreflightInstance<'a> {
         limits: PreflightLimits,
         allow_suspended: bool,
         reuse: Option<PreflightTranscript>,
+        profile: Option<&GuestProfileConfig>,
     ) -> Result<PreflightExecution, ExecutionError> {
         let from_state = ExecutionState::new(state.pc(), 1u32);
         #[cfg(feature = "metrics")]
@@ -281,10 +314,17 @@ impl<'a> PreflightInstance<'a> {
                         &self.inner.compiled,
                         &self.inner.runtime_hooks,
                         &mut state,
-                        limits,
-                        self.inner.system_config.memory_config.timestamp_max_bits,
-                        allow_suspended,
-                        reuse,
+                        PreflightExecuteOptions {
+                            limits,
+                            timestamp_max_bits: self
+                                .inner
+                                .system_config
+                                .memory_config
+                                .timestamp_max_bits,
+                            allow_suspended,
+                            reuse,
+                            profile,
+                        },
                     )
                 })
                 .map_err(map_rvr_execute_error)?;

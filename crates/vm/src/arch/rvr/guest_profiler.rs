@@ -537,7 +537,10 @@ impl GuestProfiler {
         })
     }
 
-    pub(super) fn finish(mut self, compiled: &RvrCompiled) -> Result<(), String> {
+    pub(super) fn finish_capture(
+        mut self,
+        compiled: &RvrCompiled,
+    ) -> Result<RawGuestProfile, String> {
         if let Err(error) = self.stop_sampling() {
             // A timer cleanup failure leaves handler-visible storage live.
             // Leak it rather than allowing Drop to free memory a kernel timer
@@ -547,19 +550,7 @@ impl GuestProfiler {
         }
         let samples = self.samples();
         let generated_module = native_library_module(compiled)?;
-        let output = emit_raw_profile(&samples, &generated_module, &self)?;
-        std::fs::write(self.config.output(), output).map_err(|error| {
-            format!(
-                "failed to write guest profile {}: {error}",
-                self.config.output().display()
-            )
-        })?;
-        if let Some(output) = self.config.native_artifact_output() {
-            compiled
-                .save_artifact(output)
-                .map_err(|error| format!("failed to preserve native profile artifact: {error}"))?;
-        }
-
+        let profile = emit_raw_profile(&samples, &generated_module, &self)?;
         let with_stack = samples.iter().filter(|sample| sample.depth > 1).count();
         let max_depth = samples.iter().map(|sample| sample.depth).max().unwrap_or(0);
         let total_depth: usize = samples.iter().map(|sample| usize::from(sample.depth)).sum();
@@ -594,7 +585,7 @@ impl GuestProfiler {
         if dropped != 0 || overruns != 0 || arm_failures != 0 || clock_failures != 0 {
             return Err("RVR guest profile is incomplete; inspect the emitted profile diagnostics and lower the sampling rate".to_string());
         }
-        Ok(())
+        Ok(profile)
     }
 
     fn stop_sampling(&mut self) -> Result<(), String> {
@@ -717,7 +708,7 @@ fn emit_raw_profile(
     samples: &[StackSample],
     generated_module: &NativeModuleInfo,
     profiler: &GuestProfiler,
-) -> Result<String, String> {
+) -> Result<RawGuestProfile, String> {
     let mut native_modules = vec![RawNativeModule {
         name: generated_module.name.clone(),
         path: generated_module.path.clone(),
@@ -775,7 +766,7 @@ fn emit_raw_profile(
             }
         })
         .collect();
-    serde_json::to_string(&RawGuestProfile {
+    Ok(RawGuestProfile {
         version: RAW_GUEST_PROFILE_VERSION,
         requested_sample_hz: profiler.config.sample_hz(),
         owner_tid: profiler.ctx.owner_tid,
@@ -792,7 +783,6 @@ fn emit_raw_profile(
         native_modules,
         samples,
     })
-    .map_err(|error| format!("failed to serialize raw guest profile: {error}"))
 }
 
 fn native_module_for_address(address: u64) -> Option<NativeModuleInfo> {

@@ -68,11 +68,11 @@ use super::execution_mode::PreflightCtx;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile::compile_preflight,
-    compile_metered_cost, compile_metered_cost_profiled, compile_metered_profiled,
-    compile_metered_segment_boundary, compile_profiled, compile_with_instret_tracking,
-    load_compiled_from_path, ChipMapping, GuestDebugMap, PreflightInstance, RvrExecutionKind,
-    RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance,
-    RvrPureInstance,
+    compile_metered, compile_metered_cost, compile_metered_cost_profiled, compile_metered_profiled,
+    compile_metered_segment_boundary, compile_preflight_profiled, compile_profiled,
+    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
+    PreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
+    RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
 #[cfg(feature = "cuda")]
@@ -491,6 +491,26 @@ where
             tracing::info_span!("compile_preflight", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
         let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(PreflightInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
+    /// Compile compact preflight execution with native profiling information.
+    pub fn preflight_profiled_instance(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<PreflightInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_preflight", backend = "rvr", profiled = true).entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = compile_preflight_profiled(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         Ok(PreflightInstance::new(
             self.inventory.config(),

@@ -9,6 +9,8 @@ use openvm_build::get_dir_with_profile;
 use openvm_circuit::arch::instructions::exe::VmExe;
 #[cfg(feature = "rvr")]
 use openvm_execution_profile::FirefoxProfiler;
+#[cfg(feature = "rvr")]
+use openvm_sdk::ExecutableInput;
 use openvm_sdk::{
     config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
 };
@@ -27,6 +29,7 @@ use crate::{
 
 #[cfg(feature = "rvr")]
 const DEFAULT_EXECUTION_PROFILE_HZ: u32 = 1_000;
+const MAX_EXECUTION_PROFILE_HZ: u32 = 20_000;
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum ExecutionMode {
@@ -84,7 +87,7 @@ pub struct RunArgs {
         value_name = "PATH",
         num_args = 0..=1,
         require_equals = true,
-        help = "Profile RVR guest execution and print a Firefox Profiler link; optionally save the .json.gz to PATH",
+        help = "Profile RVR guest execution; upload it when PATH is omitted, otherwise save the .json.gz locally",
         help_heading = "Execution Profiling"
     )]
     pub execution_profile: Option<Option<PathBuf>>,
@@ -93,7 +96,7 @@ pub struct RunArgs {
         long,
         short = 'r',
         value_name = "HZ",
-        value_parser = clap::value_parser!(u32).range(1..=1_000_000),
+        value_parser = clap::value_parser!(u32).range(1..=MAX_EXECUTION_PROFILE_HZ as i64),
         requires = "execution_profile",
         help = "Sampling rate, in Hz (default: 1000)",
         help_heading = "Execution Profiling"
@@ -364,14 +367,17 @@ impl RunCmd {
                 let profiler = FirefoxProfiler::new(guest_elf_path, sample_hz)?;
                 match self.run_args.mode {
                     ExecutionMode::Pure => {
-                        let output =
-                            sdk.compile_and_execute_profiled(exe, inputs, profiler.config())?;
+                        let output = sdk.compile_and_execute_profiled(
+                            ExecutableInput::with_elf_path(exe, guest_elf_path),
+                            inputs,
+                            profiler.config(),
+                        )?;
                         eprintln!("[openvm] Execution output: {output:?}");
                     }
                     ExecutionMode::Meter => {
                         let (output, (cost, instret)) = sdk
                             .compile_and_execute_metered_cost_profiled(
-                                exe,
+                                ExecutableInput::with_elf_path(exe, guest_elf_path),
                                 inputs,
                                 profiler.config(),
                             )?;
@@ -381,7 +387,7 @@ impl RunCmd {
                     }
                     ExecutionMode::Segment => {
                         let (output, segments) = sdk.compile_and_execute_metered_profiled(
-                            exe,
+                            ExecutableInput::with_elf_path(exe, guest_elf_path),
                             inputs,
                             profiler.config(),
                         )?;
@@ -404,9 +410,10 @@ impl RunCmd {
                         "[openvm] Saved execution profile to {}",
                         output_path.display()
                     );
+                } else {
+                    let url = profile.upload()?;
+                    println!("{url}");
                 }
-                let url = profile.upload()?;
-                println!("{url}");
                 return Ok(());
             }
             #[cfg(not(feature = "rvr"))]

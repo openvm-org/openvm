@@ -1,7 +1,6 @@
 use std::{
-    collections::HashMap,
     fs,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     thread::{self, Builder},
     time::{Duration, SystemTime},
 };
@@ -10,13 +9,12 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use eyre::{bail, eyre, Context, Result};
 use flate2::{write::GzEncoder, Compression};
 use fxprof_processed_profile::{
-    Category, CategoryColor, CpuDelta, FrameAddress, FrameFlags, FrameSymbolInfo, LibraryInfo,
-    Profile, SamplingInterval, SourceLocation, SubcategoryHandle, Timestamp,
+    CategoryColor, CategoryPairHandle, CpuDelta, Frame, FrameFlags, FrameInfo, Profile,
+    SamplingInterval, Timestamp,
 };
 use object::{Object, ObjectSymbol, SymbolKind};
 use openvm_circuit::arch::rvr::{GuestProfileConfig, RawGuestProfile, RAW_GUEST_PROFILE_VERSION};
 use reqwest::{blocking::Client, header::ACCEPT};
-use samply_debugid::DebugIdExt;
 use serde_json::Value;
 
 const DEFAULT_UPLOAD_URL: &str = "https://api.profiler.firefox.com/compressed-store";
@@ -24,21 +22,38 @@ const FIREFOX_ACCEPT: &str = "application/vnd.firefox-profiler+json;version=1.0"
 
 /// Coordinates one guest execution capture and its Firefox profile conversion.
 pub struct FirefoxProfiler {
-    guest_elf_path: PathBuf,
     config: GuestProfileConfig,
     _raw_profile: tempfile::NamedTempFile,
+    guest_elf: tempfile::NamedTempFile,
+    native_artifact: tempfile::NamedTempFile,
 }
 
 impl FirefoxProfiler {
     pub fn new(guest_elf_path: impl Into<PathBuf>, sample_hz: u32) -> Result<Self> {
+        let guest_elf_path = guest_elf_path.into();
         let raw_profile =
             tempfile::NamedTempFile::new().context("failed to create temporary RVR profile")?;
-        let config =
-            GuestProfileConfig::raw(raw_profile.path(), sample_hz).map_err(|error| eyre!(error))?;
+        let guest_elf = tempfile::NamedTempFile::new()
+            .context("failed to create temporary guest profile artifact")?;
+        fs::copy(&guest_elf_path, guest_elf.path()).with_context(|| {
+            format!(
+                "failed to preserve guest profile artifact {}",
+                guest_elf_path.display()
+            )
+        })?;
+        let native_artifact = tempfile::NamedTempFile::new()
+            .context("failed to create temporary native profile artifact")?;
+        let config = GuestProfileConfig::raw_session_with_native_artifact(
+            raw_profile.path(),
+            native_artifact.path(),
+            sample_hz,
+        )
+        .map_err(|error| eyre!(error))?;
         Ok(Self {
-            guest_elf_path: guest_elf_path.into(),
             config,
             _raw_profile: raw_profile,
+            guest_elf,
+            native_artifact,
         })
     }
 
@@ -49,11 +64,11 @@ impl FirefoxProfiler {
 
     /// Convert the captured raw samples into a reusable Firefox artifact.
     pub fn finish(self) -> Result<FirefoxProfile> {
+        self.config.finish_session().map_err(|error| eyre!(error))?;
         FirefoxProfile::from_raw_guest_stacks(
             self.config.output(),
-            &self.guest_elf_path,
-            None,
-            self.config.sample_hz(),
+            self.guest_elf.path(),
+            Some(self.native_artifact.path()),
         )
     }
 }
@@ -65,15 +80,17 @@ pub struct FirefoxProfile {
 }
 
 impl FirefoxProfile {
-    /// Convert an ordered v3 raw guest profile into a symbolicated Firefox profile.
+    /// Convert an ordered v3 raw guest profile into a function-level Firefox profile.
     ///
-    /// `native_artifact_path` is retained for source compatibility. If supplied,
-    /// it overrides the generated module path recorded in the raw profile.
+    /// Raw v3 retains exact PCs and return-address roles. The processed profile
+    /// intentionally aggregates frames by function name for stable call trees.
+    ///
+    /// If supplied, `native_artifact_path` overrides the generated module path
+    /// recorded in the raw profile.
     pub fn from_raw_guest_stacks(
         raw_profile_path: &Path,
         guest_elf_path: &Path,
         native_artifact_path: Option<&Path>,
-        _sample_hz: u32,
     ) -> Result<Self> {
         let raw = parse_raw_profile(raw_profile_path)?;
         let profile = build_firefox_profile(&raw, guest_elf_path, native_artifact_path)?;
@@ -170,7 +187,6 @@ fn build_firefox_profile(
     profile.set_thread_name(thread, "RV64 guest execution");
     profile.add_initial_selected_thread(thread);
 
-    let guest_lib = add_library(&mut profile, guest_elf_path, None, "riscv64")?;
     let mut native_modules = Vec::with_capacity(raw.native_modules.len());
     for module in &raw.native_modules {
         let path = if module.generated {
@@ -180,10 +196,8 @@ fn build_firefox_profile(
         };
         match BinaryResolver::new(path) {
             Ok(resolver) => {
-                let library = add_library(&mut profile, path, Some(&module.name), "x86_64")?;
                 native_modules.push(NativeModule {
                     resolver: Some(resolver),
-                    library,
                     generated: module.generated,
                 });
             }
@@ -198,27 +212,13 @@ fn build_firefox_profile(
             Err(_) => {
                 native_modules.push(NativeModule {
                     resolver: None,
-                    library: add_unresolved_library(&mut profile, &module.name, "x86_64"),
                     generated: false,
                 });
             }
         }
     }
-    let unknown_native_lib = profile.add_lib(LibraryInfo {
-        name: "[unknown native]".to_string(),
-        debug_name: "[unknown native]".to_string(),
-        path: "[unknown native]".to_string(),
-        debug_path: "[unknown native]".to_string(),
-        debug_id: debugid::DebugId::nil(),
-        code_id: None,
-        arch: Some("x86_64".to_string()),
-    });
-
-    let guest_category: SubcategoryHandle = profile
-        .handle_for_category(Category("Guest", CategoryColor::Yellow))
-        .into();
-    let mut native_symbols = HashMap::new();
-    let mut strings = HashMap::new();
+    let guest_category: CategoryPairHandle =
+        profile.add_category("Guest", CategoryColor::Yellow).into();
     let mut previous_cpu_time = raw.start_cpu_time_ns;
 
     for sample in &raw.samples {
@@ -235,11 +235,7 @@ fn build_firefox_profile(
             let lookup_pc = return_pc.saturating_sub(1);
             emit_resolved_pc(
                 &mut profile,
-                &mut native_symbols,
-                &mut strings,
                 &mut frame_handles,
-                guest_lib,
-                0,
                 lookup_pc,
                 guest_resolver.resolve(lookup_pc),
                 guest_category,
@@ -256,11 +252,7 @@ fn build_firefox_profile(
             if let Some(callsite_pc) = sample.guest_callsite_pc {
                 emit_resolved_pc(
                     &mut profile,
-                    &mut native_symbols,
-                    &mut strings,
                     &mut frame_handles,
-                    guest_lib,
-                    0,
                     callsite_pc,
                     guest_resolver.resolve(callsite_pc),
                     guest_category,
@@ -273,11 +265,8 @@ fn build_firefox_profile(
         if let Some(native_leaf) = &sample.native_leaf {
             emit_native_leaf(
                 &mut profile,
-                &mut native_symbols,
-                &mut strings,
                 &mut frame_handles,
                 &native_modules,
-                unknown_native_lib,
                 &guest_resolver,
                 native_leaf.module_index,
                 native_leaf.pc,
@@ -285,10 +274,7 @@ fn build_firefox_profile(
             );
         }
 
-        let mut stack = None;
-        for frame in frame_handles {
-            stack = Some(profile.handle_for_stack(frame, stack));
-        }
+        let stack = profile.intern_stack_frames(thread, frame_handles.into_iter());
         profile.add_sample(thread, timestamp, stack, cpu_delta, 1);
     }
 
@@ -299,28 +285,20 @@ fn build_firefox_profile(
     Ok(profile)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn emit_native_leaf(
     profile: &mut Profile,
-    native_symbols: &mut HashMap<(usize, u32), fxprof_processed_profile::NativeSymbolHandle>,
-    strings: &mut HashMap<String, fxprof_processed_profile::StringHandle>,
-    output: &mut Vec<fxprof_processed_profile::FrameHandle>,
+    output: &mut Vec<FrameInfo>,
     modules: &[NativeModule],
-    unknown_lib: fxprof_processed_profile::LibraryHandle,
     guest_resolver: &BinaryResolver,
     module_index: Option<u32>,
     native_pc: u64,
-    category: SubcategoryHandle,
+    category: CategoryPairHandle,
 ) {
     let Some(module) = module_index.and_then(|index| modules.get(index as usize)) else {
         let pc = u32::try_from(native_pc).unwrap_or(u32::MAX);
         emit_frame_chain(
             profile,
-            native_symbols,
-            strings,
             output,
-            unknown_lib,
-            usize::MAX,
             pc,
             &[ResolvedFrame::named(format!("native 0x{native_pc:x}"))],
             category,
@@ -336,33 +314,15 @@ fn emit_native_leaf(
     if module.generated {
         replace_block_frame(&mut chain, guest_resolver);
     }
-    let module_index = module_index.unwrap_or(u32::MAX) as usize + 1;
-    emit_resolved_pc(
-        profile,
-        native_symbols,
-        strings,
-        output,
-        module.library,
-        module_index,
-        native_pc,
-        chain,
-        category,
-        false,
-        "native",
-    );
+    emit_resolved_pc(profile, output, native_pc, chain, category, false, "native");
 }
 
-#[allow(clippy::too_many_arguments)]
 fn emit_resolved_pc(
     profile: &mut Profile,
-    native_symbols: &mut HashMap<(usize, u32), fxprof_processed_profile::NativeSymbolHandle>,
-    strings: &mut HashMap<String, fxprof_processed_profile::StringHandle>,
-    output: &mut Vec<fxprof_processed_profile::FrameHandle>,
-    library: fxprof_processed_profile::LibraryHandle,
-    library_tag: usize,
+    output: &mut Vec<FrameInfo>,
     pc: u64,
     mut chain: Vec<ResolvedFrame>,
-    category: SubcategoryHandle,
+    category: CategoryPairHandle,
     is_return_address: bool,
     kind: &str,
 ) {
@@ -374,11 +334,7 @@ fn emit_resolved_pc(
     }
     emit_frame_chain(
         profile,
-        native_symbols,
-        strings,
         output,
-        library,
-        library_tag,
         relative_pc,
         &chain,
         category,
@@ -389,25 +345,16 @@ fn emit_resolved_pc(
 #[derive(Clone, Debug)]
 struct ResolvedFrame {
     name: String,
-    file: Option<String>,
-    line: Option<u32>,
-    column: Option<u32>,
 }
 
 impl ResolvedFrame {
     fn named(name: String) -> Self {
-        Self {
-            name,
-            file: None,
-            line: None,
-            column: None,
-        }
+        Self { name }
     }
 }
 
 struct NativeModule {
     resolver: Option<BinaryResolver>,
-    library: fxprof_processed_profile::LibraryHandle,
     generated: bool,
 }
 
@@ -513,59 +460,15 @@ impl BinaryResolver {
                 let Some(name) = name else {
                     continue;
                 };
-                let (file, line, column) = frame
-                    .location
-                    .as_ref()
-                    .map(|location| {
-                        (
-                            location.file.map(sanitize_source_path),
-                            location.line,
-                            location.column,
-                        )
-                    })
-                    .unwrap_or((None, None, None));
-                chain.push(ResolvedFrame {
-                    name,
-                    file,
-                    line,
-                    column,
-                });
+                chain.push(ResolvedFrame { name });
             }
             // addr2line yields the interrupted/inlined leaf first.
             chain.reverse();
         }
 
-        let (location_file, location_line, location_column) = self
-            .loader
-            .find_location(pc)
-            .ok()
-            .flatten()
-            .map(|location| {
-                (
-                    location.file.map(sanitize_source_path),
-                    location.line,
-                    location.column,
-                )
-            })
-            .unwrap_or((None, None, None));
         if chain.is_empty() {
             if let Some(name) = fallback_name {
-                chain.push(ResolvedFrame {
-                    name,
-                    file: location_file,
-                    line: location_line,
-                    column: location_column,
-                });
-            }
-        } else if let Some(leaf) = chain.last_mut() {
-            if leaf.file.is_none() {
-                leaf.file = location_file;
-            }
-            if leaf.line.is_none() {
-                leaf.line = location_line;
-            }
-            if leaf.column.is_none() {
-                leaf.column = location_column;
+                chain.push(ResolvedFrame { name });
             }
         }
         chain
@@ -609,10 +512,7 @@ fn is_guest_execution_symbol(name: &str) -> bool {
 
 fn replace_block_frame(chain: &mut [ResolvedFrame], guest_resolver: &BinaryResolver) {
     for frame in chain {
-        let Some(hex_pc) = frame.name.strip_prefix("block_0x") else {
-            continue;
-        };
-        let Ok(pc) = u64::from_str_radix(hex_pc, 16) else {
+        let Some(pc) = block_symbol_pc(&frame.name) else {
             continue;
         };
         if let Some(guest_frame) = guest_resolver.resolve(pc).last() {
@@ -624,63 +524,14 @@ fn replace_block_frame(chain: &mut [ResolvedFrame], guest_resolver: &BinaryResol
     }
 }
 
-fn add_library(
-    profile: &mut Profile,
-    path: &Path,
-    name_override: Option<&str>,
-    arch: &str,
-) -> Result<fxprof_processed_profile::LibraryHandle> {
-    let data = fs::read(path)
-        .with_context(|| format!("failed to read library metadata from {}", path.display()))?;
-    let object = object::File::parse(&*data)
-        .with_context(|| format!("failed to parse library metadata from {}", path.display()))?;
-    let build_id = object.build_id().ok().flatten();
-    let name = name_override
-        .and_then(|name| Path::new(name).file_name())
-        .or_else(|| path.file_name())
-        .and_then(|name| name.to_str())
-        .unwrap_or("openvm-profile")
-        .to_string();
-    let debug_id = build_id
-        .map(|build_id| debug_id_from_build_id(build_id, object.is_little_endian()))
-        .unwrap_or_default();
-    let code_id = build_id.map(|id| debugid::CodeId::from_binary(id).to_string());
-    // The payload is already locally symbolicated. Publishing only the stable
-    // module name avoids leaking workstation and temporary-directory paths.
-    Ok(profile.add_lib(LibraryInfo {
-        name: name.clone(),
-        debug_name: name.clone(),
-        path: name.clone(),
-        debug_path: name,
-        debug_id,
-        code_id,
-        arch: Some(arch.to_string()),
-    }))
-}
-
-fn add_unresolved_library(
-    profile: &mut Profile,
-    name: &str,
-    arch: &str,
-) -> fxprof_processed_profile::LibraryHandle {
-    let name = Path::new(name)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("unavailable-native-module")
-        .to_string();
-    profile.add_lib(LibraryInfo {
-        name: name.clone(),
-        debug_name: name.clone(),
-        path: name.clone(),
-        debug_path: name,
-        debug_id: debugid::DebugId::nil(),
-        code_id: None,
-        arch: Some(arch.to_string()),
-    })
-}
-
-fn debug_id_from_build_id(build_id: &[u8], little_endian: bool) -> debugid::DebugId {
-    debugid::DebugId::from_identifier(build_id, little_endian)
+fn block_symbol_pc(name: &str) -> Option<u64> {
+    let suffix = name.strip_prefix("block_0x")?;
+    let hex_len = suffix
+        .as_bytes()
+        .iter()
+        .take_while(|byte| byte.is_ascii_hexdigit())
+        .count();
+    u64::from_str_radix(suffix.get(..hex_len)?, 16).ok()
 }
 
 fn observed_interval_ns(raw: &RawGuestProfile) -> f64 {
@@ -705,196 +556,21 @@ fn observed_interval_ns(raw: &RawGuestProfile) -> f64 {
     (1_000_000_000_u64 / u64::from(raw.requested_sample_hz.max(1))) as f64
 }
 
-fn sanitize_source_path(path: &str) -> String {
-    let components = Path::new(path)
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(value) => value.to_str().map(str::to_string),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    if let Some(index) = subsequence(&components, &[".cargo", "registry", "src"]) {
-        return components
-            .iter()
-            .skip(index + 4)
-            .cloned()
-            .collect::<PathBuf>()
-            .display()
-            .to_string();
-    }
-    if let Some(index) = subsequence(&components, &[".cargo", "git", "checkouts"]) {
-        let repo = components
-            .get(index + 3)
-            .map_or("git-checkout", String::as_str);
-        let tail = components
-            .iter()
-            .skip(index + 5)
-            .cloned()
-            .collect::<PathBuf>();
-        return Path::new(repo).join(tail).display().to_string();
-    }
-    if let Some(index) = subsequence(&components, &["lib", "rustlib", "src", "rust"]) {
-        return components
-            .iter()
-            .skip(index + 3)
-            .cloned()
-            .collect::<PathBuf>()
-            .display()
-            .to_string();
-    }
-    if let Some(index) = components
-        .windows(3)
-        .position(|window| window[0] == "target" && window[2] == "build")
-    {
-        return components[index + 2..]
-            .iter()
-            .cloned()
-            .collect::<PathBuf>()
-            .display()
-            .to_string();
-    }
-    if let Some(index) = components.iter().position(|component| {
-        matches!(
-            component.as_str(),
-            "crates" | "benches" | "guest-programs" | "extensions"
-        )
-    }) {
-        return components[index..]
-            .iter()
-            .cloned()
-            .collect::<PathBuf>()
-            .display()
-            .to_string();
-    }
-    if let Some(index) = components
-        .iter()
-        .position(|component| component == ".worktrees")
-    {
-        return join_sanitized_tail(&components, index + 2, "worktree-source");
-    }
-    if matches!(
-        components.first().map(String::as_str),
-        Some("home" | "Users")
-    ) {
-        return join_sanitized_tail(&components, 2, "home-source");
-    }
-    if components
-        .first()
-        .is_some_and(|component| component == "tmp")
-    {
-        return sanitize_temporary_tail(&components, 1);
-    }
-    if components
-        .get(..2)
-        .is_some_and(|prefix| prefix[0] == "private" && prefix[1] == "tmp")
-    {
-        return sanitize_temporary_tail(&components, 2);
-    }
-    components
-        .iter()
-        .rev()
-        .take(3)
-        .rev()
-        .cloned()
-        .collect::<PathBuf>()
-        .display()
-        .to_string()
-}
-
-fn sanitize_temporary_tail(components: &[String], prefix_len: usize) -> String {
-    let remaining = components.len().saturating_sub(prefix_len);
-    if remaining >= 2 {
-        join_sanitized_tail(components, prefix_len + 1, "temporary-source")
-    } else if components
-        .last()
-        .and_then(|component| Path::new(component).extension())
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| {
-            matches!(
-                extension,
-                "rs" | "c" | "h" | "cc" | "cpp" | "s" | "S" | "asm"
-            )
-        })
-    {
-        join_sanitized_tail(components, prefix_len, "temporary-source")
-    } else {
-        "temporary-source".to_string()
-    }
-}
-
-fn join_sanitized_tail(components: &[String], start: usize, fallback: &str) -> String {
-    let tail = components.iter().skip(start).cloned().collect::<PathBuf>();
-    if tail.as_os_str().is_empty() {
-        fallback.to_string()
-    } else {
-        tail.display().to_string()
-    }
-}
-
-fn subsequence(components: &[String], needle: &[&str]) -> Option<usize> {
-    components
-        .windows(needle.len())
-        .position(|window| window.iter().map(String::as_str).eq(needle.iter().copied()))
-}
-
-#[allow(clippy::too_many_arguments)]
 fn emit_frame_chain(
     profile: &mut Profile,
-    native_symbols: &mut HashMap<(usize, u32), fxprof_processed_profile::NativeSymbolHandle>,
-    strings: &mut HashMap<String, fxprof_processed_profile::StringHandle>,
-    output: &mut Vec<fxprof_processed_profile::FrameHandle>,
-    library: fxprof_processed_profile::LibraryHandle,
-    library_tag: usize,
-    pc: u32,
+    output: &mut Vec<FrameInfo>,
+    _pc: u32,
     chain: &[ResolvedFrame],
-    category: SubcategoryHandle,
-    is_return_address: bool,
+    category: CategoryPairHandle,
+    _is_return_address: bool,
 ) {
-    if chain.is_empty() {
-        return;
+    for frame in chain {
+        output.push(FrameInfo {
+            frame: Frame::Label(profile.intern_string(&frame.name)),
+            category_pair: category,
+            flags: FrameFlags::empty(),
+        });
     }
-    let outer_name = intern_string(profile, strings, &chain[0].name);
-    let native_symbol = *native_symbols
-        .entry((library_tag, pc))
-        .or_insert_with(|| profile.handle_for_native_symbol(library, pc, None, outer_name));
-    for (inline_depth, frame) in chain.iter().enumerate() {
-        let address = if is_return_address {
-            FrameAddress::RelativeAddressFromAdjustedReturnAddress(library, pc)
-        } else {
-            FrameAddress::RelativeAddressFromInstructionPointer(library, pc)
-        };
-        let symbol = FrameSymbolInfo {
-            name: Some(intern_string(profile, strings, &frame.name)),
-            native_symbol,
-            source_location: SourceLocation {
-                file_path: frame
-                    .file
-                    .as_deref()
-                    .map(|file| intern_string(profile, strings, file)),
-                line: frame.line,
-                col: frame.column,
-                function_start_line: None,
-                function_start_col: None,
-            },
-        };
-        output.push(profile.handle_for_frame_with_address_and_symbol(
-            address,
-            symbol,
-            inline_depth as u16,
-            category,
-            FrameFlags::empty(),
-        ));
-    }
-}
-
-fn intern_string(
-    profile: &mut Profile,
-    strings: &mut HashMap<String, fxprof_processed_profile::StringHandle>,
-    value: &str,
-) -> fxprof_processed_profile::StringHandle {
-    *strings
-        .entry(value.to_string())
-        .or_insert_with(|| profile.handle_for_string(value))
 }
 
 fn compress_profile(profile: &Profile) -> Result<Vec<u8>> {
@@ -993,10 +669,9 @@ mod tests {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
     use super::{
-        build_firefox_profile, build_id_debug_path, debug_id_from_build_id,
-        is_guest_execution_symbol, observed_interval_ns, parse_raw_profile,
-        public_url_from_response, sanitize_source_path, upload_profile_blocking_to,
-        RawGuestProfile, FIREFOX_ACCEPT,
+        block_symbol_pc, build_firefox_profile, build_id_debug_path, is_guest_execution_symbol,
+        observed_interval_ns, parse_raw_profile, public_url_from_response,
+        upload_profile_blocking_to, RawGuestProfile, FIREFOX_ACCEPT,
     };
 
     #[test]
@@ -1091,10 +766,7 @@ mod tests {
         let json = serde_json::to_value(profile).unwrap();
         assert_eq!(json["meta"]["interval"], 1.0);
         assert_eq!(json["meta"]["startTime"], 1234.0);
-        let library = &json["libs"][0];
-        assert_eq!(library["path"], library["name"]);
-        assert!(!library["path"].as_str().unwrap().contains('/'));
-        assert_eq!(library["arch"], "riscv64");
+        assert!(!json.to_string().contains(&executable.display().to_string()));
     }
 
     #[test]
@@ -1128,71 +800,6 @@ mod tests {
     }
 
     #[test]
-    fn sanitizes_private_and_dependency_source_prefixes() {
-        assert_eq!(
-            sanitize_source_path(
-                "/home/alice/.cargo/registry/src/index-abcd/serde-1.0.0/src/lib.rs"
-            ),
-            "serde-1.0.0/src/lib.rs"
-        );
-        assert_eq!(
-            sanitize_source_path("/tmp/build.secret/openvm/crates/vm/src/lib.rs"),
-            "crates/vm/src/lib.rs"
-        );
-        assert_eq!(
-            sanitize_source_path("/home/alice/private/generated/block_0x10.c"),
-            "private/generated/block_0x10.c"
-        );
-        assert_eq!(sanitize_source_path("/home/alice/main.rs"), "main.rs");
-        assert_eq!(
-            sanitize_source_path(
-                "/home/alice/.worktrees/private-branch/target/profiling/build/native-abc/out/src/file.c"
-            ),
-            "build/native-abc/out/src/file.c"
-        );
-        assert_eq!(
-            sanitize_source_path("/home/alice/.worktrees/private-branch/vendor/file.c"),
-            "vendor/file.c"
-        );
-        assert_eq!(
-            sanitize_source_path("/Users/alice/project/src/main.rs"),
-            "project/src/main.rs"
-        );
-        assert_eq!(
-            sanitize_source_path("/tmp/openvm-run.ABC123/dispatch.c"),
-            "dispatch.c"
-        );
-        assert_eq!(
-            sanitize_source_path("/private/tmp/.tmp-secret/block.c"),
-            "block.c"
-        );
-        assert_eq!(
-            sanitize_source_path("/tmp/openvm-run.ABC123"),
-            "temporary-source"
-        );
-    }
-
-    #[test]
-    fn build_id_debug_id_uses_object_endianness() {
-        let identifier = [
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-            0x0f, 0x10,
-        ];
-        assert_eq!(
-            debug_id_from_build_id(&identifier, true)
-                .breakpad()
-                .to_string(),
-            "0403020106050807090A0B0C0D0E0F100"
-        );
-        assert_eq!(
-            debug_id_from_build_id(&identifier, false)
-                .breakpad()
-                .to_string(),
-            "0102030405060708090A0B0C0D0E0F100"
-        );
-    }
-
-    #[test]
     fn build_id_maps_to_the_standard_debug_file_path() {
         assert_eq!(
             build_id_debug_path(&[0x8e, 0x9f, 0xd8, 0x27]).unwrap(),
@@ -1209,6 +816,17 @@ mod tests {
         assert!(!is_guest_execution_symbol("metered_checkpoint"));
         assert!(!is_guest_execution_symbol("openvm_hint_input"));
         assert!(!is_guest_execution_symbol("memcpy"));
+    }
+
+    #[test]
+    fn parses_checkpoint_block_symbols() {
+        assert_eq!(block_symbol_pc("block_0x00200100"), Some(0x0020_0100));
+        assert_eq!(
+            block_symbol_pc("block_0x00200100_checkpoint"),
+            Some(0x0020_0100)
+        );
+        assert_eq!(block_symbol_pc("block_0x"), None);
+        assert_eq!(block_symbol_pc("rv_execute"), None);
     }
 
     #[test]

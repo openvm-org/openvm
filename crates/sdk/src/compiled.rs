@@ -169,6 +169,25 @@ impl<'a> CompiledExePreflight<'a> {
     }
 
     #[cfg(feature = "rvr")]
+    /// Whether this artifact can be passed to the profiled execution APIs.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.instance.is_profile_compatible()
+    }
+
+    #[cfg(feature = "rvr")]
+    /// Execute exactly one metered segment and append its profile samples.
+    pub fn execute_segment_profiled(
+        &self,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+        profile: &GuestProfileConfig,
+    ) -> Result<PreflightOutput, ExecutionError> {
+        self.instance
+            .execute_segment_profiled(state, segment, profile)
+            .map(PreflightOutput::new)
+    }
+
+    #[cfg(feature = "rvr")]
     pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
         self.instance.save(dir)
     }

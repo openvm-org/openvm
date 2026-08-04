@@ -692,12 +692,9 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// Emit a PC read when value tracing is enabled.
+    /// Record the current instruction PC for a possible profiled host call.
     pub fn trace_pc(&mut self, pc: u64) {
         self.current_pc = Some(pc);
-        if self.mode.traces_values() {
-            self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
-        }
     }
 
     fn emit_profile_callsite(&mut self) {
@@ -971,6 +968,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         EmitContext::emit_call_without_page_flush(self, name, args);
+    }
+
+    fn before_call_without_page_flush(&mut self) {
+        self.emit_profile_callsite();
     }
 
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
@@ -1412,5 +1413,28 @@ mod tests {
                 "        host_callback(value);\n",
             )
         );
+    }
+
+    #[test]
+    fn profiling_snapshots_checked_inline_calls() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Preflight,
+            BlockAbi::Plain,
+            None,
+            None,
+            true,
+        );
+        ctx.trace_pc(0x20_1234);
+        ExtEmitCtx::emit_checked_call_without_page_flush(
+            &mut ctx,
+            "openvm_hint_prepare",
+            &["ptr", "1u"],
+        );
+
+        let output = ctx.take_buf();
+        let snapshot = output.find("rv_profile_guest_pc").unwrap();
+        let call = output.find("openvm_hint_prepare").unwrap();
+        assert!(snapshot < call);
     }
 }

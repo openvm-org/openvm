@@ -12,13 +12,11 @@ license.workspace = true
 [dependencies]
 base64 = "0.22"
 addr2line = { version = "0.24", default-features = false, features = ["std", "loader", "rustc-demangle"] }
-debugid = "0.8"
 eyre.workspace = true
 flate2 = "1"
-fxprof-processed-profile = { git = "https://github.com/mstange/samply.git", rev = "c11e5a4cfc010095e7688f3e798b720ef8a9d657" }
+fxprof-processed-profile = "0.8.1"
 openvm-circuit = { workspace = true, features = ["rvr"] }
 object = "0.36"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
-samply-debugid = { git = "https://github.com/mstange/samply.git", rev = "c11e5a4cfc010095e7688f3e798b720ef8a9d657" }
 serde_json.workspace = true
 tempfile.workspace = true

@@ -458,6 +458,28 @@ pub(crate) fn compile_preflight<F: PrimeField32>(
     )
 }
 
+/// Compile a preflight artifact with native profiling information.
+pub fn compile_preflight_profiled<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::Preflight,
+            extensions,
+            chips: None,
+            guest_debug_map,
+            native_debug_info: true,
+            sanitize: false,
+            profile_execution: true,
+            keep_artifacts: false,
+        },
+    )
+}
+
 /// Compile a VmExe with per-chip metered execution.
 pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,

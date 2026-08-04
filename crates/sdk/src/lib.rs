@@ -507,6 +507,9 @@ where
     }
 
     /// Compile and execute with explicit RVR guest profiling.
+    ///
+    /// The guest ELF must correspond to the executable and must be built with
+    /// frame pointers and debug information for complete call-stack attribution.
     #[cfg(feature = "rvr")]
     pub fn compile_and_execute_profiled(
         &self,
@@ -520,6 +523,9 @@ where
 
     /// Compile a pure RVR artifact with native debug information for exact
     /// interrupted-host-PC execution profiling.
+    ///
+    /// The guest ELF must correspond to the executable and must be built with
+    /// frame pointers and debug information for complete call-stack attribution.
     #[cfg(feature = "rvr")]
     #[tracing::instrument(name = "sdk.compile_profiled", level = "info", skip_all)]
     pub fn compile_profiled(
@@ -671,6 +677,30 @@ where
             .map_err(SdkError::from)
     }
 
+    /// Compile bounded preflight execution with guest profiling support.
+    ///
+    /// The guest ELF must correspond to the executable and must be built with
+    /// frame pointers and debug information for complete call-stack attribution.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.compile_preflight_profiled", level = "info", skip_all)]
+    pub fn compile_preflight_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePreflight<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        self.executor
+            .preflight_profiled_instance(&exe, guest_debug_map.as_ref())
+            .map(CompiledExePreflight::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
     /// Run preflight for exactly one metered segment from `state`.
     #[tracing::instrument(name = "sdk.execute_preflight", level = "info", skip_all)]
     pub fn execute_preflight(
@@ -681,6 +711,22 @@ where
     ) -> Result<PreflightOutput, SdkError> {
         compiled
             .execute_segment(state, segment)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Run one profiled preflight segment, appending to a session profile.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.execute_preflight_profiled", level = "info", skip_all)]
+    pub fn execute_preflight_profiled(
+        &self,
+        compiled: &CompiledExePreflight<'_>,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+        profile: &GuestProfileConfig,
+    ) -> Result<PreflightOutput, SdkError> {
+        compiled
+            .execute_segment_profiled(state, segment, profile)
             .map_err(VirtualMachineError::from)
             .map_err(SdkError::from)
     }

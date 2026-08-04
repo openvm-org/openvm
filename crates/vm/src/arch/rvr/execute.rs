@@ -178,50 +178,99 @@ fn run_and_finalize<ModeState>(
     state: &mut RvState<ModeState>,
     allow_suspended: bool,
     preflight_deferral_dirty_pages: Option<&mut [u64]>,
+    profile: Option<&GuestProfileConfig>,
 ) -> Result<ExecutionStatus, ExecuteError> {
-    let mut io_state = build_io_state_borrowed(vm_state, preflight_deferral_dirty_pages);
-    unsafe {
-        register_openvm_io_ctx(compiled, &mut io_state)?;
-        for hook in runtime_hooks {
-            hook.register_host_callbacks(&compiled.lib)?;
+    let capture = {
+        let mut io_state = build_io_state_borrowed(vm_state, preflight_deferral_dirty_pages);
+        unsafe {
+            register_openvm_io_ctx(compiled, &mut io_state)?;
+            for hook in runtime_hooks {
+                hook.register_host_callbacks(&compiled.lib)?;
+            }
+            execute_profiled(compiled, state, profile)?
         }
-        rv_execute(compiled, state.as_void_ptr())?;
-    }
+    };
 
     let status = state.execution_status();
     let exit_code = state.exit_code();
-    match status {
-        ExecutionStatus::Terminated if exit_code == 0 => {
-            write_rv64_registers(vm_state, &state.regs);
-            vm_state.set_pc(
-                u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
-            );
-            Ok(status)
+    let status = match status {
+        ExecutionStatus::Terminated if exit_code == 0 => status,
+        ExecutionStatus::Suspended if allow_suspended => status,
+        _ => {
+            return Err(if status == ExecutionStatus::Terminated {
+                ExecuteError::GuestExit(exit_code)
+            } else {
+                ExecuteError::ExecutionFailed(status as i32)
+            });
         }
-        ExecutionStatus::Suspended if allow_suspended => {
-            write_rv64_registers(vm_state, &state.regs);
-            vm_state.set_pc(
-                u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
-            );
-            Ok(status)
-        }
-        _ => Err(if status == ExecutionStatus::Terminated {
-            ExecuteError::GuestExit(exit_code)
+    };
+    write_rv64_registers(vm_state, &state.regs);
+    vm_state
+        .set_pc(u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"));
+    if let (Some(config), Some(capture)) = (profile, capture) {
+        commit_guest_profile(compiled, config, capture)?;
+    }
+    Ok(status)
+}
+
+pub(super) fn commit_guest_profile(
+    compiled: &RvrCompiled,
+    config: &GuestProfileConfig,
+    profile: super::RawGuestProfile,
+) -> Result<(), ExecuteError> {
+    if config.is_session() {
+        config
+            .validate_session_profile(&profile)
+            .map_err(ExecuteError::GuestProfile)?;
+        let preserve_artifact = config
+            .session_needs_native_artifact()
+            .map_err(ExecuteError::GuestProfile)?;
+        let artifact_saved = if preserve_artifact {
+            if let Some(output) = config.native_artifact_output() {
+                compiled.save_artifact(output).map_err(|error| {
+                    ExecuteError::GuestProfile(format!(
+                        "failed to preserve native profile artifact: {error}"
+                    ))
+                })?;
+                true
+            } else {
+                false
+            }
         } else {
-            ExecuteError::ExecutionFailed(status as i32)
-        }),
+            false
+        };
+        config
+            .append_session(profile, artifact_saved)
+            .map_err(ExecuteError::GuestProfile)
+    } else {
+        let output = serde_json::to_vec(&profile).map_err(|error| {
+            ExecuteError::GuestProfile(format!("failed to serialize raw guest profile: {error}"))
+        })?;
+        std::fs::write(config.output(), output).map_err(|error| {
+            ExecuteError::GuestProfile(format!(
+                "failed to write guest profile {}: {error}",
+                config.output().display()
+            ))
+        })?;
+        if let Some(output) = config.native_artifact_output() {
+            compiled.save_artifact(output).map_err(|error| {
+                ExecuteError::GuestProfile(format!(
+                    "failed to preserve native profile artifact: {error}"
+                ))
+            })?;
+        }
+        Ok(())
     }
 }
 
 /// Run one complete RVR execution with optional guest profiling. The profiler
 /// is finished even when execution fails, but the execution error remains
 /// primary.
-fn run_profiled<ModeState, T>(
+unsafe fn execute_profiled<ModeState>(
     compiled: &RvrCompiled,
     state: &mut RvState<ModeState>,
     profile: Option<&GuestProfileConfig>,
-    execute: impl FnOnce(&mut RvState<ModeState>) -> Result<T, ExecuteError>,
-) -> Result<T, ExecuteError> {
+) -> Result<Option<super::RawGuestProfile>, ExecuteError> {
     if profile.is_some() {
         compiled
             .require_profile_compatible()
@@ -238,17 +287,18 @@ fn run_profiled<ModeState, T>(
             "RVR guest profiling currently requires Linux x86_64".to_string(),
         ));
     }
-    let execution_result = execute(state);
+    let execution_result = unsafe { rv_execute(compiled, state.as_void_ptr()) };
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let profile_result = profiler
-        .map(|profiler| profiler.finish(compiled))
+        .map(|profiler| profiler.finish_capture(compiled))
         .transpose()
         .map_err(ExecuteError::GuestProfile);
 
-    let output = execution_result?;
+    execution_result?;
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    profile_result?;
-    Ok(output)
+    return profile_result;
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    Ok(None)
 }
 
 // ── Public execute functions ─────────────────────────────────────────────────
@@ -270,23 +320,41 @@ pub(super) fn execute_pure(
     let initial_regs = read_rv64_registers(vm_state);
     let mut state: PureRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
-    run_profiled(compiled, &mut state, profile, |state| {
-        run_and_finalize(compiled, runtime_hooks, vm_state, state, false, None)
-            .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))
-    })?;
+    run_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        false,
+        None,
+        profile,
+    )
+    .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
     Ok(())
 }
 
 /// Execute a compiled preflight artifact.
+pub(super) struct PreflightExecuteOptions<'a> {
+    pub limits: PreflightLimits,
+    pub timestamp_max_bits: usize,
+    pub allow_suspended: bool,
+    pub reuse: Option<PreflightTranscript>,
+    pub profile: Option<&'a GuestProfileConfig>,
+}
+
 pub(super) fn execute_preflight(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
-    limits: PreflightLimits,
-    timestamp_max_bits: usize,
-    allow_suspended: bool,
-    reuse: Option<PreflightTranscript>,
+    options: PreflightExecuteOptions<'_>,
 ) -> Result<(PreflightTranscript, PreflightEndpoint, u32, u32), ExecuteError> {
+    let PreflightExecuteOptions {
+        limits,
+        timestamp_max_bits,
+        allow_suspended,
+        reuse,
+        profile,
+    } = options;
     require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
     let mut buffers = match reuse {
@@ -307,6 +375,7 @@ pub(super) fn execute_preflight(
         &mut state,
         allow_suspended,
         Some(dirty_pages.deferral_mut()),
+        profile,
     );
     if state.mode_state.error != 0 {
         return Err(ExecuteError::InvalidPreflightContext(format!(
@@ -388,6 +457,7 @@ fn execute_pure_with_instret_tracking_impl(
         &mut state,
         allow_suspended,
         None,
+        None,
     )
     .inspect_err(|error| tracing::warn!(%error, "rvr tracked pure execution failed"))?;
     Ok(TrackedExecutionResult {
@@ -410,10 +480,16 @@ pub(super) fn execute_metered_cost(
     let mut state: MeteredCostRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
 
-    run_profiled(compiled, &mut state, profile, |state| {
-        run_and_finalize(compiled, runtime_hooks, vm_state, state, false, None)
-            .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))
-    })?;
+    run_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        false,
+        None,
+        profile,
+    )
+    .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
     Ok(RvrMeteredCostResult {
         instret: state.mode_state.instret,
         cost: state.mode_state.cost,
@@ -444,10 +520,21 @@ fn execute_metered_profiled(
     mut seg_state: SegmentationState,
     profile: Option<&GuestProfileConfig>,
 ) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
+    require_num_airs(
+        compiled,
+        seg_state.ctx.trace_heights.len(),
+        "trace-height storage",
+    )?;
     let mut state = prepare_metered_state(vm_state, &mut seg_state)?;
-    run_profiled(compiled, &mut state, profile, |state| {
-        run_metered_state(compiled, runtime_hooks, vm_state, state, seg_state, false)
-    })
+    run_metered_state(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        seg_state,
+        false,
+        profile,
+    )
 }
 
 /// Execute a VmExe with per-chip metered execution until termination or a segment boundary.
@@ -490,6 +577,7 @@ fn execute_metered_impl(
         &mut state,
         seg_state,
         allow_suspended,
+        None,
     )
 }
 
@@ -526,6 +614,7 @@ fn run_metered_state(
     state: &mut MeteredRvState,
     mut seg_state: SegmentationState,
     allow_suspended: bool,
+    profile: Option<&GuestProfileConfig>,
 ) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
     state.mode_state.seg_state = &mut seg_state;
     let status = run_and_finalize(
@@ -535,6 +624,7 @@ fn run_metered_state(
         state,
         allow_suspended,
         None,
+        profile,
     )
     .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
 

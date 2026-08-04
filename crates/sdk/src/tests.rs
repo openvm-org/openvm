@@ -10,6 +10,8 @@ use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
 #[cfg(feature = "cuda")]
 use openvm_circuit::arch::{verify_segments, VirtualMachineError};
 use openvm_continuations::prover::DeferralCircuitProver;
+#[cfg(all(feature = "rvr", target_os = "linux", target_arch = "x86_64"))]
+use openvm_execution_profile::FirefoxProfiler;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
     SdkVmConfig,
@@ -807,6 +809,43 @@ fn test_sdk_compiled_preflight_executes_metered_segment() -> Result<()> {
     let output = sdk.execute_preflight(&preflight, empty.into_state(), &segments[0])?;
 
     assert_eq!(output.is_terminated(), segments.len() == 1);
+    Ok(())
+}
+
+#[cfg(all(feature = "rvr", target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn test_sdk_profiled_preflight_session() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf_bytes = include_bytes!("../programs/examples/fibonacci.elf");
+    let dir = tempfile::tempdir()?;
+    let elf_path = dir.path().join("fibonacci.elf");
+    fs::write(&elf_path, elf_bytes)?;
+    let elf = Elf::decode(elf_bytes, MEM_SIZE as u32)?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&1_000_000u64);
+    let metered = sdk.compile_metered(exe.clone())?;
+    let (_, segments) = sdk.execute_metered(&metered, stdin.clone())?;
+    let preflight =
+        sdk.compile_preflight_profiled(ExecutableInput::with_elf_path(exe, &elf_path))?;
+    assert!(preflight.is_profile_compatible());
+
+    let profiler = FirefoxProfiler::new(&elf_path, 20_000)?;
+    fs::remove_file(&elf_path)?;
+    let mut state = preflight.create_initial_vm_state(stdin);
+    let mut terminated = false;
+    for segment in &segments {
+        let output =
+            sdk.execute_preflight_profiled(&preflight, state, segment, profiler.config())?;
+        terminated = output.is_terminated();
+        state = output.into_state();
+    }
+    assert!(terminated);
+
+    drop(preflight);
+    let profile = profiler.finish()?;
+    assert!(profile.sample_count() > 0);
     Ok(())
 }
 
