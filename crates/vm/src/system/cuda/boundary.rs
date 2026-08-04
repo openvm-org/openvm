@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use openvm_circuit::{
-    arch::BLOCK_FE_WIDTH, system::memory::persistent::PersistentBoundaryCols,
+    arch::BLOCK_FE_WIDTH,
+    system::memory::persistent::{PersistentBoundaryCols, LOW_LEAF_BITS},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::Chip;
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::VM_DIGEST_WIDTH;
@@ -14,6 +17,12 @@ use crate::cuda_abi::boundary::persistent_boundary_tracegen;
 pub struct BoundaryChipGPU {
     pub device_ctx: GpuDeviceCtx,
     pub poseidon2_buffer: SharedBuffer<F>,
+    /// Range checker receiving the leaf-label limb counts emitted by the tracegen kernel
+    /// (the AIR range-checks `leaf_label_limbs` on every valid row).
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    /// Bit width of the high leaf-label limb range check:
+    /// `address_height - LOW_LEAF_BITS` (saturating).
+    pub leaf_label_high_bits: u32,
     /// A `Vec` of pointers to the copied guest memory on device.
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
     /// don't own. TODO: use `Arc<DeviceBuffer>` instead?
@@ -40,12 +49,16 @@ pub struct PersistentBoundaryRecord {
 impl BoundaryChipGPU {
     pub fn new(
         poseidon2_buffer: SharedBuffer<F>,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
+        address_height: usize,
         device_ctx: GpuDeviceCtx,
         cell_types: Vec<u8>,
     ) -> Self {
         Self {
             device_ctx,
             poseidon2_buffer,
+            range_checker,
+            leaf_label_high_bits: address_height.saturating_sub(LOW_LEAF_BITS) as u32,
             initial_leaves: Vec::new(),
             cell_types,
             records: None,
@@ -126,6 +139,8 @@ impl Chip<GpuBackend> for BoundaryChipGPU {
                 num_records,
                 &poseidon2_records,
                 &self.poseidon2_buffer.idx,
+                &self.range_checker.count,
+                self.leaf_label_high_bits,
                 self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate boundary trace");

@@ -76,6 +76,7 @@ impl SystemChipInventoryGPU {
 
         let memory_inventory = MemoryInventoryGPU::new(
             config.memory_config.clone(),
+            range_checker,
             hasher_chip,
             device_ctx.clone(),
         );

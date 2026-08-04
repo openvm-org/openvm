@@ -8,7 +8,7 @@ use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
         fill_trace_rows, Postflight, PostflightError, PostflightStep, U16Access, VmChipWrapper,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
     },
     system::memory::SharedMemoryHelper,
     utils::next_power_of_two_or_zero,
@@ -23,7 +23,10 @@ use openvm_mod_circuit_builder::FieldExpressionFiller;
 use openvm_riscv_adapters::{
     IsEqualModU16AdapterCols, VecHeapAdapterCols, VecHeapAdapterFiller, VecHeapTraceInput,
 };
-use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_field_u16_limbs, U16_BITS};
+use openvm_riscv_circuit::adapters::{
+    byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits, compute_block_add_carries,
+    ptr_to_field_u16_limbs, u32_to_ptr_limbs, U16_BITS,
+};
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
@@ -418,10 +421,26 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
                     rs_accesses[read].timestamp,
                     adapter_cols.rs_read_aux[read].as_mut(),
                 );
-                temporary_range_checker.add_count(
-                    ptr_bound_from_ptr(rs_vals[read], pointer_max_bits),
-                    U16_BITS,
+                // Byte -> cell conversion carry plus one add-carry per heap block, with the
+                // matching range-check counts (the AIR converts each base pointer once and adds
+                // the per-block cell offset, all with multiplicity `is_valid`).
+                let (conv_carry, base_cell) =
+                    byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(rs_vals[read]));
+                temporary_range_checker
+                    .add_count(base_cell[1], cell_ptr_hi_bits(pointer_max_bits));
+                let add_carries = compute_block_add_carries(
+                    &temporary_range_checker,
+                    base_cell.map(|limb| limb as u16),
+                    NUM_LANES,
+                    (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32,
                 );
+                adapter_cols.rs_cell_carry[read] = F::from_u32(conv_carry);
+                for (col, carry) in adapter_cols.reads_add_carry[read]
+                    .iter_mut()
+                    .zip(add_carries)
+                {
+                    *col = F::from_u32(carry);
+                }
                 adapter_cols.rs_val[read] = ptr_to_field_u16_limbs(rs_vals[read]);
                 adapter_cols.rs_ptr[read] = F::from_u32(rs_ptrs[read]);
             }

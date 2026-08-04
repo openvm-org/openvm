@@ -12,6 +12,7 @@
 #include "primitives/fp_array.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -74,4 +75,13 @@ template <typename T> struct DeferralOutputCols {
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
+
+    // Carry for converting the heap `input` base byte pointer (read on the first row) to AS-native
+    // u16 cell pointer limbs, plus per-block cell-offset carries.
+    T input_cell_carry;
+    T input_add_carry[OUTPUT_TOTAL_MEMORY_OPS];
+
+    // Per-row output write cell pointer limbs `[lo16, hi16]`. On write rows this equals
+    // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2`.
+    T write_cell_ptr[2];
 };

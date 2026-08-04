@@ -17,8 +17,8 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{validate_hint_buffer_num_words, HintStoreChip, HintStoreCols, REM_WORDS_SHIFT};
 use crate::adapters::{
-    byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, PTR_BITS, U16_BITS,
+    byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value, cell_ptr_hi_bits,
+    checked_register_pointer, ptr_to_field_u16_limbs, u32_to_ptr_limbs, PTR_BITS, U16_BITS,
 };
 
 struct HintStoreReplayInput {
@@ -62,10 +62,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let mut row_index = 0usize;
 
     for (mut replay, input) in replay_inputs {
-        chip.inner.range_checker_chip.add_count(
-            ptr_bound_from_ptr(input.mem_ptr, chip.inner.pointer_max_bits),
-            U16_BITS,
-        );
+        // Range check num_words (using MAX_HINT_BUFFER_DWORDS_BITS). Per-row pointer-limb
+        // range checks are added in `fill_row`.
         chip.inner
             .range_checker_chip
             .add_count(input.num_words << REM_WORDS_SHIFT, U16_BITS);
@@ -83,7 +81,16 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
             let row = &mut trace.values[row_index * width..(row_index + 1) * width];
             let cols: &mut HintStoreCols<F> = row.borrow_mut();
-            fill_row(&mem_helper, cols, &input, local_index, byte_ptr, write);
+            fill_row(
+                &chip.inner.range_checker_chip,
+                chip.inner.pointer_max_bits,
+                &mem_helper,
+                cols,
+                &input,
+                local_index,
+                byte_ptr,
+                write,
+            );
             row_index += 1;
         }
         replay.finish(input.from_pc.wrapping_add(DEFAULT_PC_STEP))?;
@@ -189,7 +196,10 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fill_row<F: PrimeField32>(
+    range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
+    pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
     cols: &mut HintStoreCols<F>,
     input: &HintStoreReplayInput,
@@ -233,6 +243,15 @@ fn fill_row<F: PrimeField32>(
     cols.data = write.value.map(F::from_u16);
     cols.is_buffer_start = F::from_bool(local_index == 0 && !is_single);
     cols.mem_ptr_limbs = ptr_to_field_u16_limbs(byte_ptr);
+    // Byte -> cell pointer conversion (heap write) and the per-row range checks: cell_hi
+    // (hi_bits) and the low byte limb (16 bits, for the limb-wise `+8` increment).
+    let byte_limbs = u32_to_ptr_limbs(byte_ptr);
+    let (mem_carry, cell_limbs) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+    cols.mem_ptr_carry = F::from_u32(mem_carry);
+    // `+8` carry from this row's low byte limb into the high limb.
+    cols.mem_ptr_inc_carry = F::from_u32((byte_limbs[0] + REGISTER_NUM_LIMBS as u32) >> U16_BITS);
+    range_checker.add_count(cell_limbs[1], cell_ptr_hi_bits(pointer_max_bits));
+    range_checker.add_count(byte_limbs[0], U16_BITS);
     cols.mem_ptr_ptr = F::from_u32(input.mem_ptr_ptr);
     cols.from_state.timestamp = F::from_u32(timestamp);
     cols.from_state.pc = F::from_u32(input.from_pc);
