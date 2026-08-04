@@ -68,7 +68,9 @@ impl XorinVmFiller {
             ));
         }
         let num_reads = len_usize / MEMORY_BLOCK_BYTES;
-        if num_reads != 0 && (buffer & 1 != 0 || input & 1 != 0) {
+        // The AIR converts both base byte pointers to cell pointers on every enabled row (even
+        // when all blocks are padding), so alignment is required regardless of `len`.
+        if buffer & 1 != 0 || input & 1 != 0 {
             return Err(PostflightError::new(
                 "XORIN memory pointer must be two-byte aligned",
             ));

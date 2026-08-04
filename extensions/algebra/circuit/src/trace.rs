@@ -421,8 +421,7 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
                 // the per-block cell offset, all with multiplicity `is_valid`).
                 let (conv_carry, base_cell) =
                     byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(rs_vals[read]));
-                temporary_range_checker
-                    .add_count(base_cell[1], cell_ptr_hi_bits(pointer_max_bits));
+                temporary_range_checker.add_count(base_cell[1], cell_ptr_hi_bits(pointer_max_bits));
                 let add_carries = compute_block_add_carries(
                     &temporary_range_checker,
                     base_cell.map(|limb| limb as u16),

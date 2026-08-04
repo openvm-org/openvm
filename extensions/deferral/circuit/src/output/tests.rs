@@ -394,7 +394,6 @@ fn postflight_output_trace_rejects_truncated_history_without_mutating_periphery(
         .accesses
         .pop()
         .expect("OUTPUT has timed memory events");
-    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
     let counts_before = count
         .1
         .count
@@ -402,11 +401,20 @@ fn postflight_output_trace_rejects_truncated_history_without_mutating_periphery(
         .map(|count| count.load(Ordering::Relaxed))
         .collect::<Vec<_>>();
     let poseidon_records_before = poseidon2.1.records.len();
-    let error = super::generate_trace_from_postflight(&harness.chip, &postflight)
-        .expect_err("truncated OUTPUT history must be rejected");
+    // Depending on which location the popped access referenced, the truncation is caught either
+    // by `Postflight::new`'s seed-reference validation or by trace generation; both must reject
+    // without mutating the periphery.
+    let error = match Postflight::new(&program, history, &memory_config, None) {
+        Err(error) => error,
+        Ok(postflight) => super::generate_trace_from_postflight(&harness.chip, &postflight)
+            .expect_err("truncated OUTPUT history must be rejected"),
+    };
     assert!(
         error.to_string().contains("too few memory events")
             || error.to_string().contains("ended at timestamp")
+            || error
+                .to_string()
+                .contains("initial-write seeds are not referenced")
     );
     assert_eq!(
         counts_before,

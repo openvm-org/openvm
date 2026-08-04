@@ -113,6 +113,34 @@ fn rand_load_byte_test() {
 }
 
 #[test]
+fn positive_loadbu_max_address_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
+    let (mut harness, bitwise) = create_byte_harness(&mut tester);
+    // The default config exposes the full 2^32-byte memory AS; deterministically load the last
+    // addressable byte (byte address 2^32 - 1).
+    let rs1 = u32::MAX.to_le_bytes();
+    set_and_execute_load(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        LOADBU,
+        Some([rs1[0], rs1[1], rs1[2], rs1[3], 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        None,
+    );
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
 #[should_panic(expected = "effective address exceeds implemented memory address space")]
 fn negative_load_address_wraparound_test() {
     let mut rng = create_seeded_rng();

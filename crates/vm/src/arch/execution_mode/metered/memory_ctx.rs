@@ -414,7 +414,8 @@ mod tests {
     /// memory-address change).
     #[test]
     fn test_update_boundary_merkle_heights_at_top_of_address_space() {
-        let system_config = test_system_config();
+        // The default config exposes the full 2^32-byte RV64 memory capacity.
+        let system_config = SystemConfig::default();
         let mut ctx = MemoryCtx::new(&system_config);
         // Byte range [u32::MAX - 7, u32::MAX] (8 bytes ending at 2^32 - 1).
         ctx.update_boundary_merkle_heights(MEMORY_AS, u32::MAX - 7, 8);
