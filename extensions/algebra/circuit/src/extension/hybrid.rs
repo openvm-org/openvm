@@ -106,14 +106,13 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
         device_ctx: GpuDeviceCtx,
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
-        let field_expr_replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
-            .expect("valid modular field-expression replay configuration");
-        Self {
+    ) -> Result<Self, GpuPostflightError> {
+        let field_expr_replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)?;
+        Ok(Self {
             cpu,
             device_ctx,
             replay: Some(ModularReplay::FieldExpr(field_expr_replay)),
-        }
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -127,7 +126,7 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
         range_checker: std::sync::Arc<
             openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
         >,
-    ) -> Self {
+    ) -> Result<Self, GpuPostflightError> {
         let direct_addsub = crate::cuda::modular_addsub::ModularAddSubReplayChipGpu::new(
             &cpu,
             modulus,
@@ -135,20 +134,20 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             pointer_max_bits,
             timestamp_max_bits,
             range_checker.clone(),
-        )
-        .expect("valid modular add/sub replay configuration");
+        )?;
         let replay = match direct_addsub {
             Some(replay) => ModularReplay::AddSub(replay),
-            None => ModularReplay::FieldExpr(
-                FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
-                    .expect("valid modular field-expression replay configuration"),
-            ),
+            None => ModularReplay::FieldExpr(FieldExprReplayChip::new(
+                &cpu,
+                opcode_base,
+                range_checker,
+            )?),
         };
-        Self {
+        Ok(Self {
             cpu,
             device_ctx,
             replay: Some(replay),
-        }
+        })
     }
 
     pub fn generate_proving_ctx_from_postflight(
@@ -217,8 +216,8 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         pointer_max_bits: usize,
         timestamp_max_bits: usize,
         range_checker_gpu: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, GpuPostflightError> {
+        Ok(Self {
             cpu,
             device_ctx,
             replay: Some(ModularIsEqualReplayChipGpu::new(
@@ -227,8 +226,8 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
                 pointer_max_bits,
                 timestamp_max_bits,
                 range_checker_gpu,
-            )),
-        }
+            )?),
+        })
     }
 
     pub fn generate_proving_ctx_from_postflight(
@@ -305,7 +304,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     byte_ptr_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("modular add/sub replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -331,7 +333,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     device_ctx.clone(),
                     start_offset,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("modular mul/div replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -370,7 +375,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     byte_ptr_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization(
+                        "ModularIsEqual replay",
+                        source,
+                    )
+                })?;
                 inventory.add_executor_chip_with_tracegen(is_eq, move |chip, postflight| {
                     let trace = generate_modular_is_equal_trace_from_postflight::<
                         _,
@@ -406,7 +417,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     byte_ptr_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("modular add/sub replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -432,7 +446,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     device_ctx.clone(),
                     start_offset,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("modular mul/div replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -471,7 +488,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
                     byte_ptr_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization(
+                        "ModularIsEqual replay",
+                        source,
+                    )
+                })?;
                 inventory.add_executor_chip_with_tracegen(is_eq, move |chip, postflight| {
                     let trace = generate_modular_is_equal_trace_from_postflight::<
                         _,
@@ -514,14 +537,13 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
         device_ctx: GpuDeviceCtx,
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
-        let replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
-            .expect("valid Fp2 field-expression replay configuration");
-        Self {
+    ) -> Result<Self, GpuPostflightError> {
+        let replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)?;
+        Ok(Self {
             cpu,
             device_ctx,
             replay: Some(replay),
-        }
+        })
     }
 
     pub fn generate_proving_ctx_from_postflight(
@@ -1037,7 +1059,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     device_ctx.clone(),
                     start_offset,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("Fp2 add/sub replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -1063,7 +1088,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     device_ctx.clone(),
                     start_offset,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("Fp2 mul/div replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -1095,7 +1123,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     device_ctx.clone(),
                     start_offset,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("Fp2 add/sub replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(addsub, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,
@@ -1121,7 +1152,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
                     device_ctx.clone(),
                     start_offset,
                     range_checker_gpu.clone(),
-                );
+                )
+                .map_err(|source| {
+                    ChipInventoryError::prover_chip_initialization("Fp2 mul/div replay", source)
+                })?;
                 inventory.add_executor_chip_with_tracegen(muldiv, move |chip, postflight| {
                     let trace = generate_field_expression_trace_from_postflight(
                         &chip.cpu,

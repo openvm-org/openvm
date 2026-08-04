@@ -164,7 +164,8 @@ mod addsub_tests {
             tester.address_bits(),
             tester.timestamp_max_bits(),
             tester.range_checker(),
-        );
+        )
+        .unwrap();
         let address_bits = tester.address_bits();
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
             .with_trace_generators(
@@ -602,7 +603,8 @@ mod muldiv_tests {
             tester.range_checker().device_ctx.clone(),
             offset,
             tester.range_checker(),
-        );
+        )
+        .unwrap();
         let address_bits = tester.address_bits();
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
             .with_trace_generators(
@@ -1151,7 +1153,8 @@ mod is_equal_tests {
             tester.address_bits(),
             tester.timestamp_max_bits(),
             tester.range_checker(),
-        );
+        )
+        .unwrap();
         let address_bits = tester.address_bits();
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
             .with_trace_generators(

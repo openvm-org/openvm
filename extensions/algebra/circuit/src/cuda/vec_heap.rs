@@ -47,12 +47,12 @@ pub(crate) fn checked_trace_shape(
     timestamp_max_bits: usize,
 ) -> Result<(usize, usize), GpuPostflightError> {
     let timestamp_bits = u32::try_from(timestamp_max_bits).map_err(|_| {
-        GpuPostflightError::InvalidTranscript(
+        GpuPostflightError::InvalidConfiguration(
             "timestamp width cannot be represented as a host trace height".to_string(),
         )
     })?;
     let timestamp_row_limit = 1usize.checked_shl(timestamp_bits).ok_or_else(|| {
-        GpuPostflightError::InvalidTranscript(
+        GpuPostflightError::InvalidConfiguration(
             "timestamp width cannot be represented as a host trace height".to_string(),
         )
     })?;
