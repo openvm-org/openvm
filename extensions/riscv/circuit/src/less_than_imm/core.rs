@@ -82,10 +82,11 @@ where
         // exact form `mode * (mode - 1) / 2` is degree 2, which would push
         // `c_msb_f` to degree 3 and the two constraints reading it to degree 4.
         //
-        // On a mode=0 row, `is_signed` and `is_unsigned` are -1 and 2 rather than 0. `sign_shift` and
-        // `expected_opcode` are unaffected because their interactions have count `is_valid`, which
-        // is exactly 0 there. `c_msb_f` is the one ungated consumer, so `imm_sign` is
-        // pinned to zero on invalid rows below, which forces `c_msb_f` to zero too.
+        // On a mode=0 row, `is_signed` and `is_unsigned` are -1 and 2 rather than 0. `sign_shift`
+        // and `expected_opcode` are unaffected because their interactions have count
+        // `is_valid`, which is exactly 0 there. `c_msb_f` is the one ungated consumer, so
+        // `imm_sign` is pinned to zero on invalid rows below, which forces `c_msb_f` to
+        // zero too.
         let is_signed = mode - AB::Expr::ONE;
         let is_unsigned = AB::Expr::ONE - is_signed.clone();
 
