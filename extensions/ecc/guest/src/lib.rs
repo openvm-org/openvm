@@ -32,6 +32,8 @@ pub enum SwBaseFunct7 {
     SwAddNe = 0,
     SwDouble,
     SwSetup,
+    SwMul,
+    SwSetupMul,
 }
 
 impl SwBaseFunct7 {
