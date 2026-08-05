@@ -1,8 +1,7 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
-use openvm_instructions::riscv::REGISTER_NUM_LIMBS;
+use openvm_circuit::arch::VmChipWrapper;
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 
-mod adapter;
-mod core;
+mod air;
 mod execution;
 pub(crate) mod trace;
 
@@ -14,13 +13,22 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub use core::*;
-
-pub use adapter::*;
+pub use air::*;
 pub use execution::*;
 
-pub(crate) const REVEAL_ACCESS_WIDTH: usize = REGISTER_NUM_LIMBS;
-pub(crate) const REVEAL_VALUE_CELLS: usize = BLOCK_FE_WIDTH;
-
-pub type RevealAir = VmAirWrapper<RevealAdapterAir, RevealCoreAir>;
 pub type RevealChip<F> = VmChipWrapper<F, RevealFiller>;
+
+#[derive(Clone)]
+pub struct RevealFiller {
+    pub(crate) pointer_max_bits: usize,
+    pub(crate) range_checker: SharedVariableRangeCheckerChip,
+}
+
+impl RevealFiller {
+    pub fn new(pointer_max_bits: usize, range_checker: SharedVariableRangeCheckerChip) -> Self {
+        Self {
+            pointer_max_bits,
+            range_checker,
+        }
+    }
+}

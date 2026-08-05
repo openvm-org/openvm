@@ -25,7 +25,6 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::REVEAL_ACCESS_WIDTH;
 use crate::adapters::{address_add_imm, bytes_to_u32, sign_extend_imm16};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -49,11 +48,14 @@ fn checked_reveal_address(
     public_values_capacity: usize,
 ) -> Result<u32, ExecutionError> {
     let address = address_add_imm(base, imm_extended);
-    let end = address.checked_add(REVEAL_ACCESS_WIDTH as u64);
-    if address > u64::from(u32::MAX) || end.is_none_or(|end| end > public_values_capacity as u64) {
+    let end = address.checked_add(REGISTER_NUM_LIMBS as u64);
+    if address > u64::from(u32::MAX)
+        || !address.is_multiple_of(REGISTER_NUM_LIMBS as u64)
+        || end.is_none_or(|end| end > public_values_capacity as u64)
+    {
         return Err(ExecutionError::Fail {
             pc,
-            msg: "reveal address exceeds configured public-values capacity",
+            msg: "reveal address is not aligned within configured public-values capacity",
         });
     }
     Ok(address as u32)
@@ -192,12 +194,9 @@ unsafe fn execute_e12_impl<Ctx: ExecutionCtxTrait>(
         })?;
     let address =
         checked_reveal_address(pc, base, pre_compute.imm_extended, public_values_capacity)?;
-    let value: [u8; REVEAL_ACCESS_WIDTH] =
+    let value: [u8; REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(REGISTER_AS, u32::from(pre_compute.src_ptr));
     exec_state.vm_write_bytes(PUBLIC_VALUES_AS, address, &value);
-    if (address as usize).is_multiple_of(REVEAL_ACCESS_WIDTH) {
-        exec_state.ctx.advance_timestamp(1);
-    }
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
     Ok(())
 }
@@ -236,11 +235,12 @@ mod tests {
     #[test]
     fn reveal_address_is_bounded_by_configured_public_values_capacity() {
         assert_eq!(checked_reveal_address(4, 56, 0, 64).unwrap(), 56);
+        assert!(checked_reveal_address(4, 33, 0, 64).is_err());
         assert!(matches!(
             checked_reveal_address(4, 57, 0, 64),
             Err(ExecutionError::Fail {
                 pc: 4,
-                msg: "reveal address exceeds configured public-values capacity",
+                msg: "reveal address is not aligned within configured public-values capacity",
             })
         ));
         assert!(checked_reveal_address(4, 0, u32::MAX, 64).is_err());

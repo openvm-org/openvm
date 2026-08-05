@@ -776,7 +776,6 @@ mod tests {
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
         let instructions = [
             reveal_instruction(1, 2, 0),
-            // A doubleword at byte address 7 crosses an eight-byte memory block.
             reveal_instruction(3, 4, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
@@ -785,9 +784,9 @@ mod tests {
         let preflight = executor.preflight_instance(&exe)?;
         let registers = [
             (1, 0xa5a4_a3a2_a1a0_9998),
-            (2, 2),
+            (2, 0),
             (3, 0x1122_3344_5566_7788),
-            (4, 7),
+            (4, 8),
         ];
         let initial_public_values = (0u8..16).collect::<Vec<_>>();
         let initial = configure_reveal_state(
@@ -805,13 +804,13 @@ mod tests {
             execution.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        // Both unaligned REVEALs use two register-read slots and two public-value write slots.
-        assert_eq!(execution.to_state.timestamp, 9);
+        // Each aligned REVEAL uses two register reads and one full-block write.
+        assert_eq!(execution.to_state.timestamp, 7);
         assert!(execution.transcript.replay_values.is_empty());
 
         let mut expected = initial_public_values;
-        expected[2..10].copy_from_slice(&0xa5a4_a3a2_a1a0_9998u64.to_le_bytes());
-        expected[7..15].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
+        expected[..8].copy_from_slice(&0xa5a4_a3a2_a1a0_9998u64.to_le_bytes());
+        expected[8..].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
         assert_eq!(
             extract_public_values(16, &execution.state.memory.memory),
             expected
@@ -1189,7 +1188,7 @@ mod tests {
                 (1, 0xaabb_ccdd_eeff_0011),
                 (2, 8),
                 (3, 0x2233_4455_6677_8899),
-                (4, 9),
+                (4, 16),
             ],
             &vec![0; PAGE_SIZE],
         );
@@ -1218,8 +1217,11 @@ mod tests {
         );
         assert!(second.transcript.replay_values.is_empty());
         assert_eq!(
-            &extract_public_values(PAGE_SIZE, &second.state.memory.memory)[8..17],
-            &[0x11, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22]
+            &extract_public_values(PAGE_SIZE, &second.state.memory.memory)[8..24],
+            &[
+                0x11, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44,
+                0x33, 0x22,
+            ]
         );
         Ok(())
     }
@@ -1749,7 +1751,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Memory access out of bounds")]
+    #[should_panic(
+        expected = "reveal address is not aligned within configured public-values capacity"
+    )]
     #[cfg(not(feature = "rvr"))]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();

@@ -17,7 +17,6 @@ __global__ void reveal_replay_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup,
     uint32_t timestamp_max_bits
 ) {
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
@@ -45,32 +44,12 @@ __global__ void reveal_replay_tracegen(
         return;
     }
 
-    auto adapter = RevealAdapter(
+    auto reveal = Reveal(
         pointer_max_bits,
         VariableRangeChecker(range_checker, range_checker_num_bins),
         timestamp_max_bits
     );
-    adapter.fill_trace_row(
-        row,
-        input.from_pc,
-        input.from_timestamp,
-        input.src_ptr,
-        input.base_ptr,
-        input.base_value,
-        input.base_prev_timestamp,
-        input.src_prev_timestamp,
-        input.write_prev_timestamps[0],
-        input.write_prev_timestamps[1],
-        input.imm,
-        input.imm_sign
-    );
-    auto core = RevealCore(BitwiseOperationLookup(bitwise_lookup));
-    core.fill_trace_row(
-        row.slice_from(COL_INDEX(RevealCols, core)),
-        input.src_data,
-        input.prev_data,
-        input.shift
-    );
+    reveal.fill_trace_row(row, input);
 }
 
 extern "C" int _reveal_replay_tracegen(
@@ -93,7 +72,6 @@ extern "C" int _reveal_replay_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -122,7 +100,6 @@ extern "C" int _reveal_replay_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

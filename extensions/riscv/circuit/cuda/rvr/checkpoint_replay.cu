@@ -364,9 +364,7 @@ struct LoadStoreInstruction {
 struct RevealInstruction {
     uint32_t src;
     uint32_t base;
-    uint32_t aligned_address;
-    uint32_t shift;
-    bool crosses;
+    uint32_t address;
 };
 
 struct HintStoreInstruction {
@@ -523,11 +521,9 @@ __device__ __forceinline__ bool validate_reveal(
     int64_t signed_imm = imm_sign ? int64_t(imm) - (int64_t(1) << 16) : int64_t(imm);
     int64_t effective = int64_t(uint32_t(base)) + signed_imm;
     if (effective < 0 || effective > UINT32_MAX) return false;
-    uint32_t address = uint32_t(effective);
-    decoded.shift = address & 7;
-    decoded.aligned_address = address - decoded.shift;
-    decoded.crosses = decoded.shift != 0;
-    uint64_t block_end = uint64_t(decoded.aligned_address) + (decoded.crosses ? 16 : 8);
+    decoded.address = uint32_t(effective);
+    if ((decoded.address & (REGISTER_BYTES - 1)) != 0) return false;
+    uint64_t block_end = uint64_t(decoded.address) + REGISTER_BYTES;
     return pointer_max_bits >= 32 || block_end <= (uint64_t(1) << pointer_max_bits);
 }
 
@@ -1206,47 +1202,30 @@ __device__ bool replay_chunk(
                 preflight_set_error(error, ERROR_BAD_REVEAL);
                 return false;
             }
-            uint32_t event_count = 3 + uint32_t(decoded.crosses);
+            constexpr uint32_t event_count = 3;
             if (memory != nullptr) {
                 if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {
                     preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
                     return false;
                 }
                 write_event(memory[memory_start + emitted], &write_masks[memory_start + emitted],
-                            state.timestamp, register_as, instruction->words[2] / 2, false,
+                            state.timestamp, register_as,
+                            instruction->words[2] / U16_CELL_SIZE, false,
                             state.regs[decoded.base]);
                 uint64_t source = state.regs[decoded.src];
                 write_event(memory[memory_start + emitted + 1],
                             &write_masks[memory_start + emitted + 1], state.timestamp + 1,
-                            register_as, instruction->words[1] / 2, false, source);
-                uint64_t block_values[2] = {0, 0};
-                uint8_t block_masks[2] = {0, 0};
-                for (uint32_t byte = 0; byte < REGISTER_BYTES; byte++) {
-                    uint32_t position = decoded.shift + byte;
-                    uint32_t block = position / REGISTER_BYTES;
-                    uint32_t within = position % REGISTER_BYTES;
-                    block_values[block] |= ((source >> (8 * byte)) & 0xff) << (8 * within);
-                    block_masks[block] |= uint8_t(1u << within);
-                }
+                            register_as, instruction->words[1] / U16_CELL_SIZE, false, source);
                 write_memory_intent(
                     memory[memory_start + emitted + 2],
                     &write_masks[memory_start + emitted + 2], state.timestamp + 2,
-                    REVEAL_PUBLIC_VALUES_ADDRESS_SPACE, decoded.aligned_address,
-                    block_values[0], block_masks[0]
+                    REVEAL_PUBLIC_VALUES_ADDRESS_SPACE, decoded.address, source,
+                    FULL_WRITE_MASK
                 );
-                if (decoded.crosses) {
-                    write_memory_intent(
-                        memory[memory_start + emitted + 3],
-                        &write_masks[memory_start + emitted + 3], state.timestamp + 3,
-                        REVEAL_PUBLIC_VALUES_ADDRESS_SPACE,
-                        decoded.aligned_address + REGISTER_BYTES,
-                        block_values[1], block_masks[1]
-                    );
-                }
             }
             emitted += event_count;
             state.pc += 4;
-            state.timestamp += 4;
+            state.timestamp += event_count;
         } else if (
             opcode >= LOAD_STORE_OPCODE_BASE &&
             opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT

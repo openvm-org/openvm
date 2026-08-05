@@ -1,39 +1,128 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{fill_trace_rows, Postflight, PostflightError},
+    arch::{fill_trace_rows, Postflight, PostflightError, MEMORY_BLOCK_BYTES},
     utils::next_power_of_two_or_zero,
 };
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{
+    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+};
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{RevealReplay, RevealAdapterCols, RevealChip, RevealCoreCols};
+use super::{RevealChip, RevealCols};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    address_add_imm, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
+};
 
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &RevealChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(RevealOpcode::REVEAL.global_opcode());
-    let adapter_width = RevealAdapterCols::<F>::width();
-    let width = adapter_width + RevealCoreCols::<F>::width();
+    let width = RevealCols::<F>::width();
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+    let mem_helper = chip.mem_helper.as_borrowed();
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {
-        let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let RevealReplay {
-            src_data,
-            prev_data,
-            shift,
-        } = chip.inner.adapter.replay(
-            postflight,
-            step,
-            &chip.mem_helper.as_borrowed(),
-            adapter_row.borrow_mut(),
+        let instruction = postflight.instruction(step);
+        if instruction.opcode != RevealOpcode::REVEAL.global_opcode()
+            || instruction.d.as_canonical_u32() != REGISTER_AS
+            || instruction.e.as_canonical_u32() != PUBLIC_VALUES_AS
+            || !instruction.f.is_one()
+        {
+            return Err(PostflightError::new(
+                "REVEAL instruction has invalid fixed operands",
+            ));
+        }
+        let imm_sign = match instruction.g.as_canonical_u32() {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(PostflightError::new(
+                    "REVEAL instruction has a non-boolean immediate sign",
+                ));
+            }
+        };
+        let imm = instruction.c.as_canonical_u32();
+        if imm > u16::MAX as u32 {
+            return Err(PostflightError::new(
+                "REVEAL immediate exceeds the u16 execution-bus operand",
+            ));
+        }
+
+        let base_ptr = u32::from(checked_register_pointer(instruction.b.as_canonical_u32())?);
+        let src_ptr = u32::from(checked_register_pointer(instruction.a.as_canonical_u32())?);
+        let from_pc = postflight.pc(step);
+        let from_timestamp = postflight.timestamp(step);
+        let mut replay = postflight.replay(step);
+        let base = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(base_ptr))?;
+        if base.value[PTR_U16_LIMBS..]
+            .iter()
+            .any(|&limb| limb != 0)
+        {
+            return Err(PostflightError::new(
+                "REVEAL base register is not a low-32-bit pointer",
+            ));
+        }
+        let base_value = u32::from(base.value[0]) | (u32::from(base.value[1]) << U16_BITS);
+        let reveal_ptr =
+            address_add_imm(base_value, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let pointer_limit = 1u64
+            .checked_shl(chip.inner.pointer_max_bits as u32)
+            .unwrap_or(u64::MAX);
+        if reveal_ptr > u64::from(u32::MAX)
+            || !reveal_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u64)
+            || reveal_ptr + MEMORY_BLOCK_BYTES as u64 > pointer_limit
+        {
+            return Err(PostflightError::new(
+                "REVEAL destination is not an aligned in-bounds pointer",
+            ));
+        }
+        let reveal_ptr = reveal_ptr as u32;
+
+        let src = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(src_ptr))?;
+        let write = replay.write_u16(
+            PUBLIC_VALUES_AS,
+            byte_ptr_to_u16_ptr_value(reveal_ptr),
+            src.value,
         )?;
+        replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
+
+        let ptr_limbs = ptr_to_u16_limbs(reveal_ptr).map(u32::from);
         chip.inner
-            .fill_core_row(shift, src_data, prev_data, core_row.borrow_mut());
+            .range_checker
+            .add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
+        chip.inner
+            .range_checker
+            .add_count(ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);
+
+        let cols: &mut RevealCols<F> = row.borrow_mut();
+        cols.is_valid = F::ONE;
+        cols.from_state.pc = F::from_u32(from_pc);
+        cols.from_state.timestamp = F::from_u32(from_timestamp);
+        cols.base_ptr = F::from_u32(base_ptr);
+        cols.base_data = ptr_to_field_u16_limbs(base_value);
+        mem_helper.fill(
+            base.previous_timestamp,
+            base.timestamp,
+            cols.base_aux.as_mut(),
+        );
+        cols.src_ptr = F::from_u32(src_ptr);
+        cols.src_data = src.value.map(F::from_u16);
+        mem_helper.fill(src.previous_timestamp, src.timestamp, cols.src_aux.as_mut());
+        cols.imm = F::from_u32(imm);
+        cols.imm_sign = F::from_bool(imm_sign);
+        cols.reveal_ptr_low_limb = F::from_u32(ptr_limbs[0]);
+        cols.write_aux
+            .set_prev_data(write.previous_value.map(F::from_u16));
+        mem_helper.fill(
+            write.previous_timestamp,
+            write.timestamp,
+            cols.write_aux.as_mut(),
+        );
         Ok(())
     })?;
     Ok(trace)

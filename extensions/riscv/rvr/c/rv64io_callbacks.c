@@ -45,14 +45,8 @@ bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
   }
 
   trace_write_other_block_u64(
-      state, AS_PUBLIC_VALUES, (uint32_t)(plan.block_addr >> 1),
-      plan.post[0], plan.previous[0]);
-  if (plan.crosses != 0u) {
-    trace_write_other_block_u64(
-        state, AS_PUBLIC_VALUES,
-        (uint32_t)((plan.block_addr + WORD_SIZE) >> 1), plan.post[1],
-        plan.previous[1]);
-  }
+      state, AS_PUBLIC_VALUES, (uint32_t)(plan.address >> 1), plan.post,
+      plan.previous);
 
   g_rv64io_host_callbacks.reveal_commit(ctx, &plan);
   return true;

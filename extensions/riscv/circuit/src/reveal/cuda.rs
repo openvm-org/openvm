@@ -7,21 +7,18 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::{RevealAdapterCols, RevealCoreCols};
-use crate::{adapters::BYTE_BITS, cuda_abi::reveal_cuda};
+use super::RevealCols;
+use crate::cuda_abi::reveal_cuda;
 
 #[derive(new)]
 pub struct RevealChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
@@ -40,7 +37,7 @@ impl RevealChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = RevealAdapterCols::<F>::width() + RevealCoreCols::<F>::width();
+        let trace_width = RevealCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
@@ -61,7 +58,6 @@ impl RevealChipGpu {
                 REGISTER_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )?;

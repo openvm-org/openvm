@@ -1,10 +1,6 @@
 //! RV64 IO instruction lifting and host callbacks.
 
-use std::{
-    ffi::c_void,
-    mem::{align_of, size_of},
-    ops::Range,
-};
+use std::{ffi::c_void, ops::Range};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
@@ -180,9 +176,8 @@ impl ExtInstr for RevealInstr {
         // The callback emits the proof-visible public-values memory events.
         // Reserve only their logical clock here so compact checkpoint
         // preflight can preserve the schedule without logging those events.
-        // Full preflight still performs its exact write reservation inside the
-        // callback after materializing the crossing-access plan.
-        ctx.reserve_preflight_timestamp_slots("2u");
+        // Full preflight performs the aligned block-write reservation inside the callback.
+        ctx.reserve_preflight_timestamp_slots("1u");
         ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr]);
         ctx.trace_page_access(
             &addr,
@@ -337,17 +332,10 @@ struct Rv64IoHostCallbacks {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct RevealPlan {
-    block_addr: u64,
-    previous: [u64; 2],
-    post: [u64; 2],
-    crosses: u8,
-    padding: [u8; 7],
+    address: u64,
+    previous: u64,
+    post: u64,
 }
-
-const _: () = {
-    assert!(size_of::<RevealPlan>() == 48);
-    assert!(align_of::<RevealPlan>() == 8);
-};
 
 fn checked_hint_range(
     io: &OpenVmIoState<'_>,
@@ -422,7 +410,7 @@ extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u32)
     true
 }
 
-/// Validate and materialize complete pre/post AS3 blocks without mutation.
+/// Validate and materialize one complete pre/post AS3 block without mutation.
 extern "C" fn host_reveal_prepare(
     ctx: *mut c_void,
     src_val: u64,
@@ -441,46 +429,18 @@ extern "C" fn host_reveal_prepare(
     if end > io.public_values.len() as u64 {
         return false;
     }
-    let block_addr = effective_addr & !7;
-    if u32::try_from(block_addr >> 1).is_err() {
+    if !effective_addr.is_multiple_of(WORD_SIZE as u64)
+        || u32::try_from(effective_addr >> 1).is_err()
+    {
         return false;
     }
-    let shift = (effective_addr - block_addr) as usize;
-    let crosses = shift + width > 8;
-    let block_count = 1 + usize::from(crosses);
-    let Some(block_end) = block_addr.checked_add((block_count * 8) as u64) else {
-        return false;
-    };
-    if block_end > io.public_values.len() as u64 {
-        return false;
-    }
-
-    let mut previous = [0u64; 2];
-    let mut post = [0u64; 2];
-    let block_addr = block_addr as usize;
-    for index in 0..block_count {
-        let start = block_addr + index * 8;
-        previous[index] =
-            u64::from_le_bytes(io.public_values[start..start + 8].try_into().unwrap());
-        post[index] = previous[index];
-    }
-    let mut post_bytes = [0u8; 16];
-    post_bytes[..8].copy_from_slice(&post[0].to_le_bytes());
-    if crosses {
-        post_bytes[8..].copy_from_slice(&post[1].to_le_bytes());
-    }
-    post_bytes[shift..shift + width].copy_from_slice(&src_val.to_le_bytes()[..width]);
-    post[0] = u64::from_le_bytes(post_bytes[..8].try_into().unwrap());
-    if crosses {
-        post[1] = u64::from_le_bytes(post_bytes[8..].try_into().unwrap());
-    }
+    let start = effective_addr as usize;
+    let previous = u64::from_le_bytes(io.public_values[start..start + width].try_into().unwrap());
     unsafe {
         plan.write(RevealPlan {
-            block_addr: block_addr as u64,
+            address: effective_addr,
             previous,
-            post,
-            crosses: u8::from(crosses),
-            padding: [0; 7],
+            post: src_val,
         });
     }
     true
@@ -495,12 +455,8 @@ extern "C" fn host_reveal_prepare(
 unsafe extern "C" fn host_reveal_commit(ctx: *mut c_void, plan: *const RevealPlan) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let plan = unsafe { &*plan };
-    let block_count = 1 + usize::from(plan.crosses != 0);
-    let block_addr = plan.block_addr as usize;
-    for index in 0..block_count {
-        let start = block_addr + index * 8;
-        io.public_values[start..start + 8].copy_from_slice(&plan.post[index].to_le_bytes());
-    }
+    let start = plan.address as usize;
+    io.public_values[start..start + WORD_SIZE].copy_from_slice(&plan.post.to_le_bytes());
 }
 
 #[cfg(test)]
@@ -654,7 +610,7 @@ mod tests {
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
-        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(2u);");
+        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(1u);");
         assert_eq!(
             ctx.lines[1],
             "bool tmp1 = openvm_reveal(state, r1, r2, r2);"
@@ -746,7 +702,7 @@ mod tests {
         };
         instr.emit_c(&mut ctx);
 
-        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(2u);");
+        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(1u);");
         assert_eq!(
             ctx.lines[1],
             "bool tmp1 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull));"
@@ -854,8 +810,7 @@ mod tests {
         assert!(!emitted.contains("for (uint32_t hint_idx"));
     }
 
-    #[test_case(0x1122_3344_5566_7788, 0; "aligned")]
-    #[test_case(0x1122_3344_5566_7788, 3; "crossing")]
+    #[test_case(0x1122_3344_5566_7788, 0; "first_dword")]
     #[test_case(0xaabb_ccdd_eeff_0123, 8; "last_dword")]
     fn host_reveal_plans_then_commits_doubleword(src_val: u64, addr: u64) {
         let mut input_stream = VecDeque::new();
@@ -891,6 +846,7 @@ mod tests {
     }
 
     #[test_case(u64::MAX; "address_overflow")]
+    #[test_case(1; "misaligned")]
     #[test_case(9; "out_of_bounds")]
     fn host_reveal_rejects_invalid_range(addr: u64) {
         let mut input_stream = VecDeque::new();

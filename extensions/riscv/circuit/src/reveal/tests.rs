@@ -1,17 +1,10 @@
-use std::sync::Arc;
-
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
-    default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-    GpuTestChipHarness,
+    default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
 };
 use openvm_circuit::arch::{
-    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
     MemoryConfig,
-};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -22,13 +15,10 @@ use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use super::{
-    trace::generate_trace_from_postflight, RevealAdapterAir, RevealAir, RevealChip,
-    RevealCoreAir, RevealExecutor, RevealFiller,
+    trace::generate_trace_from_postflight, RevealAir, RevealChip, RevealExecutor,
+    RevealFiller,
 };
-use crate::{
-    adapters::BYTE_BITS,
-    test_utils::memory::{F, MAX_INS_CAPACITY},
-};
+use crate::test_utils::memory::{F, MAX_INS_CAPACITY};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{reveal::RevealChipGpu, test_utils::memory::dummy_range_checker};
 
@@ -47,41 +37,25 @@ fn reveal_gpu_memory_config() -> MemoryConfig {
     config
 }
 
-fn create_harness(
-    tester: &mut VmChipTestBuilder<F>,
-) -> (
-    RevealHarness,
-    (
-        BitwiseOperationLookupAir<BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<BYTE_BITS>,
-    ),
-) {
+fn create_harness(tester: &mut VmChipTestBuilder<F>) -> RevealHarness {
     let range_checker = tester.range_checker();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_bus));
     let air = RevealAir::new(
-        RevealAdapterAir::new(
-            tester.memory_bridge(),
-            tester.execution_bridge(),
-            range_checker.bus(),
-            tester.address_bits(),
-        ),
-        RevealCoreAir::new(bitwise_chip.bus()),
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        range_checker.bus(),
+        tester.address_bits(),
     );
     let executor = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
     let chip = RevealChip::new(
-        RevealFiller::new(tester.address_bits(), range_checker, bitwise_chip.clone()),
+        RevealFiller::new(tester.address_bits(), range_checker),
         tester.memory_helper(),
     );
-    (
-        RevealHarness::with_capacity(
-            executor,
-            air,
-            chip,
-            MAX_INS_CAPACITY,
-            generate_trace_from_postflight,
-        ),
-        (bitwise_chip.air, bitwise_chip),
+    RevealHarness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
     )
 }
 
@@ -105,13 +79,13 @@ fn field_block(bytes: &[u8]) -> [F; 8] {
 }
 
 #[test]
-fn reveal_preserves_legacy_unaligned_overwrite_semantics() {
+fn reveal_writes_aligned_public_value() {
     let mut tester = VmChipTestBuilder::from_config(reveal_memory_config());
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
     let base_ptr = REGISTER_NUM_LIMBS;
     let first_src = 2 * REGISTER_NUM_LIMBS;
     let second_src = 3 * REGISTER_NUM_LIMBS;
-    let address = 39usize;
+    let address = 40usize;
     let initial = [
         0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
         0x1f,
@@ -134,7 +108,7 @@ fn reveal_preserves_legacy_unaligned_overwrite_semantics() {
         &reveal_instruction(first_src, base_ptr, 0),
     );
     let mut expected = initial;
-    expected[7..15].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
+    expected[8..16].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
     assert_eq!(
         tester.read_bytes::<8>(PUBLIC_VALUES_AS as usize, 32),
         field_block(&expected[..8])
@@ -154,7 +128,7 @@ fn reveal_preserves_legacy_unaligned_overwrite_semantics() {
         &mut harness.preflight,
         &reveal_instruction(second_src, base_ptr, 0),
     );
-    expected[7..15].copy_from_slice(&0xaabb_ccdd_eeff_0123u64.to_le_bytes());
+    expected[8..16].copy_from_slice(&0xaabb_ccdd_eeff_0123u64.to_le_bytes());
     assert_eq!(
         tester.read_bytes::<8>(PUBLIC_VALUES_AS as usize, 32),
         field_block(&expected[..8])
@@ -167,7 +141,6 @@ fn reveal_preserves_legacy_unaligned_overwrite_semantics() {
     tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .unwrap();
@@ -180,26 +153,19 @@ type GpuRevealHarness =
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_gpu_harness(tester: &GpuChipTestBuilder) -> GpuRevealHarness {
     let range_checker = dummy_range_checker();
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
-        default_bitwise_lookup_bus(),
-    ));
     let air = RevealAir::new(
-        RevealAdapterAir::new(
-            tester.memory_bridge(),
-            tester.execution_bridge(),
-            range_checker.bus(),
-            tester.address_bits(),
-        ),
-        RevealCoreAir::new(bitwise_chip.bus()),
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        range_checker.bus(),
+        tester.address_bits(),
     );
     let executor = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
     let cpu_chip = RevealChip::new(
-        RevealFiller::new(tester.address_bits(), range_checker, bitwise_chip),
+        RevealFiller::new(tester.address_bits(), range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip = RevealChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -214,15 +180,14 @@ fn create_gpu_harness(tester: &GpuChipTestBuilder) -> GpuRevealHarness {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_cuda_reveal_tracegen_crossing_and_non_crossing() {
+fn test_cuda_reveal_tracegen_aligned() {
     let mut tester =
-        GpuChipTestBuilder::new(reveal_gpu_memory_config(), default_var_range_checker_bus())
-            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        GpuChipTestBuilder::new(reveal_gpu_memory_config(), default_var_range_checker_bus());
     let mut harness = create_gpu_harness(&tester);
     let base_ptr = REGISTER_NUM_LIMBS;
     let src_ptr = 2 * REGISTER_NUM_LIMBS;
 
-    for address in [32u64, 39] {
+    for address in [32u64, 40] {
         tester.write_bytes(
             REGISTER_AS as usize,
             base_ptr,

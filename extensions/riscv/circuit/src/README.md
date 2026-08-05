@@ -129,7 +129,7 @@ This circuit proves the following:
 - A memory write to the RV64 memory address space (`2`) is performed at address `val(rs1) + imm`
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 8. Reveal adapter
+#### 8. Reveal
 
 Given
 
@@ -142,7 +142,7 @@ This circuit proves the following:
 
 - Memory reads from registers `rs1` and `rs2` are performed
 - Eight bytes from `rs2` are written at `val(rs1) + imm` in the public-values address space (`3`)
-- An unaligned write preserves the surrounding bytes and may span two memory blocks
+- The destination is constrained to an eight-byte-aligned, in-bounds address
 - The dedicated reveal instruction is correctly fetched at `from_pc`, and the program counter is set to `from_pc + 4`
 
 #### 9. [Multiplication adapter](./adapters/mul.rs)

@@ -1380,18 +1380,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         let range_checker = inventory.range_checker().bus;
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
-        let bitwise_lu = {
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
-
         let hint_store = HintStoreAir::new(
             exec_bridge,
             memory_bridge,
@@ -1401,10 +1389,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         );
         inventory.add_air(hint_store);
 
-        let reveal = RevealAir::new(
-            RevealAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            RevealCoreAir::new(bitwise_lu),
-        );
+        let reveal =
+            RevealAir::new(exec_bridge, memory_bridge, range_checker, byte_ptr_max_bits);
         inventory.add_air(reveal);
 
         Ok(())
@@ -1430,22 +1416,6 @@ where
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
-                    Ok(chip.generate_proving_ctx())
-                });
-                chip
-            }
-        };
-
         inventory.next_air::<HintStoreAir>()?;
         let hint_store = HintStoreChip::new(
             HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
@@ -1459,7 +1429,7 @@ where
 
         inventory.next_air::<RevealAir>()?;
         let reveal = RevealChip::new(
-            RevealFiller::new(byte_ptr_max_bits, range_checker, bitwise_lu),
+            RevealFiller::new(byte_ptr_max_bits, range_checker),
             mem_helper,
         );
         add_executor_chip_with_tracegen!(

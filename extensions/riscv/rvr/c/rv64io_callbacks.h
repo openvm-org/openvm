@@ -4,15 +4,10 @@
 #include <stdint.h>
 
 typedef struct {
-  uint64_t block_addr;
-  uint64_t previous[2];
-  uint64_t post[2];
-  uint8_t crosses;
-  uint8_t _padding[7];
+  uint64_t address;
+  uint64_t previous;
+  uint64_t post;
 } RevealPlan;
-
-static_assert(sizeof(RevealPlan) == 48);
-static_assert(alignof(RevealPlan) == 8);
 
 typedef struct {
   bool (*hint_prepare)(void* ctx, uint64_t dest_addr, uint32_t num_words);
