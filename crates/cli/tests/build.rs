@@ -6,6 +6,8 @@ use cargo_openvm::{
 };
 use eyre::Result;
 use openvm_build::get_rustc_target;
+use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
+use openvm_sdk::{fs::read_object_from_file, F};
 
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
@@ -157,6 +159,16 @@ fn test_multi_target_transpile_default() -> Result<()> {
     let palindrome_exe = examples_dir.join("palindrome.vmexe");
     assert!(fibonacci_exe.exists());
     assert!(palindrome_exe.exists());
+
+    let exe: VmExe<F> = read_object_from_file(fibonacci_exe)?;
+    assert!(!exe.cfg_hints.basic_block_starts.is_empty());
+    assert!(exe.cfg_hints.basic_block_starts.iter().all(|&pc| {
+        pc.checked_sub(exe.program.pc_base)
+            .filter(|offset| offset.is_multiple_of(DEFAULT_PC_STEP))
+            .and_then(|offset| usize::try_from(offset / DEFAULT_PC_STEP).ok())
+            .and_then(|index| exe.program.get_instruction_and_debug_info(index))
+            .is_some()
+    }));
 
     Ok(())
 }
