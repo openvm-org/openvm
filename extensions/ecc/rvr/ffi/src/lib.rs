@@ -325,21 +325,25 @@ unsafe fn ec_double_setup(
     true
 }
 
-/// `SETUP_EC_MUL` reads `(modulus, a)` from the point operand, like `SETUP_EC_DOUBLE`. Its scalar
-/// operand is unused.
+/// `SETUP_EC_MUL` reads `(modulus, a)` from the point operand, like `SETUP_EC_DOUBLE`.
 ///
 /// The circuit evaluates a setup row from the program's own setup inputs — the modulus, then the
 /// setup values, then zero padding — rather than from the base-point operand, so the validated
 /// operand bytes are extended with zeros to the expression's full input width.
+///
+/// The scalar operand's value is unused, but it is still read: the chip reads it on every row,
+/// setup included, and the replayed access sequence has to match.
 unsafe fn ec_mul_setup(
     state: *mut c_void,
     rd_ptr: u64,
     rs1_ptr: u64,
+    rs2_ptr: u64,
     point_bytes: u32,
     program: &FieldExpressionProgram,
 ) -> bool {
     let coord_bytes = (point_bytes / 2) as usize;
     let mut setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
+    let _scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
     if !setup_values_match(program, coord_bytes, &setup_bytes) {
         return false;
     }
@@ -464,10 +468,15 @@ macro_rules! ecc_mul_setup_entry {
         /// `state` must point to a valid native tracer state for this execution.
         /// Pointer parameters must point to valid affine point coordinates.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) -> bool {
+        pub unsafe extern "C" fn $name(
+            state: *mut c_void,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
+        ) -> bool {
             static PROGRAM: LazyLock<FieldExpressionProgram> =
                 LazyLock::new(|| ec_mul_setup_program($curve, ($point_bytes / 2) as usize));
-            ec_mul_setup(state, rd_ptr, rs1_ptr, $point_bytes, &PROGRAM)
+            ec_mul_setup(state, rd_ptr, rs1_ptr, rs2_ptr, $point_bytes, &PROGRAM)
         }
     };
 }
@@ -670,6 +679,33 @@ mod tests {
     fn write_le(value: &BigUint, out: &mut [u8]) {
         let bytes = value.to_bytes_le();
         out[..bytes.len()].copy_from_slice(&bytes);
+    }
+
+    /// A setup row sets no case flag, so the output selects fall through to the base point, which
+    /// `setup_row_inputs` leaves zero. The GPU postflight registry hardcodes this postimage.
+    #[test]
+    fn ec_mul_setup_postimage_is_zero() {
+        for (curve, point_bytes) in [
+            (CurveType::K256, POINT_256_BYTES),
+            (CurveType::P256, POINT_256_BYTES),
+            (CurveType::BN254, POINT_256_BYTES),
+            (CurveType::BLS12_381, POINT_BLS12_381_BYTES),
+        ] {
+            let coord_bytes = point_bytes as usize / 2;
+            let program = ec_mul_setup_program(curve, coord_bytes);
+
+            let mut setup = vec![0u8; program.num_inputs() * coord_bytes];
+            write_le(program.prime(), &mut setup[..coord_bytes]);
+            write_le(
+                &program.setup_values()[0],
+                &mut setup[coord_bytes..2 * coord_bytes],
+            );
+
+            let output: Vec<u8> =
+                run_field_expression_precomputed::<true>(&program, program.num_flags(), &setup)
+                    .into();
+            assert_eq!(output, vec![0u8; point_bytes as usize], "{curve:?}");
+        }
     }
 
     #[test]
