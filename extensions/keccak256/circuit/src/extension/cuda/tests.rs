@@ -329,7 +329,9 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ]);
-    let zero_memory: SparseMemoryImage = [(1usize, 3u64), (2, 5), (3, 0)]
+    // The pointers are never dereferenced for a len = 0 XORIN, but replay still converts them to
+    // cell pointers on every enabled row, so they must be 2-byte aligned.
+    let zero_memory: SparseMemoryImage = [(1usize, 2u64), (2, 4), (3, 0)]
         .into_iter()
         .flat_map(|(register, value)| {
             value
