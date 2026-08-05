@@ -44,16 +44,16 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
 
-#[cfg(feature = "rvr")]
-use crate::CurveConfig;
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip,
+    generate_ec_mul_trace_from_postflight, get_ec_addne_chip, get_ec_double_chip, get_ec_mul_chip,
     weierstrass_chip::{
         generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
     },
-    Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32,
-    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    EcMulAir, EcMulChip, Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip,
+    WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
+#[cfg(feature = "rvr")]
+use crate::{CurveConfig, SCALAR_BLOCKS};
 
 #[cfg(feature = "rvr")]
 fn ec_double_setup_words(
@@ -170,6 +170,39 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
             )
         })?;
         replay.generate_proving_ctx(&self.cpu, program, transcript, replay_plan)
+    }
+}
+
+/// GPU-side wrapper for the CPU `EC_MUL` chip.
+///
+/// Unlike the add-ne and double chips, this one has no [`FieldExprReplayChip`]. That replay path is
+/// typed for a [`WeierstrassChip`], and its projection kernel accepts only a fixed set of
+/// (reads, blocks) shapes, none of which describe `EC_MUL`'s point + 256-bit scalar + point access
+/// pattern or its multirow trace. The trace is therefore built on the CPU and uploaded.
+pub struct HybridEcMulChip<F, const NUM_LIMBS: usize, const BLOCKS: usize> {
+    cpu: EcMulChip<F, NUM_LIMBS, BLOCKS>,
+    device_ctx: GpuDeviceCtx,
+    opcode_base: usize,
+}
+
+impl<const NUM_LIMBS: usize, const BLOCKS: usize> HybridEcMulChip<F, NUM_LIMBS, BLOCKS> {
+    pub fn new(
+        cpu: EcMulChip<F, NUM_LIMBS, BLOCKS>,
+        device_ctx: GpuDeviceCtx,
+        opcode_base: usize,
+    ) -> Self {
+        Self {
+            cpu,
+            device_ctx,
+            opcode_base,
+        }
+    }
+
+    fn local_opcodes() -> [usize; 2] {
+        [
+            Rv64WeierstrassOpcode::EC_MUL as usize,
+            Rv64WeierstrassOpcode::SETUP_EC_MUL as usize,
+        ]
     }
 }
 
@@ -302,6 +335,55 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                     ..double_schedule
                 },
             )?;
+
+            // `EC_MUL` reads a point and a fixed-width scalar and writes a point. The scalar is
+            // read on setup rows too, so both schedules share the read spans.
+            let mul_spans = [
+                PostflightAccessSpan::read_fixed(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    0,
+                    blocks as u32,
+                ),
+                PostflightAccessSpan::read_fixed(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    1,
+                    SCALAR_BLOCKS as u32,
+                ),
+                PostflightAccessSpan::write_fixed_from_replay_values(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    2,
+                    blocks as u32,
+                ),
+            ];
+            let mul_schedule = PostflightAccessSchedule {
+                register_operands: &[2, 3, 1],
+                zero_operand_mask: (1 << 6) | (1 << 7),
+                register_as_operand: 4,
+                memory_as_operand: 5,
+                spans: &mul_spans,
+            };
+            registry.register(opcode(Rv64WeierstrassOpcode::EC_MUL)?, mul_schedule)?;
+
+            // A setup row sets no case flag, so the output selects fall through to the base point,
+            // which the setup inputs leave zero. `ec_mul_setup_postimage_is_zero` in the rvr FFI
+            // crate pins this for every curve.
+            let setup_mul_words = vec![0u64; blocks];
+            let setup_mul_spans = [
+                mul_spans[0],
+                mul_spans[1],
+                registry.write_fixed_from_static(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    2,
+                    &setup_mul_words,
+                )?,
+            ];
+            registry.register(
+                opcode(Rv64WeierstrassOpcode::SETUP_EC_MUL)?,
+                PostflightAccessSchedule {
+                    spans: &setup_mul_spans,
+                    ..mul_schedule
+                },
+            )?;
         }
         Ok(())
     }
@@ -395,12 +477,60 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         chip.generate_proving_ctx_from_postflight(self.program, self.transcript, self.replay_plan)
     }
 
+    /// `EC_MUL` has no GPU projection: the shared vec-heap gather kernel accepts only a fixed set
+    /// of (reads, blocks) shapes, and none describes this chip's point + 256-bit scalar + point
+    /// access pattern or its multirow trace. This path can therefore only serve a program that
+    /// issues no `EC_MUL` instruction at all.
+    ///
+    /// Every configured curve registers an `EC_MUL` chip whether or not the program uses one, so an
+    /// unused chip must return the empty context rather than report the missing projection.
+    fn generate_for_ec_mul_chip<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        &mut self,
+        chip: &HybridEcMulChip<F, NUM_LIMBS, BLOCKS>,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        let mut counts = [0usize; 2];
+        for (local, count) in HybridEcMulChip::<F, NUM_LIMBS, BLOCKS>::local_opcodes()
+            .into_iter()
+            .zip(counts.iter_mut())
+        {
+            let opcode = chip.opcode_base + local;
+            let opcode =
+                u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
+            *count = self
+                .replay_plan
+                .opcode_range(openvm_instructions::VmOpcode::from_usize(opcode as usize))
+                .len();
+            self.pending_opcodes.remove(&opcode);
+        }
+        let [muls, setups] = counts;
+        if muls + setups != 0 {
+            // `sw_declare!`'s one-time setup emits SETUP_EC_MUL for every declared curve, so any
+            // program touching a Weierstrass curve reaches this even without a scalar
+            // multiplication. Both cases need the same projection.
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "EC_MUL GPU postflight replay is not implemented: {muls} EC_MUL and {setups} \
+                 SETUP_EC_MUL instruction(s) at opcode base {} require a projection for the \
+                 point + scalar + point access schedule",
+                chip.opcode_base
+            )));
+        }
+        Ok(AirProvingContext::simple_no_pis(
+            openvm_cuda_backend::base::DeviceMatrix::dummy(),
+        ))
+    }
+
     /// Returns `Some` only for a Weierstrass-owned AIR, allowing a concrete
     /// combined coordinator to fall through to algebra and RV64 producers.
     pub fn generate_for_chip(
         &mut self,
         chip: &dyn Any,
     ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuPostflightError> {
+        if let Some(chip) = chip.downcast_ref::<HybridEcMulChip<F, NUM_LIMBS_32, ECC_BLOCKS_32>>() {
+            return self.generate_for_ec_mul_chip(chip).map(Some);
+        }
+        if let Some(chip) = chip.downcast_ref::<HybridEcMulChip<F, NUM_LIMBS_48, ECC_BLOCKS_48>>() {
+            return self.generate_for_ec_mul_chip(chip).map(Some);
+        }
         if let Some(chip) = chip.downcast_ref::<HybridWeierstrassChip<F, 2, ECC_BLOCKS_32>>() {
             return self.generate_for_weierstrass_chip(chip).map(Some);
         }
@@ -546,7 +676,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_32>(
-                    config,
+                    config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
@@ -567,6 +697,24 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                 inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
+
+                inventory.next_air::<EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>>()?;
+                let mul = get_ec_mul_chip::<F, NUM_LIMBS_32, ECC_BLOCKS_32>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    byte_ptr_max_bits,
+                    curve.a.clone(),
+                );
+                let mul = HybridEcMulChip::new(mul, device_ctx.clone(), opcode_base);
+                inventory.add_executor_chip_with_tracegen(mul, move |chip, postflight| {
+                    let trace =
+                        generate_ec_mul_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
                         AirProvingContext::simple_no_pis(trace),
                         &chip.device_ctx,
@@ -609,7 +757,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_48>(
-                    config,
+                    config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
@@ -630,6 +778,24 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                 inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
                     let trace =
                         generate_double_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                    Ok(cpu_proving_ctx_to_gpu(
+                        AirProvingContext::simple_no_pis(trace),
+                        &chip.device_ctx,
+                    ))
+                });
+
+                inventory.next_air::<EcMulAir<NUM_LIMBS_48, ECC_BLOCKS_48>>()?;
+                let mul = get_ec_mul_chip::<F, NUM_LIMBS_48, ECC_BLOCKS_48>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    byte_ptr_max_bits,
+                    curve.a.clone(),
+                );
+                let mul = HybridEcMulChip::new(mul, device_ctx.clone(), opcode_base);
+                inventory.add_executor_chip_with_tracegen(mul, move |chip, postflight| {
+                    let trace =
+                        generate_ec_mul_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
                         AirProvingContext::simple_no_pis(trace),
                         &chip.device_ctx,
