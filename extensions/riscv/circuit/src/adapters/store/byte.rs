@@ -20,7 +20,6 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_AS},
-    PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -29,9 +28,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    address_add_imm, byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_register_pointer,
-    expand_to_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs, sign_extend_imm16, PTR_BITS,
-    PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_register_pointer, expand_to_block,
+    ptr_to_field_u16_limbs, ptr_to_u16_limbs, address_add_imm, sign_extend_imm16,
+    PTR_BITS, PTR_U16_LIMBS, U16_BITS,
 };
 
 // Byte stores never cross a memory block, so this adapter has no second-block columns.
@@ -68,7 +67,6 @@ pub struct StoreByteAdapterCols<T> {
     pub imm_sign: T,
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
     pub mem_ptr_low_limb: T,
-    pub mem_as: T,
     /// Timestamp aux for the memory write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
 }
@@ -147,9 +145,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreByteAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
 
-        // Constrain stores to writable u16-celled address spaces.
-        builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
-
         let (prev_data, read_data) = ctx.reads;
         let write_data = ctx.writes;
 
@@ -171,7 +166,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreByteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    local_cols.mem_as,
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount),
                 ),
                 write_data,
@@ -191,7 +186,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreByteAdapterAir {
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::from_u32(REGISTER_AS),
-                    local_cols.mem_as.into(),
+                    AB::Expr::from_u32(MEMORY_AS),
                     is_valid.clone(),
                     local_cols.imm_sign.into(),
                 ],
@@ -231,9 +226,7 @@ impl StoreByteAdapterFiller {
     ) -> Result<([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH], usize), PostflightError> {
         let instruction = postflight.instruction(step);
         let mem_as = instruction.e.as_canonical_u32();
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || !matches!(mem_as, MEMORY_AS | PUBLIC_VALUES_AS)
-        {
+        if instruction.d.as_canonical_u32() != REGISTER_AS || mem_as != MEMORY_AS {
             return Err(PostflightError::new(
                 "byte-store instruction has invalid address spaces",
             ));
@@ -264,14 +257,21 @@ impl StoreByteAdapterFiller {
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr)))?;
-        if rs1.value[PTR_U16_LIMBS..].iter().any(|&limb| limb != 0) {
+        let rs1 = replay.read_u16(
+            REGISTER_AS,
+            byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr)),
+        )?;
+        if rs1.value[PTR_U16_LIMBS..]
+            .iter()
+            .any(|&limb| limb != 0)
+        {
             return Err(PostflightError::new(
                 "byte-store base register is not a low-32-bit pointer",
             ));
         }
         let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
-        let effective_ptr = address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let effective_ptr =
+            address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
         let effective_ptr = u32::try_from(effective_ptr)
             .ok()
             .filter(|&ptr| {
@@ -286,8 +286,10 @@ impl StoreByteAdapterFiller {
         let shift_amount = effective_ptr as usize & (MEMORY_BLOCK_BYTES - 1);
         let aligned_ptr = effective_ptr - shift_amount as u32;
 
-        let read_data =
-            replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr)))?;
+        let read_data = replay.read_u16(
+            REGISTER_AS,
+            byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr)),
+        )?;
         let mem_ptr = byte_ptr_to_u16_ptr_value(aligned_ptr);
         let prev_data = replay.peek_u16(mem_as, mem_ptr)?;
         let write_data = compute(read_data.value, prev_data, shift_amount);
@@ -304,7 +306,6 @@ impl StoreByteAdapterFiller {
             write.timestamp,
             &mut adapter_row.write_base_aux,
         );
-        adapter_row.mem_as = F::from_u32(mem_as);
         let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
         self.range_checker_chip
             .add_count((ptr_limbs[0] - shift_amount as u32) >> 3, U16_BITS - 3);

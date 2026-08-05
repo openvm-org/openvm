@@ -18,13 +18,14 @@ use openvm_instructions::{
     instruction::Instruction,
     program::Program,
     riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
-    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode,
+    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
-    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
-    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
-    JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, AuipcOpcode, HintStoreOpcode, JalLuiOpcode,
+    JalrOpcode, LoadStoreOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode,
+    ShiftWImmOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -34,8 +35,8 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::Rv64ImPreflightGpuTracegen;
 use crate::{
-    adapters::REGISTER_NUM_LIMBS, preflight::PreflightReplayProgram, MultiplicationChipGpu,
-    Rv64IConfig, Rv64IGpuBuilder, Rv64ImConfig, Rv64ImGpuBuilder,
+    adapters::REGISTER_NUM_LIMBS, preflight::PreflightReplayProgram, Rv64IConfig,
+    Rv64IGpuBuilder, Rv64ImConfig, Rv64ImGpuBuilder, MultiplicationChipGpu,
 };
 
 type F = BabyBear;
@@ -351,6 +352,18 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
             ],
         ),
         Instruction::from_usize(
+            RevealOpcode::REVEAL.global_opcode(),
+            [
+                reg(2),
+                reg(1),
+                6,
+                REGISTER_AS as usize,
+                PUBLIC_VALUES_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
             JalrOpcode::JALR.global_opcode(),
             [reg(30), 0, 200, REGISTER_AS as usize, 0, 1, 0],
         ),
@@ -370,7 +383,9 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
+                .map(move |(offset, byte)| {
+                    ((REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
         })
         .collect::<openvm_instructions::exe::SparseMemoryImage>();
     init_memory.insert((MEMORY_AS, 3), 0x80);
@@ -1012,8 +1027,20 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
         0,
         false,
     );
-    append_store_load(LoadStoreOpcode::STOREH, LoadStoreOpcode::LOADH, 4, 7, false);
-    append_store_load(LoadStoreOpcode::STOREW, LoadStoreOpcode::LOADW, 5, 6, false);
+    append_store_load(
+        LoadStoreOpcode::STOREH,
+        LoadStoreOpcode::LOADH,
+        4,
+        7,
+        false,
+    );
+    append_store_load(
+        LoadStoreOpcode::STOREW,
+        LoadStoreOpcode::LOADW,
+        5,
+        6,
+        false,
+    );
     append_store_load(
         LoadStoreOpcode::STORED,
         LoadStoreOpcode::LOADD,
@@ -1041,7 +1068,9 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
+                .map(move |(offset, byte)| {
+                    ((REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
         })
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(initial_registers);
@@ -1321,7 +1350,13 @@ fn preflight_postflight_rejects_raw_x0_destination() {
     let instructions = [
         instruction(
             MulOpcode::MUL,
-            [0, reg(1), reg(2), REGISTER_AS as usize, IMM_AS as usize],
+            [
+                0,
+                reg(1),
+                reg(2),
+                REGISTER_AS as usize,
+                IMM_AS as usize,
+            ],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -1333,7 +1368,9 @@ fn preflight_postflight_rejects_raw_x0_destination() {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
+                .map(move |(offset, byte)| {
+                    ((REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
         })
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
@@ -1377,11 +1414,23 @@ fn preflight_gpu_replay_proves_hint_store() {
     let instructions = [
         Instruction::<F>::from_usize(
             HintStoreOpcode::HINT_STORED.global_opcode(),
-            [0, reg(1), 0, REGISTER_AS as usize, MEMORY_AS as usize],
+            [
+                0,
+                reg(1),
+                0,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
+            ],
         ),
         Instruction::<F>::from_usize(
             HintStoreOpcode::HINT_BUFFER.global_opcode(),
-            [reg(2), reg(3), 0, REGISTER_AS as usize, MEMORY_AS as usize],
+            [
+                reg(2),
+                reg(3),
+                0,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
+            ],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -1393,7 +1442,9 @@ fn preflight_gpu_replay_proves_hint_store() {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
+                .map(move |(offset, byte)| {
+                    ((REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
         })
         .collect();
     // Both hint instructions overwrite nonzero initial words. This exercises the first-write

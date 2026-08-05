@@ -419,34 +419,15 @@ __device__ __forceinline__ uint64_t normalize_load_result(
     return value;
 }
 
-__device__ __forceinline__ bool validate_load_store(
+__device__ __forceinline__ bool validate_memory_access(
     RvrReplayInstruction const &instruction,
     uint32_t register_as,
-    uint32_t memory_as,
+    uint32_t expected_address_space,
     uint32_t pointer_max_bits,
     ReplayState const &state,
     size_t initial_memory_bytes,
     LoadStoreInstruction &decoded
 ) {
-    uint32_t local;
-    if (!opcode_in_family(instruction.words[0], LOAD_STORE_OPCODE_BASE, LOAD_STORE_OPCODE_COUNT, local)) return false;
-    decoded.is_load = local <= 3 || local >= 8;
-    decoded.sign_extend = local >= 8;
-    switch (local) {
-    case 0:
-    case 4: decoded.width = 8; break;
-    case 3:
-    case 5:
-    case 10: decoded.width = 4; break;
-    case 2:
-    case 6:
-    case 9: decoded.width = 2; break;
-    case 1:
-    case 7:
-    case 8: decoded.width = 1; break;
-    default: return false;
-    }
-
     uint32_t rd_or_rs2_ptr = instruction.words[1];
     uint32_t rs1_ptr = instruction.words[2];
     uint32_t imm = instruction.words[3];
@@ -456,11 +437,8 @@ __device__ __forceinline__ bool validate_load_store(
         !replay_canonical_register_pointer(rd_or_rs2_ptr) ||
         !replay_canonical_register_pointer(rs1_ptr) || imm > UINT16_MAX || imm_sign > 1)
         return false;
-    if (decoded.is_load) {
-        if (instruction.words[5] != memory_as ||
-            needs_write != uint32_t(rd_or_rs2_ptr != 0)) return false;
-    } else if ((instruction.words[5] != memory_as && instruction.words[5] != memory_as + 1) ||
-               needs_write != 1) {
+    if (instruction.words[5] != expected_address_space ||
+        (decoded.is_load ? needs_write != uint32_t(rd_or_rs2_ptr != 0) : needs_write != 1)) {
         return false;
     }
     decoded.rd_or_rs2 = rd_or_rs2_ptr / REGISTER_BYTES;
@@ -485,6 +463,74 @@ __device__ __forceinline__ bool validate_load_store(
         return false;
     }
     return true;
+}
+
+__device__ __forceinline__ bool validate_load_store(
+    RvrReplayInstruction const &instruction,
+    uint32_t register_as,
+    uint32_t memory_as,
+    uint32_t pointer_max_bits,
+    ReplayState const &state,
+    size_t initial_memory_bytes,
+    LoadStoreInstruction &decoded
+) {
+    uint32_t local;
+    if (!opcode_in_family(
+            instruction.words[0],
+            LOAD_STORE_OPCODE_BASE,
+            LOAD_STORE_OPCODE_COUNT,
+            local
+        )) {
+        return false;
+    }
+    decoded.is_load = local <= 3 || local >= 8;
+    decoded.sign_extend = local >= 8;
+    switch (local) {
+    case 0:
+    case 4: decoded.width = 8; break;
+    case 3:
+    case 5:
+    case 10: decoded.width = 4; break;
+    case 2:
+    case 6:
+    case 9: decoded.width = 2; break;
+    case 1:
+    case 7:
+    case 8: decoded.width = 1; break;
+    default: return false;
+    }
+    return validate_memory_access(
+        instruction,
+        register_as,
+        memory_as,
+        pointer_max_bits,
+        state,
+        initial_memory_bytes,
+        decoded
+    );
+}
+
+__device__ __forceinline__ bool validate_reveal(
+    RvrReplayInstruction const &instruction,
+    uint32_t register_as,
+    uint32_t public_values_as,
+    uint32_t pointer_max_bits,
+    ReplayState const &state,
+    LoadStoreInstruction &decoded
+) {
+    if (instruction.words[0] != REVEAL_OPCODE_BASE) return false;
+    decoded.is_load = false;
+    decoded.sign_extend = false;
+    decoded.width = 8;
+    return validate_memory_access(
+        instruction,
+        register_as,
+        public_values_as,
+        pointer_max_bits,
+        state,
+        0,
+        decoded
+    );
 }
 
 __device__ __forceinline__ uint32_t branch_target(uint32_t pc, uint32_t encoded_offset) {
@@ -990,6 +1036,7 @@ __device__ bool replay_chunk(
     size_t chunk,
     uint32_t register_as,
     uint32_t memory_as,
+    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1151,12 +1198,30 @@ __device__ bool replay_chunk(
             state.pc += 4;
             state.timestamp += 3 * decoded.num_words;
         } else if (
-            opcode >= LOAD_STORE_OPCODE_BASE &&
-            opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT
+            opcode == REVEAL_OPCODE_BASE ||
+            (opcode >= LOAD_STORE_OPCODE_BASE &&
+             opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT)
         ) {
             LoadStoreInstruction decoded{};
-            if (!validate_load_store(*instruction, register_as, memory_as,
-                                     byte_pointer_max_bits, state, initial_memory.len(), decoded)) {
+            bool valid = opcode == REVEAL_OPCODE_BASE
+                             ? validate_reveal(
+                                   *instruction,
+                                   register_as,
+                                   public_values_as,
+                                   byte_pointer_max_bits,
+                                   state,
+                                   decoded
+                               )
+                             : validate_load_store(
+                                   *instruction,
+                                   register_as,
+                                   memory_as,
+                                   byte_pointer_max_bits,
+                                   state,
+                                   initial_memory.len(),
+                                   decoded
+                               );
+            if (!valid) {
                 preflight_set_error(error, ERROR_BAD_LOAD);
                 return false;
             }
@@ -1448,6 +1513,7 @@ __global__ void checkpoint_count(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
+    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1464,7 +1530,7 @@ __global__ void checkpoint_count(
     uint32_t field_count = 0;
     if (replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
                      schedule_dispatch, schedules, spans, static_values, chunk,
-                     register_as, memory_as, immediate_as, deferral_as,
+                     register_as, memory_as, public_values_as, immediate_as, deferral_as,
                      byte_pointer_max_bits, cell_pointer_max_bits, initial_pc, initial_timestamp,
                      endpoint_kind, DeviceBufferView<PreflightProgramEvent>{nullptr, 0},
                      nullptr, nullptr, 0, 0, nullptr, 0, 0,
@@ -1487,6 +1553,7 @@ __global__ void checkpoint_emit(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
+    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1507,7 +1574,8 @@ __global__ void checkpoint_emit(
     auto const offsets = event_offsets[chunk];
     if (!replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
                       schedule_dispatch, schedules, spans, static_values, chunk,
-                      register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
+                      register_as, memory_as, public_values_as, immediate_as, deferral_as,
+                      byte_pointer_max_bits,
                       cell_pointer_max_bits, initial_pc, initial_timestamp, endpoint_kind,
                       program, memory.data(), write_masks.data(), memory.len(), offsets.memory,
                       field_values.data(), field_values.len(), offsets.field, memory_count,
@@ -1551,6 +1619,7 @@ extern "C" int _rvr_checkpoint_count(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
+    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1566,8 +1635,9 @@ extern "C" int _rvr_checkpoint_count(
     auto [grid, block] = kernel_launch_params(anchors.len(), REPLAY_THREADS);
     checkpoint_count<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
-        schedule_dispatch, schedules, spans, static_values, register_as,
-        memory_as, immediate_as, deferral_as, byte_pointer_max_bits, cell_pointer_max_bits,
+        schedule_dispatch, schedules, spans, static_values, register_as, memory_as,
+        public_values_as, immediate_as, deferral_as, byte_pointer_max_bits,
+        cell_pointer_max_bits,
         initial_pc, initial_timestamp,
         endpoint_kind, event_counts, error
     );
@@ -1588,6 +1658,7 @@ extern "C" int _rvr_checkpoint_emit(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
+    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1609,8 +1680,8 @@ extern "C" int _rvr_checkpoint_emit(
     checkpoint_emit<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
         event_offsets, schedule_dispatch, schedules, spans, static_values,
-        register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
-        cell_pointer_max_bits, initial_pc, initial_timestamp,
+        register_as, memory_as, public_values_as, immediate_as, deferral_as,
+        byte_pointer_max_bits, cell_pointer_max_bits, initial_pc, initial_timestamp,
         endpoint_kind, program, memory, write_masks, field_values, error
     );
     return CHECK_KERNEL();

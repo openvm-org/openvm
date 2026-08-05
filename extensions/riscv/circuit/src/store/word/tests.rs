@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::sync::Arc;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
@@ -15,29 +15,21 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{MEMORY_AS, REGISTER_AS},
-    LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREW};
-use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
-    utils::disable_debug_builder,
-};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::utils::create_seeded_rng;
 
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterCols,
-        StoreMultiByteAdapterFiller, BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller,
+        BYTE_BITS,
     },
     store::{
         common::store_write_data, core::fill_padding_row, StoreWordAir, StoreWordChip,
-        StoreWordCoreAir, StoreWordExecutor, StoreWordFiller,
+        StoreWordExecutor, StoreWordCoreAir, StoreWordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -47,7 +39,8 @@ use crate::{
     test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
-type StoreWordHarness = TestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChip<F>>;
+type StoreWordHarness =
+    TestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChip<F>>;
 
 fn create_store_word_harness(
     tester: &mut VmChipTestBuilder<F>,
@@ -60,7 +53,9 @@ fn create_store_word_harness(
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = StoreWordAir::new(
         StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
@@ -90,31 +85,6 @@ fn create_store_word_harness(
         .with_padding(fill_padding_row),
         (bitwise_chip.air, bitwise_chip),
     )
-}
-
-#[test]
-fn positive_storew_public_values_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let (mut harness, bitwise) = create_store_word_harness(&mut tester);
-    set_and_execute_store(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.preflight,
-        &mut rng,
-        STOREW,
-        Some([4, 0, 0, 0, 0, 0, 0, 0]),
-        Some(0),
-        Some(0),
-        Some(PUBLIC_VALUES_AS as usize),
-    );
-    tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize()
-        .simple_test()
-        .unwrap();
 }
 
 #[test]
@@ -159,7 +129,7 @@ fn negative_store_address_wraparound_test() {
         Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
         Some(16),
         Some(0),
-        Some(PUBLIC_VALUES_AS as usize),
+        Some(MEMORY_AS as usize),
     );
 }
 
@@ -228,43 +198,14 @@ fn run_storew_sanity_test() {
     );
 }
 
-#[test]
-fn negative_split_store_deferral_as_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let (mut harness, bitwise) = create_store_word_harness(&mut tester);
-    set_and_execute_store(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.preflight,
-        &mut rng,
-        STOREW,
-        None,
-        None,
-        None,
-        None,
-    );
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter: &mut StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
-        adapter.mem_as = F::from_u32(DEFERRAL_AS);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-    disable_debug_builder();
-    tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize()
-        .simple_test()
-        .expect_err("pranked store adapter trace should fail");
-}
-
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuStoreWordHarness =
-    GpuTestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChipGpu, StoreWordChip<F>>;
+type GpuStoreWordHarness = GpuTestChipHarness<
+    F,
+    StoreWordExecutor,
+    StoreWordAir,
+    StoreWordChipGpu,
+    StoreWordChip<F>,
+>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHarness {
@@ -308,9 +249,8 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-#[test_case::test_case(MEMORY_AS as usize)]
-#[test_case::test_case(PUBLIC_VALUES_AS as usize)]
-fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
+#[test]
+fn test_cuda_rand_store_word_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::new(store_gpu_memory_config(), default_var_range_checker_bus())
@@ -326,7 +266,7 @@ fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
             None,
             None,
             None,
-            Some(mem_as),
+            Some(MEMORY_AS as usize),
         );
     }
     tester

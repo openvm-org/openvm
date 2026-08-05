@@ -19,8 +19,29 @@ pub(crate) fn store_write_data(
     prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
     byte_shift: usize,
 ) -> [[u16; BLOCK_FE_WIDTH]; 2] {
+    rmw_write_data(
+        store_width_for_opcode(opcode),
+        read_data,
+        prev_data,
+        byte_shift,
+    )
+}
+
+pub(crate) fn doubleword_rmw_write_data(
+    read_data: [u16; BLOCK_FE_WIDTH],
+    prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
+    byte_shift: usize,
+) -> [[u16; BLOCK_FE_WIDTH]; 2] {
+    rmw_write_data(DOUBLEWORD_ACCESS_WIDTH, read_data, prev_data, byte_shift)
+}
+
+fn rmw_write_data(
+    width: usize,
+    read_data: [u16; BLOCK_FE_WIDTH],
+    prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
+    byte_shift: usize,
+) -> [[u16; BLOCK_FE_WIDTH]; 2] {
     debug_assert!(byte_shift < 2 * BLOCK_FE_WIDTH);
-    let width = store_width_for_opcode(opcode);
     let mut bytes = [0u8; 4 * BLOCK_FE_WIDTH];
     bytes[..2 * BLOCK_FE_WIDTH].copy_from_slice(&u16_block_to_bytes(prev_data[0]));
     bytes[2 * BLOCK_FE_WIDTH..].copy_from_slice(&u16_block_to_bytes(prev_data[1]));

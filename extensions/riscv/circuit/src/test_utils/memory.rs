@@ -19,7 +19,7 @@ use openvm_riscv_transpiler::LoadStoreOpcode::{
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
+use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::testing::default_var_range_checker_bus,
@@ -27,7 +27,9 @@ use {
 };
 
 use crate::{
-    adapters::{bytes_to_u16_block, bytes_to_u32, sign_extend_imm16, u16_block_to_bytes},
+    adapters::{
+        bytes_to_u16_block, bytes_to_u32, u16_block_to_bytes, sign_extend_imm16,
+    },
     load::common::load_write_data,
     store::common::store_write_data,
 };
@@ -112,7 +114,11 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or(MEMORY_AS as usize);
 
-    tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        access.b,
+        access.rs1.map(F::from_u8),
+    );
 
     let mut prev_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
         bytes_to_u16_block(access.rs1)
@@ -188,13 +194,13 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     );
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
-    let mem_as = mem_as.unwrap_or_else(|| {
-        *[MEMORY_AS as usize, PUBLIC_VALUES_AS as usize]
-            .choose(rng)
-            .unwrap()
-    });
+    let mem_as = mem_as.unwrap_or(MEMORY_AS as usize);
 
-    tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        access.b,
+        access.rs1.map(F::from_u8),
+    );
 
     let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
         array::from_fn(|_| array::from_fn(|_| rng.random()));

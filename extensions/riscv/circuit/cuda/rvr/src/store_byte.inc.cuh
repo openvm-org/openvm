@@ -16,8 +16,6 @@ __global__ void store_byte_replay_tracegen(
     uint32_t *error,
     uint32_t opcode,
     uint32_t register_as,
-    uint32_t main_memory_as,
-    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
@@ -28,7 +26,6 @@ __global__ void store_byte_replay_tracegen(
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
     row.fill_zero(0, sizeof(StoreByteCols<uint8_t>));
-    COL_WRITE_VALUE(row, StoreByteCols, adapter.mem_as, main_memory_as);
     if (idx >= num_steps) return;
 
     ReplayStoreByteInput input = {};
@@ -42,8 +39,6 @@ __global__ void store_byte_replay_tracegen(
             steps[step_start + idx],
             opcode,
             register_as,
-            main_memory_as,
-            public_values_as,
             pointer_max_bits,
             input,
             error
@@ -64,8 +59,7 @@ __global__ void store_byte_replay_tracegen(
         input.rs2_prev_timestamp,
         input.write_prev_timestamp,
         input.imm,
-        input.imm_sign,
-        input.memory_as
+        input.imm_sign
     );
     auto core = StoreByteCore(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
@@ -94,8 +88,6 @@ extern "C" int _store_byte_replay_tracegen(
     uint32_t *d_error,
     uint32_t opcode,
     uint32_t register_as,
-    uint32_t main_memory_as,
-    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
@@ -124,8 +116,6 @@ extern "C" int _store_byte_replay_tracegen(
         d_error,
         opcode,
         register_as,
-        main_memory_as,
-        public_values_as,
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,

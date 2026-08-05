@@ -29,10 +29,11 @@ use openvm_cuda_backend::{
 };
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_riscv_transpiler::{
-    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
-    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
-    JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, AuipcOpcode, HintStoreOpcode, JalLuiOpcode,
+    JalrOpcode, LoadStoreOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode,
+    ShiftWImmOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
@@ -40,26 +41,33 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 #[cfg(feature = "rvr")]
 use crate::preflight::PreflightReplayProgram;
 use crate::{
-    AddIAir, AddIChipGpu, AddIWAir, AddIWChipGpu, AddSubAir, AddSubChipGpu, AddSubWAir,
-    AddSubWChipGpu, AuipcAir, AuipcChipGpu, BitwiseLogicAir, BitwiseLogicChipGpu,
-    BitwiseLogicImmAir, BitwiseLogicImmChipGpu, BranchEqualAir, BranchEqualChipGpu,
-    BranchLessThanAir, BranchLessThanChipGpu, DivRemAir, DivRemChipGpu, DivRemWAir, DivRemWChipGpu,
-    HintStoreAir, HintStoreChipGpu, JalLuiAir, JalLuiChipGpu, JalrAir, JalrChipGpu, LessThanAir,
-    LessThanChipGpu, LessThanImmAir, LessThanImmChipGpu, LoadByteAir, LoadByteChipGpu,
-    LoadDoublewordAir, LoadDoublewordChipGpu, LoadHalfwordAir, LoadHalfwordChipGpu,
+    AddIAir, AddIChipGpu, AddIWAir, AddIWChipGpu, AddSubAir, AddSubChipGpu,
+    AddSubWAir, AddSubWChipGpu, AuipcAir, AuipcChipGpu, BitwiseLogicAir,
+    BitwiseLogicChipGpu, BitwiseLogicImmAir, BitwiseLogicImmChipGpu,
+    BranchEqualAir, BranchEqualChipGpu, BranchLessThanAir, BranchLessThanChipGpu,
+    DivRemAir, DivRemChipGpu, DivRemWAir, DivRemWChipGpu, HintStoreAir,
+    HintStoreChipGpu, Rv64I, Rv64Io, JalLuiAir, JalLuiChipGpu, JalrAir,
+    JalrChipGpu, LessThanAir, LessThanChipGpu, LessThanImmAir,
+    LessThanImmChipGpu, LoadByteAir, LoadByteChipGpu, LoadDoublewordAir,
+    LoadDoublewordChipGpu, LoadHalfwordAir, LoadHalfwordChipGpu,
     LoadSignExtendByteAir, LoadSignExtendByteChipGpu, LoadSignExtendHalfwordAir,
-    LoadSignExtendHalfwordChipGpu, LoadSignExtendWordAir, LoadSignExtendWordChipGpu, LoadWordAir,
-    LoadWordChipGpu, MulHAir, MulHChipGpu, MulWAir, MulWChipGpu, MultiplicationAir,
-    MultiplicationChipGpu, Rv64I, Rv64Io, Rv64M, ShiftLogicalAir, ShiftLogicalChipGpu,
-    ShiftLogicalImmAir, ShiftLogicalImmChipGpu, ShiftRightArithmeticAir,
-    ShiftRightArithmeticChipGpu, ShiftRightArithmeticImmAir, ShiftRightArithmeticImmChipGpu,
-    ShiftWLogicalAir, ShiftWLogicalChipGpu, ShiftWLogicalImmAir, ShiftWLogicalImmChipGpu,
-    ShiftWRightArithmeticAir, ShiftWRightArithmeticChipGpu, ShiftWRightArithmeticImmAir,
-    ShiftWRightArithmeticImmChipGpu, StoreByteAir, StoreByteChipGpu, StoreDoublewordAir,
-    StoreDoublewordChipGpu, StoreHalfwordAir, StoreHalfwordChipGpu, StoreWordAir, StoreWordChipGpu,
+    LoadSignExtendHalfwordChipGpu, LoadSignExtendWordAir, LoadSignExtendWordChipGpu,
+    LoadWordAir, LoadWordChipGpu, Rv64M, MulHAir, MulHChipGpu, MulWAir,
+    MulWChipGpu, MultiplicationAir, MultiplicationChipGpu, RevealAir,
+    RevealChipGpu, ShiftLogicalAir, ShiftLogicalChipGpu, ShiftLogicalImmAir,
+    ShiftLogicalImmChipGpu, ShiftRightArithmeticAir, ShiftRightArithmeticChipGpu,
+    ShiftRightArithmeticImmAir, ShiftRightArithmeticImmChipGpu, ShiftWLogicalAir,
+    ShiftWLogicalChipGpu, ShiftWLogicalImmAir, ShiftWLogicalImmChipGpu,
+    ShiftWRightArithmeticAir, ShiftWRightArithmeticChipGpu,
+    ShiftWRightArithmeticImmAir, ShiftWRightArithmeticImmChipGpu, StoreByteAir,
+    StoreByteChipGpu, StoreDoublewordAir, StoreDoublewordChipGpu, StoreHalfwordAir,
+    StoreHalfwordChipGpu, StoreWordAir, StoreWordChipGpu,
 };
 
-include!(concat!(env!("OUT_DIR"), "/checkpoint_replay_opcodes.rs"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/checkpoint_replay_opcodes.rs"
+));
 
 pub struct Rv64ImGpuProverExt;
 
@@ -270,9 +278,18 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
             BitwiseLogicChipGpu,
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND,]
         );
-        replay_chip!(AddSubWChipGpu, [BaseAluWOpcode::ADDW, BaseAluWOpcode::SUBW]);
-        replay_chip!(LessThanChipGpu, [LessThanOpcode::SLT, LessThanOpcode::SLTU]);
-        replay_chip!(ShiftLogicalChipGpu, [ShiftOpcode::SLL, ShiftOpcode::SRL]);
+        replay_chip!(
+            AddSubWChipGpu,
+            [BaseAluWOpcode::ADDW, BaseAluWOpcode::SUBW]
+        );
+        replay_chip!(
+            LessThanChipGpu,
+            [LessThanOpcode::SLT, LessThanOpcode::SLTU]
+        );
+        replay_chip!(
+            ShiftLogicalChipGpu,
+            [ShiftOpcode::SLL, ShiftOpcode::SRL]
+        );
         replay_chip!(ShiftRightArithmeticChipGpu, [ShiftOpcode::SRA]);
         replay_chip!(
             ShiftWLogicalChipGpu,
@@ -284,7 +301,10 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
             ShiftWLogicalImmChipGpu,
             [ShiftWImmOpcode::SLLIW, ShiftWImmOpcode::SRLIW]
         );
-        replay_chip!(ShiftWRightArithmeticImmChipGpu, [ShiftWImmOpcode::SRAIW]);
+        replay_chip!(
+            ShiftWRightArithmeticImmChipGpu,
+            [ShiftWImmOpcode::SRAIW]
+        );
         replay_chip!(
             BranchEqualChipGpu,
             [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE]
@@ -298,12 +318,18 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
                 BranchLessThanOpcode::BGEU,
             ]
         );
-        replay_chip!(JalLuiChipGpu, [JalLuiOpcode::JAL, JalLuiOpcode::LUI]);
+        replay_chip!(
+            JalLuiChipGpu,
+            [JalLuiOpcode::JAL, JalLuiOpcode::LUI]
+        );
         replay_chip!(JalrChipGpu, [JalrOpcode::JALR]);
         replay_chip!(AuipcChipGpu, [AuipcOpcode::AUIPC]);
         replay_chip!(LoadSignExtendByteChipGpu, [LoadStoreOpcode::LOADB]);
         replay_chip!(LoadByteChipGpu, [LoadStoreOpcode::LOADBU]);
-        replay_chip!(LoadSignExtendHalfwordChipGpu, [LoadStoreOpcode::LOADH]);
+        replay_chip!(
+            LoadSignExtendHalfwordChipGpu,
+            [LoadStoreOpcode::LOADH]
+        );
         replay_chip!(LoadHalfwordChipGpu, [LoadStoreOpcode::LOADHU]);
         replay_chip!(LoadSignExtendWordChipGpu, [LoadStoreOpcode::LOADW]);
         replay_chip!(LoadWordChipGpu, [LoadStoreOpcode::LOADWU]);
@@ -312,9 +338,13 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
         replay_chip!(StoreHalfwordChipGpu, [LoadStoreOpcode::STOREH]);
         replay_chip!(StoreWordChipGpu, [LoadStoreOpcode::STOREW]);
         replay_chip!(StoreDoublewordChipGpu, [LoadStoreOpcode::STORED]);
+        replay_chip!(RevealChipGpu, [RevealOpcode::REVEAL]);
         replay_chip!(
             HintStoreChipGpu,
-            [HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER,]
+            [
+                HintStoreOpcode::HINT_STORED,
+                HintStoreOpcode::HINT_BUFFER,
+            ]
         );
         replay_chip!(MultiplicationChipGpu, [MulOpcode::MUL]);
         replay_chip!(MulWChipGpu, [MulWOpcode::MULW]);
@@ -446,7 +476,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64I> for Rv64ImGpuProverExt
         inventory.add_executor_chip(shift_right_arithmetic);
 
         inventory.next_air::<ShiftWLogicalAir>()?;
-        let shift_w_logical = ShiftWLogicalChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_w_logical =
+            ShiftWLogicalChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(shift_w_logical);
 
         inventory.next_air::<ShiftWRightArithmeticAir>()?;
@@ -716,11 +747,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverEx
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<HintStoreAir>()?;
         let hint_store =
             HintStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(hint_store);
+
+        inventory.next_air::<RevealAir>()?;
+        let reveal = RevealChipGpu::new(
+            range_checker,
+            bitwise_lu,
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(reveal);
 
         Ok(())
     }

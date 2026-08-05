@@ -6,11 +6,12 @@ use openvm_decoder::{
 };
 use openvm_instructions::{
     instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
-    SystemOpcode,
+    SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_guest::{
-    PhantomImm, ALU_OPCODE, ALU_OP_32, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3,
-    HINT_STORED_IMM, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STORED_IMM,
+    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, ALU_OPCODE, ALU_OP_32, SYSTEM_OPCODE,
+    TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -175,14 +176,13 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
             REVEAL_FUNCT3 => {
                 let dec_insn = IType::new(instruction_u32);
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
-                // REVEAL_RV64 is a pseudo-instruction for STORED_RV64 a,b,c,1,3
                 Some(Instruction::large_from_isize(
-                    LoadStoreOpcode::STORED.global_opcode(),
+                    RevealOpcode::REVEAL.global_opcode(),
                     (REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
                     (REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,
                     1,
-                    3,
+                    PUBLIC_VALUES_AS as isize,
                     1,
                     (dec_insn.imm < 0) as isize,
                 ))
@@ -191,5 +191,72 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
         };
 
         instruction.map(TranspilerOutput::one_to_one)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{
+        instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PUBLIC_VALUES_AS,
+    };
+    use openvm_riscv_guest::{REVEAL_FUNCT3, ALU_OPCODE, SYSTEM_OPCODE};
+    use openvm_transpiler::TranspilerExtension;
+    use p3_baby_bear::BabyBear;
+
+    use super::{Rv64IoTranspilerExtension, RevealOpcode};
+
+    fn encode_reveal(rs1: u32, rd: u32, imm: i32) -> u32 {
+        debug_assert!((-(1 << 11)..(1 << 11)).contains(&imm));
+        ((imm as u32 & 0xfff) << 20)
+            | (rs1 << 15)
+            | (u32::from(REVEAL_FUNCT3) << 12)
+            | (rd << 7)
+            | u32::from(SYSTEM_OPCODE)
+    }
+
+    fn transpile(instruction: u32) -> Option<Instruction<BabyBear>> {
+        <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
+            &Rv64IoTranspilerExtension,
+            &[instruction],
+        )?
+        .instructions
+        .into_iter()
+        .next()?
+    }
+
+    #[test]
+    fn reveal_preserves_legacy_operands() {
+        for (rs1, rd, imm) in [(7, 3, 123), (31, 0, -2048), (0, 31, 2047)] {
+            let actual =
+                transpile(encode_reveal(rs1, rd, imm)).expect("well-formed REVEAL must transpile");
+            let expected = Instruction::large_from_isize(
+                RevealOpcode::REVEAL.global_opcode(),
+                (REGISTER_NUM_LIMBS * rs1 as usize) as isize,
+                (REGISTER_NUM_LIMBS * rd as usize) as isize,
+                (imm as i16 as u16) as isize,
+                1,
+                PUBLIC_VALUES_AS as isize,
+                1,
+                isize::from(imm.is_negative()),
+            );
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn reveal_rejects_non_reveal_instruction_shapes() {
+        let reveal = encode_reveal(7, 3, -1);
+        let wrong_opcode = (reveal & !0x7f) | u32::from(ALU_OPCODE);
+        let wrong_funct3 = (reveal & !(0b111 << 12)) | (0b111 << 12);
+
+        assert!(transpile(wrong_opcode).is_none());
+        assert!(transpile(wrong_funct3).is_none());
+        assert!(
+            <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
+                &Rv64IoTranspilerExtension,
+                &[],
+            )
+            .is_none()
+        );
     }
 }

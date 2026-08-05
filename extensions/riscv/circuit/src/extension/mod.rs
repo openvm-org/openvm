@@ -24,10 +24,11 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
-    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
-    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
-    JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, AuipcOpcode, HintStoreOpcode, JalLuiOpcode,
+    JalrOpcode, LoadStoreOpcode, Rv64Phantom, RevealOpcode, ShiftImmOpcode,
+    ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -179,6 +180,7 @@ pub enum Rv64MExecutor {
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Rv64IoExecutor {
     HintStore(HintStoreExecutor),
+    Reveal(RevealExecutor),
 }
 
 // ============ VmExtension Implementations ============
@@ -214,7 +216,8 @@ impl VmExecutionExtension for Rv64I {
             [ShiftOpcode::SLL, ShiftOpcode::SRL].map(|x| x.global_opcode()),
         )?;
 
-        let shift_right_arithmetic = ShiftRightArithmeticExecutor::new(ShiftOpcode::CLASS_OFFSET);
+        let shift_right_arithmetic =
+            ShiftRightArithmeticExecutor::new(ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(
             shift_right_arithmetic,
             [ShiftOpcode::SRA].map(|x| x.global_opcode()),
@@ -252,7 +255,8 @@ impl VmExecutionExtension for Rv64I {
             [ShiftWImmOpcode::SRAIW].map(|x| x.global_opcode()),
         )?;
 
-        let load_sign_extend_byte = LoadSignExtendByteExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+        let load_sign_extend_byte =
+            LoadSignExtendByteExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
             load_sign_extend_byte,
             [LoadStoreOpcode::LOADB].map(|x| x.global_opcode()),
@@ -289,7 +293,8 @@ impl VmExecutionExtension for Rv64I {
             [LoadStoreOpcode::STOREH].map(|x| x.global_opcode()),
         )?;
 
-        let load_sign_extend_word = LoadSignExtendWordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+        let load_sign_extend_word =
+            LoadSignExtendWordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
             load_sign_extend_word,
             [LoadStoreOpcode::LOADW].map(|x| x.global_opcode()),
@@ -484,7 +489,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(shift_w_right_arithmetic_imm);
 
         let load_sign_extend_byte = LoadSignExtendByteAir::new(
-            LoadByteAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            LoadByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             LoadSignExtendByteCoreAir::new(
                 LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu,
@@ -494,13 +504,23 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(load_sign_extend_byte);
 
         let load_byte = LoadByteAir::new(
-            LoadByteAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            LoadByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             LoadByteCoreAir::new(LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_byte);
 
         let store_byte = StoreByteAir::new(
-            StoreByteAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            StoreByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             StoreByteCoreAir::new(LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_byte);
@@ -708,7 +728,8 @@ where
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
         inventory.next_air::<AddSubAir>()?;
-        let add_sub = AddSubChip::new(AddSubFiller::new(range_checker.clone()), mem_helper.clone());
+        let add_sub =
+            AddSubChip::new(AddSubFiller::new(range_checker.clone()), mem_helper.clone());
         add_executor_chip_with_tracegen!(
             inventory,
             add_sub,
@@ -991,7 +1012,8 @@ where
         );
 
         inventory.next_air::<BranchEqualAir>()?;
-        let beq = BranchEqualChip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), mem_helper.clone());
+        let beq =
+            BranchEqualChip::new(BranchEqualFiller::new(DEFAULT_PC_STEP), mem_helper.clone());
         add_executor_chip_with_tracegen!(
             inventory,
             beq,
@@ -1010,7 +1032,10 @@ where
         );
 
         inventory.next_air::<JalLuiAir>()?;
-        let jal_lui = JalLuiChip::new(JalLuiFiller::new(range_checker.clone()), mem_helper.clone());
+        let jal_lui = JalLuiChip::new(
+            JalLuiFiller::new(range_checker.clone()),
+            mem_helper.clone(),
+        );
         add_executor_chip_with_tracegen!(
             inventory,
             jal_lui,
@@ -1018,7 +1043,10 @@ where
         );
 
         inventory.next_air::<JalrAir>()?;
-        let jalr = JalrChip::new(JalrFiller::new(range_checker.clone()), mem_helper.clone());
+        let jalr = JalrChip::new(
+            JalrFiller::new(range_checker.clone()),
+            mem_helper.clone(),
+        );
         add_executor_chip_with_tracegen!(
             inventory,
             jalr,
@@ -1026,7 +1054,10 @@ where
         );
 
         inventory.next_air::<AuipcAir>()?;
-        let auipc = AuipcChip::new(AuipcFiller::new(range_checker.clone()), mem_helper.clone());
+        let auipc = AuipcChip::new(
+            AuipcFiller::new(range_checker.clone()),
+            mem_helper.clone(),
+        );
         add_executor_chip_with_tracegen!(
             inventory,
             auipc,
@@ -1330,6 +1361,8 @@ impl VmExecutionExtension for Rv64Io {
             hint_store,
             HintStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
+        let reveal = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
+        inventory.add_executor(reveal, RevealOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
     }
@@ -1347,6 +1380,18 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         let range_checker = inventory.range_checker().bus;
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
+        let bitwise_lu = {
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+
         let hint_store = HintStoreAir::new(
             exec_bridge,
             memory_bridge,
@@ -1355,6 +1400,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
             byte_ptr_max_bits,
         );
         inventory.add_air(hint_store);
+
+        let reveal = RevealAir::new(
+            RevealAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            RevealCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(reveal);
 
         Ok(())
     }
@@ -1379,6 +1430,22 @@ where
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx())
+                });
+                chip
+            }
+        };
+
         inventory.next_air::<HintStoreAir>()?;
         let hint_store = HintStoreChip::new(
             HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
@@ -1388,6 +1455,17 @@ where
             inventory,
             hint_store,
             crate::hintstore::trace::generate_trace_from_postflight
+        );
+
+        inventory.next_air::<RevealAir>()?;
+        let reveal = RevealChip::new(
+            RevealFiller::new(byte_ptr_max_bits, range_checker, bitwise_lu),
+            mem_helper,
+        );
+        add_executor_chip_with_tracegen!(
+            inventory,
+            reveal,
+            crate::reveal::trace::generate_trace_from_postflight
         );
 
         Ok(())
@@ -1500,7 +1578,9 @@ mod phantom {
             arch::{MemoryConfig, Streams},
             system::memory::online::{AddressMap, GuestMemory},
         };
-        use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS};
+        use openvm_instructions::riscv::{
+            MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS,
+        };
         use rand::{rngs::StdRng, SeedableRng};
 
         use super::*;
@@ -1513,7 +1593,12 @@ mod phantom {
             let mut config = MemoryConfig::default();
             config.addr_spaces[MEMORY_AS as usize].num_cells = 512;
             let mut memory = GuestMemory::new(AddressMap::from_mem_config(&config));
-            memory_write(&mut memory, REGISTER_AS, OPERAND_A_REG, first.to_le_bytes());
+            memory_write(
+                &mut memory,
+                REGISTER_AS,
+                OPERAND_A_REG,
+                first.to_le_bytes(),
+            );
             memory_write(
                 &mut memory,
                 REGISTER_AS,

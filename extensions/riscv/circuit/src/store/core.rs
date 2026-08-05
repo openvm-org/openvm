@@ -21,9 +21,10 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    is_multi_byte_access_width, shift_encoder, u16_cell_byte, StoreInstruction,
-    StoreMultiByteAdapterCols, StoreMultiByteAdapterFiller, BYTE_BITS, BYTE_SHIFT_SELECTOR_WIDTH,
-    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, WORD_ACCESS_WIDTH,
+    is_multi_byte_access_width, shift_encoder, u16_cell_byte, StoreMultiByteAdapterCols,
+    StoreMultiByteAdapterFiller, StoreInstruction, BYTE_SHIFT_SELECTOR_WIDTH,
+    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, BYTE_BITS,
+    WORD_ACCESS_WIDTH,
 };
 
 /// The single opcode handled by the store chip of the given width.
@@ -61,6 +62,7 @@ pub struct StoreCoreCols<T, const NUM_VALUE_CELLS: usize> {
 #[columns_via(StoreCoreCols<u8, NUM_VALUE_CELLS>)]
 pub struct StoreCoreAir<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> {
     pub offset: usize,
+    local_opcode: usize,
     encoder: Encoder,
     bitwise_lookup_bus: BitwiseOperationLookupBus,
 }
@@ -78,6 +80,24 @@ impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
         }
         Self {
             offset,
+            local_opcode: store_opcode::<STORE_WIDTH>() as usize,
+            encoder: shift_encoder(),
+            bitwise_lookup_bus,
+        }
+    }
+
+    pub(crate) fn new_with_local_opcode(
+        offset: usize,
+        local_opcode: usize,
+        bitwise_lookup_bus: BitwiseOperationLookupBus,
+    ) -> Self {
+        const {
+            assert!(is_multi_byte_access_width(STORE_WIDTH));
+            assert!(NUM_VALUE_CELLS == STORE_WIDTH / U16_CELL_SIZE);
+        }
+        Self {
+            offset,
+            local_opcode,
             encoder: shift_encoder(),
             bitwise_lookup_bus,
         }
@@ -172,7 +192,7 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            is_valid.clone() * AB::Expr::from_u8(store_opcode::<STORE_WIDTH>() as u8),
+            is_valid.clone() * AB::Expr::from_usize(self.local_opcode),
         );
         // shift_amount = Σₛ s * flag[s].
         let shift_amount = flags
@@ -245,16 +265,28 @@ pub struct StoreFiller<
     const STORE_WIDTH: usize = WORD_ACCESS_WIDTH,
     const NUM_VALUE_CELLS: usize = 2,
 > {
-    adapter: A,
+    pub(crate) adapter: A,
     pub offset: usize,
     encoder: Encoder,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
 }
 
+impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
+    StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
+{
+    pub fn new(
+        adapter: StoreMultiByteAdapterFiller,
+        offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
+    ) -> Self {
+        Self::new_with_adapter(adapter, offset, bitwise_lookup_chip)
+    }
+}
+
 impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     StoreFiller<A, STORE_WIDTH, NUM_VALUE_CELLS>
 {
-    pub fn new(
+    pub(crate) fn new_with_adapter(
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
@@ -272,10 +304,10 @@ impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     }
 }
 
-impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
-    StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
+impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
+    StoreFiller<A, STORE_WIDTH, NUM_VALUE_CELLS>
 {
-    fn fill_core_row<F: PrimeField32>(
+    pub(crate) fn fill_core_row<F: PrimeField32>(
         &self,
         shift: usize,
         read_data: [u16; BLOCK_FE_WIDTH],
@@ -325,7 +357,10 @@ pub(crate) fn generate_trace_from_postflight<
     const STORE_WIDTH: usize,
     const NUM_VALUE_CELLS: usize,
 >(
-    chip: &VmChipWrapper<F, StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>>,
+    chip: &VmChipWrapper<
+        F,
+        StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>,
+    >,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(store_opcode::<STORE_WIDTH>().global_opcode());
@@ -361,7 +396,5 @@ pub(crate) fn generate_trace_from_postflight<
 }
 
 pub(crate) fn fill_padding_row<F: PrimeField32>(row: &mut [F]) {
-    let adapter_width = StoreMultiByteAdapterCols::<F>::width();
-    let adapter_row: &mut StoreMultiByteAdapterCols<F> = row[..adapter_width].borrow_mut();
-    adapter_row.mem_as = F::from_u32(2);
+    let _ = row;
 }

@@ -12,9 +12,9 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::LocalOpcode;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_instructions::{riscv::MEMORY_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::riscv::MEMORY_AS;
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREH};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -30,13 +30,14 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller,
+        BYTE_BITS,
     },
     store::{
         common::store_write_data,
         core::{fill_padding_row, StoreCoreCols},
-        StoreHalfwordAir, StoreHalfwordChip, StoreHalfwordCoreAir, StoreHalfwordExecutor,
-        StoreHalfwordFiller, STORE_HALFWORD_VALUE_CELLS,
+        StoreHalfwordAir, StoreHalfwordChip, StoreHalfwordExecutor,
+        StoreHalfwordCoreAir, StoreHalfwordFiller, STORE_HALFWORD_VALUE_CELLS,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -60,7 +61,9 @@ fn create_store_halfword_harness(
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = StoreHalfwordAir::new(
         StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
@@ -257,9 +260,8 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-#[test_case::test_case(MEMORY_AS as usize)]
-#[test_case::test_case(PUBLIC_VALUES_AS as usize)]
-fn test_cuda_rand_store_halfword_tracegen(mem_as: usize) {
+#[test]
+fn test_cuda_rand_store_halfword_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::new(store_gpu_memory_config(), default_var_range_checker_bus())
@@ -275,7 +277,7 @@ fn test_cuda_rand_store_halfword_tracegen(mem_as: usize) {
             None,
             None,
             None,
-            Some(mem_as),
+            Some(MEMORY_AS as usize),
         );
     }
     tester

@@ -12,25 +12,25 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
-use openvm_riscv_transpiler::LoadStoreOpcode;
+use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::StoreByteCoreCols;
+use super::RevealAdapterCols;
 use crate::{
-    adapters::{StoreByteAdapterCols, BYTE_BITS},
-    cuda_abi::store_byte_cuda,
+    adapters::BYTE_BITS,
+    cuda_abi::reveal_cuda,
+    store::{core::StoreCoreCols, STORE_DOUBLEWORD_VALUE_CELLS},
 };
 
 #[derive(new)]
-pub struct StoreByteChipGpu {
+pub struct RevealChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl StoreByteChipGpu {
-    /// Replays RV64I main-memory STOREB rows.
+impl RevealChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -39,16 +39,17 @@ impl StoreByteChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let step_range = replay_plan.opcode_range(LoadStoreOpcode::STOREB.global_opcode());
+        let step_range = replay_plan.opcode_range(RevealOpcode::REVEAL.global_opcode());
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = StoreByteAdapterCols::<F>::width() + StoreByteCoreCols::<F>::width();
+        let trace_width = RevealAdapterCols::<F>::width()
+            + StoreCoreCols::<F, STORE_DOUBLEWORD_VALUE_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            store_byte_cuda::replay_tracegen(
+            reveal_cuda::replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 program.instructions(),
@@ -61,7 +62,7 @@ impl StoreByteChipGpu {
                 step_range.start,
                 step_range.len(),
                 transcript.error_ptr(),
-                LoadStoreOpcode::STOREB.global_opcode().as_usize() as u32,
+                RevealOpcode::REVEAL.global_opcode().as_usize() as u32,
                 REGISTER_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,

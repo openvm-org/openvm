@@ -1,7 +1,6 @@
 #include "riscv/store_multibyte_replay.cuh"
 
-
-__global__ void store_halfword_replay_tracegen(
+__global__ void reveal_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -25,11 +24,11 @@ __global__ void store_halfword_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(StoreHalfwordCols<uint8_t>));
+    row.fill_zero(0, sizeof(RevealCols<uint8_t>));
     if (idx >= num_steps) return;
 
     ReplayStoreMultiByteInput input = {};
-    if (!replay_store_multibyte<HALFWORD_ACCESS_WIDTH>(
+    if (!replay_multibyte_write<DOUBLEWORD_ACCESS_WIDTH>(
             instructions,
             pc_base,
             program,
@@ -39,6 +38,7 @@ __global__ void store_halfword_replay_tracegen(
             steps[step_start + idx],
             opcode,
             register_as,
+            RV64_PUBLIC_VALUES_ADDRESS_SPACE,
             pointer_max_bits,
             input,
             error
@@ -65,18 +65,16 @@ __global__ void store_halfword_replay_tracegen(
         input.imm,
         input.imm_sign
     );
-    auto core = StoreHalfwordCore(BitwiseOperationLookup(bitwise_lookup));
+    auto core = RevealCore(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(StoreHalfwordCols, core)),
+        row.slice_from(COL_INDEX(RevealCols, core)),
         input.read_data,
         input.prev_data,
         input.shift
     );
 }
 
-
-
-extern "C" int _store_halfword_replay_tracegen(
+extern "C" int _reveal_replay_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -99,13 +97,13 @@ extern "C" int _store_halfword_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(StoreHalfwordCols<uint8_t>));
+    assert(width == sizeof(RevealCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
     auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
-    store_halfword_replay_tracegen<<<grid, block, 0, stream>>>(
+    reveal_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_instructions,

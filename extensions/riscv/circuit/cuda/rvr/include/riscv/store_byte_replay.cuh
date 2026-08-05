@@ -2,6 +2,7 @@
 
 #include "primitives/constants.h"
 #include "arch/rvr/replay.cuh"
+#include "checkpoint_replay_opcodes.cuh"
 
 using namespace program;
 using namespace riscv;
@@ -15,7 +16,6 @@ struct ReplayStoreByteInput {
     uint32_t rs1_prev_timestamp;
     uint32_t rs2_prev_timestamp;
     uint32_t write_prev_timestamp;
-    uint32_t memory_as;
     uint16_t imm;
     uint8_t imm_sign;
     uint8_t shift;
@@ -33,8 +33,6 @@ static __device__ bool replay_store_byte(
     RvrReplayStep const &step,
     uint32_t expected_opcode,
     uint32_t register_as,
-    uint32_t main_memory_as,
-    uint32_t public_values_as,
     size_t pointer_max_bits,
     ReplayStoreByteInput &out,
     uint32_t *error
@@ -59,11 +57,10 @@ static __device__ bool replay_store_byte(
     uint32_t rs2_ptr = instruction.words[1];
     uint32_t rs1_ptr = instruction.words[2];
     uint32_t imm = instruction.words[3];
-    uint32_t memory_as = instruction.words[5];
     uint32_t is_valid = instruction.words[6];
     uint32_t imm_sign = instruction.words[7];
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
-        (memory_as != main_memory_as && memory_as != public_values_as) || imm > UINT16_MAX ||
+        instruction.words[5] != MEMORY_ADDRESS_SPACE || imm > UINT16_MAX ||
         is_valid != 1 || imm_sign > 1 || !replay_canonical_register_pointer(rs1_ptr) ||
         !replay_canonical_register_pointer(rs2_ptr)) {
         preflight_set_error(error, 254);
@@ -86,7 +83,7 @@ static __device__ bool replay_store_byte(
         rs2_read.timestamp != from.timestamp + 1 || preflight_is_write(rs2_read) ||
         preflight_address_space(rs2_read) != register_as || rs2_read.pointer != rs2_ptr / 2 ||
         write.timestamp != from.timestamp + 2 || !preflight_is_write(write) ||
-        preflight_address_space(write) != memory_as ||
+        preflight_address_space(write) != MEMORY_ADDRESS_SPACE ||
         (next_index < memory.len() && memory[next_index].timestamp < to.timestamp)) {
         preflight_set_error(error, 255);
         return false;
@@ -166,7 +163,6 @@ static __device__ bool replay_store_byte(
     out.rs1_prev_timestamp = rs1_previous.timestamp;
     out.rs2_prev_timestamp = rs2_previous.timestamp;
     out.write_prev_timestamp = write_previous.timestamp;
-    out.memory_as = memory_as;
     out.imm = static_cast<uint16_t>(imm);
     out.imm_sign = imm_sign;
     out.shift = shift;
