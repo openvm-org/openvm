@@ -30,7 +30,7 @@ pub fn main() {
 
 #[cfg(not(feature = "std"))]
 pub fn main() {
-    // No-op when built without std: the test_riscv_im_std test case always passes
+    // No-op when built without std: the test_rv64im_std test case always passes
     // --features std, so this branch only exists to keep the file compilable
     // under default `cargo check`/`clippy`.
 }

@@ -21,8 +21,8 @@ fn main() -> eyre::Result<()> {
     let ParallelCli { inner, concurrency } = ParallelCli::parse();
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
-        .riscv_i(Default::default())
-        .riscv_m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .keccak(Default::default())
         .build()

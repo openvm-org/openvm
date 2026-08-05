@@ -38,7 +38,7 @@ use openvm_riscv_circuit::preflight::PreflightReplayProgram;
 use openvm_riscv_circuit::preflight::{
     PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
 };
-use openvm_riscv_circuit::RiscvImPreflightGpuTracegen;
+use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
@@ -341,7 +341,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(
@@ -448,7 +448,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         let mut extension_opcodes = self.claimed_opcodes.clone();
         extension_opcodes.extend_from_slice(algebra.extension_opcodes());
-        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -459,8 +459,8 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             self.program,
             self.transcript,
             self.replay_plan,
-            (self, algebra, riscv),
-            |(tracegen, algebra, riscv), chip| {
+            (self, algebra, rv64),
+            |(tracegen, algebra, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
@@ -472,14 +472,12 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 {
                     Ok(ctx)
                 } else {
-                    riscv
-                        .generate_for_chip(chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-            |(tracegen, algebra, riscv)| {
-                riscv
-                    .finish()
+            |(tracegen, algebra, rv64)| {
+                rv64.finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
                 algebra
                     .finish()

@@ -20,7 +20,7 @@ use rvr_openvm_ir::{
 };
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 
-use self::instruction::{AluOp, RiscvIInstr};
+use self::instruction::{AluOp, Rv64IInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
@@ -28,21 +28,21 @@ const MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(REGISTER_BYTES as usize);
 
 /// RVR extension for RV64I base integer instructions.
-pub struct RiscvIExtension;
+pub struct Rv64IExtension;
 
-impl RiscvIExtension {
+impl Rv64IExtension {
     pub const fn new() -> Self {
         Self
     }
 }
 
-impl Default for RiscvIExtension {
+impl Default for Rv64IExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RvrExtension for RiscvIExtension {
+impl RvrExtension for Rv64IExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         try_lift(insn, pc)
     }
@@ -353,7 +353,7 @@ fn lift_alu(
     let rhs = immediate.unwrap_or_else(|| reg_operand(rhs_reg.unwrap()));
     Some(body(
         pc,
-        RiscvIInstr::Alu {
+        Rv64IInstr::Alu {
             op,
             word,
             immediate: immediate.is_some(),
@@ -374,7 +374,7 @@ fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> O
     let rd = decode_reg(insn.a);
     Some(body(
         pc,
-        RiscvIInstr::Load {
+        Rv64IInstr::Load {
             width,
             signed,
             rd,
@@ -392,7 +392,7 @@ fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedI
     }
     Some(body(
         pc,
-        RiscvIInstr::Store {
+        Rv64IInstr::Store {
             width,
             base: decode_reg(insn.b),
             src: decode_reg(insn.a),
@@ -406,7 +406,7 @@ fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedI
 fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
     term(
         pc,
-        RiscvIInstr::Branch {
+        Rv64IInstr::Branch {
             cond,
             lhs: decode_reg(insn.a),
             rhs: decode_reg(insn.b),
@@ -421,7 +421,7 @@ fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(
         pc,
-        RiscvIInstr::Jump {
+        Rv64IInstr::Jump {
             link_dst: (rd != ZERO).then_some(rd),
             target: pc.wrapping_add_signed(i64::from(insn.signed_c())),
         },
@@ -434,7 +434,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(
         pc,
-        RiscvIInstr::JumpIndirect {
+        Rv64IInstr::JumpIndirect {
             link_dst: (rd != ZERO).then_some(rd),
             base: decode_reg(insn.b),
             offset: decode_imm_cg(insn) as i32,
@@ -446,7 +446,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     body(
         pc,
-        RiscvIInstr::Const {
+        Rv64IInstr::Const {
             name: "lui",
             rd: decode_reg(insn.a),
             value: sign_extend_32(insn.c << 12),
@@ -462,7 +462,7 @@ fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let upper = insn.c << 8;
     body(
         pc,
-        RiscvIInstr::Const {
+        Rv64IInstr::Const {
             name: "auipc",
             rd: decode_reg(insn.a),
             value: pc.wrapping_add(sign_extend_32(upper)),
@@ -478,7 +478,7 @@ fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
     })
 }
 
-fn term(pc: u64, instr: RiscvIInstr) -> LiftedInstr {
+fn term(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
     LiftedInstr::Term {
         pc,
         terminator: Terminator::instruction(instr),
@@ -550,7 +550,7 @@ mod tests {
         );
 
         assert_eq!(
-            RiscvIExtension.extra_cfg_targets(&init_memory, &HashSet::from([u64::from(target)])),
+            Rv64IExtension.extra_cfg_targets(&init_memory, &HashSet::from([u64::from(target)])),
             vec![u64::from(target)]
         );
     }

@@ -473,7 +473,7 @@ pub enum LessThanImmOpcode {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
-pub enum RiscvPhantom {
+pub enum Rv64Phantom {
     /// Prepare the next input vector for hinting, but prepend it with an 8-byte decomposition of
     /// its length instead of one field element.
     HintInput = 0x20,

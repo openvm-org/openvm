@@ -16,7 +16,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, SystemOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::{RiscvI, RiscvIo, RiscvM};
+use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear};
 
@@ -114,9 +114,9 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
 
     let config = DeferralVmConfig {
         system: test_system_config(),
-        riscv_i: RiscvI,
-        riscv_m: RiscvM::default(),
-        io: RiscvIo,
+        rv64i: Rv64I,
+        rv64m: Rv64M::default(),
+        io: Rv64Io,
         deferral: DeferralExtension::new(
             vec![Arc::new(DeferralFn::new(|_| Vec::new()))],
             vec![[0; COMMIT_NUM_BYTES]],
@@ -252,9 +252,9 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     let config = DeferralVmConfig {
         system,
-        riscv_i: RiscvI,
-        riscv_m: RiscvM::default(),
-        io: RiscvIo,
+        rv64i: Rv64I,
+        rv64m: Rv64M::default(),
+        io: Rv64Io,
         deferral: DeferralExtension::new(
             vec![Arc::new(DeferralFn::new({
                 let output_raw = output_raw.clone();

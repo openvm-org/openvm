@@ -21,7 +21,7 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::{
-    RiscvI, RiscvIExecutor, RiscvImCpuProverExt, RiscvIo, RiscvIoExecutor, RiscvM, RiscvMExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Sha2Opcode;
@@ -53,11 +53,11 @@ pub struct Sha2VmConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub riscv_i: RiscvI,
+    pub rv64i: Rv64I,
     #[extension]
-    pub riscv_m: RiscvM,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: RiscvIo,
+    pub io: Rv64Io,
     #[extension]
     pub sha2: Sha2,
 }
@@ -66,9 +66,9 @@ impl Default for Sha2VmConfig {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            riscv_i: RiscvI,
-            riscv_m: RiscvM::default(),
-            io: RiscvIo,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             sha2: Sha2,
         }
     }
@@ -103,9 +103,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
     }

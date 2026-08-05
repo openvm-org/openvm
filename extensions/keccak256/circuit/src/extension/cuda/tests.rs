@@ -19,7 +19,7 @@ use openvm_riscv_circuit::{
         PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
         PreflightReplayProgram,
     },
-    RiscvImPreflightGpuTracegen,
+    Rv64ImPreflightGpuTracegen,
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::StarkEngine;
@@ -243,7 +243,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         Keccak256PreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     assert!(
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).is_err(),
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).is_err(),
         "the plain RV64 coordinator must not silently claim Keccak opcodes"
     );
     assert_eq!(transcript.error_code().unwrap(), 0);
@@ -399,7 +399,7 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
         XorinOpcode::XORIN.global_opcode().as_usize() as u32,
         KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
     ];
-    let error = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+    let error = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
         &gpu_program,
         &gpu_transcript,
         &replay_plan,

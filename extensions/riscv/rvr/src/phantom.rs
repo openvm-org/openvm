@@ -5,7 +5,7 @@ use std::{ffi::c_void, io::Write, iter::repeat_with};
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{riscv::REGISTER_BYTES, LocalOpcode, SystemOpcode};
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_transpiler::RiscvPhantom;
+use openvm_riscv_transpiler::Rv64Phantom;
 use rand::Rng;
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrInstruction, RvrRuntimeExtension};
@@ -103,33 +103,33 @@ impl ExtInstr for HintRandomInstr {
 }
 
 /// RVR extension for RV64-specific phantom instructions.
-pub struct RiscvPhantomExtension;
+pub struct Rv64PhantomExtension;
 
-impl RiscvPhantomExtension {
+impl Rv64PhantomExtension {
     pub const fn new() -> Self {
         Self
     }
 }
 
-impl Default for RiscvPhantomExtension {
+impl Default for Rv64PhantomExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RvrExtension for RiscvPhantomExtension {
+impl RvrExtension for Rv64PhantomExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }
-        let phantom = RiscvPhantom::from_repr((insn.c & 0xffff) as u16)?;
+        let phantom = Rv64Phantom::from_repr((insn.c & 0xffff) as u16)?;
         let instr: Box<dyn ExtInstr> = match phantom {
-            RiscvPhantom::HintInput => Box::new(HintInputInstr),
-            RiscvPhantom::PrintStr => Box::new(PrintStrInstr {
+            Rv64Phantom::HintInput => Box::new(HintInputInstr),
+            Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
                 ptr_reg: decode_reg(insn.a),
                 len_reg: decode_reg(insn.b),
             }),
-            RiscvPhantom::HintRandom => Box::new(HintRandomInstr {
+            Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
                 num_words_reg: decode_reg(insn.a),
             }),
         };
@@ -142,15 +142,15 @@ impl RvrExtension for RiscvPhantomExtension {
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "riscv_phantom_callbacks.h",
-            include_str!("../c/riscv_phantom_callbacks.h"),
+            "rv64_phantom_callbacks.h",
+            include_str!("../c/rv64_phantom_callbacks.h"),
         )]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "riscv_phantom_callbacks.c",
-            include_str!("../c/riscv_phantom_callbacks.c"),
+            "rv64_phantom_callbacks.c",
+            include_str!("../c/rv64_phantom_callbacks.c"),
         )]
     }
 
@@ -160,22 +160,20 @@ impl RvrExtension for RiscvPhantomExtension {
 }
 
 /// Runtime hooks for RV64-specific phantom instructions.
-pub struct RiscvPhantomRuntimeHooks;
+pub struct Rv64PhantomRuntimeHooks;
 
-impl RvrRuntimeExtension for RiscvPhantomRuntimeHooks {
+impl RvrRuntimeExtension for Rv64PhantomRuntimeHooks {
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
     ) -> Result<(), ExtensionError> {
-        let register_fn: RegisterRiscvPhantomHostCallbacksFn = unsafe {
+        let register_fn: RegisterRv64PhantomHostCallbacksFn = unsafe {
             let sym = lib
-                .get::<RegisterRiscvPhantomHostCallbacksFn>(
-                    b"register_riscv_phantom_host_callbacks",
-                )
+                .get::<RegisterRv64PhantomHostCallbacksFn>(b"register_rv64_phantom_host_callbacks")
                 .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
             *sym
         };
-        let callbacks = RiscvPhantomHostCallbacks {
+        let callbacks = Rv64PhantomHostCallbacks {
             hint_input: host_hint_input,
             print_str: host_print_str,
             hint_random: host_hint_random,
@@ -185,11 +183,11 @@ impl RvrRuntimeExtension for RiscvPhantomRuntimeHooks {
     }
 }
 
-type RegisterRiscvPhantomHostCallbacksFn = unsafe extern "C" fn(*const RiscvPhantomHostCallbacks);
+type RegisterRv64PhantomHostCallbacksFn = unsafe extern "C" fn(*const Rv64PhantomHostCallbacks);
 
-/// Host callback table shared with `riscv_phantom_callbacks.c`.
+/// Host callback table shared with `rv64_phantom_callbacks.c`.
 #[repr(C)]
-struct RiscvPhantomHostCallbacks {
+struct Rv64PhantomHostCallbacks {
     hint_input: extern "C" fn(*mut c_void) -> bool,
     print_str: extern "C" fn(*mut c_void, u64, u64) -> bool,
     hint_random: extern "C" fn(*mut c_void, u64) -> bool,
@@ -262,9 +260,9 @@ mod tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::i::RiscvIExtension;
+    use crate::i::Rv64IExtension;
 
-    fn phantom_instruction(phantom: RiscvPhantom) -> RvrInstruction {
+    fn phantom_instruction(phantom: Rv64Phantom) -> RvrInstruction {
         RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             VmOpcode::from_usize(SystemOpcode::PHANTOM.global_opcode_usize()),
             [8, 16, phantom as usize, 0, 0, 1, 0],
@@ -367,9 +365,9 @@ mod tests {
         }
     }
 
-    fn emit_phantom(phantom: RiscvPhantom) -> (bool, Vec<String>) {
+    fn emit_phantom(phantom: Rv64Phantom) -> (bool, Vec<String>) {
         let instruction = phantom_instruction(phantom);
-        let lifted = RiscvPhantomExtension
+        let lifted = Rv64PhantomExtension
             .try_lift(&instruction, 0x100)
             .expect("RV64 phantom should lift");
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
@@ -382,11 +380,11 @@ mod tests {
     }
 
     #[test]
-    fn phantom_lifter_is_separate_from_riscv_i() {
-        let instruction = phantom_instruction(RiscvPhantom::PrintStr);
+    fn phantom_lifter_is_separate_from_rv64i() {
+        let instruction = phantom_instruction(Rv64Phantom::PrintStr);
 
-        assert!(RiscvIExtension.try_lift(&instruction, 0x100).is_none());
-        let lifted = RiscvPhantomExtension
+        assert!(Rv64IExtension.try_lift(&instruction, 0x100).is_none());
+        let lifted = Rv64PhantomExtension
             .try_lift(&instruction, 0x100)
             .expect("RV64 phantom should lift");
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
@@ -397,7 +395,7 @@ mod tests {
 
     #[test]
     fn callback_phantoms_tick_only_after_successful_checked_call() {
-        let (supports_preflight, hint_input) = emit_phantom(RiscvPhantom::HintInput);
+        let (supports_preflight, hint_input) = emit_phantom(Rv64Phantom::HintInput);
         assert!(supports_preflight);
         assert_eq!(
             hint_input,
@@ -409,7 +407,7 @@ mod tests {
             ]
         );
 
-        let (supports_preflight, print_str) = emit_phantom(RiscvPhantom::PrintStr);
+        let (supports_preflight, print_str) = emit_phantom(Rv64Phantom::PrintStr);
         assert!(supports_preflight);
         assert_eq!(
             print_str,
@@ -423,7 +421,7 @@ mod tests {
             ]
         );
 
-        let (supports_preflight, hint_random) = emit_phantom(RiscvPhantom::HintRandom);
+        let (supports_preflight, hint_random) = emit_phantom(Rv64Phantom::HintRandom);
         assert!(supports_preflight);
         assert_eq!(
             hint_random,

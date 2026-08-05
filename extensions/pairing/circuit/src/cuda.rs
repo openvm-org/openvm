@@ -119,7 +119,7 @@ mod tests {
     use openvm_pairing_transpiler::PairingPhantom;
     use openvm_riscv_circuit::{
         preflight::{PostflightAccessRegistry, PreflightReplayProgram},
-        RiscvImPreflightGpuTracegen,
+        Rv64ImPreflightGpuTracegen,
     };
     use openvm_riscv_transpiler::{HintStoreOpcode, JalLuiOpcode};
     use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, StarkEngine};
@@ -269,7 +269,7 @@ mod tests {
         assert!(first.state.streams.hint_stream.remaining() > 8);
         let hint_bytes = first.state.streams.hint_stream.remaining();
         let (transcript, replay_plan) =
-            RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
+            Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
                 .unwrap();
         let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
@@ -295,7 +295,7 @@ mod tests {
             hint_bytes - u64::BITS as usize / 8
         );
         let (transcript, replay_plan) =
-            RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
+            Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
                 .unwrap();
         let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,

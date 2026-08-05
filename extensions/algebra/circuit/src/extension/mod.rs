@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_derive::VmConfig;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_riscv_circuit::{
-    RiscvI, RiscvIExecutor, RiscvImCpuProverExt, RiscvIo, RiscvIoExecutor, RiscvM, RiscvMExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -83,11 +83,11 @@ pub struct ModularConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub base: RiscvI,
+    pub base: Rv64I,
     #[extension]
-    pub mul: RiscvM,
+    pub mul: Rv64M,
     #[extension]
-    pub io: RiscvIo,
+    pub io: Rv64Io,
     #[extension]
     pub modular: ModularExtension,
 }
@@ -170,9 +170,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, &config.modular, inventory)?;
         Ok(chip_complex)
     }

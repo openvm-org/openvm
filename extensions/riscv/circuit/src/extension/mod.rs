@@ -27,16 +27,15 @@ use openvm_riscv_transpiler::{
     AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
     BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
     JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, RiscvPhantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-    ShiftWOpcode,
+    MulOpcode, MulWOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_riscv::{
-    RiscvIExtension, RiscvIoExtension, RiscvIoRuntimeHooks, RiscvMExtension, RiscvPhantomExtension,
-    RiscvPhantomRuntimeHooks,
+    Rv64IExtension, Rv64IoExtension, Rv64IoRuntimeHooks, Rv64MExtension, Rv64PhantomExtension,
+    Rv64PhantomRuntimeHooks,
 };
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
@@ -57,12 +56,12 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use cuda::{
-            RiscvImGpuProverExt as RiscvImGpuProverExt,
-            RiscvImPreflightGpuTracegen,
+            Rv64ImGpuProverExt as Rv64ImGpuProverExt,
+            Rv64ImPreflightGpuTracegen,
         };
     } else {
         pub use self::{
-            RiscvImCpuProverExt as RiscvImProverExt,
+            Rv64ImCpuProverExt as Rv64ImProverExt,
         };
     }
 }
@@ -71,20 +70,20 @@ cfg_if::cfg_if! {
 
 /// RISC-V 64-bit Base (RV64I) Extension
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct RiscvI;
+pub struct Rv64I;
 
 /// RISC-V Extension for handling IO (not to be confused with I base extension)
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct RiscvIo;
+pub struct Rv64Io;
 
 /// RISC-V 64-bit Multiplication Extension (RV64M) Extension
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct RiscvM {
+pub struct Rv64M {
     #[serde(default = "default_range_tuple_checker_sizes")]
     pub range_tuple_checker_sizes: [u32; 2],
 }
 
-impl Default for RiscvM {
+impl Default for Rv64M {
     fn default() -> Self {
         Self {
             range_tuple_checker_sizes: default_range_tuple_checker_sizes(),
@@ -102,28 +101,28 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for RiscvI {
+impl<F: PrimeField32> VmRvrExtension<F> for Rv64I {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
-        extensions.register_lifter(RiscvIExtension::new());
-        extensions.register_lifter(RiscvPhantomExtension::new());
-        extensions.register_runtime_hook(RiscvPhantomRuntimeHooks);
+        extensions.register_lifter(Rv64IExtension::new());
+        extensions.register_lifter(Rv64PhantomExtension::new());
+        extensions.register_runtime_hook(Rv64PhantomRuntimeHooks);
     }
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for RiscvIo {
+impl<F: PrimeField32> VmRvrExtension<F> for Rv64Io {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(
-            RiscvIoExtension::new(ctx).expect("RiscvIoExtension chip resolution failed"),
+            Rv64IoExtension::new(ctx).expect("Rv64IoExtension chip resolution failed"),
         );
-        extensions.register_runtime_hook(RiscvIoRuntimeHooks);
+        extensions.register_runtime_hook(Rv64IoRuntimeHooks);
     }
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for RiscvM {
+impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
-        extensions.register_lifter(RiscvMExtension::new());
+        extensions.register_lifter(Rv64MExtension::new());
     }
 }
 
@@ -131,7 +130,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for RiscvM {
 
 /// RISC-V 64-bit Base (RV64I) Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
-pub enum RiscvIExecutor {
+pub enum Rv64IExecutor {
     AddSub(AddSubExecutor),
     AddI(AddIExecutor),
     BitwiseLogic(BitwiseLogicExecutor),
@@ -168,7 +167,7 @@ pub enum RiscvIExecutor {
 
 /// RISC-V 64-bit Multiplication Extension (RV64M) Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
-pub enum RiscvMExecutor {
+pub enum Rv64MExecutor {
     Multiplication(MultiplicationExecutor),
     MulW(MulWExecutor),
     MultiplicationHigh(MulHExecutor),
@@ -178,18 +177,18 @@ pub enum RiscvMExecutor {
 
 /// RISC-V 64-bit Io Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
-pub enum RiscvIoExecutor {
+pub enum Rv64IoExecutor {
     HintStore(HintStoreExecutor),
 }
 
 // ============ VmExtension Implementations ============
 
-impl VmExecutionExtension for RiscvI {
-    type Executor = RiscvIExecutor;
+impl VmExecutionExtension for Rv64I {
+    type Executor = Rv64IExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<RiscvIExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let add_sub = AddSubExecutor::new(BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -371,22 +370,22 @@ impl VmExecutionExtension for RiscvI {
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
             phantom::HintInputSubEx,
-            PhantomDiscriminant(RiscvPhantom::HintInput as u16),
+            PhantomDiscriminant(Rv64Phantom::HintInput as u16),
         )?;
         inventory.add_phantom_sub_executor(
             phantom::HintRandomSubEx,
-            PhantomDiscriminant(RiscvPhantom::HintRandom as u16),
+            PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
         )?;
         inventory.add_phantom_sub_executor(
             phantom::PrintStrSubEx,
-            PhantomDiscriminant(RiscvPhantom::PrintStr as u16),
+            PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
         )?;
 
         Ok(())
     }
 }
 
-impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for RiscvI {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -670,10 +669,10 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for RiscvI {
     }
 }
 
-pub struct RiscvImCpuProverExt;
+pub struct Rv64ImCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC> VmProverExtension<E, RiscvI> for RiscvImCpuProverExt
+impl<E, SC> VmProverExtension<E, Rv64I> for Rv64ImCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -682,7 +681,7 @@ where
 {
     fn extend_prover(
         &self,
-        _: &RiscvI,
+        _: &Rv64I,
         inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -1090,12 +1089,12 @@ where
     }
 }
 
-impl VmExecutionExtension for RiscvM {
-    type Executor = RiscvMExecutor;
+impl VmExecutionExtension for Rv64M {
+    type Executor = Rv64MExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<RiscvMExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Rv64MExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let mult = MultiplicationExecutor::new(MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
@@ -1116,7 +1115,7 @@ impl VmExecutionExtension for RiscvM {
     }
 }
 
-impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for RiscvM {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -1199,7 +1198,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for RiscvM {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC> VmProverExtension<E, RiscvM> for RiscvImCpuProverExt
+impl<E, SC> VmProverExtension<E, Rv64M> for Rv64ImCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -1208,7 +1207,7 @@ where
 {
     fn extend_prover(
         &self,
-        extension: &RiscvM,
+        extension: &Rv64M,
         inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -1319,12 +1318,12 @@ where
     }
 }
 
-impl VmExecutionExtension for RiscvIo {
-    type Executor = RiscvIoExecutor;
+impl VmExecutionExtension for Rv64Io {
+    type Executor = Rv64IoExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<RiscvIoExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Rv64IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let hint_store = HintStoreExecutor::new(HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -1336,7 +1335,7 @@ impl VmExecutionExtension for RiscvIo {
     }
 }
 
-impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for RiscvIo {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -1363,7 +1362,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for RiscvIo {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC> VmProverExtension<E, RiscvIo> for RiscvImCpuProverExt
+impl<E, SC> VmProverExtension<E, Rv64Io> for Rv64ImCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -1372,7 +1371,7 @@ where
 {
     fn extend_prover(
         &self,
-        _: &RiscvIo,
+        _: &Rv64Io,
         inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();

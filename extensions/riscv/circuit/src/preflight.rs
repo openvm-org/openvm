@@ -25,7 +25,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, RvrCheckpoint};
 
-use crate::{cuda_abi::rvr_checkpoint_replay, RiscvImPreflightGpuTracegen};
+use crate::{cuda_abi::rvr_checkpoint_replay, Rv64ImPreflightGpuTracegen};
 
 fn upload<T>(
     values: &[T],
@@ -159,7 +159,7 @@ impl PreflightReplayProgram {
         registry: &PostflightAccessRegistry,
         device_ctx: &GpuDeviceCtx,
     ) -> Result<Self, GpuPostflightError> {
-        registry.validate_disjoint_opcodes(RiscvImPreflightGpuTracegen::replay_opcodes())?;
+        registry.validate_disjoint_opcodes(Rv64ImPreflightGpuTracegen::replay_opcodes())?;
         let program = GpuPostflightProgram::upload_with_instruction_validation(
             program,
             memory_config,

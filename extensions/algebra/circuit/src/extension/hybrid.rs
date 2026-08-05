@@ -38,7 +38,7 @@ use openvm_riscv_circuit::preflight::PreflightReplayProgram;
 use openvm_riscv_circuit::preflight::{
     PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
 };
-use openvm_riscv_circuit::{adapters::U16_BITS, RiscvImGpuProverExt, RiscvImPreflightGpuTracegen};
+use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
@@ -810,7 +810,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(
@@ -986,7 +986,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = self.configured_opcodes.clone();
-        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -997,22 +997,20 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
             self.program,
             self.transcript,
             self.replay_plan,
-            (self, riscv),
-            |(tracegen, riscv), chip| {
+            (self, rv64),
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    riscv
-                        .generate_for_chip(chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-            |(tracegen, riscv)| {
-                riscv
-                    .finish()
+            |(tracegen, rv64)| {
+                rv64.finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
                 tracegen
                     .finish()
@@ -1233,9 +1231,9 @@ impl VmBuilder<E> for ModularHybridBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(
             &AlgebraHybridProverExt,
             &config.modular,

@@ -45,16 +45,16 @@ And then to `transpile`, `run`, and `prove` the above program, in the `src/lib.r
 ```rust
 #[test]
 fn test_fibonacci_prove() -> Result<()> {
-    let config = RiscvImConfig::default();
+    let config = Rv64ImConfig::default();
     let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(RiscvITranspilerExtension)
-            .with_extension(RiscvMTranspilerExtension)
-            .with_extension(RiscvIoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
-    air_test(RiscvImBuilder, config, exe);
+    air_test(Rv64ImBuilder, config, exe);
     Ok(())
 }
 ```

@@ -210,11 +210,11 @@ impl ExtInstr for RevealInstr {
 
 /// RVR extension for RV64 IO hint-store instructions and stores to public
 /// values, including REVEAL.
-pub struct RiscvIoExtension {
+pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
 
-impl RiscvIoExtension {
+impl Rv64IoExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let hint_store_chip_idx = opcode_air_idx(ctx, HintStoreOpcode::HINT_STORED)?;
         Ok(Self {
@@ -223,7 +223,7 @@ impl RiscvIoExtension {
     }
 }
 
-impl RvrExtension for RiscvIoExtension {
+impl RvrExtension for Rv64IoExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
@@ -271,15 +271,15 @@ impl RvrExtension for RiscvIoExtension {
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "riscv_io_callbacks.h",
-            include_str!("../c/riscv_io_callbacks.h"),
+            "rv64io_callbacks.h",
+            include_str!("../c/rv64io_callbacks.h"),
         )]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "riscv_io_callbacks.c",
-            include_str!("../c/riscv_io_callbacks.c"),
+            "rv64io_callbacks.c",
+            include_str!("../c/rv64io_callbacks.c"),
         )]
     }
 
@@ -288,20 +288,20 @@ impl RvrExtension for RiscvIoExtension {
     }
 }
 
-pub struct RiscvIoRuntimeHooks;
+pub struct Rv64IoRuntimeHooks;
 
-impl RvrRuntimeExtension for RiscvIoRuntimeHooks {
+impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
     ) -> Result<(), ExtensionError> {
-        let register_fn: RegisterRiscvIoHostCallbacksFn = unsafe {
+        let register_fn: RegisterRv64IoHostCallbacksFn = unsafe {
             let sym = lib
-                .get::<RegisterRiscvIoHostCallbacksFn>(b"register_riscv_io_host_callbacks")
+                .get::<RegisterRv64IoHostCallbacksFn>(b"register_rv64io_host_callbacks")
                 .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
             *sym
         };
-        let callbacks = RiscvIoHostCallbacks {
+        let callbacks = Rv64IoHostCallbacks {
             hint_prepare: host_hint_prepare,
             hint_read_words: host_hint_read_words,
             hint_storew: host_hint_storew,
@@ -328,11 +328,11 @@ fn public_values_store_width(insn: &RvrInstruction) -> Option<MemWidth> {
     }
 }
 
-type RegisterRiscvIoHostCallbacksFn = unsafe extern "C" fn(*const RiscvIoHostCallbacks);
+type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallbacks);
 
-/// Host callback table shared with `riscv_io_callbacks.c`.
+/// Host callback table shared with `rv64io_callbacks.c`.
 #[repr(C)]
-struct RiscvIoHostCallbacks {
+struct Rv64IoHostCallbacks {
     hint_prepare: extern "C" fn(*mut c_void, u64, u32) -> bool,
     hint_read_words: unsafe extern "C" fn(*mut c_void, *mut u64, u32),
     hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
@@ -646,8 +646,8 @@ mod tests {
     #[test_case(LoadStoreOpcode::STOREW, 4; "word")]
     #[test_case(LoadStoreOpcode::STOREH, 2; "halfword")]
     #[test_case(LoadStoreOpcode::STOREB, 1; "byte")]
-    fn riscv_io_lifts_public_values_store_width(opcode: LoadStoreOpcode, width: u8) {
-        let ext = RiscvIoExtension::new(None).unwrap();
+    fn rv64io_lifts_public_values_store_width(opcode: LoadStoreOpcode, width: u8) {
+        let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             opcode.global_opcode(),
             [
@@ -682,8 +682,8 @@ mod tests {
     }
 
     #[test]
-    fn riscv_io_rejects_public_values_store_with_non_register_d() {
-        let ext = RiscvIoExtension::new(None).unwrap();
+    fn rv64io_rejects_public_values_store_with_non_register_d() {
+        let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             LoadStoreOpcode::STORED.global_opcode(),
             [
@@ -701,8 +701,8 @@ mod tests {
     }
 
     #[test]
-    fn riscv_io_ignores_non_store_public_values_shaped_instruction() {
-        let ext = RiscvIoExtension::new(None).unwrap();
+    fn rv64io_ignores_non_store_public_values_shaped_instruction() {
+        let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
             [

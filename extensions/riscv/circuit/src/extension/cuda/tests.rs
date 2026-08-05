@@ -32,10 +32,10 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::RiscvImPreflightGpuTracegen;
+use super::Rv64ImPreflightGpuTracegen;
 use crate::{
     adapters::REGISTER_NUM_LIMBS, preflight::PreflightReplayProgram, MultiplicationChipGpu,
-    RiscvIConfig, RiscvIGpuBuilder, RiscvImConfig, RiscvImGpuBuilder,
+    Rv64IConfig, Rv64IGpuBuilder, Rv64ImConfig, Rv64ImGpuBuilder,
 };
 
 type F = BabyBear;
@@ -106,7 +106,7 @@ fn checkpoint_branch(opcode: impl LocalOpcode, rs1: usize, rs2: usize) -> Instru
 }
 
 #[test]
-fn preflight_gpu_tracegen_proves_system_and_riscv_i_airs() {
+fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
     let register_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -378,7 +378,7 @@ fn preflight_gpu_tracegen_proves_system_and_riscv_i_airs() {
     init_memory.insert((MEMORY_AS, 7), 0x7f);
     init_memory.insert((MEMORY_AS, 8), 0x80);
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -390,7 +390,7 @@ fn preflight_gpu_tracegen_proves_system_and_riscv_i_airs() {
     let interpreter_state = state.clone();
 
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -406,10 +406,10 @@ fn preflight_gpu_tracegen_proves_system_and_riscv_i_airs() {
     let gpu_program =
         PreflightReplayProgram::upload(&program, &config.system.memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
             .unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
 
@@ -430,7 +430,7 @@ fn preflight_gpu_tracegen_proves_system_and_riscv_i_airs() {
         .postflight_history(gpu_program.program(), &output)
         .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
             .unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
@@ -451,7 +451,7 @@ fn preflight_gpu_replay_proves_a_suspended_segment() {
     ];
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program.clone());
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -459,7 +459,7 @@ fn preflight_gpu_replay_proves_a_suspended_segment() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -476,7 +476,7 @@ fn preflight_gpu_replay_proves_a_suspended_segment() {
         &vm.engine.device().device_ctx,
     )
     .unwrap();
-    let error = RiscvImPreflightGpuTracegen::postflight(
+    let error = Rv64ImPreflightGpuTracegen::postflight(
         &vm,
         &gpu_program,
         &execution,
@@ -491,10 +491,10 @@ fn preflight_gpu_replay_proves_a_suspended_segment() {
     ));
 
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -511,7 +511,7 @@ fn preflight_gpu_replay_expands_more_than_one_launch_block() {
         [0, 0, 0, REGISTER_AS as usize, 0, 0, 0],
     )]);
     let exe = VmExe::new(program.clone());
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -519,7 +519,7 @@ fn preflight_gpu_replay_expands_more_than_one_launch_block() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -539,7 +539,7 @@ fn preflight_gpu_replay_expands_more_than_one_launch_block() {
     )
     .unwrap();
     let (_, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     assert_eq!(replay_plan.steps_host().unwrap().len(), RETIRED);
 }
@@ -567,8 +567,8 @@ fn preflight_gpu_replay_launches_high_register_m_kernels() {
     ];
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program.clone());
-    let config = RiscvImConfig {
-        riscv_i: RiscvIConfig {
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -578,7 +578,7 @@ fn preflight_gpu_replay_launches_high_register_m_kernels() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvImGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -590,14 +590,14 @@ fn preflight_gpu_replay_launches_high_register_m_kernels() {
 
     let gpu_program = PreflightReplayProgram::upload(
         &program,
-        &config.riscv_i.system.memory_config,
+        &config.rv64i.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
-    RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan)
+    Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan)
         .unwrap()
         .generate_proving_ctx(&mut vm)
         .unwrap();
@@ -616,7 +616,7 @@ fn preflight_gpu_replay_carries_a_register_across_segments() {
     ];
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program.clone());
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -624,7 +624,7 @@ fn preflight_gpu_replay_carries_a_register_across_segments() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -642,10 +642,10 @@ fn preflight_gpu_replay_carries_a_register_across_segments() {
     )
     .unwrap();
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -666,10 +666,10 @@ fn preflight_gpu_replay_carries_a_register_across_segments() {
     assert_eq!(x2, [12, 0, 0, 0]);
 
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -685,7 +685,7 @@ fn preflight_gpu_replay_proves_an_empty_suspended_segment() {
     )];
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program.clone());
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -693,7 +693,7 @@ fn preflight_gpu_replay_proves_an_empty_suspended_segment() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -712,10 +712,10 @@ fn preflight_gpu_replay_proves_an_empty_suspended_segment() {
     )
     .unwrap();
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -731,7 +731,7 @@ fn preflight_gpu_replay_rejects_terminate_in_a_suspended_segment() {
     )];
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program.clone());
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -739,7 +739,7 @@ fn preflight_gpu_replay_rejects_terminate_in_a_suspended_segment() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     vm.transport_init_memory_to_device(&state.memory);
     let mut execution = checkpoint
@@ -753,14 +753,14 @@ fn preflight_gpu_replay_rejects_terminate_in_a_suspended_segment() {
     )
     .unwrap();
     let error =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .err()
             .expect("TERMINATE should be rejected for a suspended endpoint");
     assert!(error.to_string().contains("code 308"));
 }
 
 #[test]
-fn preflight_gpu_replay_proves_bounded_riscv_i_slice() {
+fn preflight_gpu_replay_proves_bounded_rv64i_slice() {
     let jal = |rd| {
         Instruction::from_usize(
             JalLuiOpcode::JAL.global_opcode(),
@@ -910,8 +910,8 @@ fn preflight_gpu_replay_proves_bounded_riscv_i_slice() {
         .map(|(offset, byte)| ((MEMORY_AS, 8 + offset as u32), byte))
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = RiscvImConfig {
-        riscv_i: RiscvIConfig {
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -923,7 +923,7 @@ fn preflight_gpu_replay_proves_bounded_riscv_i_slice() {
     let preflight_state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
 
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvImGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -941,15 +941,15 @@ fn preflight_gpu_replay_proves_bounded_riscv_i_slice() {
 
     let gpu_program = PreflightReplayProgram::upload(
         &program,
-        &config.riscv_i.system.memory_config,
+        &config.rv64i.system.memory_config,
         &vm.engine.device().device_ctx,
     )
     .unwrap();
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
     drop(transcript);
@@ -1045,8 +1045,8 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
         })
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(initial_registers);
-    let config = RiscvImConfig {
-        riscv_i: RiscvIConfig {
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -1056,7 +1056,7 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut preflight_vm, preflight_pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvImGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = preflight_vm.commit_program_on_device(&program);
     preflight_vm.load_program(cached_program);
@@ -1085,18 +1085,18 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
     );
     let preflight_program = PreflightReplayProgram::upload(
         &program,
-        &config.riscv_i.system.memory_config,
+        &config.rv64i.system.memory_config,
         &preflight_vm.engine.device().device_ctx,
     )
     .unwrap();
-    let (preflight_transcript, preflight_plan) = RiscvImPreflightGpuTracegen::postflight(
+    let (preflight_transcript, preflight_plan) = Rv64ImPreflightGpuTracegen::postflight(
         &preflight_vm,
         &preflight_program,
         &preflight_execution,
         preflight_execution.retired,
     )
     .unwrap();
-    let preflight_tracegen = RiscvImPreflightGpuTracegen::new(
+    let preflight_tracegen = Rv64ImPreflightGpuTracegen::new(
         preflight_program.program(),
         &preflight_transcript,
         &preflight_plan,
@@ -1118,7 +1118,7 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
 }
 
 #[test]
-fn preflight_gpu_tracegen_proves_riscv_m_airs() {
+fn preflight_gpu_tracegen_proves_rv64m_airs() {
     let m_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -1171,8 +1171,8 @@ fn preflight_gpu_tracegen_proves_riscv_m_airs() {
     })
     .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = RiscvImConfig {
-        riscv_i: RiscvIConfig {
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -1182,7 +1182,7 @@ fn preflight_gpu_tracegen_proves_riscv_m_airs() {
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvImGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -1193,14 +1193,14 @@ fn preflight_gpu_tracegen_proves_riscv_m_airs() {
 
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
-        PreflightReplayProgram::upload(&program, &config.riscv_i.system.memory_config, device_ctx)
+        PreflightReplayProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx)
             .unwrap();
     let (gpu_transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     assert_eq!(gpu_transcript.memory_log_host().unwrap().len(), 21 * 3);
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
             .unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     drop(replay_plan);
@@ -1232,8 +1232,8 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
         .map(|(offset, byte)| ((REGISTER_AS, (reg(1) + offset) as u32), byte))
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = RiscvImConfig {
-        riscv_i: RiscvIConfig {
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -1243,7 +1243,7 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvImGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -1253,10 +1253,10 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
         .unwrap();
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
-        PreflightReplayProgram::upload(&program, &config.riscv_i.system.memory_config, device_ctx)
+        PreflightReplayProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx)
             .unwrap();
     let (gpu_transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     let history = PreflightHistory {
         program: gpu_transcript.program_log_host().unwrap(),
@@ -1288,7 +1288,7 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
             range_checker.clone(),
             bitwise_lookup.clone(),
             range_tuple.clone(),
-            config.riscv_i.system.memory_config.timestamp_max_bits,
+            config.rv64i.system.memory_config.timestamp_max_bits,
         );
         chip.generate_proving_ctx_from_postflight(
             gpu_program.program(),
@@ -1337,8 +1337,8 @@ fn preflight_postflight_rejects_raw_x0_destination() {
         })
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = RiscvImConfig {
-        riscv_i: RiscvIConfig {
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -1348,7 +1348,7 @@ fn preflight_postflight_rejects_raw_x0_destination() {
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvImGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -1358,9 +1358,9 @@ fn preflight_postflight_rejects_raw_x0_destination() {
         .unwrap();
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
-        PreflightReplayProgram::upload(&program, &config.riscv_i.system.memory_config, device_ctx)
+        PreflightReplayProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx)
             .unwrap();
-    let error = match RiscvImPreflightGpuTracegen::postflight(
+    let error = match Rv64ImPreflightGpuTracegen::postflight(
         &vm,
         &gpu_program,
         &execution,
@@ -1404,7 +1404,7 @@ fn preflight_gpu_replay_proves_hint_store() {
             .map(|(byte_ptr, byte)| ((MEMORY_AS, byte_ptr), byte)),
     );
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = RiscvIConfig {
+    let config = Rv64IConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -1424,7 +1424,7 @@ fn preflight_gpu_replay_proves_hint_store() {
             .collect(),
     );
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), RiscvIGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -1446,14 +1446,14 @@ fn preflight_gpu_replay_proves_hint_store() {
     .unwrap();
     let missing = execution.transcript.replay_values.pop().unwrap();
     let error =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .err()
             .expect("missing hint replay value must fail checkpoint replay");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.replay_values.push(missing);
 
     let (transcript, replay_plan) =
-        RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
+        Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
     assert_eq!(
         replay_plan
@@ -1468,7 +1468,7 @@ fn preflight_gpu_replay_proves_hint_store() {
         1
     );
     let tracegen =
-        RiscvImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
+        Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &transcript, &replay_plan).unwrap();
     let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
     assert_eq!(transcript.error_code().unwrap(), 0);
     drop(replay_plan);

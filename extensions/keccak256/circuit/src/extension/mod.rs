@@ -28,7 +28,7 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_riscv_circuit::{
-    RiscvI, RiscvIExecutor, RiscvImCpuProverExt, RiscvIo, RiscvIoExecutor, RiscvM, RiscvMExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
@@ -59,11 +59,11 @@ pub struct Keccak256Config {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub riscv_i: RiscvI,
+    pub rv64i: Rv64I,
     #[extension]
-    pub riscv_m: RiscvM,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: RiscvIo,
+    pub io: Rv64Io,
     #[extension]
     pub keccak: Keccak256,
 }
@@ -72,9 +72,9 @@ impl Default for Keccak256Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            riscv_i: RiscvI,
-            riscv_m: RiscvM::default(),
-            io: RiscvIo,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             keccak: Keccak256,
         }
     }
@@ -109,9 +109,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(
             &Keccak256CpuProverExt,
             &config.keccak,

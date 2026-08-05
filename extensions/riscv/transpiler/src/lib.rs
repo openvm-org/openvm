@@ -10,8 +10,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_guest::{
     PhantomImm, ALU_OPCODE, ALU_OP_32, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3,
-    HINT_STORED_IMM, PHANTOM_FUNCT3, REVEAL_FUNCT3, RISCV_M_FUNCT7, SYSTEM_OPCODE,
-    TERMINATE_FUNCT3,
+    HINT_STORED_IMM, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -26,15 +25,15 @@ pub mod rrs;
 pub use instructions::*;
 
 #[derive(Default)]
-pub struct RiscvITranspilerExtension;
+pub struct Rv64ITranspilerExtension;
 
 #[derive(Default)]
-pub struct RiscvMTranspilerExtension;
+pub struct Rv64MTranspilerExtension;
 
 #[derive(Default)]
-pub struct RiscvIoTranspilerExtension;
+pub struct Rv64IoTranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for RiscvITranspilerExtension {
+impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         let mut transpiler = InstructionTranspiler::<F>(PhantomData);
         if instruction_stream.is_empty() {
@@ -73,19 +72,19 @@ impl<F: PrimeField32> TranspilerExtension<F> for RiscvITranspilerExtension {
                 let dec_insn = IType::new(instruction_u32);
                 PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
                     PhantomImm::HintInput => Instruction::phantom(
-                        PhantomDiscriminant(RiscvPhantom::HintInput as u16),
+                        PhantomDiscriminant(Rv64Phantom::HintInput as u16),
                         F::ZERO,
                         F::ZERO,
                         0,
                     ),
                     PhantomImm::HintRandom => Instruction::phantom(
-                        PhantomDiscriminant(RiscvPhantom::HintRandom as u16),
+                        PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
                         F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
                         F::ZERO,
                         0,
                     ),
                     PhantomImm::PrintStr => Instruction::phantom(
-                        PhantomDiscriminant(RiscvPhantom::PrintStr as u16),
+                        PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
                         F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
                         F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
                         0,
@@ -97,7 +96,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for RiscvITranspilerExtension {
                 let dec_insn = RType::new(instruction_u32);
                 let funct7 = dec_insn.funct7 as u8;
                 match funct7 {
-                    RISCV_M_FUNCT7 => None,
+                    RV64M_FUNCT7 => None,
                     _ => process_instruction(&mut transpiler, instruction_u32),
                 }
             }
@@ -108,7 +107,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for RiscvITranspilerExtension {
     }
 }
 
-impl<F: PrimeField32> TranspilerExtension<F> for RiscvMTranspilerExtension {
+impl<F: PrimeField32> TranspilerExtension<F> for Rv64MTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
@@ -122,7 +121,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for RiscvMTranspilerExtension {
 
         let dec_insn = RType::new(instruction_u32);
         let funct7 = dec_insn.funct7 as u8;
-        if funct7 != RISCV_M_FUNCT7 {
+        if funct7 != RV64M_FUNCT7 {
             return None;
         }
 
@@ -135,7 +134,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for RiscvMTranspilerExtension {
     }
 }
 
-impl<F: PrimeField32> TranspilerExtension<F> for RiscvIoTranspilerExtension {
+impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;

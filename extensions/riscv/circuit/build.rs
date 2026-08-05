@@ -195,7 +195,7 @@ fn main() {
             .watch("cuda/include")
             .watch("cuda/rvr")
             .watch("cuda/src")
-            .library_name("tracegen_gpu_riscv_im")
+            .library_name("tracegen_gpu_rv64im")
             .files_from_glob("cuda/src/**/*.cu");
 
         let out_dir = env::var_os("OUT_DIR").expect("OUT_DIR");

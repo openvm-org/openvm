@@ -50,7 +50,7 @@ use crate::{
     LoadSignExtendByteAir, LoadSignExtendByteChipGpu, LoadSignExtendHalfwordAir,
     LoadSignExtendHalfwordChipGpu, LoadSignExtendWordAir, LoadSignExtendWordChipGpu, LoadWordAir,
     LoadWordChipGpu, MulHAir, MulHChipGpu, MulWAir, MulWChipGpu, MultiplicationAir,
-    MultiplicationChipGpu, RiscvI, RiscvIo, RiscvM, ShiftLogicalAir, ShiftLogicalChipGpu,
+    MultiplicationChipGpu, Rv64I, Rv64Io, Rv64M, ShiftLogicalAir, ShiftLogicalChipGpu,
     ShiftLogicalImmAir, ShiftLogicalImmChipGpu, ShiftRightArithmeticAir,
     ShiftRightArithmeticChipGpu, ShiftRightArithmeticImmAir, ShiftRightArithmeticImmChipGpu,
     ShiftWLogicalAir, ShiftWLogicalChipGpu, ShiftWLogicalImmAir, ShiftWLogicalImmChipGpu,
@@ -61,7 +61,7 @@ use crate::{
 
 include!(concat!(env!("OUT_DIR"), "/checkpoint_replay_opcodes.rs"));
 
-pub struct RiscvImGpuProverExt;
+pub struct Rv64ImGpuProverExt;
 
 macro_rules! impl_postflight_tracegen {
     ($builder:ty) => {
@@ -84,7 +84,7 @@ macro_rules! impl_postflight_tracegen {
                 let (transcript, replay_plan) = vm
                     .postflight_history(program, output)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-                RiscvImPreflightGpuTracegen::new(program, &transcript, &replay_plan)
+                Rv64ImPreflightGpuTracegen::new(program, &transcript, &replay_plan)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                     .generate_proving_ctx(vm)
             }
@@ -92,8 +92,8 @@ macro_rules! impl_postflight_tracegen {
     };
 }
 
-impl_postflight_tracegen!(crate::RiscvIGpuBuilder);
-impl_postflight_tracegen!(crate::RiscvImGpuBuilder);
+impl_postflight_tracegen!(crate::Rv64IGpuBuilder);
+impl_postflight_tracegen!(crate::Rv64ImGpuBuilder);
 
 /// Segment-wide RV64I GPU trace generation from an immutable postflight transcript.
 ///
@@ -102,14 +102,14 @@ impl_postflight_tracegen!(crate::RiscvImGpuBuilder);
 /// remains pending until the VM's reverse inventory walk reaches its concrete chip.
 /// This makes a missing/mismatched chip fail closed instead of silently
 /// producing a dummy trace.
-pub struct RiscvImPreflightGpuTracegen<'a> {
+pub struct Rv64ImPreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
     replay_plan: &'a GpuPostflightPlan,
     pending_opcodes: std::collections::BTreeSet<u32>,
 }
 
-impl<'a> RiscvImPreflightGpuTracegen<'a> {
+impl<'a> Rv64ImPreflightGpuTracegen<'a> {
     /// Checkpoint replay for RV64IM and phantom execution. Loads and stores
     /// first become unresolved block intents; the VM chronology pass resolves
     /// those intents before the ordinary transcript indexes and unchanged
@@ -402,10 +402,10 @@ impl<'a> RiscvImPreflightGpuTracegen<'a> {
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, RiscvI> for RiscvImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64I> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
-        _: &RiscvI,
+        _: &Rv64I,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
@@ -619,10 +619,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, RiscvI> for RiscvImGpuProverE
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, RiscvM> for RiscvImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64M> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
-        extension: &RiscvM,
+        extension: &Rv64M,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
@@ -706,10 +706,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, RiscvM> for RiscvImGpuProverE
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, RiscvIo> for RiscvImGpuProverExt {
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
-        _: &RiscvIo,
+        _: &Rv64Io,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());

@@ -75,7 +75,7 @@ impl AluOp {
 
 /// An RV64I instruction implemented by this extension.
 #[derive(Debug, Clone)]
-pub(crate) enum RiscvIInstr {
+pub(crate) enum Rv64IInstr {
     /// Register-register or register-immediate arithmetic.
     Alu {
         op: AluOp,
@@ -125,7 +125,7 @@ pub(crate) enum RiscvIInstr {
     },
 }
 
-impl ExtInstr for RiscvIInstr {
+impl ExtInstr for Rv64IInstr {
     fn opname(&self) -> &str {
         match self {
             Self::Alu {
@@ -512,8 +512,8 @@ mod tests {
         }
     }
 
-    fn load(rd: Reg) -> RiscvIInstr {
-        RiscvIInstr::Load {
+    fn load(rd: Reg) -> Rv64IInstr {
+        Rv64IInstr::Load {
             width: MemWidth::Word,
             signed: true,
             rd,
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn memory_accesses_select_the_sp_cache_only_for_x2() {
         let mut ctx = RecordingCtx::default();
-        RiscvIInstr::Load {
+        Rv64IInstr::Load {
             width: MemWidth::Byte,
             signed: false,
             rd: Reg::new(3),
@@ -554,14 +554,14 @@ mod tests {
             offset: -1,
         }
         .emit_c(&mut ctx);
-        RiscvIInstr::Store {
+        Rv64IInstr::Store {
             width: MemWidth::Double,
             base: SP,
             src: Reg::new(5),
             offset: 8,
         }
         .emit_c(&mut ctx);
-        RiscvIInstr::Store {
+        Rv64IInstr::Store {
             width: MemWidth::Word,
             base: Reg::new(6),
             src: Reg::new(7),

@@ -29,7 +29,7 @@ use openvm_riscv_circuit::preflight::PreflightReplayProgram;
 use openvm_riscv_circuit::preflight::{
     PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
 };
-use openvm_riscv_circuit::{RiscvImGpuProverExt, RiscvImPreflightGpuTracegen};
+use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_stark_backend::{
     prover::{AirProvingContext, ProvingContext},
     StarkEngine,
@@ -195,7 +195,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
+        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(
@@ -283,7 +283,7 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -294,25 +294,23 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
             self.program,
             self.transcript,
             self.replay_plan,
-            (self, riscv),
-            |(tracegen, riscv), chip| {
+            (self, rv64),
+            |(tracegen, rv64), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    riscv
-                        .generate_for_chip(chip)
+                    rv64.generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-            |(tracegen, riscv)| {
+            |(tracegen, rv64)| {
                 tracegen
                     .finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-                riscv
-                    .finish()
+                rv64.finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
             },
         )
@@ -438,17 +436,17 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for DeferralGpuBuilder {
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
-            &RiscvImGpuProverExt,
-            &config.riscv_i,
+            &Rv64ImGpuProverExt,
+            &config.rv64i,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
-            &RiscvImGpuProverExt,
-            &config.riscv_m,
+            &Rv64ImGpuProverExt,
+            &config.rv64m,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
-            &RiscvImGpuProverExt,
+            &Rv64ImGpuProverExt,
             &config.io,
             inventory,
         )?;

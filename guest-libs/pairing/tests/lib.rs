@@ -46,7 +46,7 @@ mod bn254 {
     #[cfg(feature = "rvr")]
     use openvm_platform::memory::MEM_SIZE;
     use openvm_riscv_transpiler::{
-        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{openvm_stark_backend::SystemParams, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
@@ -91,9 +91,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
@@ -113,9 +113,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -148,9 +148,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -204,9 +204,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -251,9 +251,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -302,9 +302,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -357,9 +357,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -420,9 +420,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -606,7 +606,7 @@ mod bls12_381 {
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
     use openvm_riscv_transpiler::{
-        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{openvm_stark_backend::SystemParams, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
@@ -658,9 +658,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
@@ -680,9 +680,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -715,9 +715,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -772,9 +772,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -819,9 +819,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -876,9 +876,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -931,9 +931,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -993,9 +993,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),

@@ -10,25 +10,25 @@ use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 
-use self::instruction::{MulDivOp, RiscvMInstr};
+use self::instruction::{MulDivOp, Rv64MInstr};
 use crate::instruction::decode_reg;
 
 /// RVR extension for RV64M instructions.
-pub struct RiscvMExtension;
+pub struct Rv64MExtension;
 
-impl RiscvMExtension {
+impl Rv64MExtension {
     pub const fn new() -> Self {
         Self
     }
 }
 
-impl Default for RiscvMExtension {
+impl Default for Rv64MExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RvrExtension for RiscvMExtension {
+impl RvrExtension for Rv64MExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         let operations = [
@@ -97,7 +97,7 @@ impl RvrExtension for RiscvMExtension {
             return None;
         }
 
-        let instruction: Box<dyn ExtInstr> = Box::new(RiscvMInstr {
+        let instruction: Box<dyn ExtInstr> = Box::new(Rv64MInstr {
             op,
             word,
             rd: decode_reg(insn.a),
@@ -112,7 +112,7 @@ impl RvrExtension for RiscvMExtension {
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
-        vec![("riscv_m.h", include_str!("../c/riscv_m.h"))]
+        vec![("rv64m.h", include_str!("../c/rv64m.h"))]
     }
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
@@ -144,8 +144,8 @@ mod tests {
     }
 
     #[test]
-    fn all_riscv_m_families_lift_with_register_domains() {
-        let extension = RiscvMExtension;
+    fn all_rv64m_families_lift_with_register_domains() {
+        let extension = Rv64MExtension;
         for (opcode, name) in [
             (MulOpcode::MUL.global_opcode(), "mul"),
             (MulHOpcode::MULH.global_opcode(), "mulh"),
@@ -189,7 +189,7 @@ mod tests {
             ],
         ));
         let LiftedInstr::Body(InstrAt { instr, .. }) =
-            RiscvMExtension.try_lift(&insn, 0x100).unwrap()
+            Rv64MExtension.try_lift(&insn, 0x100).unwrap()
         else {
             panic!("expected body instruction");
         };

@@ -249,7 +249,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
 }
 
 #[test]
-fn mixed_riscv_sha_checkpoint_expansion_proves() {
+fn mixed_rv64_sha_checkpoint_expansion_proves() {
     let (program, exe, _) = fixture(false);
     let config = Sha2VmConfig {
         system: test_system_config(),
@@ -287,7 +287,7 @@ fn mixed_riscv_sha_checkpoint_expansion_proves() {
 }
 
 #[test]
-fn mixed_riscv_sha_manual_transcript_rejects_corruption() {
+fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
     let (program, exe, corrupt) = fixture(true);
     let config = Sha2VmConfig {
         system: test_system_config(),
@@ -326,7 +326,7 @@ fn mixed_riscv_sha_manual_transcript_rejects_corruption() {
 }
 
 #[test]
-fn mixed_riscv_sha_manual_transcript_rejects_corrupt_outputs() {
+fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
     let (program, exe, _) = fixture(false);
     let config = Sha2VmConfig {
         system: test_system_config(),

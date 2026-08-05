@@ -17,7 +17,7 @@ use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
 use openvm_keccak256_circuit::Keccak256PreflightGpuTracegen;
 #[cfg(feature = "rvr")]
 use openvm_riscv_circuit::preflight::{PostflightAccessRegistry, PreflightReplayProgram};
-use openvm_riscv_circuit::RiscvImPreflightGpuTracegen;
+use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_sha2_circuit::Sha2PreflightGpuTracegen;
 use openvm_stark_backend::{
     p3_field::PrimeField32,
@@ -39,7 +39,7 @@ struct SdkPreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
     replay_plan: &'a GpuPostflightPlan,
-    riscv: RiscvImPreflightGpuTracegen<'a>,
+    rv64: Rv64ImPreflightGpuTracegen<'a>,
     keccak: Option<Keccak256PreflightGpuTracegen<'a>>,
     sha2: Option<Sha2PreflightGpuTracegen<'a>>,
     bigint: Option<Int256PreflightGpuTracegen<'a>>,
@@ -123,7 +123,7 @@ impl SdkVmGpuBuilder {
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let result = RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns);
+        let result = Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns);
         #[cfg(feature = "metrics")]
         if let Ok((_, replay_plan)) = &result {
             vm.emit_preflight_opcode_counts(replay_plan);
@@ -250,7 +250,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         }
         ownership.validate_executed(replay_plan.executed_opcodes())?;
         let extension_opcodes = ownership.extension_opcodes();
-        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             program,
             transcript,
             replay_plan,
@@ -261,7 +261,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
             program,
             transcript,
             replay_plan,
-            riscv,
+            rv64,
             keccak,
             sha2,
             bigint,
@@ -320,7 +320,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
                 return Ok(ctx);
             }
         }
-        self.riscv.generate_for_chip(chip).map_err(extension_error)
+        self.rv64.generate_for_chip(chip).map_err(extension_error)
     }
 
     fn finish(self) -> Result<(), GenerationError> {
@@ -342,7 +342,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         if let Some(tracegen) = self.algebra {
             tracegen.finish().map_err(extension_error)?;
         }
-        self.riscv.finish().map_err(extension_error)
+        self.rv64.finish().map_err(extension_error)
     }
 }
 
@@ -381,7 +381,7 @@ impl OpcodeOwnership {
         opcodes: impl IntoIterator<Item = u32>,
     ) -> Result<(), GpuPostflightError> {
         for opcode in opcodes {
-            if RiscvImPreflightGpuTracegen::owns_opcode(opcode) {
+            if Rv64ImPreflightGpuTracegen::owns_opcode(opcode) {
                 return Err(GpuPostflightError::InvalidTranscript(format!(
                     "{owner} opcode {opcode:#x} collides with RV64/system"
                 )));
@@ -401,7 +401,7 @@ impl OpcodeOwnership {
         executed: impl IntoIterator<Item = u32>,
     ) -> Result<(), GpuPostflightError> {
         if let Some(opcode) = executed.into_iter().find(|opcode| {
-            !RiscvImPreflightGpuTracegen::owns_opcode(*opcode)
+            !Rv64ImPreflightGpuTracegen::owns_opcode(*opcode)
                 && !self.extensions.contains_key(opcode)
         }) {
             return Err(GpuPostflightError::InvalidTranscript(format!(
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn opcode_ownership_rejects_duplicates_and_missing_producers() {
         let mut free_opcodes = (0..=u16::MAX as u32)
-            .filter(|opcode| !RiscvImPreflightGpuTracegen::owns_opcode(*opcode));
+            .filter(|opcode| !Rv64ImPreflightGpuTracegen::owns_opcode(*opcode));
         let claimed_opcode = free_opcodes.next().unwrap();
         let missing_opcode = free_opcodes.next().unwrap();
         let mut ownership = OpcodeOwnership::new();

@@ -28,7 +28,7 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_adapters::{VecHeapAdapterAir, VecHeapBranchU16AdapterAir, VecHeapU16AdapterAir};
-use openvm_riscv_circuit::RiscvImCpuProverExt;
+use openvm_riscv_circuit::Rv64ImCpuProverExt;
 use openvm_riscv_transpiler::{BaseAluOpcode, ShiftOpcode};
 use openvm_stark_backend::{
     p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
@@ -473,9 +473,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(&Int256CpuProverExt, &config.bigint, inventory)?;
         Ok(chip_complex)
     }

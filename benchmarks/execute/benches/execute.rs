@@ -38,10 +38,10 @@ use openvm_pairing_circuit::{
 use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
 use openvm_pairing_transpiler::PairingTranspilerExtension;
 use openvm_riscv_circuit::{
-    RiscvI, RiscvIExecutor, RiscvImCpuProverExt, RiscvIo, RiscvIoExecutor, RiscvM, RiscvMExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_riscv_transpiler::{
-    RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
 use openvm_sha2_transpiler::Sha2TranspilerExtension;
@@ -96,11 +96,11 @@ pub struct ExecuteConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub riscv_i: RiscvI,
+    pub rv64i: Rv64I,
     #[extension]
-    pub riscv_m: RiscvM,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: RiscvIo,
+    pub io: Rv64Io,
     #[extension]
     pub bigint: Int256,
     #[extension]
@@ -122,9 +122,9 @@ impl Default for ExecuteConfig {
         let bn_config = PairingCurve::Bn254.curve_config();
         Self {
             system: SystemConfig::default(),
-            riscv_i: RiscvI,
-            riscv_m: RiscvM::default(),
-            io: RiscvIo,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             bigint: Int256::default(),
             keccak: Keccak256,
             sha2: Sha2,
@@ -176,9 +176,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(&Int256CpuProverExt, &config.bigint, inventory)?;
         VmProverExtension::<E, _>::extend_prover(
             &Keccak256CpuProverExt,
@@ -200,9 +200,9 @@ fn main() {
 
 fn create_default_transpiler() -> Transpiler<BabyBear> {
     Transpiler::<BabyBear>::default()
-        .with_extension(RiscvITranspilerExtension)
-        .with_extension(RiscvIoTranspilerExtension)
-        .with_extension(RiscvMTranspilerExtension)
+        .with_extension(Rv64ITranspilerExtension)
+        .with_extension(Rv64IoTranspilerExtension)
+        .with_extension(Rv64MTranspilerExtension)
         .with_extension(Int256TranspilerExtension)
         .with_extension(Keccak256TranspilerExtension)
         .with_extension(Sha2TranspilerExtension)

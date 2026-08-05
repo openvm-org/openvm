@@ -19,8 +19,8 @@ use openvm_riscv_circuit::{
     adapters::{BYTE_BITS, U16_BITS},
     AddSubCoreAir, AddSubFiller, BitwiseLogicCoreAir, BitwiseLogicFiller, BranchEqualCoreAir,
     BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanFiller, LessThanCoreAir,
-    LessThanFiller, MultiplicationCoreAir, MultiplicationFiller, RiscvI, RiscvIExecutor, RiscvIo,
-    RiscvIoExecutor, RiscvM, RiscvMExecutor, ShiftLogicalCoreAir, ShiftLogicalFiller,
+    LessThanFiller, MultiplicationCoreAir, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io,
+    Rv64IoExecutor, Rv64M, Rv64MExecutor, ShiftLogicalCoreAir, ShiftLogicalFiller,
     ShiftRightArithmeticCoreAir, ShiftRightArithmeticFiller,
 };
 use serde::{Deserialize, Serialize};
@@ -149,11 +149,11 @@ pub struct Int256Config {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub riscv_i: RiscvI,
+    pub rv64i: Rv64I,
     #[extension]
-    pub riscv_m: RiscvM,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: RiscvIo,
+    pub io: Rv64Io,
     #[extension]
     pub bigint: Int256,
 }
@@ -165,9 +165,9 @@ impl Default for Int256Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            riscv_i: RiscvI,
-            riscv_m: RiscvM::default(),
-            io: RiscvIo,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             bigint: Int256::default(),
         }
     }

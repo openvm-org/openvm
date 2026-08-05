@@ -11,7 +11,7 @@ use openvm_instructions::{
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluWImmOpcode, HintStoreOpcode, LessThanImmOpcode,
-    RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension, RiscvPhantom,
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension, Rv64Phantom,
     ShiftImmOpcode, ShiftWImmOpcode,
 };
 use openvm_stark_sdk::{openvm_stark_backend::p3_field::PrimeField32, p3_baby_bear::BabyBear};
@@ -29,9 +29,9 @@ fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
 
 fn transpiler() -> Transpiler<F> {
     Transpiler::<F>::default()
-        .with_extension(RiscvITranspilerExtension)
-        .with_extension(RiscvMTranspilerExtension)
-        .with_extension(RiscvIoTranspilerExtension)
+        .with_extension(Rv64ITranspilerExtension)
+        .with_extension(Rv64MTranspilerExtension)
+        .with_extension(Rv64IoTranspilerExtension)
 }
 
 fn encode_op_imm(funct3: u32, immediate: u32) -> u32 {
@@ -256,13 +256,13 @@ fn test_transpile_custom_opcodes() -> Result<()> {
 /// Verify that PHANTOM instructions carry the correct discriminant values
 /// for PrintStr and HintInput.
 #[test]
-fn test_transpile_riscv_phantom_discriminants() -> Result<()> {
+fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
     let elf = get_elf("tests/data/rv64im-intrin")?;
     let program = transpiler().transpile(&elf.instructions)?;
 
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-    let hint_input_disc = RiscvPhantom::HintInput as u16;
-    let print_str_disc = RiscvPhantom::PrintStr as u16;
+    let hint_input_disc = Rv64Phantom::HintInput as u16;
+    let print_str_disc = Rv64Phantom::PrintStr as u16;
 
     let mut found_hint_input = false;
     let mut found_print_str = false;

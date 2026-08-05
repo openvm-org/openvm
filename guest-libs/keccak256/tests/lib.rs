@@ -15,7 +15,7 @@ mod tests {
     use openvm_keccak256_circuit::Keccak256GpuBuilder as TestBuilder;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_riscv_transpiler::{
-        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sdk::StdIn;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -76,9 +76,9 @@ mod tests {
             elf,
             Transpiler::<F>::default()
                 .with_extension(Keccak256TranspilerExtension)
-                .with_extension(RiscvITranspilerExtension)
-                .with_extension(RiscvMTranspilerExtension)
-                .with_extension(RiscvIoTranspilerExtension),
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
         )?;
 
         let test_vectors = parse_test_vectors(test_vector_file_name);

@@ -18,11 +18,10 @@ use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::{
-    RiscvI, RiscvIExecutor, RiscvImBuilder, RiscvImConfig, RiscvIo, RiscvIoExecutor, RiscvM,
-    RiscvMExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImBuilder, Rv64ImConfig, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_riscv_transpiler::{
-    RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
@@ -54,9 +53,9 @@ fn test_decode_elf() -> Result<()> {
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = Transpiler::<F>::default()
-        .with_extension(RiscvITranspilerExtension)
-        .with_extension(RiscvMTranspilerExtension)
-        .with_extension(RiscvIoTranspilerExtension)
+        .with_extension(Rv64ITranspilerExtension)
+        .with_extension(Rv64MTranspilerExtension)
+        .with_extension(Rv64IoTranspilerExtension)
         .with_extension(ModularTranspilerExtension)
         .transpile(&elf.instructions)?;
     for instruction in program {
@@ -67,16 +66,16 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 
 #[test_case("tests/data/rv64im-exp-from-as")]
 #[test_case("tests/data/rv64im-fib-from-as")]
-fn test_riscv_im_runtime(elf_path: &str) -> Result<()> {
+fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(RiscvITranspilerExtension)
-            .with_extension(RiscvMTranspilerExtension)
-            .with_extension(RiscvIoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
-    let config = RiscvImConfig::default();
+    let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config)?;
     let instance = executor.instance(&exe)?;
     instance.execute(vec![])?;
@@ -88,11 +87,11 @@ pub struct ModularFp2Int256Config {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub base: RiscvI,
+    pub base: Rv64I,
     #[extension]
-    pub mul: RiscvM,
+    pub mul: Rv64M,
     #[extension]
-    pub io: RiscvIo,
+    pub io: Rv64Io,
     #[extension]
     pub modular: ModularExtension,
     #[extension]
@@ -135,9 +134,9 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(RiscvITranspilerExtension)
-            .with_extension(RiscvMTranspilerExtension)
-            .with_extension(RiscvIoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
@@ -149,16 +148,16 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 
 #[test]
 fn test_terminate_prove() -> Result<()> {
-    let config = RiscvImConfig::default();
+    let config = Rv64ImConfig::default();
     let elf = get_elf("tests/data/rv64im-terminate-from-as")?;
     let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(RiscvITranspilerExtension)
-            .with_extension(RiscvMTranspilerExtension)
-            .with_extension(RiscvIoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(RiscvImBuilder, config, openvm_exe);
+    air_test(Rv64ImBuilder, config, openvm_exe);
     Ok(())
 }

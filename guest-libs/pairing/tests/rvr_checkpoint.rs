@@ -27,8 +27,7 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::{PairingPhantom, PairingTranspilerExtension};
 use openvm_riscv_transpiler::{
-    HintStoreOpcode, RiscvITranspilerExtension, RiscvIoTranspilerExtension,
-    RiscvMTranspilerExtension,
+    HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_sdk::{
     openvm_stark_backend::{p3_field::PrimeField32, StarkEngine},
@@ -291,9 +290,9 @@ fn transpile_pairing_fixture(
     Ok(VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_extension(RiscvITranspilerExtension)
-            .with_extension(RiscvMTranspilerExtension)
-            .with_extension(RiscvIoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(PairingTranspilerExtension)
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension)

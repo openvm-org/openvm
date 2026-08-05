@@ -466,7 +466,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
 }
 
 #[test]
-fn mixed_riscv_int256_checkpoint_expansion_proves_both_branch_outcomes() {
+fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
     for (equal, expected_pc, expected_branch_replay_value) in [(false, 12, 0u64), (true, 16, 1u64)]
     {
         let (program, exe) = fixture(equal);

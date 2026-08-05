@@ -121,8 +121,8 @@ fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, Verificat
 fn riscv64_config_with_deferral(deferral: DeferralConfig) -> SdkVmConfig {
     SdkVmConfig::builder()
         .system(Default::default())
-        .riscv_i(Default::default())
-        .riscv_m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .deferral(deferral)
         .build()
