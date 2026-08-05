@@ -4,9 +4,10 @@
 //! produced by evaluating the step [`FieldExpr`] once per scalar bit and carrying the accumulator
 //! forward, followed by the digest row holding the memory witnesses.
 //!
-//! Padding rows are left all-zero, which satisfies the AIR: the gated constraints switch off with
-//! `is_compute` and `is_digest`, and the expression region's ungated carry recurrences hold on
-//! zeros.
+//! Padding rows carry a consistent witness for zero inputs with `is_valid` cleared, rather than
+//! being all-zero: the expression folds the curve's `a` coefficient in as a constant, so on a zero
+//! row its lambda constraint evaluates to `-a` and the ungated carry recurrences are unsatisfiable
+//! whenever `a != 0`.
 
 use std::{
     borrow::BorrowMut,
@@ -36,10 +37,10 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    ec_mul_digest_offset, ec_mul_header_width, ec_mul_width, EcMulDigestCols, EcMulHeaderCols,
-    EC_MUL_COMPUTE_ROWS, EC_MUL_DIGEST_ROW_IDX, EC_MUL_REGISTER_READS, EC_MUL_SCALAR_BITS,
-    EC_MUL_TOTAL_ROWS, FLAG_DBL, FLAG_DBL_ADD, FLAG_INF_STAY, FLAG_INF_TAKE, NUM_STEP_FLAGS,
-    SCALAR_BLOCKS, SCALAR_LIMBS,
+    ec_mul_digest_offset, ec_mul_header_width, ec_mul_width, setup_row_inputs, EcMulDigestCols,
+    EcMulHeaderCols, EC_MUL_COMPUTE_ROWS, EC_MUL_DIGEST_ROW_IDX, EC_MUL_REGISTER_READS,
+    EC_MUL_SCALAR_BITS, EC_MUL_TOTAL_ROWS, FLAG_DBL, FLAG_DBL_ADD, FLAG_INF_STAY, FLAG_INF_TAKE,
+    NUM_STEP_FLAGS, SCALAR_BLOCKS, SCALAR_LIMBS,
 };
 
 /// Prover-side state for one curve's `EC_MUL` chip.
@@ -75,7 +76,7 @@ struct EcMulTraceInput<const BLOCKS: usize> {
     from_pc: u32,
     from_timestamp: u32,
     is_setup: bool,
-    /// `[rd, rs1, rs2]`, in the AIR's timestamp order.
+    /// `[rs1, rs2, rd]`, in the AIR's timestamp order.
     reg_ptrs: [u32; EC_MUL_REGISTER_READS],
     reg_vals: [u32; EC_MUL_REGISTER_READS],
     reg_prev_timestamps: [u32; EC_MUL_REGISTER_READS],
@@ -129,7 +130,7 @@ fn add_byte_offset(base: u32, block: usize, ptr_max_bits: usize) -> Result<u32, 
     Ok(pointer)
 }
 
-/// Replays a step's memory accesses in the order the AIR assigns timestamps: `rd`, `rs1`, `rs2`,
+/// Replays a step's memory accesses in the order the AIR assigns timestamps: `rs1`, `rs2`, `rd`,
 /// the point blocks, the scalar blocks, then the result writes.
 fn project_step<F: PrimeField32, const BLOCKS: usize>(
     postflight: &Postflight<'_, F>,
@@ -147,9 +148,9 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     }
 
     let reg_ptrs = [
-        instruction.a.as_canonical_u32(),
         instruction.b.as_canonical_u32(),
         instruction.c.as_canonical_u32(),
+        instruction.a.as_canonical_u32(),
     ];
     let mut replay = postflight.replay(step);
 
@@ -163,7 +164,7 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
         reg_vals[i] = pointer_from_register(access.value, ptr_max_bits)?;
         reg_prev_timestamps[i] = access.previous_timestamp;
     }
-    let [rd_val, point_val, scalar_val] = reg_vals;
+    let [point_val, scalar_val, rd_val] = reg_vals;
 
     let mut point_blocks = [[0u16; BLOCK_FE_WIDTH]; BLOCKS];
     let mut point_prev_timestamps = [0u32; BLOCKS];
@@ -243,6 +244,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
     range_checker: &VariableRangeCheckerChip,
     mem_helper: &openvm_circuit::system::memory::MemoryAuxColsFactory<F>,
     ptr_max_bits: usize,
+    dummy_expr: &[F],
     rows: &mut [F],
     width: usize,
     input: &EcMulTraceInput<BLOCKS>,
@@ -307,14 +309,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         }
 
         let inputs = if input.is_setup {
-            // Setup rows carry the modulus and `a` in the accumulator slots, which FieldExpr
-            // checks against the values the chip was built with.
-            let mut setup_inputs = vec![expr.program().prime().clone()];
-            setup_inputs.extend(expr.program().setup_values().iter().cloned());
-            while setup_inputs.len() < 4 {
-                setup_inputs.push(BigUint::ZERO);
-            }
-            setup_inputs
+            setup_row_inputs(expr.program())
         } else {
             vec![rx.clone(), ry.clone(), px.clone(), py.clone()]
         };
@@ -364,15 +359,19 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         }
     }
 
+    // The expression region is inactive here but cannot be zero, for the same reason padding rows
+    // cannot: its ungated carry recurrences do not hold on zeros once `a != 0`.
+    row[header_width..digest_offset].copy_from_slice(dummy_expr);
+
     let digest: &mut EcMulDigestCols<F, NUM_LIMBS, BLOCKS> = row[digest_offset..].borrow_mut();
     digest.from_state.pc = F::from_u32(input.from_pc);
     digest.from_state.timestamp = F::from_u32(input.from_timestamp);
-    digest.rd_ptr = F::from_u32(input.reg_ptrs[0]);
-    digest.rs1_ptr = F::from_u32(input.reg_ptrs[1]);
-    digest.rs2_ptr = F::from_u32(input.reg_ptrs[2]);
-    digest.rd_val = ptr_to_field_u16_limbs(input.reg_vals[0]);
-    digest.rs1_val = ptr_to_field_u16_limbs(input.reg_vals[1]);
-    digest.rs2_val = ptr_to_field_u16_limbs(input.reg_vals[2]);
+    digest.rs1_ptr = F::from_u32(input.reg_ptrs[0]);
+    digest.rs2_ptr = F::from_u32(input.reg_ptrs[1]);
+    digest.rd_ptr = F::from_u32(input.reg_ptrs[2]);
+    digest.rs1_val = ptr_to_field_u16_limbs(input.reg_vals[0]);
+    digest.rs2_val = ptr_to_field_u16_limbs(input.reg_vals[1]);
+    digest.rd_val = ptr_to_field_u16_limbs(input.reg_vals[2]);
     for &ptr in &input.reg_vals {
         range_checker.add_count(ptr_bound_from_ptr(ptr, ptr_max_bits), 16);
     }
@@ -483,6 +482,28 @@ pub fn generate_ec_mul_trace_from_postflight<
     };
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
+    // An inactive expression region cannot be zero: the curve's `a` coefficient is folded in as a
+    // constant, so on an all-zero row the lambda constraint evaluates to `-a` and the ungated carry
+    // recurrences are unsatisfiable whenever `a != 0`. Build one consistent witness for zero inputs
+    // with `is_valid` cleared, as `fill_dummy_core_row` does for the single-row chips, and reuse it
+    // for every digest and padding row. Its range-check counts are discarded, since the AIR emits
+    // no range checks when `is_valid` is zero.
+    let expr_width = BaseAir::<F>::width(&chip.expr);
+    let dummy_expr = {
+        let discard = VariableRangeCheckerChip::new(chip.range_checker.bus());
+        let mut sub = F::zero_vec(expr_width);
+        chip.expr.generate_subrow(
+            (
+                &discard,
+                vec![BigUint::ZERO; chip.expr.program().num_inputs()],
+                vec![false; NUM_STEP_FLAGS],
+            ),
+            &mut sub,
+        );
+        sub[0] = F::ZERO;
+        sub
+    };
+
     // Counts accumulate into a private chip and are merged at the end so the per-instruction fills
     // can run in parallel, as the single-row chips do.
     let counter = Arc::new(VariableRangeCheckerChip::new(chip.range_checker.bus()));
@@ -500,11 +521,20 @@ pub fn generate_ec_mul_trace_from_postflight<
                 counter.as_ref(),
                 &mem_helper,
                 chip.ptr_max_bits,
+                &dummy_expr,
                 rows,
                 width,
                 &input,
             )
         })?;
+
+    if used_rows < height {
+        let mut dummy = F::zero_vec(width);
+        dummy[ec_mul_header_width()..ec_mul_digest_offset(expr_width)].copy_from_slice(&dummy_expr);
+        trace.values[used_rows * width..]
+            .par_chunks_exact_mut(width)
+            .for_each(|row| row.copy_from_slice(&dummy));
+    }
 
     if chip.range_checker.count.len() != counter.count.len() {
         return Err(PostflightError::new("EC_MUL range-count shape mismatch"));
