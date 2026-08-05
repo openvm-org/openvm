@@ -109,8 +109,10 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             #[allow(non_upper_case_globals)]
 
             impl #struct_name {
-                /// Computes `scalar * self` with the `EC_MUL` intrinsic, where `scalar` is a
-                /// 256-bit little-endian integer.
+                /// Computes `scalar * self`, where `scalar` is a 256-bit little-endian integer.
+                ///
+                /// The parameter is raw bytes because `sw_declare!` is given the coordinate field
+                /// but not the scalar field; a typed wrapper belongs in the curve's guest library.
                 ///
                 /// # Safety
                 ///
@@ -122,17 +124,38 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 ///
                 /// Not used by `IntrinsicCurve::msm`: the windowed method shares doublings across
                 /// bases, which a single-base intrinsic cannot.
-                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 pub unsafe fn mul_scalar_le_unchecked(&self, scalar: &[u8; 32]) -> Self {
-                    <Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::set_up_once();
-                    let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
-                    unsafe {
-                        #sw_mul_extern_func(
-                            uninit.as_mut_ptr() as usize,
-                            self as *const Self as usize,
-                            scalar.as_ptr() as usize,
-                        );
-                        uninit.assume_init()
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
+                    {
+                        // Same MSB-first ladder the chip constrains. `double_assign_impl` and
+                        // `add_assign_impl` handle the identity, so the leading zero bits need no
+                        // special case.
+                        let mut acc = Self::identity();
+                        for i in (0..256usize).rev() {
+                            openvm_ecc_guest::weierstrass::WeierstrassPoint::double_assign_impl::<true>(
+                                &mut acc,
+                            );
+                            if (scalar[i / 8] >> (i % 8)) & 1 == 1 {
+                                openvm_ecc_guest::weierstrass::WeierstrassPoint::add_assign_impl::<true>(
+                                    &mut acc, self,
+                                );
+                            }
+                        }
+                        acc
+                    }
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+                    {
+                        <Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::set_up_once();
+                        let mut uninit: core::mem::MaybeUninit<Self> =
+                            core::mem::MaybeUninit::uninit();
+                        unsafe {
+                            #sw_mul_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                self as *const Self as usize,
+                                scalar.as_ptr() as usize,
+                            );
+                            uninit.assume_init()
+                        }
                     }
                 }
 
