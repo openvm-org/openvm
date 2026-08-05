@@ -173,7 +173,6 @@ impl AirModule for StackingModule {
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
             column_claims_bus: self.bus_inventory.column_claims_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
-            air_shape_bus: self.bus_inventory.air_shape_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,
             claim_coefficients_bus: self.claim_coefficients_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,

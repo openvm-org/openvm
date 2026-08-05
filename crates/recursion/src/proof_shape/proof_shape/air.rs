@@ -450,10 +450,9 @@ where
                     + AB::Expr::from_usize(self.per_air.len()) * local.is_last,
                 tidx: local.starting_tidx.into(),
             },
-            or(
-                local.is_last,
-                and(local.is_valid, not::<AB::Expr>(is_first_idx)),
-            ),
+            // `is_last * is_valid = 0` is constrained below, so this sum equals
+            // `or(is_last, is_valid * (1 - is_first_idx))` at one degree lower.
+            local.is_last + and(local.is_valid, not::<AB::Expr>(is_first_idx)),
         );
 
         let mut tidx = local.starting_tidx.into();
@@ -583,21 +582,6 @@ where
             local.is_present,
         );
 
-        let total_width = main_common_width.clone()
-            + preprocessed_stacked_width.clone()
-            + cached_widths.iter().cloned().sum::<AB::Expr>();
-
-        self.air_shape_bus.add_key_with_lookups(
-            builder,
-            local.proof_idx,
-            AirShapeBusMessage {
-                sort_idx: local.sorted_idx.into(),
-                property_idx: AirShapeProperty::NeedRot.to_field(),
-                value: need_rot.clone(),
-            },
-            local.is_present * total_width,
-        );
-
         ///////////////////////////////////////////////////////////////////////////////////////////
         // HYPERDIM (SIGNED N) LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -660,6 +644,7 @@ where
                 hypercube_dim: n.clone(),
                 lifted_height: lifted_height.clone(),
                 log_lifted_height: log_lifted_height.clone(),
+                need_rot: need_rot.clone(),
             },
             local.is_present * main_common_width,
         );
@@ -679,6 +664,7 @@ where
                 hypercube_dim: n.clone(),
                 lifted_height: lifted_height.clone(),
                 log_lifted_height: log_lifted_height.clone(),
+                need_rot: need_rot.clone(),
             },
             local.is_present * preprocessed_stacked_width,
         );
@@ -706,6 +692,7 @@ where
                     hypercube_dim: n.clone(),
                     lifted_height: lifted_height.clone(),
                     log_lifted_height: log_lifted_height.clone(),
+                    need_rot: need_rot.clone(),
                 },
                 local.is_present * cached_widths[cached_idx].clone(),
             );

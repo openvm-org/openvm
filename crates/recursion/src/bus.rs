@@ -400,7 +400,6 @@ define_typed_lookup_bus!(Poseidon2CompressBus, Poseidon2CompressMessage);
 pub(crate) enum AirShapeProperty {
     AirId,
     NumInteractions,
-    NeedRot,
 }
 
 impl AirShapeProperty {
@@ -482,6 +481,8 @@ pub struct LiftedHeightsBusMessage<T> {
     pub lifted_height: T,
     /// Sender must constrain this equals `max(log_height, l_skip)`.
     pub log_lifted_height: T,
+    /// Whether the AIR's constraints reference rotated (next-row) values.
+    pub need_rot: T,
 }
 
 define_typed_per_proof_lookup_bus!(LiftedHeightsBus, LiftedHeightsBusMessage);

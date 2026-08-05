@@ -107,7 +107,6 @@ define_typed_per_proof_permutation_bus!(FinalPolyMleEvalBus, FinalPolyMleEvalMes
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct FinalPolyFoldingMessage<T> {
-    pub proof_idx: T,
     pub depth: T,
     pub node_idx: T,
     pub num_nodes_in_layer: T,

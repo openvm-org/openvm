@@ -158,7 +158,6 @@ where
             builder,
             local.proof_idx,
             FinalPolyFoldingMessage {
-                proof_idx: local.proof_idx.into(),
                 depth: child_depth.clone(),
                 node_idx: left_idx.into(),
                 num_nodes_in_layer: local.num_nodes_in_layer * AB::Expr::TWO,
@@ -171,7 +170,6 @@ where
             builder,
             local.proof_idx,
             FinalPolyFoldingMessage {
-                proof_idx: local.proof_idx.into(),
                 depth: child_depth,
                 node_idx: right_idx.clone(),
                 num_nodes_in_layer: local.num_nodes_in_layer * AB::Expr::TWO,
@@ -184,7 +182,6 @@ where
             builder,
             local.proof_idx,
             FinalPolyFoldingMessage {
-                proof_idx: local.proof_idx,
                 depth: local.layer,
                 node_idx: local.node_idx,
                 num_nodes_in_layer: local.num_nodes_in_layer,

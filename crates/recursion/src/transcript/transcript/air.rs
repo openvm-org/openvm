@@ -147,29 +147,22 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         // Interactions
         ///////////////////////////////////////////////////////////////////////
         for i in 0..CHUNK {
-            // When absorb, it's normal order (0 -> RATE)
-            let observe_message = TranscriptBusMessage {
-                tidx: local.tidx + AB::Expr::from_usize(i),
-                value: local.prev_state[i].into(),
-                is_sample: AB::Expr::ZERO,
-            };
-            // When squeeze, it's reverse RATE -> 0, so i means RATE - 1 - i
-            let sample_message = TranscriptBusMessage {
-                tidx: local.tidx + AB::Expr::from_usize(i),
-                value: local.prev_state[CHUNK - 1 - i].into(),
-                is_sample: AB::Expr::ONE,
-            };
+            // When absorb, values are read in normal order (0 -> RATE); when squeeze,
+            // in reverse (RATE -> 0), so slot i reads prev_state[RATE - 1 - i]. Since
+            // is_sample is boolean, one send with a blended value field is
+            // LogUp-equivalent to separate observe/sample sends with counts
+            // mask[i]*(1 - is_sample) and mask[i]*is_sample.
+            let value = local.prev_state[i]
+                + local.is_sample * (local.prev_state[CHUNK - 1 - i] - local.prev_state[i]);
             self.transcript_bus.send(
                 builder,
                 local.proof_idx,
-                observe_message,
-                local.mask[i] * (AB::Expr::ONE - local.is_sample),
-            );
-            self.transcript_bus.send(
-                builder,
-                local.proof_idx,
-                sample_message,
-                local.mask[i] * local.is_sample,
+                TranscriptBusMessage {
+                    tidx: local.tidx + AB::Expr::from_usize(i),
+                    value,
+                    is_sample: local.is_sample.into(),
+                },
+                local.mask[i],
             );
         }
 

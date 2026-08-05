@@ -15,7 +15,7 @@ use p3_matrix::Matrix;
 
 use crate::{
     bus::{
-        AirShapeBus, AirShapeBusMessage, AirShapeProperty, ColumnClaimsBus, ColumnClaimsMessage,
+        ColumnClaimsBus, ColumnClaimsMessage,
         LiftedHeightsBus, LiftedHeightsBusMessage, StackingModuleBus, StackingModuleMessage,
         TranscriptBus, TranscriptBusMessage,
     },
@@ -92,7 +92,6 @@ pub struct OpeningClaimsAir {
     pub stacking_module_bus: StackingModuleBus,
     pub column_claims_bus: ColumnClaimsBus,
     pub transcript_bus: TranscriptBus,
-    pub air_shape_bus: AirShapeBus,
 
     // Internal buses
     pub stacking_tidx_bus: StackingModuleTidxBus,
@@ -470,6 +469,7 @@ where
                 hypercube_dim: local.hypercube_dim,
                 lifted_height: local.lifted_height,
                 log_lifted_height: local.log_lifted_height,
+                need_rot: local.need_rot,
             },
             local.is_valid,
         );
@@ -499,17 +499,6 @@ where
                 num_bits: AB::Expr::from_usize(self.n_stack + self.l_skip)
                     - local.log_lifted_height,
                 eval: local.eq_bits.map(Into::into),
-            },
-            local.is_valid,
-        );
-
-        self.air_shape_bus.lookup_key(
-            builder,
-            local.proof_idx,
-            AirShapeBusMessage {
-                sort_idx: local.sort_idx.into(),
-                property_idx: AirShapeProperty::NeedRot.to_field(),
-                value: local.need_rot.into(),
             },
             local.is_valid,
         );

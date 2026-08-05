@@ -112,6 +112,13 @@ where
         when_same_air.assert_eq(next.pv_idx, local.pv_idx + AB::Expr::ONE);
         when_same_air.assert_eq(next.tidx, local.tidx + AB::Expr::ONE);
 
+        // With continuations there are two consumers of each public value, so the
+        // message is sent with multiplicity 2 (equivalent to two identical sends).
+        let pv_send_count = if self.continuations_enabled {
+            local.is_valid * AB::Expr::TWO
+        } else {
+            local.is_valid.into()
+        };
         self.public_values_bus.send(
             builder,
             local.proof_idx,
@@ -120,20 +127,8 @@ where
                 pv_idx: local.pv_idx,
                 value: local.value,
             },
-            local.is_valid,
+            pv_send_count,
         );
-        if self.continuations_enabled {
-            self.public_values_bus.send(
-                builder,
-                local.proof_idx,
-                PublicValuesBusMessage {
-                    air_idx: local.air_idx,
-                    pv_idx: local.pv_idx,
-                    value: local.value,
-                },
-                local.is_valid,
-            );
-        }
 
         // Receive transcript read of public values
         self.transcript_bus.receive(
