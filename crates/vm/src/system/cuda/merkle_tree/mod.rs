@@ -1,8 +1,8 @@
 use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
-    system::memory::merkle::MemoryMerkleCols,
+    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    system::memory::{merkle::MemoryMerkleCols, online::LinearMemory, AddressMap},
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
@@ -28,6 +28,28 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
 /// = 2 (key) + 1 (is_dirty) + VM_DIGEST_WIDTH (values); see `MemoryMerkleRecord`.
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + VM_DIGEST_WIDTH;
 pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
+
+/// Number of leaf digests a subtree must store densely so that every page of `addr_sp` that may
+/// contain non-zero data lies inside it, rounded up to a power of two. Returns 0 for an empty
+/// address space and at least 1 otherwise, so that stored-node reads during
+/// [`MemoryMerkleTree::update_with_touched_blocks`] stay in bounds. All leaves at or beyond the
+/// watermark are guaranteed zero (see
+/// [`TouchedPages`](openvm_circuit::system::memory::online::TouchedPages)), which is exactly the
+/// invariant [`MemoryMerkleTree::build_async`] requires of its `addr_space_size` argument.
+pub(crate) fn touched_leaf_watermark(memory: &AddressMap, addr_sp: usize) -> usize {
+    let raw_len = memory.mem[addr_sp].as_slice().len();
+    if raw_len == 0 {
+        return 0;
+    }
+    let cell_size = memory.config[addr_sp].layout.size();
+    let watermark_bytes = memory.touched_pages[addr_sp]
+        .touched_byte_ranges(raw_len)
+        .last()
+        .map_or(0, |&(_, end)| end);
+    watermark_bytes
+        .div_ceil(cell_size * VM_DIGEST_WIDTH)
+        .next_power_of_two()
+}
 
 /// Exact number of distinct internal merkle nodes (heights `1..=tree_height`) on the
 /// paths from a sorted stream of global leaf indices to the root: the first leaf's path
@@ -339,20 +361,38 @@ impl MemoryMerkleTree {
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
     ///
+    /// `addr_space_size` is the number of leaf digests to build and store densely — a power of
+    /// two (or zero for an empty address space) no larger than the address space's configured
+    /// leaf count. Every leaf of `d_data` at or beyond this watermark must be all-zero: the
+    /// stored subtree covers only the watermark prefix, the vertical path above it is folded
+    /// with zero hashes, and reads outside the prefix resolve to precomputed zero hashes
+    /// (`virtual_node_exists` in `merkle_tree.cu`). Passing [`touched_leaf_watermark`] makes the
+    /// build cost proportional to touched memory instead of the configured capacity.
+    ///
     /// **Note:** the caller MUST ENSURE that `d_data` lives long enough to be there
     /// when the enqueued task actually starts. Moreover, when the subtree uses the
     /// `OmitBottomLevels` layout, `d_data` is also re-read during
     /// [`Self::update_with_touched_blocks`] to recompute the omitted bottom levels, so it must
     /// remain valid until that update completes — not just until the build kernel runs. See
     /// [`MemoryMerkleSubTree`]'s `initial_data` field for details.
-    pub fn build_async(&mut self, d_data: Arc<DeviceBuffer<u8>>, addr_space: usize) {
+    pub fn build_async(
+        &mut self,
+        d_data: Arc<DeviceBuffer<u8>>,
+        addr_space: usize,
+        addr_space_size: usize,
+    ) {
         if addr_space < ADDR_SPACE_OFFSET as usize {
             return;
         }
         let addr_space_idx = addr_space - ADDR_SPACE_OFFSET as usize;
         if addr_space < self.mem_config.addr_spaces.len() && addr_space_idx == self.subtrees.len() {
+            assert!(
+                addr_space_size
+                    <= self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
+                "subtree size exceeds the address space's configured leaf count"
+            );
             let mut subtree = MemoryMerkleSubTree::new(
-                self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
+                addr_space_size,
                 1 << (self.zero_hash.len() - 1), /* label_max_bits */
                 &self.device_ctx,
             );
@@ -520,8 +560,8 @@ mod tests {
     use rand::Rng;
 
     use super::{
-        MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, SpanningNodeCounter,
-        OMITTED_BOTTOM_LEVELS,
+        touched_leaf_watermark, MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree,
+        SpanningNodeCounter, OMITTED_BOTTOM_LEVELS,
     };
     use crate::{
         arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
@@ -678,7 +718,11 @@ mod tests {
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(mem_slice.clone(), i);
+            gpu_merkle_tree.build_async(
+                mem_slice.clone(),
+                i,
+                mem_config.addr_spaces[i].num_cells / VM_DIGEST_WIDTH,
+            );
         }
         assert_eq!(
             gpu_merkle_tree.subtrees[REGISTER_AS as usize - 1].layout,
@@ -884,7 +928,11 @@ mod tests {
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(mem_slice.clone(), i);
+            gpu_merkle_tree.build_async(
+                mem_slice.clone(),
+                i,
+                mem_config.addr_spaces[i].num_cells / VM_DIGEST_WIDTH,
+            );
         }
         gpu_merkle_tree.finalize();
 
@@ -1008,5 +1056,261 @@ mod tests {
             gpu_rows, cpu_rows,
             "GPU merkle trace rows do not match the CPU reference trace"
         );
+    }
+
+    /// Sparse-prefix variant of the equivalence tests: only a low prefix of each large address
+    /// space contains data, so the GPU subtrees are built only up to the touched-pages watermark
+    /// (`touched_leaf_watermark`) with a zero-hash vertical path above. The update then touches
+    /// blocks across the whole pointer range — including dirty and clean blocks *above* the
+    /// watermark, whose initial values resolve to precomputed zero hashes and whose path stores
+    /// land outside the stored prefix (skipped by `store_virtual_node`). Checks the initial root,
+    /// the final root, and the full trace against the CPU reference.
+    #[test]
+    fn test_cuda_merkle_tree_sparse_prefix_cpu_gpu_equivalence() {
+        let mut rng = create_seeded_rng();
+        let mem_config = {
+            let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+            let max_ptr_bits = 16;
+            let max_cells = 1 << max_ptr_bits;
+            // REGISTER_AS uses u16 storage cells.
+            addr_spaces[REGISTER_AS as usize].num_cells = 32 * size_of::<u64>() / U16_CELL_SIZE;
+            addr_spaces[MEMORY_AS as usize].num_cells = max_cells;
+            addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
+            MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
+        };
+
+        // Fill REGISTER_AS fully and only a low prefix of the two large address spaces, so
+        // that the watermark truncates their subtrees (asserted below).
+        let prefix_cells = 1 << 10;
+        let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        for (idx, space) in mem_config.addr_spaces.iter().enumerate() {
+            let num_filled = if idx == REGISTER_AS as usize {
+                space.num_cells
+            } else {
+                space.num_cells.min(prefix_cells)
+            };
+            unsafe {
+                match space.layout {
+                    MemoryCellType::Null => {}
+                    MemoryCellType::U8 => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<u8, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::U16 => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<u16, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::U32 => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<u32, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::F { .. } => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<F, 1>(
+                                idx as u32,
+                                i as u32,
+                                [F::from_u32(rng.random_range(0..F::ORDER_U32))],
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
+        let mut gpu_merkle_tree = MemoryMerkleTree::new(
+            mem_config.clone(),
+            gpu_hasher_chip.clone(),
+            device_ctx.clone(),
+        );
+        let mem_slices = initial_memory
+            .memory
+            .get_memory()
+            .iter()
+            .map(|mem| {
+                let mem_slice = mem.as_slice();
+                Arc::new(if !mem_slice.is_empty() {
+                    mem_slice.to_device_on(&gpu_merkle_tree.device_ctx).unwrap()
+                } else {
+                    DeviceBuffer::new()
+                })
+            })
+            .collect::<Vec<_>>();
+        for (i, mem_slice) in mem_slices.iter().enumerate() {
+            gpu_merkle_tree.build_async(
+                mem_slice.clone(),
+                i,
+                touched_leaf_watermark(&initial_memory.memory, i),
+            );
+        }
+        // The large address spaces must actually be truncated, or this test degenerates into
+        // the dense equivalence tests.
+        for addr_space in [MEMORY_AS as usize, DEFERRAL_AS as usize] {
+            let subtree = &gpu_merkle_tree.subtrees[addr_space - 1];
+            assert!(
+                subtree.path_len > 0,
+                "watermark did not truncate AS {addr_space}"
+            );
+        }
+        gpu_merkle_tree.finalize();
+
+        let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+        let cpu_merkle_tree = MerkleTree::<F, VM_DIGEST_WIDTH>::from_memory(
+            &initial_memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher_chip,
+        );
+        assert_eq!(
+            cpu_merkle_tree.root(),
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.device_ctx)
+                .unwrap()[0],
+            "initial roots diverge"
+        );
+
+        // Touch ~1/3 of digest-aligned pointers across the WHOLE pointer range (most lie above
+        // the watermark), always including the very last leaf of the large address spaces.
+        let touched_ptrs = mem_config
+            .addr_spaces
+            .iter()
+            .enumerate()
+            .flat_map(|(i, cnf)| {
+                let mut ptrs = Vec::new();
+                let num_leaves = cnf.num_cells / VM_DIGEST_WIDTH;
+                for j in 0..num_leaves {
+                    let is_last_large = j + 1 == num_leaves
+                        && (i == MEMORY_AS as usize || i == DEFERRAL_AS as usize);
+                    if is_last_large || rng.random_bool(0.333) {
+                        ptrs.push((i as u32, (j * VM_DIGEST_WIDTH) as u32));
+                    }
+                }
+                ptrs
+            })
+            .collect::<Vec<_>>();
+        let mut new_data = touched_ptrs
+            .iter()
+            .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
+            .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
+        // Make every third touched leaf *clean* (final values equal to initial ones). Above the
+        // watermark the initial values are all zero, so this exercises clean zero-hash leaves.
+        for (i, (&(address_space, ptr), values)) in
+            touched_ptrs.iter().zip(new_data.iter_mut()).enumerate()
+        {
+            if i % 3 == 0 {
+                *values = std::array::from_fn(|j| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(address_space, ptr + j as u32)
+                });
+            }
+        }
+        let new_data = new_data;
+        assert!(!touched_ptrs.is_empty());
+
+        let mut cpu_merkle_chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, F>::new(
+            mem_config.memory_dimensions(),
+            PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+            PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+        );
+        let final_partition: BTreeMap<(u32, u32), [F; VM_DIGEST_WIDTH]> = touched_ptrs
+            .iter()
+            .copied()
+            .zip(new_data.iter().copied())
+            .collect();
+        // Dirtiness is per *write*; the test scenario treats exactly the leaves whose
+        // values changed as written (the minimal valid dirty set).
+        let dirty_leaves: DirtyLeaves = final_partition
+            .iter()
+            .filter(|((address_space, ptr), values)| {
+                let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(*address_space, *ptr + i as u32)
+                });
+                init_values != **values
+            })
+            .map(|(&key, _)| key)
+            .collect();
+        cpu_merkle_chip.finalize(
+            &initial_memory.memory,
+            &final_partition,
+            &dirty_leaves,
+            &cpu_hasher_chip,
+        );
+        let cpu_ctx = cpu_merkle_chip.generate_proving_ctx::<SC>();
+
+        let touched_blocks = touched_ptrs
+            .into_iter()
+            .zip(new_data)
+            .map(|(address, data)| {
+                (
+                    address,
+                    TimestampedValues {
+                        timestamp: rng.random_range(0..(1u32 << mem_config.timestamp_max_bits)),
+                        values: data,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let (merkle_records, unpadded_height) =
+            build_records_and_height(&initial_memory, &touched_blocks, &mem_config);
+        let d_touched_blocks = merkle_records
+            .to_device_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
+        gpu_hasher_chip.prepare_records(unpadded_height);
+        let merkle_ctx =
+            gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
+
+        // Final roots and the full trace must match the CPU reference.
+        let gpu_final_root = gpu_merkle_tree
+            .top_roots
+            .to_host_on(&gpu_merkle_tree.device_ctx)
+            .unwrap()[0];
+        let width = cpu_ctx.common_main.width;
+        let height = cpu_ctx.common_main.values.len() / width;
+        let cpu_vals = &cpu_ctx.common_main.values;
+        // The CPU chip's final root is the parent hash of the height-section final root row
+        // (row 1 by the AIR's pinning of the first two rows).
+        let gpu_trace = &merkle_ctx.common_main;
+        assert_eq!(gpu_trace.width(), width, "trace width mismatch");
+        assert_eq!(gpu_trace.height(), height, "trace (padded) height mismatch");
+        let gpu_vals = gpu_trace
+            .buffer()
+            .to_host_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
+        let row_to_u32 = |get: &dyn Fn(usize, usize) -> F, r: usize| -> Vec<u32> {
+            (0..width).map(|c| get(r, c).as_canonical_u32()).collect()
+        };
+        let cpu_get = |r: usize, c: usize| cpu_vals[r * width + c];
+        let gpu_get = |r: usize, c: usize| gpu_vals[c * height + r];
+        let mut cpu_rows: Vec<Vec<u32>> = (0..height).map(|r| row_to_u32(&cpu_get, r)).collect();
+        let mut gpu_rows: Vec<Vec<u32>> = (0..height).map(|r| row_to_u32(&gpu_get, r)).collect();
+        cpu_rows.sort_unstable();
+        gpu_rows.sort_unstable();
+        assert_eq!(
+            gpu_rows, cpu_rows,
+            "GPU merkle trace rows do not match the CPU reference trace"
+        );
+        // Cross-check the final root through an independently finalized CPU tree.
+        let mut cpu_final_tree = MerkleTree::<F, VM_DIGEST_WIDTH>::from_memory(
+            &initial_memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher_chip,
+        );
+        cpu_final_tree.finalize(
+            &cpu_hasher_chip,
+            &final_partition,
+            &dirty_leaves,
+            &mem_config.memory_dimensions(),
+        );
+        assert_eq!(cpu_final_tree.root(), gpu_final_root, "final roots diverge");
     }
 }
