@@ -52,8 +52,9 @@ pub struct EqBaseCols<F> {
     // Running product of (u^{2^i} + r^{2^i}) from i to row
     pub prod_u_r: [F; D_EF],
     pub prod_u_r_omega: [F; D_EF],
-    pub prod_u_1: [F; D_EF],
-    pub prod_r_omega_1: [F; D_EF],
+    // Running product of (u^{2^i} + 1) * ((r * omega)^{2^i} + 1); only the combined
+    // product is ever consumed (as eq_0(u, 1) * eq_0(r * omega, 1)).
+    pub prod_u_1_r_omega_1: [F; D_EF],
 
     // Lookup multiplicity for eq_0(u, r) and k_rot_0(u, r)
     pub mult: F,
@@ -276,29 +277,23 @@ where
 
         assert_array_eq(
             &mut builder.when(local.is_first),
-            local.prod_u_1,
-            ext_field_add(local.u_pow, ef_one),
-        );
-
-        assert_array_eq(
-            &mut builder.when(local.is_first),
-            local.prod_r_omega_1,
-            ext_field_add(local.r_omega_pow, ef_one),
-        );
-
-        assert_array_eq(
-            &mut builder.when(not(local.is_last)),
-            ext_field_multiply(local.prod_u_1, ext_field_add(next.u_pow, ef_one)),
-            next.prod_u_1,
-        );
-
-        assert_array_eq(
-            &mut builder.when(not(local.is_last)),
-            ext_field_multiply(
-                local.prod_r_omega_1,
-                ext_field_add(next.r_omega_pow, ef_one),
+            local.prod_u_1_r_omega_1,
+            ext_field_multiply::<AB::Expr>(
+                ext_field_add::<AB::Expr>(local.u_pow, ef_one),
+                ext_field_add::<AB::Expr>(local.r_omega_pow, ef_one),
             ),
-            next.prod_r_omega_1,
+        );
+
+        assert_array_eq(
+            &mut builder.when(not(local.is_last)),
+            ext_field_multiply::<AB::Expr>(
+                local.prod_u_1_r_omega_1,
+                ext_field_multiply::<AB::Expr>(
+                    ext_field_add::<AB::Expr>(next.u_pow, ef_one),
+                    ext_field_add::<AB::Expr>(next.r_omega_pow, ef_one),
+                ),
+            ),
+            next.prod_u_1_r_omega_1,
         );
 
         /*
@@ -331,10 +326,10 @@ where
         );
 
         /*
-         * Compute eq_0(u, 1) and eq_0(r * omega, 1) and send to SumcheckRoundsAir.
+         * Compute eq_0(u, 1) * eq_0(r * omega, 1) and send to SumcheckRoundsAir.
          */
-        let eq_u_1 = ext_field_multiply_scalar(local.prod_u_1, omega_pow_inv);
-        let eq_r_omega_1 = ext_field_multiply_scalar(local.prod_r_omega_1, omega_pow_inv);
+        let eq_u_r_prod =
+            ext_field_multiply_scalar(local.prod_u_1_r_omega_1, omega_pow_inv.square());
 
         self.eq_base_bus.send(
             builder,
@@ -342,7 +337,7 @@ where
             EqBaseMessage {
                 eq_u_r,
                 eq_u_r_omega,
-                eq_u_r_prod: ext_field_multiply(eq_u_1, eq_r_omega_1),
+                eq_u_r_prod,
             },
             and(next.is_last, next.is_valid),
         );

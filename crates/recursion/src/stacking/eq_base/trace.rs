@@ -62,8 +62,7 @@ impl RowMajorChip<F> for EqBaseTraceGenerator {
 
                 let mut prod_u_r = u * (u + r);
                 let mut prod_u_r_omega = u * (u + r_omega);
-                let mut prod_u_1 = u + F::ONE;
-                let mut prod_r_omega_1 = r_omega + F::ONE;
+                let mut prod_u_1_r_omega_1 = (u + F::ONE) * (r_omega + F::ONE);
 
                 let mut in_prod = EF::ONE;
 
@@ -93,10 +92,8 @@ impl RowMajorChip<F> for EqBaseTraceGenerator {
                         .copy_from_slice(prod_u_r.as_basis_coefficients_slice());
                     cols.prod_u_r_omega
                         .copy_from_slice(prod_u_r_omega.as_basis_coefficients_slice());
-                    cols.prod_u_1
-                        .copy_from_slice(prod_u_1.as_basis_coefficients_slice());
-                    cols.prod_r_omega_1
-                        .copy_from_slice(prod_r_omega_1.as_basis_coefficients_slice());
+                    cols.prod_u_1_r_omega_1
+                        .copy_from_slice(prod_u_1_r_omega_1.as_basis_coefficients_slice());
 
                     if is_last {
                         cols.mult = F::from_usize(mults[0]);
@@ -134,8 +131,7 @@ impl RowMajorChip<F> for EqBaseTraceGenerator {
 
                     prod_u_r *= u + r;
                     prod_u_r_omega *= u + r_omega;
-                    prod_u_1 *= u + F::ONE;
-                    prod_r_omega_1 *= r_omega + F::ONE;
+                    prod_u_1_r_omega_1 *= (u + F::ONE) * (r_omega + F::ONE);
                 }
 
                 (trace, num_rows_per_proof)
