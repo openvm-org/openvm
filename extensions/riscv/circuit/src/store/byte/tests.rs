@@ -12,8 +12,6 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_instructions::riscv::MEMORY_AS;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB};
 use openvm_stark_backend::{
