@@ -117,12 +117,28 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcMulExecu
         std::mem::size_of::<EcMulPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut EcMulPreCompute = data.borrow_mut();
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, pre_compute, is_setup)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -138,6 +154,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F> for EcM
         std::mem::size_of::<E2PreCompute<EcMulPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -145,6 +162,24 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F> for EcM
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<EcMulPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let pre_compute_pure = &mut pre_compute.data;
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+        dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
