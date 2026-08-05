@@ -28,9 +28,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_register_pointer, expand_to_block,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, address_add_imm, sign_extend_imm16,
-    PTR_BITS, PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, checked_register_pointer,
+    expand_to_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs, sign_extend_imm16, PTR_BITS,
+    PTR_U16_LIMBS, U16_BITS,
 };
 
 // Byte stores never cross a memory block, so this adapter has no second-block columns.
@@ -257,21 +257,14 @@ impl StoreByteAdapterFiller {
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(
-            REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr)),
-        )?;
-        if rs1.value[PTR_U16_LIMBS..]
-            .iter()
-            .any(|&limb| limb != 0)
-        {
+        let rs1 = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr)))?;
+        if rs1.value[PTR_U16_LIMBS..].iter().any(|&limb| limb != 0) {
             return Err(PostflightError::new(
                 "byte-store base register is not a low-32-bit pointer",
             ));
         }
         let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
-        let effective_ptr =
-            address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let effective_ptr = address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
         let effective_ptr = u32::try_from(effective_ptr)
             .ok()
             .filter(|&ptr| {
@@ -286,10 +279,8 @@ impl StoreByteAdapterFiller {
         let shift_amount = effective_ptr as usize & (MEMORY_BLOCK_BYTES - 1);
         let aligned_ptr = effective_ptr - shift_amount as u32;
 
-        let read_data = replay.read_u16(
-            REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr)),
-        )?;
+        let read_data =
+            replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr)))?;
         let mem_ptr = byte_ptr_to_u16_ptr_value(aligned_ptr);
         let prev_data = replay.peek_u16(mem_as, mem_ptr)?;
         let write_data = compute(read_data.value, prev_data, shift_amount);

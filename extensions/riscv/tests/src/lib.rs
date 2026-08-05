@@ -28,9 +28,8 @@ mod tests {
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
-        BaseAluImmOpcode, DivRemOpcode, MulHOpcode, MulOpcode, HintStoreOpcode,
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, JalLuiOpcode, LoadStoreOpcode,
-        Rv64MTranspilerExtension,
+        BaseAluImmOpcode, DivRemOpcode, HintStoreOpcode, JalLuiOpcode, LoadStoreOpcode, MulHOpcode,
+        MulOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
@@ -51,9 +50,7 @@ mod tests {
             riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
             SysPhantom, PUBLIC_VALUES_AS,
         },
-        openvm_riscv_transpiler::{
-            BranchEqualOpcode, JalrOpcode, Rv64Phantom, RevealOpcode,
-        },
+        openvm_riscv_transpiler::{BranchEqualOpcode, JalrOpcode, RevealOpcode, Rv64Phantom},
     };
     #[cfg(not(feature = "rvr"))]
     use {
@@ -358,10 +355,9 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn read_register(state: &VmState<GuestMemory>, index: usize) -> u64 {
         let limbs: [u16; 4] = unsafe {
-            state.memory.read(
-                REGISTER_AS,
-                (index * REGISTER_NUM_LIMBS / 2) as u32,
-            )
+            state
+                .memory
+                .read(REGISTER_AS, (index * REGISTER_NUM_LIMBS / 2) as u32)
         };
         u64::from(limbs[0])
             | (u64::from(limbs[1]) << 16)
@@ -706,11 +702,9 @@ mod tests {
             metered_initial
                 .memory
                 .write_bytes(MEMORY_AS, 8, x0_only.to_le_bytes());
-            metered_initial.memory.write_bytes(
-                MEMORY_AS,
-                16,
-                (sign_extended as u32).to_le_bytes(),
-            );
+            metered_initial
+                .memory
+                .write_bytes(MEMORY_AS, 16, (sign_extended as u32).to_le_bytes());
         }
         let metered_ctx = vm.build_metered_ctx(&exe);
         let (segments, _) = vm
@@ -1360,27 +1354,11 @@ mod tests {
         let instructions = [
             Instruction::<F>::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
-                [
-                    0,
-                    0,
-                    8,
-                    REGISTER_AS as usize,
-                    IMM_AS as usize,
-                    0,
-                    0,
-                ],
+                [0, 0, 8, REGISTER_AS as usize, IMM_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_usize(
                 JalrOpcode::JALR.global_opcode(),
-                [
-                    0,
-                    0,
-                    12,
-                    REGISTER_AS as usize,
-                    IMM_AS as usize,
-                    0,
-                    0,
-                ],
+                [0, 0, 12, REGISTER_AS as usize, IMM_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),

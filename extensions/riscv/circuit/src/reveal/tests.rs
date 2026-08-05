@@ -15,8 +15,7 @@ use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use super::{
-    trace::generate_trace_from_postflight, RevealAir, RevealChip, RevealExecutor,
-    RevealFiller,
+    trace::generate_trace_from_postflight, RevealAir, RevealChip, RevealExecutor, RevealFiller,
 };
 use crate::test_utils::memory::{F, MAX_INS_CAPACITY};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -74,12 +73,14 @@ fn reveal_instruction(src_ptr: usize, base_ptr: usize, imm: i16) -> Instruction<
     )
 }
 
-fn field_block(bytes: &[u8]) -> [F; 8] {
-    <[u8; 8]>::try_from(bytes).unwrap().map(F::from_u8)
+fn field_block(bytes: &[u8]) -> [F; REGISTER_NUM_LIMBS] {
+    <[u8; REGISTER_NUM_LIMBS]>::try_from(bytes)
+        .unwrap()
+        .map(F::from_u8)
 }
 
 #[test]
-fn reveal_writes_aligned_public_value() {
+fn reveal_writes_and_overwrites_aligned_public_value() {
     let mut tester = VmChipTestBuilder::from_config(reveal_memory_config());
     let mut harness = create_harness(&mut tester);
     let base_ptr = REGISTER_NUM_LIMBS;
@@ -110,11 +111,11 @@ fn reveal_writes_aligned_public_value() {
     let mut expected = initial;
     expected[8..16].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
     assert_eq!(
-        tester.read_bytes::<8>(PUBLIC_VALUES_AS as usize, 32),
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 32),
         field_block(&expected[..8])
     );
     assert_eq!(
-        tester.read_bytes::<8>(PUBLIC_VALUES_AS as usize, 40),
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 40),
         field_block(&expected[8..])
     );
 
@@ -130,11 +131,11 @@ fn reveal_writes_aligned_public_value() {
     );
     expected[8..16].copy_from_slice(&0xaabb_ccdd_eeff_0123u64.to_le_bytes());
     assert_eq!(
-        tester.read_bytes::<8>(PUBLIC_VALUES_AS as usize, 32),
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 32),
         field_block(&expected[..8])
     );
     assert_eq!(
-        tester.read_bytes::<8>(PUBLIC_VALUES_AS as usize, 40),
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 40),
         field_block(&expected[8..])
     );
 

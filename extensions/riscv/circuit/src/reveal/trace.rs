@@ -12,8 +12,8 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{RevealChip, RevealCols};
 use crate::adapters::{
-    byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    address_add_imm, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
@@ -59,52 +59,48 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         let from_timestamp = postflight.timestamp(step);
         let mut replay = postflight.replay(step);
         let base = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(base_ptr))?;
-        if base.value[PTR_U16_LIMBS..]
-            .iter()
-            .any(|&limb| limb != 0)
-        {
+        if base.value[PTR_U16_LIMBS..].iter().any(|&limb| limb != 0) {
             return Err(PostflightError::new(
                 "REVEAL base register is not a low-32-bit pointer",
             ));
         }
         let base_value = u32::from(base.value[0]) | (u32::from(base.value[1]) << U16_BITS);
-        let reveal_ptr =
-            address_add_imm(base_value, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let dst_ptr = address_add_imm(base_value, sign_extend_imm16(imm, u32::from(imm_sign)));
         let pointer_limit = 1u64
             .checked_shl(chip.inner.pointer_max_bits as u32)
             .unwrap_or(u64::MAX);
-        if reveal_ptr > u64::from(u32::MAX)
-            || !reveal_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u64)
-            || reveal_ptr + MEMORY_BLOCK_BYTES as u64 > pointer_limit
+        if dst_ptr > u64::from(u32::MAX)
+            || !dst_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u64)
+            || dst_ptr + MEMORY_BLOCK_BYTES as u64 > pointer_limit
         {
             return Err(PostflightError::new(
                 "REVEAL destination is not an aligned in-bounds pointer",
             ));
         }
-        let reveal_ptr = reveal_ptr as u32;
+        let dst_ptr = dst_ptr as u32;
 
         let src = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(src_ptr))?;
         let write = replay.write_u16(
             PUBLIC_VALUES_AS,
-            byte_ptr_to_u16_ptr_value(reveal_ptr),
+            byte_ptr_to_u16_ptr_value(dst_ptr),
             src.value,
         )?;
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
-        let ptr_limbs = ptr_to_u16_limbs(reveal_ptr).map(u32::from);
+        let dst_ptr_limbs = ptr_to_u16_limbs(dst_ptr).map(u32::from);
         chip.inner
-            .range_checker
-            .add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
+            .range_checker_chip
+            .add_count(dst_ptr_limbs[0] >> 3, U16_BITS - 3);
         chip.inner
-            .range_checker
-            .add_count(ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);
+            .range_checker_chip
+            .add_count(dst_ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);
 
         let cols: &mut RevealCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
         cols.from_state.pc = F::from_u32(from_pc);
         cols.from_state.timestamp = F::from_u32(from_timestamp);
         cols.base_ptr = F::from_u32(base_ptr);
-        cols.base_data = ptr_to_field_u16_limbs(base_value);
+        cols.base_ptr_limbs = ptr_to_field_u16_limbs(base_value);
         mem_helper.fill(
             base.previous_timestamp,
             base.timestamp,
@@ -115,7 +111,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         mem_helper.fill(src.previous_timestamp, src.timestamp, cols.src_aux.as_mut());
         cols.imm = F::from_u32(imm);
         cols.imm_sign = F::from_bool(imm_sign);
-        cols.reveal_ptr_low_limb = F::from_u32(ptr_limbs[0]);
+        cols.dst_ptr_low_limb = F::from_u32(dst_ptr_limbs[0]);
         cols.write_aux
             .set_prev_data(write.previous_value.map(F::from_u16));
         mem_helper.fill(

@@ -26,7 +26,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{store_width_for_opcode, StoreExecutor};
 use crate::adapters::{
-    checked_memory_address, bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    bytes_to_u32, checked_memory_address, sign_extend_imm16, BYTE_ACCESS_WIDTH,
     DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
@@ -65,9 +65,8 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        let local_opcode = LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(LoadStoreOpcode::CLASS_OFFSET),
-        );
+        let local_opcode =
+            LoadStoreOpcode::from_usize(opcode.local_opcode_idx(LoadStoreOpcode::CLASS_OFFSET));
         match local_opcode {
             STORED | STOREW | STOREH | STOREB
                 if store_width_for_opcode(local_opcode) == STORE_WIDTH => {}
@@ -102,10 +101,7 @@ where
     F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            LoadStoreOpcode::from_usize(opcode - self.offset)
-        )
+        format!("{:?}", LoadStoreOpcode::from_usize(opcode - self.offset))
     }
 
     #[inline(always)]
@@ -322,15 +318,7 @@ mod tests {
     fn instruction(opcode: LoadStoreOpcode, address_space: u32) -> Instruction<BabyBear> {
         Instruction::from_usize(
             opcode.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                REGISTER_AS as usize,
-                address_space as usize,
-                1,
-                0,
-            ],
+            [8, 16, 0, REGISTER_AS as usize, address_space as usize, 1, 0],
         )
     }
 

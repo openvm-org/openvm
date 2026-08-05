@@ -7,11 +7,11 @@ use openvm_cuda_builder::{cuda_available, CudaBuilder};
 use openvm_instructions::{LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS};
 #[cfg(feature = "cuda")]
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, MulWOpcode, AuipcOpcode, HintStoreOpcode, JalLuiOpcode,
-    JalrOpcode, LoadStoreOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode,
-    ShiftWImmOpcode, ShiftWOpcode,
+    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
+    JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
+    MulOpcode, MulWOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
 #[cfg(feature = "cuda")]
 fn opcode_family<T: Copy + LocalOpcode>(
@@ -148,10 +148,7 @@ fn write_replay_opcode_registry(out_dir: &Path) {
         ),
         opcode_family(
             "HINT_STORE",
-            &[
-                HintStoreOpcode::HINT_STORED,
-                HintStoreOpcode::HINT_BUFFER,
-            ],
+            &[HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER],
         ),
         opcode("REVEAL", RevealOpcode::REVEAL),
         opcode("PHANTOM", SystemOpcode::PHANTOM),

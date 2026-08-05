@@ -28,12 +28,11 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller,
-        BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, BYTE_BITS,
     },
     store::{
         common::store_write_data, core::StoreCoreCols, StoreHalfwordAir, StoreHalfwordChip,
-        StoreHalfwordExecutor, StoreHalfwordCoreAir, StoreHalfwordFiller,
+        StoreHalfwordCoreAir, StoreHalfwordExecutor, StoreHalfwordFiller,
         STORE_HALFWORD_VALUE_CELLS,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
@@ -58,9 +57,7 @@ fn create_store_halfword_harness(
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let air = StoreHalfwordAir::new(
         StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),

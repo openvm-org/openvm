@@ -11,10 +11,9 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, AuipcOpcode, JalLuiOpcode,
-    JalrOpcode, LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-    ShiftWOpcode,
+    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, JalLuiOpcode, JalrOpcode, LessThanImmOpcode,
+    LessThanOpcode, LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 use rvr_openvm_ir::{
     CfgBranchCond, CfgOperand, ExtInstr, InstrAt, LiftedInstr, MemWidth, Terminator,
@@ -579,16 +578,11 @@ mod tests {
         for (opcode, name) in register_opcodes {
             let valid = instruction_for_opcode(
                 opcode,
-                alu_operands(
-                    3 * REGISTER_NUM_LIMBS,
-                    REGISTER_AS,
-                    REGISTER_AS,
-                ),
+                alu_operands(3 * REGISTER_NUM_LIMBS, REGISTER_AS, REGISTER_AS),
             );
             assert_eq!(lifted_name(&valid).as_deref(), Some(name));
 
-            let wrong_domain =
-                instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, IMM_AS));
+            let wrong_domain = instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, IMM_AS));
             assert!(try_lift(&wrong_domain, 0x100).is_none());
         }
     }
@@ -606,17 +600,13 @@ mod tests {
         ];
         for (opcode, name) in opcodes {
             for immediate in [0, 0x7ff, 0xff_f800, 0xff_ffff] {
-                let valid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(immediate, REGISTER_AS, IMM_AS),
-                );
+                let valid =
+                    instruction_for_opcode(opcode, alu_operands(immediate, REGISTER_AS, IMM_AS));
                 assert_eq!(lifted_name(&valid).as_deref(), Some(name));
             }
             for invalid in [0x800, 0xffff] {
-                let invalid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(invalid, REGISTER_AS, IMM_AS),
-                );
+                let invalid =
+                    instruction_for_opcode(opcode, alu_operands(invalid, REGISTER_AS, IMM_AS));
                 assert!(try_lift(&invalid, 0x100).is_none());
             }
             let wrong_domain =
@@ -633,14 +623,11 @@ mod tests {
             (ShiftImmOpcode::SRAI.global_opcode(), "srai"),
         ] {
             for shamt in [0, 63] {
-                let valid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(shamt, REGISTER_AS, IMM_AS),
-                );
+                let valid =
+                    instruction_for_opcode(opcode, alu_operands(shamt, REGISTER_AS, IMM_AS));
                 assert_eq!(lifted_name(&valid).as_deref(), Some(name));
             }
-            let invalid =
-                instruction_for_opcode(opcode, alu_operands(64, REGISTER_AS, IMM_AS));
+            let invalid = instruction_for_opcode(opcode, alu_operands(64, REGISTER_AS, IMM_AS));
             assert!(try_lift(&invalid, 0x100).is_none());
         }
 
@@ -650,14 +637,11 @@ mod tests {
             (ShiftWImmOpcode::SRAIW.global_opcode(), "sraiw"),
         ] {
             for shamt in [0, 31] {
-                let valid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(shamt, REGISTER_AS, IMM_AS),
-                );
+                let valid =
+                    instruction_for_opcode(opcode, alu_operands(shamt, REGISTER_AS, IMM_AS));
                 assert_eq!(lifted_name(&valid).as_deref(), Some(name));
             }
-            let invalid =
-                instruction_for_opcode(opcode, alu_operands(32, REGISTER_AS, IMM_AS));
+            let invalid = instruction_for_opcode(opcode, alu_operands(32, REGISTER_AS, IMM_AS));
             assert!(try_lift(&invalid, 0x100).is_none());
         }
     }
@@ -678,15 +662,12 @@ mod tests {
             (LoadStoreOpcode::STOREB.global_opcode(), "sb"),
         ];
         for (opcode, name) in opcodes {
-            let valid =
-                instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, MEMORY_AS));
+            let valid = instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, MEMORY_AS));
             assert_eq!(lifted_name(&valid).as_deref(), Some(name));
 
             for address_space in [DEFERRAL_AS, PUBLIC_VALUES_AS] {
-                let wrong_memory = instruction_for_opcode(
-                    opcode,
-                    alu_operands(0, REGISTER_AS, address_space),
-                );
+                let wrong_memory =
+                    instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, address_space));
                 assert!(try_lift(&wrong_memory, 0x100).is_none());
             }
             let wrong_destination =
@@ -743,15 +724,7 @@ mod tests {
         let pc = 0x1_0000_0000;
         let insn = instruction(
             AuipcOpcode::AUIPC,
-            [
-                REGISTER_NUM_LIMBS,
-                0,
-                1,
-                REGISTER_AS as usize,
-                0,
-                0,
-                0,
-            ],
+            [REGISTER_NUM_LIMBS, 0, 1, REGISTER_AS as usize, 0, 0, 0],
         );
         let LiftedInstr::Body(InstrAt { instr, .. }) = try_lift(&insn, pc).unwrap() else {
             panic!("expected body instruction");

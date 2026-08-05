@@ -18,17 +18,8 @@ pub use execution::*;
 
 pub type RevealChip<F> = VmChipWrapper<F, RevealFiller>;
 
-#[derive(Clone)]
+#[derive(Clone, derive_new::new)]
 pub struct RevealFiller {
     pub(crate) pointer_max_bits: usize,
-    pub(crate) range_checker: SharedVariableRangeCheckerChip,
-}
-
-impl RevealFiller {
-    pub fn new(pointer_max_bits: usize, range_checker: SharedVariableRangeCheckerChip) -> Self {
-        Self {
-            pointer_max_bits,
-            range_checker,
-        }
-    }
+    pub(crate) range_checker_chip: SharedVariableRangeCheckerChip,
 }

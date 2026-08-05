@@ -20,10 +20,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    is_multi_byte_access_width, shift_encoder, u16_cell_byte, StoreMultiByteAdapterCols,
-    StoreMultiByteAdapterFiller, StoreInstruction, BYTE_SHIFT_SELECTOR_WIDTH,
-    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, BYTE_BITS,
-    WORD_ACCESS_WIDTH,
+    is_multi_byte_access_width, shift_encoder, u16_cell_byte, StoreInstruction,
+    StoreMultiByteAdapterCols, StoreMultiByteAdapterFiller, BYTE_BITS, BYTE_SHIFT_SELECTOR_WIDTH,
+    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, WORD_ACCESS_WIDTH,
 };
 
 /// The single opcode handled by the store chip of the given width.
@@ -325,10 +324,7 @@ pub(crate) fn generate_trace_from_postflight<
     const STORE_WIDTH: usize,
     const NUM_VALUE_CELLS: usize,
 >(
-    chip: &VmChipWrapper<
-        F,
-        StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>,
-    >,
+    chip: &VmChipWrapper<F, StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(store_opcode::<STORE_WIDTH>().global_opcode());

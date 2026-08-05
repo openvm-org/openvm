@@ -459,7 +459,7 @@ pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const
 
 #[inline(always)]
 pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
-    debug_assert!(address_space == REGISTER_AS || address_space == MEMORY_AS);
+    debug_assert!(address_space == REGISTER_AS || address_space == MEMORY_AS,);
 
     // SAFETY: reads raw storage bytes at VM byte pointers.
     unsafe { memory.read_bytes::<N>(address_space, ptr) }

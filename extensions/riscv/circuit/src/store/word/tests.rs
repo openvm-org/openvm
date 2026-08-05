@@ -24,12 +24,11 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller,
-        BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, BYTE_BITS,
     },
     store::{
-        common::store_write_data, StoreWordAir, StoreWordChip, StoreWordExecutor,
-        StoreWordCoreAir, StoreWordFiller,
+        common::store_write_data, StoreWordAir, StoreWordChip, StoreWordCoreAir, StoreWordExecutor,
+        StoreWordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -39,8 +38,7 @@ use crate::{
     test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
-type StoreWordHarness =
-    TestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChip<F>>;
+type StoreWordHarness = TestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChip<F>>;
 
 fn create_store_word_harness(
     tester: &mut VmChipTestBuilder<F>,
@@ -53,9 +51,7 @@ fn create_store_word_harness(
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let air = StoreWordAir::new(
         StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
@@ -196,13 +192,8 @@ fn run_storew_sanity_test() {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuStoreWordHarness = GpuTestChipHarness<
-    F,
-    StoreWordExecutor,
-    StoreWordAir,
-    StoreWordChipGpu,
-    StoreWordChip<F>,
->;
+type GpuStoreWordHarness =
+    GpuTestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChipGpu, StoreWordChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHarness {

@@ -30,43 +30,39 @@ const REVEAL_TIMESTAMP_DELTA: usize = 3;
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct RevealCols<T> {
+    /// Enables this row.
     pub is_valid: T,
+    /// Execution state before this reveal.
     pub from_state: ExecutionState<T>,
+    /// Byte pointer to the base-address register.
     pub base_ptr: T,
-    pub base_data: [T; PTR_U16_LIMBS],
+    /// Low 32 bits of the base address as u16 limbs.
+    pub base_ptr_limbs: [T; PTR_U16_LIMBS],
+    /// Witness for the base-register read.
     pub base_aux: MemoryReadAuxCols<T>,
+    /// Byte pointer to the source-value register.
     pub src_ptr: T,
+    /// Source register value as u16 limbs.
     pub src_data: [T; BLOCK_FE_WIDTH],
+    /// Witness for the source-register read.
     pub src_aux: MemoryReadAuxCols<T>,
+    /// Low 16 bits of the signed address offset.
     pub imm: T,
+    /// Sign bit of the address offset.
     pub imm_sign: T,
-    pub reveal_ptr_low_limb: T,
+    /// Low u16 limb of the aligned reveal address.
+    pub dst_ptr_low_limb: T,
+    /// Witness for the public-values write.
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
-#[derive(Clone, Copy, Debug, ColumnsAir)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(RevealCols<u8>)]
 pub struct RevealAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
     pub pointer_max_bits: usize,
-}
-
-impl RevealAir {
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        range_bus: VariableRangeCheckerBus,
-        pointer_max_bits: usize,
-    ) -> Self {
-        Self {
-            execution_bridge,
-            memory_bridge,
-            range_bus,
-            pointer_max_bits,
-        }
-    }
 }
 
 impl<F: Field> BaseAir<F> for RevealAir {
@@ -89,39 +85,36 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
         builder.assert_bool(cols.is_valid);
         builder.assert_bool(cols.imm_sign);
 
+        // Read the low 32-bit base address from its register.
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(cols.base_ptr),
                 ),
-                expand_to_block(&cols.base_data),
+                expand_to_block(&cols.base_ptr_limbs),
                 timestamp.clone(),
                 &cols.base_aux,
             )
             .eval(builder, is_valid.clone());
 
+        // Add the signed immediate across the two u16 pointer limbs.
         let inv_u16_base = AB::F::from_u32(1 << U16_BITS).inverse();
-        let low_carry = (cols.base_data[0] + cols.imm - cols.reveal_ptr_low_limb) * inv_u16_base;
+        let low_carry = (cols.base_ptr_limbs[0] + cols.imm - cols.dst_ptr_low_limb) * inv_u16_base;
         builder.assert_bool(low_carry.clone());
-        let reveal_ptr_high_limb = cols.base_data[1] + low_carry - cols.imm_sign;
+        let dst_ptr_high_limb = cols.base_ptr_limbs[1] + low_carry - cols.imm_sign;
 
+        // Enforce 8-byte alignment and the configured pointer bound.
         let block_bytes = AB::F::from_usize(MEMORY_BLOCK_BYTES);
         self.range_bus
-            .range_check(
-                cols.reveal_ptr_low_limb * block_bytes.inverse(),
-                U16_BITS - 3,
-            )
+            .range_check(cols.dst_ptr_low_limb * block_bytes.inverse(), U16_BITS - 3)
             .eval(builder, is_valid.clone());
         self.range_bus
-            .range_check(
-                reveal_ptr_high_limb.clone(),
-                self.pointer_max_bits - U16_BITS,
-            )
+            .range_check(dst_ptr_high_limb.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
-        let reveal_ptr =
-            cols.reveal_ptr_low_limb + reveal_ptr_high_limb * AB::F::from_u32(1 << U16_BITS);
+        let dst_ptr = cols.dst_ptr_low_limb + dst_ptr_high_limb * AB::F::from_u32(1 << U16_BITS);
 
+        // Read the source register, then write it to public values.
         self.memory_bridge
             .read(
                 MemoryAddress::new(
@@ -137,7 +130,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(PUBLIC_VALUES_AS),
-                    byte_ptr_to_u16_ptr::<AB>(reveal_ptr),
+                    byte_ptr_to_u16_ptr::<AB>(dst_ptr),
                 ),
                 cols.src_data.map(Into::into),
                 timestamp.clone() + AB::Expr::TWO,
@@ -145,6 +138,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             )
             .eval(builder, is_valid.clone());
 
+        // Bind the row to the dedicated opcode and its three memory events.
         self.execution_bridge
             .execute(
                 AB::Expr::from_usize(RevealOpcode::REVEAL.global_opcode().as_usize()),

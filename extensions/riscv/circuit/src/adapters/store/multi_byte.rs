@@ -28,9 +28,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, checked_register_pointer,
-    expand_to_block, is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    address_add_imm, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value,
+    checked_register_pointer, expand_to_block, is_multi_byte_access_width, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct StoreInstruction<T> {
@@ -314,17 +314,13 @@ impl StoreMultiByteAdapterFiller {
             REGISTER_AS,
             checked_byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr))?,
         )?;
-        if rs1.value[PTR_U16_LIMBS..]
-            .iter()
-            .any(|&limb| limb != 0)
-        {
+        if rs1.value[PTR_U16_LIMBS..].iter().any(|&limb| limb != 0) {
             return Err(PostflightError::new(
                 "multi-byte store base register is not a low-32-bit pointer",
             ));
         }
         let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
-        let effective_ptr =
-            address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let effective_ptr = address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
         let pointer_limit = 1u64
             .checked_shl(self.pointer_max_bits as u32)
             .unwrap_or(u64::MAX);

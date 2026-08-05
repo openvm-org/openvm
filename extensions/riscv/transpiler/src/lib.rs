@@ -9,9 +9,8 @@ use openvm_instructions::{
     SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_guest::{
-    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STORED_IMM,
-    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, ALU_OPCODE, ALU_OP_32, SYSTEM_OPCODE,
-    TERMINATE_FUNCT3,
+    PhantomImm, ALU_OPCODE, ALU_OP_32, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3,
+    HINT_STORED_IMM, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -199,11 +198,11 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PUBLIC_VALUES_AS,
     };
-    use openvm_riscv_guest::{REVEAL_FUNCT3, ALU_OPCODE, SYSTEM_OPCODE};
+    use openvm_riscv_guest::{ALU_OPCODE, REVEAL_FUNCT3, SYSTEM_OPCODE};
     use openvm_transpiler::TranspilerExtension;
     use p3_baby_bear::BabyBear;
 
-    use super::{Rv64IoTranspilerExtension, RevealOpcode};
+    use super::{RevealOpcode, Rv64IoTranspilerExtension};
 
     fn encode_reveal(rs1: u32, rd: u32, imm: i32) -> u32 {
         debug_assert!((-(1 << 11)..(1 << 11)).contains(&imm));

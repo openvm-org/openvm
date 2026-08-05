@@ -19,12 +19,11 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller,
-        BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, BYTE_BITS,
     },
     store::{
-        common::store_write_data, StoreDoublewordAir, StoreDoublewordChip,
-        StoreDoublewordExecutor, StoreDoublewordCoreAir, StoreDoublewordFiller,
+        common::store_write_data, StoreDoublewordAir, StoreDoublewordChip, StoreDoublewordCoreAir,
+        StoreDoublewordExecutor, StoreDoublewordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -34,12 +33,8 @@ use crate::{
     test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
-type StoreDoublewordHarness = TestChipHarness<
-    F,
-    StoreDoublewordExecutor,
-    StoreDoublewordAir,
-    StoreDoublewordChip<F>,
->;
+type StoreDoublewordHarness =
+    TestChipHarness<F, StoreDoublewordExecutor, StoreDoublewordAir, StoreDoublewordChip<F>>;
 
 fn create_store_doubleword_harness(
     tester: &mut VmChipTestBuilder<F>,
@@ -52,9 +47,7 @@ fn create_store_doubleword_harness(
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let air = StoreDoublewordAir::new(
         StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
