@@ -34,8 +34,10 @@ type F = BabyBear;
 const LIMB_BITS: usize = 8;
 const RANGE_MAX_BITS: usize = 17;
 
-/// The bound the integration tests' system config enforces.
-const DEGREE_BUDGET: usize = 4;
+/// `SystemConfig`'s default, and the bound every other AIR in the ECC configuration meets. Staying
+/// at or below it keeps `log_blowup` at 1, which matters because the blowup is chosen per
+/// application rather than per chip.
+const DEGREE_BUDGET: usize = 3;
 
 fn bus() -> VariableRangeCheckerBus {
     VariableRangeCheckerBus::new(1, RANGE_MAX_BITS)

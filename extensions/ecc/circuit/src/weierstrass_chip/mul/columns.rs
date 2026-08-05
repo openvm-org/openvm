@@ -53,6 +53,17 @@ pub struct EcMulHeaderCols<T> {
     /// because the digest row has no expression sub-row to derive it from and needs it to
     /// decide whether to check the scalar.
     pub is_setup: T,
+    /// 1 on a ladder row that continues a non-setup instruction, i.e.
+    /// `is_compute AND NOT is_setup AND NOT is_first_compute`.
+    ///
+    /// Derived, but stored so the accumulator and base-point links can be gated by a degree-1
+    /// selector. Computing the conjunction inline would put those constraints at degree 4, above
+    /// the budget every other AIR in the configuration meets.
+    pub is_ladder: T,
+    /// 1 on the digest row of a non-setup instruction, i.e. `is_digest AND NOT is_setup`. Stored
+    /// for the same reason as [`EcMulHeaderCols::is_ladder`]: it gates the handoff links at
+    /// degree 1.
+    pub is_real_digest: T,
     /// Position within the instruction, `0..=EC_MUL_COMPUTE_ROWS`.
     ///
     /// A plain incrementing counter rather than an `Encoder`: the increment is a degree-3
