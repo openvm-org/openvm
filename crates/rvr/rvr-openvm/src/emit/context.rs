@@ -4,8 +4,6 @@ use openvm_instructions::MEMORY_BLOCK_BYTES;
 use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
 use rvr_state::NUM_REGS;
 
-use super::codegen::hex_u32;
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("chip index {chip_idx} is outside AIR count {num_airs}")]
 pub(crate) struct InvalidChipIndex {
@@ -356,13 +354,7 @@ impl<'a> EmitContext<'a> {
     }
 
     fn addr_expr(base: &str, offset: i16) -> String {
-        if offset == 0 {
-            base.to_string()
-        } else if offset > 0 {
-            format!("{base} + {}", hex_u32(offset as u32))
-        } else {
-            format!("{base} - {}", hex_u32((-(offset as i32)) as u32))
-        }
+        format!("mem_effective_addr({base}, {offset})")
     }
 
     fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str) {
@@ -423,7 +415,9 @@ impl<'a> EmitContext<'a> {
         self.uses_raw_memory = true;
 
         self.emit_memory_bounds_trap(&addr, width);
-        self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
+        self.write_line(&format!(
+            "{var_ty} {var} = {read_func}(memory, {base}, {offset});"
+        ));
         self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width, sp_relative);
@@ -457,7 +451,7 @@ impl<'a> EmitContext<'a> {
         }
         self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         self.write_line(&format!(
-            "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+            "{write_func}(memory, {base}, {offset}, ({cast_ty})({val}));"
         ));
         if self.mode.uses_preflight_local() {
             self.write_line(&format!(
@@ -488,7 +482,7 @@ impl<'a> EmitContext<'a> {
         }
         self.count_fixed_timestamp_slots(1);
         self.write_line(&format!(
-            "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
+            "write_mem_u64(memory, {addr}, 0, (uint64_t)({val}));"
         ));
         if self.mode.uses_preflight_local() {
             self.write_line(&format!(
@@ -1269,7 +1263,7 @@ mod tests {
         }
         assert!(ctx
             .buf()
-            .contains("write_mem_u64(memory, addr, (uint64_t)(value));"));
+            .contains("write_mem_u64(memory, addr, 0, (uint64_t)(value));"));
     }
 
     #[test]
@@ -1286,7 +1280,7 @@ mod tests {
 
         let bounds = ctx
             .buf()
-            .find("if (unlikely((uint64_t)(addr + 0x00000003u) > OPENVM_MEM_SIZE - 4u)) {")
+            .find("if (unlikely((uint64_t)(mem_effective_addr(addr, 3)) > OPENVM_MEM_SIZE - 4u)) {")
             .expect("protected bounds guard");
         let trap = ctx
             .buf()
@@ -1294,7 +1288,7 @@ mod tests {
             .expect("typed trap");
         let read = ctx
             .buf()
-            .find("read_mem_u32(memory, addr + 0x00000003u)")
+            .find("read_mem_u32(memory, addr, 3)")
             .expect("raw read");
         assert!(bounds < trap && trap < read);
     }
@@ -1333,7 +1327,7 @@ mod tests {
 
         assert!(ctx
             .buf()
-            .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
+            .contains("trace_memory_access_span(&trace_memory, mem_effective_addr(addr, 0), 8u);"));
     }
 
     #[test]
@@ -1344,11 +1338,73 @@ mod tests {
 
         assert!(ctx
             .buf()
-            .contains("trace_sp_memory_access_leaf(&trace_memory, sp + 0x00000004u);"));
+            .contains("trace_sp_memory_access_leaf(&trace_memory, mem_effective_addr(sp, 4));"));
+        assert!(ctx.buf().contains(
+            "trace_sp_memory_access_span(&trace_memory, mem_effective_addr(sp, -8), 8u);"
+        ));
+        assert!(ctx.buf().contains("read_mem_u8(memory, sp, 4)"));
         assert!(ctx
             .buf()
-            .contains("trace_sp_memory_access_span(&trace_memory, sp - 0x00000008u, 8u);"));
+            .contains("write_mem_u64(memory, sp, -8, (uint64_t)(value))"));
         assert!(!ctx.buf().contains("trace_memory_access_leaf(&trace_memory"));
         assert!(!ctx.buf().contains("trace_memory_access_span(&trace_memory"));
+    }
+
+    #[test]
+    fn scalar_memory_helpers_cover_every_width_and_signedness() {
+        let read_cases = [
+            (1, false, "read_mem_u8"),
+            (1, true, "read_mem_i8"),
+            (2, false, "read_mem_u16"),
+            (2, true, "read_mem_i16"),
+            (4, false, "read_mem_u32"),
+            (4, true, "read_mem_i32"),
+            (8, false, "read_mem_u64"),
+        ];
+        for (width, signed, helper) in read_cases {
+            let mut ctx = EmitContext::new(
+                HashSet::new(),
+                EmitMode::Direct,
+                BlockAbi::Plain,
+                None,
+                Some(0),
+            );
+            ctx.read_mem("base", i16::MIN, width, signed);
+            assert!(
+                ctx.buf()
+                    .contains(&format!("{helper}(memory, base, -32768)")),
+                "missing {helper}: {}",
+                ctx.buf()
+            );
+            assert!(ctx.buf().contains("mem_effective_addr(base, -32768)"));
+        }
+
+        for (width, helper) in [
+            (1, "write_mem_u8"),
+            (2, "write_mem_u16"),
+            (4, "write_mem_u32"),
+            (8, "write_mem_u64"),
+        ] {
+            let mut ctx = EmitContext::new(
+                HashSet::new(),
+                EmitMode::Direct,
+                BlockAbi::Plain,
+                None,
+                Some(0),
+            );
+            ctx.write_mem("base", i16::MAX, "value", width);
+            assert!(
+                ctx.buf()
+                    .contains(&format!("{helper}(memory, base, 32767,")),
+                "missing {helper}: {}",
+                ctx.buf()
+            );
+            assert!(ctx.buf().contains("mem_effective_addr(base, 32767)"));
+        }
+
+        assert_eq!(
+            EmitContext::addr_expr("base", 0),
+            "mem_effective_addr(base, 0)"
+        );
     }
 }

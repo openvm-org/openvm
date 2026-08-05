@@ -82,22 +82,34 @@ static __attribute__((always_inline)) inline void reg_write(
 }
 #pragma clang unsafe_buffer_usage end
 
+/* Scalar RISC-V memory instructions carry a base register and signed
+ * immediate. Keep those operands separate at the helper boundary; callers
+ * with an already-computed address pass zero as the offset. Unsigned addition
+ * preserves RV64 effective-address wrapping. */
+static __attribute__((always_inline)) inline uint64_t mem_effective_addr(
+    uint64_t base, int16_t offset) {
+  return base + (uint64_t)(int64_t)offset;
+}
+
 /* ── Per-width memory reads ──────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline uint8_t read_mem_u8(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u8(addr);
   return *mem_ptr(memory, addr);
 }
 
 static __attribute__((always_inline)) inline int8_t read_mem_i8(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_i8(addr);
   return (int8_t)*mem_ptr(memory, addr);
 }
 
 static __attribute__((always_inline)) inline uint16_t read_mem_u16(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u16(addr);
   uint16_t v;
   memcpy(&v, mem_ptr(memory, addr), sizeof(v));
@@ -105,7 +117,8 @@ static __attribute__((always_inline)) inline uint16_t read_mem_u16(
 }
 
 static __attribute__((always_inline)) inline int16_t read_mem_i16(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_i16(addr);
   int16_t v;
   memcpy(&v, mem_ptr(memory, addr), sizeof(v));
@@ -113,7 +126,8 @@ static __attribute__((always_inline)) inline int16_t read_mem_i16(
 }
 
 static __attribute__((always_inline)) inline int32_t read_mem_i32(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u32(addr);
   int32_t v;
   memcpy(&v, mem_ptr(memory, addr), sizeof(v));
@@ -121,7 +135,8 @@ static __attribute__((always_inline)) inline int32_t read_mem_i32(
 }
 
 static __attribute__((always_inline)) inline uint32_t read_mem_u32(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u32(addr);
   uint32_t v;
   memcpy(&v, mem_ptr(memory, addr), sizeof(v));
@@ -129,7 +144,8 @@ static __attribute__((always_inline)) inline uint32_t read_mem_u32(
 }
 
 static __attribute__((always_inline)) inline uint64_t read_mem_u64(
-    uint8_t* restrict memory, uint64_t addr) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u64(addr);
   uint64_t v;
   memcpy(&v, mem_ptr(memory, addr), sizeof(v));
@@ -139,25 +155,29 @@ static __attribute__((always_inline)) inline uint64_t read_mem_u64(
 /* ── Per-width memory writes ─────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void write_mem_u8(
-    uint8_t* restrict memory, uint64_t addr, uint8_t val) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset, uint8_t val) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u8(addr);
   *mem_ptr(memory, addr) = val;
 }
 
 static __attribute__((always_inline)) inline void write_mem_u16(
-    uint8_t* restrict memory, uint64_t addr, uint16_t val) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset, uint16_t val) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u16(addr);
   memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
 
 static __attribute__((always_inline)) inline void write_mem_u32(
-    uint8_t* restrict memory, uint64_t addr, uint32_t val) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset, uint32_t val) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u32(addr);
   memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
 
 static __attribute__((always_inline)) inline void write_mem_u64(
-    uint8_t* restrict memory, uint64_t addr, uint64_t val) {
+    uint8_t* restrict memory, uint64_t base, int16_t offset, uint64_t val) {
+  uint64_t addr = mem_effective_addr(base, offset);
   check_mem_bounds_u64(addr);
   memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
