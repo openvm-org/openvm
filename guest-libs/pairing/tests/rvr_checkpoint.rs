@@ -242,12 +242,15 @@ fn prove_pairing_checkpoint(
             );
         }
 
+        // rvr preflight yields a compact `PreflightTranscript`, not the `PreflightHistory` that
+        // host `EC_MUL` trace generation needs.
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             replay_program.program(),
             &gpu_transcript,
             &replay_plan,
+            None,
         )?;
         let PreflightExecution {
             state: next_state,
