@@ -5,7 +5,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{air::reduce_to_single_evaluation, GkrLayerCols};
+use super::GkrLayerCols;
 use crate::tracegen::RowMajorChip;
 
 /// Minimal record for parallel gkr layer trace generation
@@ -126,7 +126,6 @@ impl RowMajorChip<F> for GkrLayerTraceGenerator {
                         cols.sumcheck_claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                         cols.q_xi_0 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                         cols.q_xi_1 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                        cols.denom_claim = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                         return;
                     }
 
@@ -175,17 +174,6 @@ impl RowMajorChip<F> for GkrLayerTraceGenerator {
                                 .as_basis_coefficients_slice()
                                 .try_into()
                                 .unwrap();
-
-                            let (numer_base, denom_base): ([F; D_EF], [F; D_EF]) =
-                                reduce_to_single_evaluation::<F, F>(
-                                    claims[0].as_basis_coefficients_slice().try_into().unwrap(),
-                                    claims[2].as_basis_coefficients_slice().try_into().unwrap(),
-                                    claims[1].as_basis_coefficients_slice().try_into().unwrap(),
-                                    claims[3].as_basis_coefficients_slice().try_into().unwrap(),
-                                    mu.as_basis_coefficients_slice().try_into().unwrap(),
-                                );
-                            cols.numer_claim = numer_base;
-                            cols.denom_claim = denom_base;
 
                             let numer = claims[0] * (EF::ONE - mu) + claims[2] * mu;
                             let denom = claims[1] * (EF::ONE - mu) + claims[3] * mu;

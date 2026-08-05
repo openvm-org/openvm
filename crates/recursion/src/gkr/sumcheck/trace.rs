@@ -131,7 +131,6 @@ impl RowMajorChip<F> for GkrSumcheckTraceGenerator {
                     cols.is_proof_start = F::ONE;
                     cols.is_last_layer = F::ONE;
                     cols.is_dummy = F::ONE;
-                    cols.eq_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                     cols.eq_out = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                     cols.claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                     cols.claim_out = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
@@ -175,8 +174,6 @@ impl RowMajorChip<F> for GkrSumcheckTraceGenerator {
 
                         let claim_in_base: [F; D_EF] =
                             claim.as_basis_coefficients_slice().try_into().unwrap();
-                        let eq_in_base: [F; D_EF] =
-                            eq.as_basis_coefficients_slice().try_into().unwrap();
 
                         let ev0 = claim - evals[0];
                         let evals_full = [ev0, evals[0], evals[1], evals[2]];
@@ -216,7 +213,6 @@ impl RowMajorChip<F> for GkrSumcheckTraceGenerator {
                         cols.claim_in = claim_in_base;
                         cols.claim_out = claim_out_base;
 
-                        cols.eq_in = eq_in_base;
                         cols.eq_out = eq_out_base;
 
                         claim = claim_out;

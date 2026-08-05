@@ -66,9 +66,8 @@ pub struct GkrLayerSumcheckCols<T> {
     /// The sampled challenge for this sub-round (corresponds to `ri`)
     pub challenge: [T; D_EF],
 
-    /// The eq value coming into this sub-round
-    pub eq_in: [T; D_EF],
-    /// The eq value going out (updated for this round)
+    /// The eq value after this sub-round. The incoming value is 1 on the first round and
+    /// the previous row's `eq_out` on later rounds, so it needs no column of its own.
     pub eq_out: [T; D_EF],
 }
 
@@ -193,7 +192,7 @@ where
             .assert_one(is_last_round.clone());
         builder.when(local.is_dummy).assert_one(local.is_last_layer);
         // Dummy rows must be strict no-ops
-        assert_array_eq(&mut builder.when(local.is_dummy), local.eq_out, local.eq_in);
+        assert_one_ext(&mut builder.when(local.is_dummy), local.eq_out);
         assert_array_eq(
             &mut builder.when(local.is_dummy),
             local.claim_out,
@@ -209,19 +208,21 @@ where
             .when(is_transition_round.clone())
             .assert_eq(next.is_last_layer, local.is_last_layer);
 
-        // Eq initialization: eq_in = 1 at first round
-        assert_one_ext(&mut builder.when(local.is_first_round), local.eq_in);
+        // Eq initialization: the incoming eq value is 1 on the first round, so
+        // eq_out = xi * ri + (1-xi) * (1-ri)
+        assert_array_eq(
+            &mut builder.when(local.is_first_round),
+            local.eq_out,
+            eq_factor::<AB::Var, AB::Expr>(local.prev_challenge, local.challenge),
+        );
 
-        // Eq update: incrementally compute eq *= (xi * ri + (1-xi) * (1-ri))
-        let eq_out: [AB::Expr; D_EF] =
-            update_eq(local.eq_in, local.prev_challenge, local.challenge);
-        assert_array_eq(&mut builder.when(local.is_enabled), local.eq_out, eq_out);
-
-        // Eq propagation
+        // Eq update across rounds: next.eq_out = eq_out * (xi * ri + (1-xi) * (1-ri))
+        let next_eq_out: [AB::Expr; D_EF] =
+            update_eq(local.eq_out, next.prev_challenge, next.challenge);
         assert_array_eq(
             &mut builder.when(is_transition_round.clone()),
-            local.eq_out,
-            next.eq_in,
+            next.eq_out,
+            next_eq_out,
         );
 
         // Compute s(0) = claim_in - s(1)
@@ -400,10 +401,27 @@ where
     )
 }
 
+/// The eq update factor for one sumcheck round:
+/// `prev_challenge * challenge + (1 - prev_challenge) * (1 - challenge)`
+/// where `prev_challenge` is xi and `challenge` is ri.
+pub(super) fn eq_factor<F, FA>(prev_challenge: [F; D_EF], challenge: [F; D_EF]) -> [FA; D_EF]
+where
+    F: Into<FA> + Copy,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
+{
+    ext_field_add::<FA>(
+        ext_field_multiply::<FA>(prev_challenge, challenge),
+        ext_field_multiply::<FA>(
+            ext_field_one_minus::<FA>(prev_challenge),
+            ext_field_one_minus::<FA>(challenge),
+        ),
+    )
+}
+
 /// Updates the eq evaluation incrementally for one sumcheck round.
 ///
-/// Computes: `eq_out = eq_in * (prev_challenge * challenge + (1 - prev_challenge) * (1 -
-/// challenge))` where `prev_challenge` is xi and `challenge` is ri.
+/// Computes: `eq_out = eq_in * eq_factor(prev_challenge, challenge)`.
 pub(super) fn update_eq<F, FA>(
     eq_in: [F; D_EF],
     prev_challenge: [F; D_EF],
@@ -414,14 +432,5 @@ where
     FA: PrimeCharacteristicRing,
     FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
-    ext_field_multiply::<FA>(
-        eq_in,
-        ext_field_add::<FA>(
-            ext_field_multiply::<FA>(prev_challenge, challenge),
-            ext_field_multiply::<FA>(
-                ext_field_one_minus::<FA>(prev_challenge),
-                ext_field_one_minus::<FA>(challenge),
-            ),
-        ),
-    )
+    ext_field_multiply::<FA>(eq_in, eq_factor(prev_challenge, challenge))
 }

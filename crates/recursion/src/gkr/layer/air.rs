@@ -53,11 +53,6 @@ pub struct GkrLayerCols<T> {
     pub p_xi_1: [T; D_EF],
     pub q_xi_1: [T; D_EF],
 
-    // (p_xi_1 - p_xi_0) * mu + p_xi_0
-    pub numer_claim: [T; D_EF],
-    // (q_xi_1 - q_xi_0) * mu + q_xi_0
-    pub denom_claim: [T; D_EF],
-
     // Sumcheck claim input
     pub sumcheck_claim_in: [T; D_EF],
 
@@ -189,18 +184,18 @@ where
         // Layer Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // Reduce to single evaluation
+        // Reduce to single evaluation; both are degree-2 expressions used directly in
+        // the RLC transition and the layer output message below.
         // `numer_claim = (p_xi_1 - p_xi_0) * mu + p_xi_0`
         // `denom_claim = (q_xi_1 - q_xi_0) * mu + q_xi_0`
-        let (numer_claim, denom_claim) = reduce_to_single_evaluation(
-            local.p_xi_0,
-            local.p_xi_1,
-            local.q_xi_0,
-            local.q_xi_1,
-            local.mu,
-        );
-        assert_array_eq(builder, local.numer_claim, numer_claim);
-        assert_array_eq(builder, local.denom_claim, denom_claim);
+        let (numer_claim, denom_claim): ([AB::Expr; D_EF], [AB::Expr; D_EF]) =
+            reduce_to_single_evaluation(
+                local.p_xi_0,
+                local.p_xi_1,
+                local.q_xi_0,
+                local.q_xi_1,
+                local.mu,
+            );
 
         ///////////////////////////////////////////////////////////////////////
         // Inter-Layer Constraints
@@ -211,8 +206,8 @@ where
             &mut builder.when(is_transition.clone()),
             next.sumcheck_claim_in,
             ext_field_add::<AB::Expr>(
-                local.numer_claim,
-                ext_field_multiply::<AB::Expr>(next.lambda, local.denom_claim),
+                numer_claim.clone(),
+                ext_field_multiply::<AB::Expr>(next.lambda, denom_claim.clone()),
             ),
         );
 
@@ -252,10 +247,7 @@ where
             GkrLayerOutputMessage {
                 tidx: tidx_end,
                 layer_idx_end: local.layer_idx.into(),
-                input_layer_claim: [
-                    local.numer_claim.map(Into::into),
-                    local.denom_claim.map(Into::into),
-                ],
+                input_layer_claim: [numer_claim, denom_claim],
             },
             is_last.clone() * is_not_dummy.clone(),
         );
