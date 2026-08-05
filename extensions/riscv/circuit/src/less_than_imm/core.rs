@@ -14,7 +14,6 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
-use strum::IntoEnumIterator;
 
 /// Core columns for comparisons with a signed 12-bit immediate.
 #[repr(C)]
@@ -27,8 +26,9 @@ pub struct LessThanImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
     pub imm_sign: T,
     pub cmp_result: T,
 
-    pub opcode_slt_flag: T,
-    pub opcode_sltu_flag: T,
+    /// Packs the opcode flags into one column:
+    /// 0 = padding, 1 = SLTIU (unsigned), 2 = SLTI (signed).
+    pub opcode_mode: T,
 
     pub b_msb_f: T,
 
@@ -71,15 +71,31 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LessThanImmCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        let flags = [cols.opcode_slt_flag, cols.opcode_sltu_flag];
+        // opcode_mode is 0 (padding), 1 (SLTIU) or 2 (SLTI).
+        let mode = cols.opcode_mode;
+        builder.assert_zero(mode * (mode - AB::Expr::ONE) * (mode - AB::Expr::TWO));
 
-        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
-            builder.assert_bool(flag);
-            acc + flag.into()
-        });
-        builder.assert_bool(is_valid.clone());
+        // mode * (3 - mode) / 2 evaluates to 0, 1, 1 at mode = 0, 1, 2
+        let is_valid = mode * (AB::Expr::from_u32(3) - mode) * AB::Expr::from(AB::F::TWO.inverse());
+
+        // `mode - 1` is 0 for SLTIU and 1 for SLTI, giving the signed selector at degree 1. The
+        // exact form `mode * (mode - 1) / 2` is degree 2, which would push
+        // `c_msb_f` to degree 3 and the two constraints reading it to degree 4.
+        //
+        // On a mode=0 row, `is_signed` and `is_unsigned` are -1 and 2 rather than 0. `sign_shift`
+        // and `expected_opcode` are unaffected because their interactions have count
+        // `is_valid`, which is exactly 0 there. `c_msb_f` is the one ungated consumer, so
+        // `imm_sign` is pinned to zero on invalid rows below, which forces `c_msb_f` to
+        // zero too.
+        let is_signed = mode - AB::Expr::ONE;
+        let is_unsigned = AB::Expr::ONE - is_signed.clone();
+
         builder.assert_bool(cols.cmp_result);
         builder.assert_bool(cols.imm_sign);
+        // An invalid row must have imm_sign = 0.
+        builder
+            .when(not::<AB::Expr>(is_valid.clone()))
+            .assert_zero(cols.imm_sign);
 
         // Range check the low 11 bits of the immediate so the (imm_low11, imm_sign)
         // decomposition of the 24-bit operand is unique.
@@ -105,9 +121,10 @@ where
         builder.assert_zero(b_diff.clone() * (AB::Expr::from_u32(1 << LIMB_BITS) - b_diff));
 
         // Field representation of the immediate's top limb for signed or unsigned comparison.
+        // For padding rows, `c_msb_f=0` due to imm_sign being 0.
         let c_msb_f: AB::Expr = cols.imm_sign
             * (AB::Expr::from_u32((1 << LIMB_BITS) - 1)
-                - cols.opcode_slt_flag * AB::Expr::from_u32(1 << LIMB_BITS));
+                - is_signed.clone() * AB::Expr::from_u32(1 << LIMB_BITS));
 
         // Maps cmp_result to -1 or 1, so cmp_sign^2 = 1.
         let cmp_sign = AB::Expr::from_u8(2) * cols.cmp_result - AB::Expr::ONE;
@@ -133,7 +150,9 @@ where
             .when(not::<AB::Expr>(prefix_sum.clone()))
             .assert_zero(cols.cmp_result);
 
-        let sign_shift = AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag;
+        // For padding rows, `sign_shift` is unaffected by `is_signed` being -2.
+        // This is due to is_valid gating.
+        let sign_shift = AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * is_signed.clone();
         self.range_bus
             .range_check(cols.b_msb_f + sign_shift.clone(), LIMB_BITS)
             .eval(builder, is_valid.clone());
@@ -142,12 +161,10 @@ where
             .range_check(cols.diff_val - AB::Expr::ONE, LIMB_BITS)
             .eval(builder, prefix_sum);
 
-        let expected_opcode = flags
-            .iter()
-            .zip(LessThanImmOpcode::iter())
-            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
-            })
+        // For padding rows, `expected_opcode` is gated by `is_valid`. Hence, its content can be
+        // anything.
+        let expected_opcode = is_signed * AB::Expr::from_u8(LessThanImmOpcode::SLTI as u8)
+            + is_unsigned * AB::Expr::from_u8(LessThanImmOpcode::SLTIU as u8)
             + AB::Expr::from_usize(self.offset);
         let mut a: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();

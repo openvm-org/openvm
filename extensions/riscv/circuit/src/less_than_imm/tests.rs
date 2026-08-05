@@ -94,28 +94,39 @@ fn rv64_less_than_immediate_boundaries() {
         .expect("verification failed");
 }
 
-#[test]
-fn rv64_less_than_immediate_result_negative() {
+type CoreCols = LessThanImmCoreCols<F, BLOCK_FE_WIDTH, U16_BITS>;
+
+/// Executes `num_ops` SLTI instructions with immediate `imm` against a zero source register, then
+/// rewrites the core columns of `row` via `prank` and expects verification to fail.
+///
+/// The trace is padded to the next power of two, so a `row` at or past `num_ops` is a padding row.
+fn run_negative_prank(num_ops: usize, imm: i16, row: usize, prank: impl Fn(&mut CoreCols)) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
-    let (instruction, _) = rv64_rand_write_register_or_imm(
-        &mut tester,
-        0u64.to_le_bytes(),
-        [0; RV64_REGISTER_NUM_LIMBS],
-        Some(encode_i12(1)),
-        LessThanImmOpcode::SLTI.global_opcode().as_usize(),
-        &mut rng,
-    );
-    tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
+    for _ in 0..num_ops {
+        let (instruction, _) = rv64_rand_write_register_or_imm(
+            &mut tester,
+            0u64.to_le_bytes(),
+            [0; RV64_REGISTER_NUM_LIMBS],
+            Some(encode_i12(imm)),
+            LessThanImmOpcode::SLTI.global_opcode().as_usize(),
+            &mut rng,
+        );
+        tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
+    }
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
-        let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut LessThanImmCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.cmp_result = F::ZERO;
-        *trace = RowMajorMatrix::new(values, trace.width());
+        let width = trace.width();
+        let mut values = trace.values.clone();
+        assert!(values.len() / width > row, "trace has no row {row}");
+        let cols: &mut CoreCols = values[row * width..(row + 1) * width]
+            .split_at_mut(adapter_width)
+            .1
+            .borrow_mut();
+        prank(cols);
+        *trace = RowMajorMatrix::new(values, width);
     };
 
     disable_debug_builder();
@@ -124,7 +135,54 @@ fn rv64_less_than_immediate_result_negative() {
         .load_and_prank_trace(harness, modify_trace)
         .finalize()
         .simple_test()
-        .expect_err("altered comparison result should fail");
+        .expect_err("pranked trace should fail verification");
+}
+
+/// Pranks the sole executed row, which is valid.
+fn prank_valid_row(imm: i16, prank: impl Fn(&mut CoreCols)) {
+    run_negative_prank(1, imm, 0, prank);
+}
+
+/// Pranks a padding row: three ops pad the height to four, so row 3 is unused.
+fn prank_padding_row(prank: impl Fn(&mut CoreCols)) {
+    run_negative_prank(3, -1, 3, prank);
+}
+
+#[test]
+fn rv64_less_than_immediate_result_negative() {
+    // 0 < 1 holds, so the honest cmp_result is 1 and clearing it must be rejected.
+    prank_valid_row(1, |cols| cols.cmp_result = F::ZERO);
+}
+
+#[test]
+fn rv64_less_than_immediate_opcode_mode_negative_tests() {
+    // 1 claims SLTIU on a SLTI row; 3 is out of range; 0 marks the row invalid, so its
+    // execution-bus interaction goes missing.
+    for mode in [1, 3, 0] {
+        prank_valid_row(-1, |cols| cols.opcode_mode = F::from_u32(mode));
+    }
+}
+
+#[test]
+fn rv64_less_than_immediate_padding_imm_sign_negative_test() {
+    // With `is_signed = -1`, the AIR computes
+    //   c_msb_f = imm_sign * ((2^16 - 1) - (-1) * 2^16) = imm_sign * (2^17 - 1).
+    const C_MSB: u32 = (1u32 << (U16_BITS + 1)) - 1;
+    // Low limb of a sign-extended immediate whose low 11 bits are zero.
+    const C_LOW: u32 = 0xF800;
+
+    prank_padding_row(|cols| {
+        cols.imm_sign = F::ONE;
+        // Match the sign-extended immediate limb for limb so every raw_diff vanishes.
+        cols.b[0] = F::from_u32(C_LOW);
+        for limb in &mut cols.b[1..BLOCK_FE_WIDTH - 1] {
+            *limb = F::from_u16(u16::MAX);
+        }
+        // The top limb also feeds `b_diff = b[last] - b_msb_f`, which must be 0 or 2^16. Setting
+        // both to C_MSB keeps b_diff = 0 and makes the top raw_diff zero.
+        cols.b[BLOCK_FE_WIDTH - 1] = F::from_u32(C_MSB);
+        cols.b_msb_f = F::from_u32(C_MSB);
+    });
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]

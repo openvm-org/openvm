@@ -23,8 +23,8 @@ template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCore
     T imm_sign;
     T cmp_result;
 
-    T opcode_slt_flag;
-    T opcode_sltu_flag;
+    // 0 = padding, 1 = SLTIU (unsigned), 2 = SLTI (signed).
+    T opcode_mode;
 
     T b_msb_f;
 
@@ -105,8 +105,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCore {
         COL_WRITE_VALUE(row, Cols, cmp_result, cmp_result);
         COL_WRITE_VALUE(row, Cols, b_msb_f, b_msb_f);
         COL_WRITE_VALUE(row, Cols, diff_val, diff_val);
-        COL_WRITE_VALUE(row, Cols, opcode_slt_flag, is_slt);
-        COL_WRITE_VALUE(row, Cols, opcode_sltu_flag, !is_slt);
+        COL_WRITE_VALUE(row, Cols, opcode_mode, is_slt ? 2 : 1);
     }
 
     __device__ void
