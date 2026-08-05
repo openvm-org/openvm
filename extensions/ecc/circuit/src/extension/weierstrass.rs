@@ -96,7 +96,7 @@ impl WeierstrassExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
-    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         for curve in &self.supported_curves {
             if let Some(expected) = CurveType::from_struct_name(&curve.struct_name) {
                 assert_eq!(
@@ -112,7 +112,10 @@ impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
             .iter()
             .map(|c| c.struct_name.clone())
             .collect();
-        extensions.register_lifter(EccExtension::new_from_struct_names(struct_names));
+        extensions.register_lifter(
+            EccExtension::new_from_struct_names(ctx, struct_names)
+                .expect("failed to construct rvr EccExtension"),
+        );
     }
 }
 
