@@ -32,7 +32,6 @@ pub struct Rv64JalLuiCoreCols<T> {
     pub imm: T,
     // Low 32 bits of rd as u16 cells. Upper register cells are sign extension.
     pub rd_data: [T; RV64_PTR_U16_LIMBS],
-    pub imm_low_4: T,
     pub is_jal: T,
     pub is_lui: T,
     pub is_sign_extend: T,
@@ -70,7 +69,6 @@ where
         let Rv64JalLuiCoreCols::<AB::Var> {
             imm,
             rd_data: rd,
-            imm_low_4,
             is_jal,
             is_lui,
             is_sign_extend,
@@ -83,14 +81,17 @@ where
         builder.assert_bool(is_sign_extend);
 
         // LUI: constrain rd = imm << RV_IS_TYPE_IMM_BITS.
-        builder
-            .when(is_lui)
-            .assert_eq(rd[0], imm_low_4 * AB::F::from_u32(1 << RV_IS_TYPE_IMM_BITS));
+        //
+        // Derive the low LUI_IMM_LOW_BITS bits of imm.
+        //   imm_low_4 * 2^12 = rd[0]                    // definition of the low cell
+        //   imm * 2^12       = rd[0] + rd[1] * 2^16     // rd[0..2] read as one 32-bit value
+        //   imm_low_4 * 2^12 = imm * 2^12 - rd[1] * 2^16
+        //   imm_low_4        = imm - rd[1] * 2^4
+        let imm_low_4 = imm - rd[1] * AB::F::from_u32(1 << LUI_IMM_LOW_BITS);
         builder.when(is_lui).assert_eq(
-            imm,
-            imm_low_4 + rd[1] * AB::F::from_u32(1 << LUI_IMM_LOW_BITS),
+            rd[0],
+            imm_low_4.clone() * AB::F::from_u32(1 << RV_IS_TYPE_IMM_BITS),
         );
-        builder.when(is_jal).assert_zero(imm_low_4);
 
         // Range-check the low LUI_IMM_LOW_BITS bits of imm.
         self.range_bus

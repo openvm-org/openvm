@@ -40,7 +40,7 @@ use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         rv64_u16_block_to_bytes, Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols,
-        RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV_J_TYPE_IMM_BITS,
+        RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS, U16_BITS,
     },
     jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
     Rv64JalLuiAir, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor, Rv64JalLuiFiller,
@@ -205,7 +205,6 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 struct JalLuiPrankValues {
     pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm: Option<i32>,
-    pub imm_low_4: Option<u32>,
     pub is_jal: Option<bool>,
     pub is_lui: Option<bool>,
     pub is_sign_extend: Option<bool>,
@@ -253,9 +252,6 @@ fn run_negative_jal_lui_test_with_rd_ptr(
             } else {
                 F::from_u32(imm.unsigned_abs())
             };
-        }
-        if let Some(imm_low_4) = prank_vals.imm_low_4 {
-            core_cols.imm_low_4 = F::from_u32(imm_low_4);
         }
         if let Some(is_jal) = prank_vals.is_jal {
             core_cols.is_jal = F::from_bool(is_jal);
@@ -517,6 +513,37 @@ fn overflow_negative_tests() {
             ..Default::default()
         },
         true,
+    );
+}
+
+#[test]
+fn lui_low_bits_negative_tests() {
+    // rd = imm << 12, split at the u16 cell boundary: rd[0] = (imm & 0xf) << 12, rd[1] = imm >> 4.
+    const IMM: i32 = 0x12345;
+    const RD_LOW: u32 = ((IMM as u32) & 0xf) << RV_IS_TYPE_IMM_BITS;
+    const RD_HIGH: u32 = (IMM as u32) >> (U16_BITS - RV_IS_TYPE_IMM_BITS);
+
+    // Raising the high cell drops the derived remainder to -16, which fails the 4-bit check.
+    run_negative_jal_lui_test(
+        LUI,
+        Some(IMM),
+        None,
+        JalLuiPrankValues {
+            rd_data: Some([RD_LOW, RD_HIGH + 1]),
+            ..Default::default()
+        },
+        false,
+    );
+    // Raising the low cell breaks `rd[0] == r * 2^12` directly.
+    run_negative_jal_lui_test(
+        LUI,
+        Some(IMM),
+        None,
+        JalLuiPrankValues {
+            rd_data: Some([RD_LOW + 1, RD_HIGH]),
+            ..Default::default()
+        },
+        false,
     );
 }
 

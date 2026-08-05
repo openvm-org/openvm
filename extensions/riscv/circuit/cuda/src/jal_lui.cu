@@ -13,7 +13,6 @@ constexpr uint32_t PC_HIGH_U16_SHIFT = 2 * U16_BITS - PC_BITS;
 template <typename T> struct Rv64JalLuiCoreCols {
     T imm;                             // core_row.imm
     T rd_data[RV64_PTR_U16_LIMBS];     // low-32 bits of rd_data as u16 cells
-    T imm_low_4;                       // low 4 bits of imm for LUI
     T is_jal;                          // core_row.is_jal
     T is_lui;                          // core_row.is_lui
     T is_sign_extend;                  // 1 if upper cells are 0xFFFF, 0 if 0x0000
@@ -31,6 +30,7 @@ struct Rv64JalLuiCore {
         uint32_t rd_hi = rd_data[1];
 
         bool is_sign_extend = (rd_hi >> (U16_BITS - 1)) & 1;
+        // Bump the range-checker multiplicity for the LUI 4-bit check.
         uint32_t imm_low_4 = is_jal ? 0u : (imm & 0xfu);
 
         range_checker.add_count(rd_lo, U16_BITS);
@@ -49,7 +49,6 @@ struct Rv64JalLuiCore {
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_sign_extend, is_sign_extend);
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_lui, !is_jal);
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_jal, is_jal);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, imm_low_4, imm_low_4);
         COL_WRITE_ARRAY(row, Rv64JalLuiCoreCols, rd_data, rd_u16);
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, imm, imm);
     }
