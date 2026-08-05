@@ -6,7 +6,6 @@
 use std::collections::{BTreeSet, HashSet};
 
 use openvm_instructions::{
-    exe::CfgHints,
     metering::MAX_METERED_BLOCK_INSNS,
     program::{DEFAULT_PC_STEP as INSTR_SIZE, MAX_ALLOWED_PC},
 };
@@ -930,7 +929,7 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// Build basic blocks from a flat `LiftedInstr` sequence using multi-value
 /// constant propagation with worklist fixpoint to resolve dynamic jump targets.
 ///
-/// `hints` provides additive block boundaries retained from the guest build.
+/// `hinted_block_starts` provides additive block boundaries retained from the guest build.
 ///
 /// `extra_targets` provides additional block entry points discovered externally,
 /// e.g. by scanning read-only data segments for code pointers (switch tables,
@@ -941,7 +940,7 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// to `rv_trap`), so block construction itself cannot fail.
 pub fn build_blocks(
     instructions: &[LiftedInstr],
-    hints: &CfgHints,
+    hinted_block_starts: &BTreeSet<u32>,
     extra_targets: &[u64],
 ) -> Vec<Block> {
     if instructions.is_empty() {
@@ -1000,8 +999,7 @@ pub fn build_blocks(
     } = worklist(&ctx, &function_entries, &internal_targets);
 
     internal_targets.extend(
-        hints
-            .basic_block_starts
+        hinted_block_starts
             .iter()
             .map(|&pc| u64::from(pc))
             .filter(|pc| pc_to_idx.contains_key(pc)),
@@ -1228,7 +1226,7 @@ mod tests {
     }
 
     #[test]
-    fn hinted_symbol_starts_a_block() {
+    fn hinted_pc_starts_a_block() {
         let instructions = [
             body(
                 0,
@@ -1253,11 +1251,9 @@ mod tests {
             ),
             term(12, Terminator::Exit { code: 0 }),
         ];
-        let hints = CfgHints {
-            basic_block_starts: BTreeSet::from([6, 8, 100]),
-        };
+        let hinted_block_starts = BTreeSet::from([6, 8, 100]);
 
-        let blocks = build_blocks(&instructions, &hints, &[]);
+        let blocks = build_blocks(&instructions, &hinted_block_starts, &[]);
 
         assert_eq!(
             blocks
@@ -1285,7 +1281,7 @@ mod tests {
                 ),
                 term(4, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &BTreeSet::new(),
             &[],
         );
 
@@ -1312,7 +1308,7 @@ mod tests {
                     term: None,
                 },
             )],
-            &CfgHints::default(),
+            &BTreeSet::new(),
             &[],
         );
 
@@ -1362,7 +1358,7 @@ mod tests {
                 ),
                 term(16, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &BTreeSet::new(),
             &[4],
         );
 
@@ -1404,7 +1400,7 @@ mod tests {
                 term(12, Terminator::Exit { code: 0 }),
                 term(16, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &BTreeSet::new(),
             &[],
         );
 
@@ -1446,7 +1442,7 @@ mod tests {
                 term(12, Terminator::Exit { code: 0 }),
                 term(16, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &BTreeSet::new(),
             &[],
         );
 

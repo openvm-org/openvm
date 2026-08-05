@@ -1,8 +1,13 @@
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use cargo_openvm::{
     args::{ManifestArgs, OpenVmConfigArgs},
     commands::{build, BuildArgs, BuildCargoArgs},
+};
+use elf::{
+    abi::{SHN_UNDEF, STT_FUNC},
+    endian::LittleEndian,
+    ElfBytes,
 };
 use eyre::Result;
 use openvm_build::get_rustc_target;
@@ -160,15 +165,35 @@ fn test_multi_target_transpile_default() -> Result<()> {
     assert!(fibonacci_exe.exists());
     assert!(palindrome_exe.exists());
 
-    let exe: VmExe<F> = read_object_from_file(fibonacci_exe)?;
-    assert!(!exe.cfg_hints.basic_block_starts.is_empty());
-    assert!(exe.cfg_hints.basic_block_starts.iter().all(|&pc| {
+    let exe: VmExe<F> = read_object_from_file(&fibonacci_exe)?;
+    assert!(!exe.cfg_block_starts.is_empty());
+    let is_instruction_pc = |pc: u32| {
         pc.checked_sub(exe.program.pc_base)
             .filter(|offset| offset.is_multiple_of(DEFAULT_PC_STEP))
             .and_then(|offset| usize::try_from(offset / DEFAULT_PC_STEP).ok())
             .and_then(|index| exe.program.get_instruction_and_debug_info(index))
             .is_some()
-    }));
+    };
+    assert!(exe.cfg_block_starts.iter().copied().all(is_instruction_pc));
+
+    let elf_path = target_dir
+        .join(get_rustc_target())
+        .join("release/examples/fibonacci");
+    let elf_data = std::fs::read(elf_path)?;
+    let elf = ElfBytes::<LittleEndian>::minimal_parse(&elf_data)?;
+    let function_starts = elf
+        .symbol_table()?
+        .into_iter()
+        .flat_map(|(symbols, _)| symbols.iter())
+        .filter(|symbol| symbol.st_symtype() == STT_FUNC && symbol.st_shndx != SHN_UNDEF)
+        .filter_map(|symbol| u32::try_from(symbol.st_value).ok())
+        .filter(|&pc| is_instruction_pc(pc))
+        .collect::<BTreeSet<_>>();
+    assert!(exe
+        .cfg_block_starts
+        .difference(&function_starts)
+        .next()
+        .is_some());
 
     Ok(())
 }

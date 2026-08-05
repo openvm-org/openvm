@@ -35,7 +35,7 @@ impl<F: PrimeField32> FromElf for VmExe<F> {
             pc_start: elf.pc_start,
             init_memory,
             fn_bounds: elf.fn_bounds,
-            cfg_hints: elf.cfg_hints,
+            cfg_block_starts: elf.cfg_block_starts,
         })
     }
 }

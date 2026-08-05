@@ -562,7 +562,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
 
 #[cfg(feature = "rvr")]
 #[test]
-fn test_sdk_cfg_hints_affect_compilation() -> Result<()> {
+fn test_sdk_cfg_block_starts_affect_compilation() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
@@ -582,7 +582,7 @@ fn test_sdk_cfg_hints_affect_compilation() -> Result<()> {
         .expect("fibonacci program has a non-leader instruction");
 
     let mut hinted_exe = exe.as_ref().clone();
-    hinted_exe.cfg_hints.basic_block_starts.insert(hinted_pc);
+    hinted_exe.cfg_block_starts.insert(hinted_pc);
     let hinted = sdk.compile(hinted_exe)?;
 
     assert!(generated_source(&hinted)?.contains(&format!("block_0x{hinted_pc:08x}")));

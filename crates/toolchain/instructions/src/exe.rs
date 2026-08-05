@@ -11,13 +11,6 @@ pub type SparseMemoryImage = BTreeMap<(u32, u32), u8>;
 /// Stores the starting address, end address, and name of a set of function.
 pub type FnBounds = BTreeMap<u32, FnBound>;
 
-/// Additive block boundaries retained from the guest build for CFG construction.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CfgHints {
-    /// Decoded instruction PCs that should begin a block.
-    pub basic_block_starts: BTreeSet<u32>,
-}
-
 /// Executable program for OpenVM.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(bound(
@@ -33,8 +26,8 @@ pub struct VmExe<F> {
     pub init_memory: SparseMemoryImage,
     /// Starting + ending bounds for each function.
     pub fn_bounds: FnBounds,
-    /// Control-flow facts retained from the guest build.
-    pub cfg_hints: CfgHints,
+    /// Decoded instruction PCs that should begin a block during CFG construction.
+    pub cfg_block_starts: BTreeSet<u32>,
 }
 
 impl<F> VmExe<F> {
@@ -44,7 +37,7 @@ impl<F> VmExe<F> {
             pc_start: 0,
             init_memory: BTreeMap::new(),
             fn_bounds: Default::default(),
-            cfg_hints: Default::default(),
+            cfg_block_starts: Default::default(),
         }
     }
     pub fn with_pc_start(mut self, pc_start: u32) -> Self {
@@ -77,17 +70,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vmexe_roundtrip_preserves_cfg_hints() {
+    fn vmexe_roundtrip_preserves_cfg_block_starts() {
         let exe = VmExe::<BabyBear> {
-            cfg_hints: CfgHints {
-                basic_block_starts: BTreeSet::from([4]),
-            },
+            cfg_block_starts: BTreeSet::from([4]),
             ..Default::default()
         };
 
         let encoded = bitcode::serialize(&exe).unwrap();
         let decoded: VmExe<BabyBear> = bitcode::deserialize(&encoded).unwrap();
 
-        assert_eq!(decoded.cfg_hints, exe.cfg_hints);
+        assert_eq!(decoded.cfg_block_starts, exe.cfg_block_starts);
     }
 }

@@ -49,6 +49,9 @@ flate2 = "1"
 tar = "0.4"
 tempfile.workspace = true
 
+[dev-dependencies]
+elf = "0.7.4"
+
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
