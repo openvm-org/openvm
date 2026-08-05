@@ -130,6 +130,35 @@ static __attribute__((always_inline)) inline void append_page_touch_range(
   }
 }
 
+/* AS_PUBLIC_VALUES and AS_DEFERRAL are not on the main-memory hot path. Grow
+ * their Rust-owned buffers before an append that would exceed capacity. */
+static __attribute__((always_inline)) inline void
+ensure_resizable_page_buffer_capacity(MeteringState* metering,
+                                      uint32_t addr_space, uint32_t len,
+                                      uint32_t cap,
+                                      uint32_t additional_entries) {
+  if (unlikely(len > cap || additional_entries > cap - len)) {
+    metering->on_page_buffer_resize(metering, addr_space,
+                                    additional_entries);
+  }
+}
+
+static __attribute__((always_inline)) inline void
+ensure_pv_page_buffer_capacity(MeteringState* metering,
+                               uint32_t additional_entries) {
+  ensure_resizable_page_buffer_capacity(
+      metering, AS_PUBLIC_VALUES, metering->pv_page_buf_len,
+      metering->pv_page_buf_cap, additional_entries);
+}
+
+static __attribute__((always_inline)) inline void
+ensure_deferral_page_buffer_capacity(MeteringState* metering,
+                                     uint32_t additional_entries) {
+  ensure_resizable_page_buffer_capacity(
+      metering, AS_DEFERRAL, metering->deferral_page_buf_len,
+      metering->deferral_page_buf_cap, additional_entries);
+}
+
 /* No bounds check — see MEM_PAGE_BUF_CAP in metered.rs. */
 static __attribute__((always_inline)) inline void record_mem_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
@@ -172,29 +201,37 @@ static __attribute__((always_inline)) inline void record_mem_page_range(
   metering->last_mem_page = last_page;
 }
 
-/* No bounds check — see PV_PAGE_BUF_CAP in metered.rs. */
 static __attribute__((always_inline)) inline void record_pv_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
+  ensure_pv_page_buffer_capacity(metering, 1u);
   append_page_touch(metering->pv_page_buf, &metering->pv_page_buf_len, page,
                     leaf_mask);
 }
 
 static __attribute__((always_inline)) inline void record_pv_page_range(
     MeteringState* metering, uint32_t first_leaf, uint32_t last_leaf) {
+  uint32_t additional_entries =
+      (last_leaf >> TRACER_PAGE_BITS) -
+      (first_leaf >> TRACER_PAGE_BITS) + 1u;
+  ensure_pv_page_buffer_capacity(metering, additional_entries);
   uint32_t len = metering->pv_page_buf_len;
   append_page_touch_range(metering->pv_page_buf, &len, first_leaf, last_leaf);
   metering->pv_page_buf_len = len;
 }
 
-/* No bounds check — see DEFERRAL_PAGE_BUF_CAP in metered.rs. */
 static __attribute__((always_inline)) inline void record_deferral_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
+  ensure_deferral_page_buffer_capacity(metering, 1u);
   append_page_touch(metering->deferral_page_buf,
                     &metering->deferral_page_buf_len, page, leaf_mask);
 }
 
 static __attribute__((always_inline)) inline void record_deferral_page_range(
     MeteringState* metering, uint32_t first_leaf, uint32_t last_leaf) {
+  uint32_t additional_entries =
+      (last_leaf >> TRACER_PAGE_BITS) -
+      (first_leaf >> TRACER_PAGE_BITS) + 1u;
+  ensure_deferral_page_buffer_capacity(metering, additional_entries);
   uint32_t len = metering->deferral_page_buf_len;
   append_page_touch_range(metering->deferral_page_buf, &len, first_leaf,
                           last_leaf);

@@ -313,6 +313,10 @@ impl RvrExtension for DeferralRvrExtension {
     fn max_main_memory_pages_per_instruction(&self) -> usize {
         DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
+
+    fn uses_deferral_address_space(&self) -> bool {
+        true
+    }
 }
 
 type DeferralCallLookupFn =

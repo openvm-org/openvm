@@ -218,6 +218,13 @@ pub trait RvrExtension: Send + Sync {
     /// between page-buffer drains. Extensions with zero such entries return zero.
     fn max_main_memory_pages_per_instruction(&self) -> usize;
 
+    /// Whether this extension can emit accesses to the deferral address space.
+    /// Metered execution uses this to avoid allocating the deferral page buffer
+    /// when no registered extension can populate it.
+    fn uses_deferral_address_space(&self) -> bool {
+        false
+    }
+
     /// Returns indirect-jump candidates found by this extension in initialized data.
     fn extra_cfg_targets(
         &self,
@@ -378,6 +385,13 @@ impl ExtensionRegistry {
             .unwrap_or(0)
     }
 
+    /// Whether any registered extension can access the deferral address space.
+    pub fn uses_deferral_address_space(&self) -> bool {
+        self.extensions
+            .iter()
+            .any(|ext| ext.extension.uses_deferral_address_space())
+    }
+
     /// Collect indirect-jump candidates from initialized memory.
     pub fn extra_cfg_targets(
         &self,
@@ -457,7 +471,10 @@ mod tests {
     use crate::opcode::NopInstr;
 
     struct ClaimingExtension;
-    struct BoundedExtension(usize);
+    struct BoundedExtension {
+        max_main_memory_pages: usize,
+        uses_deferral: bool,
+    }
 
     impl RvrExtension for ClaimingExtension {
         fn try_lift(&self, _insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
@@ -487,7 +504,11 @@ mod tests {
         }
 
         fn max_main_memory_pages_per_instruction(&self) -> usize {
-            self.0
+            self.max_main_memory_pages
+        }
+
+        fn uses_deferral_address_space(&self) -> bool {
+            self.uses_deferral
         }
     }
 
@@ -511,11 +532,36 @@ mod tests {
     #[test]
     fn registry_uses_largest_extension_page_bound() {
         let mut registry = ExtensionRegistry::new();
-        registry.register(BoundedExtension(2));
-        registry.register(BoundedExtension(9));
-        registry.register(BoundedExtension(6));
+        registry.register(BoundedExtension {
+            max_main_memory_pages: 2,
+            uses_deferral: false,
+        });
+        registry.register(BoundedExtension {
+            max_main_memory_pages: 9,
+            uses_deferral: false,
+        });
+        registry.register(BoundedExtension {
+            max_main_memory_pages: 6,
+            uses_deferral: false,
+        });
 
         assert_eq!(registry.max_main_memory_pages_per_instruction(), 9);
+    }
+
+    #[test]
+    fn registry_reports_deferral_address_space_usage() {
+        let mut registry = ExtensionRegistry::new();
+        registry.register(BoundedExtension {
+            max_main_memory_pages: 0,
+            uses_deferral: false,
+        });
+        assert!(!registry.uses_deferral_address_space());
+
+        registry.register(BoundedExtension {
+            max_main_memory_pages: 0,
+            uses_deferral: true,
+        });
+        assert!(registry.uses_deferral_address_space());
     }
 
     #[test]
