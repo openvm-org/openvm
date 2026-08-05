@@ -4,7 +4,7 @@ use std::{env, fmt::Write, fs, path::Path};
 #[cfg(feature = "cuda")]
 use openvm_cuda_builder::{cuda_available, CudaBuilder};
 #[cfg(feature = "cuda")]
-use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS};
+use openvm_instructions::{LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS};
 #[cfg(feature = "cuda")]
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
@@ -158,7 +158,7 @@ fn write_replay_opcode_registry(out_dir: &Path) {
         opcode("TERMINATE", SystemOpcode::TERMINATE),
     ];
     let mut header = format!(
-        "#pragma once\n\n#include <cstdint>\n\nstatic constexpr uint32_t MEMORY_ADDRESS_SPACE = {MEMORY_AS}u;\nstatic constexpr uint32_t RV64_PUBLIC_VALUES_ADDRESS_SPACE = {PUBLIC_VALUES_AS}u;\n"
+        "#pragma once\n\n#include <cstdint>\n\nstatic constexpr uint32_t REVEAL_PUBLIC_VALUES_ADDRESS_SPACE = {PUBLIC_VALUES_AS}u;\n"
     );
     for &(name, base, count) in &families {
         writeln!(
@@ -208,10 +208,11 @@ fn main() {
         let out_dir = env::var_os("OUT_DIR").expect("OUT_DIR");
         let out_dir = Path::new(&out_dir);
         write_replay_opcode_registry(out_dir);
-        let builder = builder.include(out_dir);
 
         #[cfg(feature = "rvr")]
-        let builder = builder.file("cuda/rvr/checkpoint_replay.cu");
+        let builder = builder
+            .include(out_dir)
+            .file("cuda/rvr/checkpoint_replay.cu");
 
         builder.emit_link_directives();
         builder.build();

@@ -15,12 +15,8 @@ use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::RevealAdapterCols;
-use crate::{
-    adapters::BYTE_BITS,
-    cuda_abi::reveal_cuda,
-    store::{core::StoreCoreCols, STORE_DOUBLEWORD_VALUE_CELLS},
-};
+use super::{RevealAdapterCols, RevealCoreCols};
+use crate::{adapters::BYTE_BITS, cuda_abi::reveal_cuda};
 
 #[derive(new)]
 pub struct RevealChipGpu {
@@ -44,8 +40,7 @@ impl RevealChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = RevealAdapterCols::<F>::width()
-            + StoreCoreCols::<F, STORE_DOUBLEWORD_VALUE_CELLS>::width();
+        let trace_width = RevealAdapterCols::<F>::width() + RevealCoreCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {

@@ -31,7 +31,7 @@ mod load;
 mod mul;
 mod mul_w;
 mod rdwrite;
-pub(crate) mod store;
+mod store;
 
 pub use alu_imm::*;
 pub use alu_imm_u16::*;

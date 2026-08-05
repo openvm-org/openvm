@@ -6,9 +6,7 @@ use openvm_circuit::{
 };
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::STOREB;
-use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{StoreByteChip, StoreByteCoreCols};
 use crate::adapters::StoreByteAdapterCols;
@@ -35,12 +33,5 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         )?;
         Ok(())
     })?;
-    trace.values[steps.len() * width..]
-        .par_chunks_exact_mut(width)
-        .for_each(fill_padding_row);
     Ok(trace)
-}
-
-pub(crate) fn fill_padding_row<F: PrimeField32>(row: &mut [F]) {
-    let _ = row;
 }

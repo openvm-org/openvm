@@ -34,10 +34,9 @@ use crate::{
         BYTE_BITS,
     },
     store::{
-        common::store_write_data,
-        core::{fill_padding_row, StoreCoreCols},
-        StoreHalfwordAir, StoreHalfwordChip, StoreHalfwordExecutor,
-        StoreHalfwordCoreAir, StoreHalfwordFiller, STORE_HALFWORD_VALUE_CELLS,
+        common::store_write_data, core::StoreCoreCols, StoreHalfwordAir, StoreHalfwordChip,
+        StoreHalfwordExecutor, StoreHalfwordCoreAir, StoreHalfwordFiller,
+        STORE_HALFWORD_VALUE_CELLS,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -89,8 +88,7 @@ fn create_store_halfword_harness(
             chip,
             MAX_INS_CAPACITY,
             generate_trace_from_postflight,
-        )
-        .with_padding(fill_padding_row),
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -107,7 +105,6 @@ fn rand_store_halfword_test() {
             &mut harness.preflight,
             &mut rng,
             STOREH,
-            None,
             None,
             None,
             None,
@@ -189,7 +186,6 @@ fn negative_split_opcode_role_test() {
         None,
         None,
         None,
-        None,
     );
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
@@ -256,7 +252,6 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
                 chip.generate_proving_ctx_from_postflight(program, transcript, plan)
             },
         )
-        .with_padding(fill_padding_row)
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -277,7 +272,6 @@ fn test_cuda_rand_store_halfword_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester

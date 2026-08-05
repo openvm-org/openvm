@@ -28,8 +28,8 @@ use crate::{
         BYTE_BITS,
     },
     store::{
-        common::store_write_data, core::fill_padding_row, StoreWordAir, StoreWordChip,
-        StoreWordExecutor, StoreWordCoreAir, StoreWordFiller,
+        common::store_write_data, StoreWordAir, StoreWordChip, StoreWordExecutor,
+        StoreWordCoreAir, StoreWordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -81,8 +81,7 @@ fn create_store_word_harness(
             chip,
             MAX_INS_CAPACITY,
             generate_trace_from_postflight,
-        )
-        .with_padding(fill_padding_row),
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -99,7 +98,6 @@ fn rand_store_word_test() {
             &mut harness.preflight,
             &mut rng,
             STOREW,
-            None,
             None,
             None,
             None,
@@ -129,7 +127,6 @@ fn negative_store_address_wraparound_test() {
         Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
         Some(16),
         Some(0),
-        Some(MEMORY_AS as usize),
     );
 }
 
@@ -245,7 +242,6 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
                 chip.generate_proving_ctx_from_postflight(program, transcript, plan)
             },
         )
-        .with_padding(fill_padding_row)
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -266,7 +262,6 @@ fn test_cuda_rand_store_word_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester

@@ -309,7 +309,7 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction,
         riscv::{MEMORY_AS, REGISTER_AS},
-        LocalOpcode, PUBLIC_VALUES_AS,
+        LocalOpcode,
     };
     use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -345,12 +345,12 @@ mod tests {
             .pre_compute_impl(4, &instruction(opcode, MEMORY_AS), &mut data)
             .is_ok());
         assert!(executor
-            .pre_compute_impl(4, &instruction(opcode, PUBLIC_VALUES_AS), &mut data)
+            .pre_compute_impl(4, &instruction(opcode, MEMORY_AS + 1), &mut data)
             .is_err());
     }
 
     #[test]
-    fn ordinary_stores_reject_public_values_address_space() {
+    fn ordinary_stores_reject_non_memory_address_spaces() {
         assert_address_space::<DOUBLEWORD_ACCESS_WIDTH>(STORED);
         assert_address_space::<WORD_ACCESS_WIDTH>(STOREW);
         assert_address_space::<HALFWORD_ACCESS_WIDTH>(STOREH);

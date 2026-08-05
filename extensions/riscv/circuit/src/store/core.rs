@@ -16,7 +16,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
     BaseAirWithPublicValues,
 };
 
@@ -62,7 +61,6 @@ pub struct StoreCoreCols<T, const NUM_VALUE_CELLS: usize> {
 #[columns_via(StoreCoreCols<u8, NUM_VALUE_CELLS>)]
 pub struct StoreCoreAir<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> {
     pub offset: usize,
-    local_opcode: usize,
     encoder: Encoder,
     bitwise_lookup_bus: BitwiseOperationLookupBus,
 }
@@ -80,24 +78,6 @@ impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
         }
         Self {
             offset,
-            local_opcode: store_opcode::<STORE_WIDTH>() as usize,
-            encoder: shift_encoder(),
-            bitwise_lookup_bus,
-        }
-    }
-
-    pub(crate) fn new_with_local_opcode(
-        offset: usize,
-        local_opcode: usize,
-        bitwise_lookup_bus: BitwiseOperationLookupBus,
-    ) -> Self {
-        const {
-            assert!(is_multi_byte_access_width(STORE_WIDTH));
-            assert!(NUM_VALUE_CELLS == STORE_WIDTH / U16_CELL_SIZE);
-        }
-        Self {
-            offset,
-            local_opcode,
             encoder: shift_encoder(),
             bitwise_lookup_bus,
         }
@@ -192,7 +172,7 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            is_valid.clone() * AB::Expr::from_usize(self.local_opcode),
+            is_valid.clone() * AB::Expr::from_u8(store_opcode::<STORE_WIDTH>() as u8),
         );
         // shift_amount = Σₛ s * flag[s].
         let shift_amount = flags
@@ -265,28 +245,16 @@ pub struct StoreFiller<
     const STORE_WIDTH: usize = WORD_ACCESS_WIDTH,
     const NUM_VALUE_CELLS: usize = 2,
 > {
-    pub(crate) adapter: A,
+    adapter: A,
     pub offset: usize,
     encoder: Encoder,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
 }
 
-impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
-    StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
-{
-    pub fn new(
-        adapter: StoreMultiByteAdapterFiller,
-        offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
-    ) -> Self {
-        Self::new_with_adapter(adapter, offset, bitwise_lookup_chip)
-    }
-}
-
 impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     StoreFiller<A, STORE_WIDTH, NUM_VALUE_CELLS>
 {
-    pub(crate) fn new_with_adapter(
+    pub fn new(
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
@@ -304,10 +272,10 @@ impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     }
 }
 
-impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
-    StoreFiller<A, STORE_WIDTH, NUM_VALUE_CELLS>
+impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
+    StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
 {
-    pub(crate) fn fill_core_row<F: PrimeField32>(
+    fn fill_core_row<F: PrimeField32>(
         &self,
         shift: usize,
         read_data: [u16; BLOCK_FE_WIDTH],
@@ -389,12 +357,5 @@ pub(crate) fn generate_trace_from_postflight<
             .fill_core_row(shift, read_data, prev_data, core_row.borrow_mut());
         Ok(())
     })?;
-    trace.values[steps.len() * width..]
-        .par_chunks_exact_mut(width)
-        .for_each(fill_padding_row);
     Ok(trace)
-}
-
-pub(crate) fn fill_padding_row<F: PrimeField32>(row: &mut [F]) {
-    let _ = row;
 }

@@ -1,5 +1,3 @@
-#include "riscv/store_multibyte_replay.cuh"
-
 __global__ void reveal_replay_tracegen(
     Fp *trace,
     size_t height,
@@ -15,6 +13,7 @@ __global__ void reveal_replay_tracegen(
     uint32_t *error,
     uint32_t opcode,
     uint32_t register_as,
+    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
@@ -27,8 +26,8 @@ __global__ void reveal_replay_tracegen(
     row.fill_zero(0, sizeof(RevealCols<uint8_t>));
     if (idx >= num_steps) return;
 
-    ReplayStoreMultiByteInput input = {};
-    if (!replay_multibyte_write<DOUBLEWORD_ACCESS_WIDTH>(
+    ReplayRevealInput input = {};
+    if (!replay_reveal(
             instructions,
             pc_base,
             program,
@@ -38,7 +37,7 @@ __global__ void reveal_replay_tracegen(
             steps[step_start + idx],
             opcode,
             register_as,
-            RV64_PUBLIC_VALUES_ADDRESS_SPACE,
+            public_values_as,
             pointer_max_bits,
             input,
             error
@@ -46,7 +45,7 @@ __global__ void reveal_replay_tracegen(
         return;
     }
 
-    auto adapter = StoreAdapter(
+    auto adapter = RevealAdapter(
         pointer_max_bits,
         VariableRangeChecker(range_checker, range_checker_num_bins),
         timestamp_max_bits
@@ -55,11 +54,11 @@ __global__ void reveal_replay_tracegen(
         row,
         input.from_pc,
         input.from_timestamp,
-        input.rs1_ptr,
-        input.rs2_ptr,
-        input.rs1_val,
-        input.rs1_prev_timestamp,
-        input.rs2_prev_timestamp,
+        input.src_ptr,
+        input.base_ptr,
+        input.base_value,
+        input.base_prev_timestamp,
+        input.src_prev_timestamp,
         input.write_prev_timestamps[0],
         input.write_prev_timestamps[1],
         input.imm,
@@ -68,7 +67,7 @@ __global__ void reveal_replay_tracegen(
     auto core = RevealCore(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
         row.slice_from(COL_INDEX(RevealCols, core)),
-        input.read_data,
+        input.src_data,
         input.prev_data,
         input.shift
     );
@@ -90,6 +89,7 @@ extern "C" int _reveal_replay_tracegen(
     uint32_t *d_error,
     uint32_t opcode,
     uint32_t register_as,
+    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
@@ -118,6 +118,7 @@ extern "C" int _reveal_replay_tracegen(
         d_error,
         opcode,
         register_as,
+        public_values_as,
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,

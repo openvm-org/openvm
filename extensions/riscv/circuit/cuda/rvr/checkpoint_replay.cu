@@ -21,6 +21,7 @@ static constexpr uint32_t ERROR_BAD_ANCHOR = 307;
 static constexpr uint32_t ERROR_BAD_TERMINATION = 308;
 static constexpr uint32_t ERROR_OUTPUT_BOUNDS = 309;
 static constexpr uint32_t ERROR_BAD_ENDPOINT = 310;
+static constexpr uint32_t ERROR_BAD_REVEAL = 311;
 static constexpr uint8_t FULL_WRITE_MASK = 0xff;
 
 struct RvrCheckpoint {
@@ -353,12 +354,19 @@ struct LoadStoreInstruction {
     uint32_t width;
     uint32_t rd_or_rs2;
     uint32_t rs1;
-    uint32_t address_space;
     uint32_t address;
     uint32_t aligned_address;
     uint32_t shift;
     bool crosses;
     bool needs_write;
+};
+
+struct RevealInstruction {
+    uint32_t src;
+    uint32_t base;
+    uint32_t aligned_address;
+    uint32_t shift;
+    bool crosses;
 };
 
 struct HintStoreInstruction {
@@ -419,52 +427,6 @@ __device__ __forceinline__ uint64_t normalize_load_result(
     return value;
 }
 
-__device__ __forceinline__ bool validate_memory_access(
-    RvrReplayInstruction const &instruction,
-    uint32_t register_as,
-    uint32_t expected_address_space,
-    uint32_t pointer_max_bits,
-    ReplayState const &state,
-    size_t initial_memory_bytes,
-    LoadStoreInstruction &decoded
-) {
-    uint32_t rd_or_rs2_ptr = instruction.words[1];
-    uint32_t rs1_ptr = instruction.words[2];
-    uint32_t imm = instruction.words[3];
-    uint32_t needs_write = instruction.words[6];
-    uint32_t imm_sign = instruction.words[7];
-    if (instruction.words[4] != register_as ||
-        !replay_canonical_register_pointer(rd_or_rs2_ptr) ||
-        !replay_canonical_register_pointer(rs1_ptr) || imm > UINT16_MAX || imm_sign > 1)
-        return false;
-    if (instruction.words[5] != expected_address_space ||
-        (decoded.is_load ? needs_write != uint32_t(rd_or_rs2_ptr != 0) : needs_write != 1)) {
-        return false;
-    }
-    decoded.rd_or_rs2 = rd_or_rs2_ptr / REGISTER_BYTES;
-    decoded.rs1 = rs1_ptr / REGISTER_BYTES;
-    decoded.address_space = instruction.words[5];
-    decoded.needs_write = needs_write != 0;
-    uint64_t base = state.regs[decoded.rs1];
-    if ((base >> 32) != 0) return false;
-    int64_t signed_imm = imm_sign ? int64_t(imm) - (int64_t(1) << 16) : int64_t(imm);
-    int64_t effective = int64_t(uint32_t(base)) + signed_imm;
-    if (effective < 0 || effective > UINT32_MAX) return false;
-    decoded.address = uint32_t(effective);
-    decoded.shift = decoded.address & 7;
-    decoded.aligned_address = decoded.address - decoded.shift;
-    decoded.crosses = decoded.shift + decoded.width > 8;
-    uint64_t block_end = uint64_t(decoded.aligned_address) + (decoded.crosses ? 16 : 8);
-    // The load/store adapter AIRs range check the byte address's high u16 limb to
-    // `pointer_max_bits - U16_BITS` bits, committing the byte-address domain
-    // `[0, 2^pointer_max_bits)`.
-    if ((decoded.is_load && block_end > initial_memory_bytes) ||
-        (pointer_max_bits < 32 && block_end > (uint64_t(1) << pointer_max_bits))) {
-        return false;
-    }
-    return true;
-}
-
 __device__ __forceinline__ bool validate_load_store(
     RvrReplayInstruction const &instruction,
     uint32_t register_as,
@@ -499,38 +461,74 @@ __device__ __forceinline__ bool validate_load_store(
     case 8: decoded.width = 1; break;
     default: return false;
     }
-    return validate_memory_access(
-        instruction,
-        register_as,
-        memory_as,
-        pointer_max_bits,
-        state,
-        initial_memory_bytes,
-        decoded
-    );
+    uint32_t rd_or_rs2_ptr = instruction.words[1];
+    uint32_t rs1_ptr = instruction.words[2];
+    uint32_t imm = instruction.words[3];
+    uint32_t needs_write = instruction.words[6];
+    uint32_t imm_sign = instruction.words[7];
+    if (instruction.words[4] != register_as ||
+        !replay_canonical_register_pointer(rd_or_rs2_ptr) ||
+        !replay_canonical_register_pointer(rs1_ptr) || imm > UINT16_MAX || imm_sign > 1)
+        return false;
+    if (instruction.words[5] != memory_as ||
+        (decoded.is_load ? needs_write != uint32_t(rd_or_rs2_ptr != 0) : needs_write != 1)) {
+        return false;
+    }
+    decoded.rd_or_rs2 = rd_or_rs2_ptr / REGISTER_BYTES;
+    decoded.rs1 = rs1_ptr / REGISTER_BYTES;
+    decoded.needs_write = needs_write != 0;
+    uint64_t base = state.regs[decoded.rs1];
+    if ((base >> 32) != 0) return false;
+    int64_t signed_imm = imm_sign ? int64_t(imm) - (int64_t(1) << 16) : int64_t(imm);
+    int64_t effective = int64_t(uint32_t(base)) + signed_imm;
+    if (effective < 0 || effective > UINT32_MAX) return false;
+    decoded.address = uint32_t(effective);
+    decoded.shift = decoded.address & 7;
+    decoded.aligned_address = decoded.address - decoded.shift;
+    decoded.crosses = decoded.shift + decoded.width > 8;
+    uint64_t block_end = uint64_t(decoded.aligned_address) + (decoded.crosses ? 16 : 8);
+    // The load/store adapter AIRs range check the byte address's high u16 limb to
+    // `pointer_max_bits - U16_BITS` bits, committing the byte-address domain
+    // `[0, 2^pointer_max_bits)`.
+    if ((decoded.is_load && block_end > initial_memory_bytes) ||
+        (pointer_max_bits < 32 && block_end > (uint64_t(1) << pointer_max_bits))) {
+        return false;
+    }
+    return true;
 }
 
 __device__ __forceinline__ bool validate_reveal(
     RvrReplayInstruction const &instruction,
     uint32_t register_as,
-    uint32_t public_values_as,
     uint32_t pointer_max_bits,
     ReplayState const &state,
-    LoadStoreInstruction &decoded
+    RevealInstruction &decoded
 ) {
-    if (instruction.words[0] != REVEAL_OPCODE_BASE) return false;
-    decoded.is_load = false;
-    decoded.sign_extend = false;
-    decoded.width = 8;
-    return validate_memory_access(
-        instruction,
-        register_as,
-        public_values_as,
-        pointer_max_bits,
-        state,
-        0,
-        decoded
-    );
+    uint32_t src_ptr = instruction.words[1];
+    uint32_t base_ptr = instruction.words[2];
+    uint32_t imm = instruction.words[3];
+    uint32_t imm_sign = instruction.words[7];
+    if (instruction.words[0] != REVEAL_OPCODE_BASE ||
+        instruction.words[4] != register_as ||
+        instruction.words[5] != REVEAL_PUBLIC_VALUES_ADDRESS_SPACE ||
+        instruction.words[6] != 1 || imm > UINT16_MAX || imm_sign > 1 ||
+        !replay_canonical_register_pointer(src_ptr) ||
+        !replay_canonical_register_pointer(base_ptr)) {
+        return false;
+    }
+    decoded.src = src_ptr / REGISTER_BYTES;
+    decoded.base = base_ptr / REGISTER_BYTES;
+    uint64_t base = state.regs[decoded.base];
+    if ((base >> 32) != 0) return false;
+    int64_t signed_imm = imm_sign ? int64_t(imm) - (int64_t(1) << 16) : int64_t(imm);
+    int64_t effective = int64_t(uint32_t(base)) + signed_imm;
+    if (effective < 0 || effective > UINT32_MAX) return false;
+    uint32_t address = uint32_t(effective);
+    decoded.shift = address & 7;
+    decoded.aligned_address = address - decoded.shift;
+    decoded.crosses = decoded.shift != 0;
+    uint64_t block_end = uint64_t(decoded.aligned_address) + (decoded.crosses ? 16 : 8);
+    return pointer_max_bits >= 32 || block_end <= (uint64_t(1) << pointer_max_bits);
 }
 
 __device__ __forceinline__ uint32_t branch_target(uint32_t pc, uint32_t encoded_offset) {
@@ -1036,7 +1034,6 @@ __device__ bool replay_chunk(
     size_t chunk,
     uint32_t register_as,
     uint32_t memory_as,
-    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1197,31 +1194,73 @@ __device__ bool replay_chunk(
             state.replay_value_cursor += decoded.num_words;
             state.pc += 4;
             state.timestamp += 3 * decoded.num_words;
+        } else if (opcode == REVEAL_OPCODE_BASE) {
+            RevealInstruction decoded{};
+            if (!validate_reveal(
+                    *instruction,
+                    register_as,
+                    byte_pointer_max_bits,
+                    state,
+                    decoded
+                )) {
+                preflight_set_error(error, ERROR_BAD_REVEAL);
+                return false;
+            }
+            uint32_t event_count = 3 + uint32_t(decoded.crosses);
+            if (memory != nullptr) {
+                if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {
+                    preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
+                    return false;
+                }
+                write_event(memory[memory_start + emitted], &write_masks[memory_start + emitted],
+                            state.timestamp, register_as, instruction->words[2] / 2, false,
+                            state.regs[decoded.base]);
+                uint64_t source = state.regs[decoded.src];
+                write_event(memory[memory_start + emitted + 1],
+                            &write_masks[memory_start + emitted + 1], state.timestamp + 1,
+                            register_as, instruction->words[1] / 2, false, source);
+                uint64_t block_values[2] = {0, 0};
+                uint8_t block_masks[2] = {0, 0};
+                for (uint32_t byte = 0; byte < REGISTER_BYTES; byte++) {
+                    uint32_t position = decoded.shift + byte;
+                    uint32_t block = position / REGISTER_BYTES;
+                    uint32_t within = position % REGISTER_BYTES;
+                    block_values[block] |= ((source >> (8 * byte)) & 0xff) << (8 * within);
+                    block_masks[block] |= uint8_t(1u << within);
+                }
+                write_memory_intent(
+                    memory[memory_start + emitted + 2],
+                    &write_masks[memory_start + emitted + 2], state.timestamp + 2,
+                    REVEAL_PUBLIC_VALUES_ADDRESS_SPACE, decoded.aligned_address,
+                    block_values[0], block_masks[0]
+                );
+                if (decoded.crosses) {
+                    write_memory_intent(
+                        memory[memory_start + emitted + 3],
+                        &write_masks[memory_start + emitted + 3], state.timestamp + 3,
+                        REVEAL_PUBLIC_VALUES_ADDRESS_SPACE,
+                        decoded.aligned_address + REGISTER_BYTES,
+                        block_values[1], block_masks[1]
+                    );
+                }
+            }
+            emitted += event_count;
+            state.pc += 4;
+            state.timestamp += 4;
         } else if (
-            opcode == REVEAL_OPCODE_BASE ||
-            (opcode >= LOAD_STORE_OPCODE_BASE &&
-             opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT)
+            opcode >= LOAD_STORE_OPCODE_BASE &&
+            opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT
         ) {
             LoadStoreInstruction decoded{};
-            bool valid = opcode == REVEAL_OPCODE_BASE
-                             ? validate_reveal(
-                                   *instruction,
-                                   register_as,
-                                   public_values_as,
-                                   byte_pointer_max_bits,
-                                   state,
-                                   decoded
-                               )
-                             : validate_load_store(
-                                   *instruction,
-                                   register_as,
-                                   memory_as,
-                                   byte_pointer_max_bits,
-                                   state,
-                                   initial_memory.len(),
-                                   decoded
-                               );
-            if (!valid) {
+            if (!validate_load_store(
+                    *instruction,
+                    register_as,
+                    memory_as,
+                    byte_pointer_max_bits,
+                    state,
+                    initial_memory.len(),
+                    decoded
+                )) {
                 preflight_set_error(error, ERROR_BAD_LOAD);
                 return false;
             }
@@ -1251,13 +1290,13 @@ __device__ bool replay_chunk(
                     write_memory_intent(
                         memory[memory_start + emitted + 1],
                         &write_masks[memory_start + emitted + 1], state.timestamp + 1,
-                        decoded.address_space, decoded.aligned_address, 0, 0
+                        memory_as, decoded.aligned_address, 0, 0
                     );
                     if (decoded.crosses) {
                         write_memory_intent(
                             memory[memory_start + emitted + 2],
                             &write_masks[memory_start + emitted + 2], state.timestamp + 2,
-                            decoded.address_space, decoded.aligned_address + 8, 0, 0
+                            memory_as, decoded.aligned_address + 8, 0, 0
                         );
                     }
                     if (decoded.needs_write) {
@@ -1297,14 +1336,14 @@ __device__ bool replay_chunk(
                     write_memory_intent(
                         memory[memory_start + emitted + 2],
                         &write_masks[memory_start + emitted + 2], state.timestamp + 2,
-                        decoded.address_space, decoded.aligned_address, block_values[0],
+                        memory_as, decoded.aligned_address, block_values[0],
                         block_masks[0]
                     );
                     if (decoded.crosses) {
                         write_memory_intent(
                             memory[memory_start + emitted + 3],
                             &write_masks[memory_start + emitted + 3], state.timestamp + 3,
-                            decoded.address_space, decoded.aligned_address + 8, block_values[1],
+                            memory_as, decoded.aligned_address + 8, block_values[1],
                             block_masks[1]
                         );
                     }
@@ -1513,7 +1552,6 @@ __global__ void checkpoint_count(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
-    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1530,7 +1568,7 @@ __global__ void checkpoint_count(
     uint32_t field_count = 0;
     if (replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
                      schedule_dispatch, schedules, spans, static_values, chunk,
-                     register_as, memory_as, public_values_as, immediate_as, deferral_as,
+                     register_as, memory_as, immediate_as, deferral_as,
                      byte_pointer_max_bits, cell_pointer_max_bits, initial_pc, initial_timestamp,
                      endpoint_kind, DeviceBufferView<PreflightProgramEvent>{nullptr, 0},
                      nullptr, nullptr, 0, 0, nullptr, 0, 0,
@@ -1553,7 +1591,6 @@ __global__ void checkpoint_emit(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
-    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1574,8 +1611,7 @@ __global__ void checkpoint_emit(
     auto const offsets = event_offsets[chunk];
     if (!replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
                       schedule_dispatch, schedules, spans, static_values, chunk,
-                      register_as, memory_as, public_values_as, immediate_as, deferral_as,
-                      byte_pointer_max_bits,
+                      register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
                       cell_pointer_max_bits, initial_pc, initial_timestamp, endpoint_kind,
                       program, memory.data(), write_masks.data(), memory.len(), offsets.memory,
                       field_values.data(), field_values.len(), offsets.field, memory_count,
@@ -1619,7 +1655,6 @@ extern "C" int _rvr_checkpoint_count(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
-    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1635,9 +1670,8 @@ extern "C" int _rvr_checkpoint_count(
     auto [grid, block] = kernel_launch_params(anchors.len(), REPLAY_THREADS);
     checkpoint_count<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
-        schedule_dispatch, schedules, spans, static_values, register_as, memory_as,
-        public_values_as, immediate_as, deferral_as, byte_pointer_max_bits,
-        cell_pointer_max_bits,
+        schedule_dispatch, schedules, spans, static_values, register_as, memory_as, immediate_as,
+        deferral_as, byte_pointer_max_bits, cell_pointer_max_bits,
         initial_pc, initial_timestamp,
         endpoint_kind, event_counts, error
     );
@@ -1658,7 +1692,6 @@ extern "C" int _rvr_checkpoint_emit(
     DeviceBufferConstView<uint64_t> static_values,
     uint32_t register_as,
     uint32_t memory_as,
-    uint32_t public_values_as,
     uint32_t immediate_as,
     uint32_t deferral_as,
     uint32_t byte_pointer_max_bits,
@@ -1680,8 +1713,8 @@ extern "C" int _rvr_checkpoint_emit(
     checkpoint_emit<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, replay_values,
         event_offsets, schedule_dispatch, schedules, spans, static_values,
-        register_as, memory_as, public_values_as, immediate_as, deferral_as,
-        byte_pointer_max_bits, cell_pointer_max_bits, initial_pc, initial_timestamp,
+        register_as, memory_as, immediate_as, deferral_as, byte_pointer_max_bits,
+        cell_pointer_max_bits, initial_pc, initial_timestamp,
         endpoint_kind, program, memory, write_masks, field_values, error
     );
     return CHECK_KERNEL();

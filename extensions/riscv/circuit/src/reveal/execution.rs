@@ -13,7 +13,7 @@ use openvm_circuit::{
         create_handler, E2PreCompute, ExecutionCtxTrait, ExecutionError, InterpreterExecutor,
         InterpreterMeteredExecutor, MeteredExecutionCtxTrait, StaticProgramError, VmExecState,
     },
-    system::memory::online::GuestMemory,
+    system::memory::online::{GuestMemory, LinearMemory},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -25,9 +25,8 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::{
-    checked_memory_address, bytes_to_u32, sign_extend_imm16, DOUBLEWORD_ACCESS_WIDTH,
-};
+use super::REVEAL_ACCESS_WIDTH;
+use crate::adapters::{address_add_imm, bytes_to_u32, sign_extend_imm16};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct RevealExecutor {
@@ -40,6 +39,24 @@ struct RevealPreCompute {
     imm_extended: u32,
     src_ptr: u8,
     base_ptr: u8,
+}
+
+#[inline(always)]
+fn checked_reveal_address(
+    pc: u32,
+    base: u32,
+    imm_extended: u32,
+    public_values_capacity: usize,
+) -> Result<u32, ExecutionError> {
+    let address = address_add_imm(base, imm_extended);
+    let end = address.checked_add(REVEAL_ACCESS_WIDTH as u64);
+    if address > u64::from(u32::MAX) || end.is_none_or(|end| end > public_values_capacity as u64) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "reveal address exceeds configured public-values capacity",
+        });
+    }
+    Ok(address as u32)
 }
 
 impl RevealExecutor {
@@ -163,12 +180,22 @@ unsafe fn execute_e12_impl<Ctx: ExecutionCtxTrait>(
     let base_bytes: [u8; REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(REGISTER_AS, u32::from(pre_compute.base_ptr));
     let base = bytes_to_u32(base_bytes);
+    let public_values_capacity = exec_state
+        .memory
+        .memory
+        .get_memory()
+        .get(PUBLIC_VALUES_AS as usize)
+        .map(LinearMemory::size)
+        .ok_or(ExecutionError::Fail {
+            pc,
+            msg: "public-values address space is not configured",
+        })?;
     let address =
-        checked_memory_address(pc, base, pre_compute.imm_extended, DOUBLEWORD_ACCESS_WIDTH)?;
-    let value: [u8; DOUBLEWORD_ACCESS_WIDTH] =
+        checked_reveal_address(pc, base, pre_compute.imm_extended, public_values_capacity)?;
+    let value: [u8; REVEAL_ACCESS_WIDTH] =
         exec_state.vm_read_bytes(REGISTER_AS, u32::from(pre_compute.src_ptr));
     exec_state.vm_write_bytes(PUBLIC_VALUES_AS, address, &value);
-    if (address as usize).is_multiple_of(DOUBLEWORD_ACCESS_WIDTH) {
+    if (address as usize).is_multiple_of(REVEAL_ACCESS_WIDTH) {
         exec_state.ctx.advance_timestamp(1);
     }
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -198,4 +225,24 @@ unsafe fn execute_e2_impl<Ctx: MeteredExecutionCtxTrait>(
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl(&pre_compute.data, exec_state)
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_circuit::arch::ExecutionError;
+
+    use super::checked_reveal_address;
+
+    #[test]
+    fn reveal_address_is_bounded_by_configured_public_values_capacity() {
+        assert_eq!(checked_reveal_address(4, 56, 0, 64).unwrap(), 56);
+        assert!(matches!(
+            checked_reveal_address(4, 57, 0, 64),
+            Err(ExecutionError::Fail {
+                pc: 4,
+                msg: "reveal address exceeds configured public-values capacity",
+            })
+        ));
+        assert!(checked_reveal_address(4, 0, u32::MAX, 64).is_err());
+    }
 }

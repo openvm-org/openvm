@@ -78,41 +78,29 @@ pub struct StoreMultiByteAdapterCols<T> {
     pub write_base_aux: [MemoryBaseAuxCols<T>; 2],
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct MultiByteAdapterAir {
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(StoreMultiByteAdapterCols<u8>)]
+pub struct StoreMultiByteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
     pub range_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for MultiByteAdapterAir {
+impl<F: Field> BaseAir<F> for StoreMultiByteAdapterAir {
     fn width(&self) -> usize {
         StoreMultiByteAdapterCols::<F>::width()
     }
 }
 
-impl MultiByteAdapterAir {
-    pub(crate) fn new(
-        memory_bridge: MemoryBridge,
-        execution_bridge: ExecutionBridge,
-        range_bus: VariableRangeCheckerBus,
-        pointer_max_bits: usize,
-    ) -> Self {
-        Self {
-            memory_bridge,
-            execution_bridge,
-            range_bus,
-            pointer_max_bits,
-        }
-    }
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
+    type Interface = StoreMultiByteAdapterAirInterface;
 
-    pub(crate) fn eval<AB: InteractionBuilder>(
+    fn eval(
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        ctx: AdapterAirContext<AB::Expr, StoreMultiByteAdapterAirInterface>,
-        address_space: u32,
+        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         let local_cols: &StoreMultiByteAdapterCols<AB::Var> = local.borrow();
 
@@ -202,7 +190,7 @@ impl MultiByteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(address_space),
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone() - shift_amount.clone()),
                 ),
                 write_data0,
@@ -219,7 +207,7 @@ impl MultiByteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(address_space),
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(
                         mem_ptr - shift_amount + AB::F::from_u32(MEMORY_BLOCK_BYTES as u32),
                     ),
@@ -244,7 +232,7 @@ impl MultiByteAdapterAir {
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::from_u32(REGISTER_AS),
-                    AB::Expr::from_u32(address_space),
+                    AB::Expr::from_u32(MEMORY_AS),
                     is_valid.clone(),
                     local_cols.imm_sign.into(),
                 ],
@@ -257,78 +245,21 @@ impl MultiByteAdapterAir {
             .eval(builder, is_valid);
     }
 
-    pub(crate) fn get_from_pc<AB: InteractionBuilder>(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
         let local_cols: &StoreMultiByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
 }
 
-#[derive(Clone, Copy, Debug, ColumnsAir)]
-#[columns_via(StoreMultiByteAdapterCols<u8>)]
-pub struct StoreMultiByteAdapterAir {
-    inner: MultiByteAdapterAir,
-}
-
-impl StoreMultiByteAdapterAir {
-    pub fn new(
-        memory_bridge: MemoryBridge,
-        execution_bridge: ExecutionBridge,
-        range_bus: VariableRangeCheckerBus,
-        pointer_max_bits: usize,
-    ) -> Self {
-        Self {
-            inner: MultiByteAdapterAir::new(
-                memory_bridge,
-                execution_bridge,
-                range_bus,
-                pointer_max_bits,
-            ),
-        }
-    }
-}
-
-impl<F: Field> BaseAir<F> for StoreMultiByteAdapterAir {
-    fn width(&self) -> usize {
-        <MultiByteAdapterAir as BaseAir<F>>::width(&self.inner)
-    }
-}
-
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
-    type Interface = StoreMultiByteAdapterAirInterface;
-
-    fn eval(
-        &self,
-        builder: &mut AB,
-        local: &[AB::Var],
-        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
-    ) {
-        self.inner.eval(builder, local, ctx, MEMORY_AS);
-    }
-
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        self.inner.get_from_pc::<AB>(local)
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct MultiByteAdapterFiller {
+#[derive(derive_new::new)]
+pub struct StoreMultiByteAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-pub(crate) type StoreMultiReplay = ([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2], usize);
+type StoreMultiReplay = ([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2], usize);
 
-impl MultiByteAdapterFiller {
-    pub(crate) fn new(
-        pointer_max_bits: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        Self {
-            pointer_max_bits,
-            range_checker_chip,
-        }
-    }
-
+impl StoreMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const STORE_WIDTH: usize>(
         &self,
         postflight: &Postflight<'_, F>,
@@ -340,7 +271,6 @@ impl MultiByteAdapterFiller {
             [[u16; BLOCK_FE_WIDTH]; 2],
             usize,
         ) -> [[u16; BLOCK_FE_WIDTH]; 2],
-        address_space: u32,
     ) -> Result<StoreMultiReplay, PostflightError> {
         if !is_multi_byte_access_width(STORE_WIDTH) {
             return Err(PostflightError::new(
@@ -349,7 +279,7 @@ impl MultiByteAdapterFiller {
         }
         let instruction = postflight.instruction(step);
         let mem_as = instruction.e.as_canonical_u32();
-        if instruction.d.as_canonical_u32() != REGISTER_AS || mem_as != address_space {
+        if instruction.d.as_canonical_u32() != REGISTER_AS || mem_as != MEMORY_AS {
             return Err(PostflightError::new(
                 "multi-byte store has invalid address spaces",
             ));
@@ -516,43 +446,5 @@ impl MultiByteAdapterFiller {
         adapter_row.from_state.pc = F::from_u32(from_pc);
 
         Ok((read_data.value, prev_data, shift))
-    }
-}
-
-#[derive(Clone)]
-pub struct StoreMultiByteAdapterFiller {
-    inner: MultiByteAdapterFiller,
-}
-
-impl StoreMultiByteAdapterFiller {
-    pub fn new(
-        pointer_max_bits: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        Self {
-            inner: MultiByteAdapterFiller::new(pointer_max_bits, range_checker_chip),
-        }
-    }
-
-    pub(crate) fn replay<F: PrimeField32, const STORE_WIDTH: usize>(
-        &self,
-        postflight: &Postflight<'_, F>,
-        step: PostflightStep,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut StoreMultiByteAdapterCols<F>,
-        compute: impl FnOnce(
-            [u16; BLOCK_FE_WIDTH],
-            [[u16; BLOCK_FE_WIDTH]; 2],
-            usize,
-        ) -> [[u16; BLOCK_FE_WIDTH]; 2],
-    ) -> Result<StoreMultiReplay, PostflightError> {
-        self.inner.replay::<F, STORE_WIDTH>(
-            postflight,
-            step,
-            mem_helper,
-            adapter_row,
-            compute,
-            MEMORY_AS,
-        )
     }
 }

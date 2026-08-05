@@ -5,8 +5,9 @@ use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
-use openvm_circuit::arch::testing::{
-    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::arch::{
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MemoryConfig,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -26,16 +27,25 @@ use super::{
 };
 use crate::{
     adapters::BYTE_BITS,
-    store::core::fill_padding_row,
-    test_utils::memory::{store_memory_config, F, MAX_INS_CAPACITY},
+    test_utils::memory::{F, MAX_INS_CAPACITY},
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::{
-    reveal::RevealChipGpu,
-    test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
-};
+use crate::{reveal::RevealChipGpu, test_utils::memory::dummy_range_checker};
 
 type RevealHarness = TestChipHarness<F, RevealExecutor, RevealAir, RevealChip<F>>;
+
+fn reveal_memory_config() -> MemoryConfig {
+    let mut config = MemoryConfig::default();
+    config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+    config
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn reveal_gpu_memory_config() -> MemoryConfig {
+    let mut config = MemoryConfig::default();
+    config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << config.pointer_max_bits;
+    config
+}
 
 fn create_harness(
     tester: &mut VmChipTestBuilder<F>,
@@ -70,8 +80,7 @@ fn create_harness(
             chip,
             MAX_INS_CAPACITY,
             generate_trace_from_postflight,
-        )
-        .with_padding(fill_padding_row),
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -97,7 +106,7 @@ fn field_block(bytes: &[u8]) -> [F; 8] {
 
 #[test]
 fn reveal_preserves_legacy_unaligned_overwrite_semantics() {
-    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(reveal_memory_config());
     let (mut harness, bitwise) = create_harness(&mut tester);
     let base_ptr = REGISTER_NUM_LIMBS;
     let first_src = 2 * REGISTER_NUM_LIMBS;
@@ -201,14 +210,13 @@ fn create_gpu_harness(tester: &GpuChipTestBuilder) -> GpuRevealHarness {
                 chip.generate_proving_ctx_from_postflight(program, transcript, plan)
             },
         )
-        .with_padding(fill_padding_row)
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_reveal_tracegen_crossing_and_non_crossing() {
     let mut tester =
-        GpuChipTestBuilder::new(store_gpu_memory_config(), default_var_range_checker_bus())
+        GpuChipTestBuilder::new(reveal_gpu_memory_config(), default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_gpu_harness(&tester);
     let base_ptr = REGISTER_NUM_LIMBS;

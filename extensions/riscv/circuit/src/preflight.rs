@@ -20,7 +20,7 @@ use openvm_cuda_common::{
 use openvm_instructions::{
     program::Program,
     riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
-    DEFERRAL_AS, PUBLIC_VALUES_AS,
+    DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, RvrCheckpoint};
@@ -220,13 +220,7 @@ impl PreflightReplayProgram {
         let error = [0u32].to_device_on(program.device_ctx())?;
         let event_counts = gpu_buffer::<PostflightEventCount>(anchors.len(), program.device_ctx());
         event_counts.fill_zero_on(program.device_ctx())?;
-        let address_spaces = [
-            REGISTER_AS,
-            MEMORY_AS,
-            PUBLIC_VALUES_AS,
-            IMM_AS,
-            DEFERRAL_AS,
-        ];
+        let address_spaces = [REGISTER_AS, MEMORY_AS, IMM_AS, DEFERRAL_AS];
         let count_span = tracing::info_span!("postflight_replay_count").entered();
         unsafe {
             rvr_checkpoint_replay::count(

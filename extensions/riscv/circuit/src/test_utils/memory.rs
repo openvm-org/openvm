@@ -12,7 +12,7 @@ use openvm_circuit::arch::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
-    LocalOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{
     self, LOADBU, LOADD, LOADHU, LOADWU, STOREB, STORED, STOREH, STOREW,
@@ -186,7 +186,6 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     rs1: Option<[u8; 8]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
-    mem_as: Option<usize>,
 ) {
     assert!(
         matches!(opcode, STORED | STOREW | STOREH | STOREB),
@@ -194,7 +193,7 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     );
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
-    let mem_as = mem_as.unwrap_or(MEMORY_AS as usize);
+    let mem_as = MEMORY_AS as usize;
 
     tester.write_bytes(
         REGISTER_AS as usize,
@@ -259,16 +258,12 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
 }
 
 pub(crate) fn store_memory_config() -> MemoryConfig {
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-    mem_config
+    MemoryConfig::default()
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
-    mem_config
+    MemoryConfig::default()
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

@@ -12,7 +12,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STORED};
 use openvm_stark_sdk::utils::create_seeded_rng;
 
@@ -23,9 +23,8 @@ use crate::{
         BYTE_BITS,
     },
     store::{
-        common::store_write_data, core::fill_padding_row, StoreDoublewordAir,
-        StoreDoublewordChip, StoreDoublewordExecutor, StoreDoublewordCoreAir,
-        StoreDoublewordFiller,
+        common::store_write_data, StoreDoublewordAir, StoreDoublewordChip,
+        StoreDoublewordExecutor, StoreDoublewordCoreAir, StoreDoublewordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -81,8 +80,7 @@ fn create_store_doubleword_harness(
             chip,
             MAX_INS_CAPACITY,
             generate_trace_from_postflight,
-        )
-        .with_padding(fill_padding_row),
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -99,7 +97,6 @@ fn rand_store_doubleword_test() {
             &mut harness.preflight,
             &mut rng,
             STORED,
-            None,
             None,
             None,
             None,
@@ -129,7 +126,6 @@ fn positive_stored_pointer_limb_boundary_cross_test() {
         Some([0xf9, 0xff, 0x00, 0x00, 0, 0, 0, 0]),
         Some(0),
         Some(0),
-        Some(MEMORY_AS as usize),
     );
     tester
         .build()
@@ -208,7 +204,6 @@ fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStore
                 chip.generate_proving_ctx_from_postflight(program, transcript, plan)
             },
         )
-        .with_padding(fill_padding_row)
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -229,7 +224,6 @@ fn test_cuda_rand_store_doubleword_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester

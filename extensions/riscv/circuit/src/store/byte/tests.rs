@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 
-use super::trace::{fill_padding_row, generate_trace_from_postflight};
+use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
         bytes_to_u16_block, StoreByteAdapterAir, StoreByteAdapterFiller,
@@ -87,8 +87,7 @@ fn create_store_byte_harness(
             chip,
             MAX_INS_CAPACITY,
             generate_trace_from_postflight,
-        )
-        .with_padding(fill_padding_row),
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -105,7 +104,6 @@ fn rand_store_byte_test() {
             &mut harness.preflight,
             &mut rng,
             STOREB,
-            None,
             None,
             None,
             None,
@@ -199,7 +197,6 @@ fn negative_split_write_data_test() {
         None,
         None,
         None,
-        None,
     );
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
@@ -266,7 +263,6 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
                 chip.generate_proving_ctx_from_postflight(program, transcript, plan)
             },
         )
-        .with_padding(fill_padding_row)
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -287,7 +283,6 @@ fn test_cuda_rand_store_byte_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester
