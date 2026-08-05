@@ -75,6 +75,18 @@ impl LinearMemory for MmapMemory {
         }
     }
 
+    fn sparse_clone(&self, ranges: &[(usize, usize)]) -> Self {
+        let mut cloned = Self::new(self.size);
+        for &(start, end) in ranges {
+            assert!(
+                start <= end && end <= self.size,
+                "sparse clone range out of bounds"
+            );
+            cloned.mmap[start..end].copy_from_slice(&self.mmap[start..end]);
+        }
+        cloned
+    }
+
     fn size(&self) -> usize {
         self.size
     }

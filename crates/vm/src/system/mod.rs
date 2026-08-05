@@ -367,7 +367,7 @@ where
 
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
         self.memory_controller
-            .set_initial_memory(memory.memory.clone());
+            .set_initial_memory(memory.memory.sparse_clone());
     }
 
     fn memory_top_tree(&self) -> Option<&[[Val<SC>; VM_DIGEST_WIDTH]]> {
