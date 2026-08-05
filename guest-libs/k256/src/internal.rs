@@ -1,7 +1,7 @@
 use core::ops::{Add, Neg};
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
     weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
@@ -80,6 +80,26 @@ impl Secp256k1Point {
     pub fn y_be_bytes(&self) -> [u8; 32] {
         <Self as WeierstrassPoint>::y(self).to_be_bytes()
     }
+
+    /// Returns `scalar * self`, for any scalar representation and any point.
+    ///
+    /// [`Secp256k1Point::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar
+    /// below the group order; this discharges both preconditions, so it is total.
+    ///
+    /// `Secp256k1Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
+    /// `from_be_bytes_unchecked` do not reduce. secp256k1 has cofactor 1, so every point on the
+    /// curve has order dividing the group order and reducing the scalar leaves the product
+    /// unchanged.
+    pub fn mul_scalar(&self, scalar: &Secp256k1Scalar) -> Self {
+        if self.is_identity() {
+            return <Self as Group>::IDENTITY;
+        }
+        let reduced = Secp256k1Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
+        // SAFETY: `self` is not the identity, and `reduce_le_bytes` returns a value below the
+        // group order.
+        unsafe { self.mul_scalar_le_unchecked(&bytes) }
+    }
 }
 
 // Host-side coverage for the ladder that `sw_declare!` generates for non-openvm targets. Guest
@@ -87,8 +107,9 @@ impl Secp256k1Point {
 // rest of the guest library uses.
 #[cfg(all(test, not(any(openvm_intrinsics, target_os = "openvm"))))]
 mod tests {
+    use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup};
+    use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
 
     use super::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
 
@@ -103,5 +124,36 @@ mod tests {
 
             assert_eq!(via_ladder, via_msm, "k = {k}");
         }
+    }
+
+    #[test]
+    fn mul_scalar_reduces_the_scalar() {
+        // `n + 5`, one group order above a small scalar. `Secp256k1Scalar` stores it verbatim, so
+        // this is the representation `mul_scalar` has to reduce before reaching the ladder.
+        let unreduced = Secp256k1Scalar::from_be_bytes_unchecked(&hex!(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364146"
+        ));
+        assert!(!unreduced.is_reduced());
+
+        let expected = Secp256k1::msm(
+            &[Secp256k1Scalar::from_u64(5)],
+            &[Secp256k1Point::GENERATOR],
+        );
+        assert_eq!(Secp256k1Point::GENERATOR.mul_scalar(&unreduced), expected);
+    }
+
+    #[test]
+    fn mul_scalar_handles_the_identity() {
+        // `k * O = O` for every `k`. The ladder itself cannot prove this case, so `mul_scalar`
+        // short-circuits it.
+        let identity = <Secp256k1Point as Group>::IDENTITY;
+        for k in [0u64, 1, 7] {
+            let scalar = Secp256k1Scalar::from_u64(k);
+            assert!(identity.mul_scalar(&scalar).is_identity(), "k = {k}");
+        }
+
+        // A zero scalar sends any point to the identity.
+        let zero = Secp256k1Scalar::ZERO;
+        assert!(Secp256k1Point::GENERATOR.mul_scalar(&zero).is_identity());
     }
 }

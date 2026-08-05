@@ -3,7 +3,7 @@ extern crate alloc;
 use core::ops::{Add, Neg};
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
     weierstrass::{CachedMulTable, IntrinsicCurve},
@@ -61,6 +61,30 @@ impl CyclicGroup for G1Affine {
             "45FD7CD8168C203C8DCA7168916A81975D588181B64550B829A031E1724E6430"
         )),
     };
+}
+
+impl G1Affine {
+    /// Returns `scalar * self`, for any scalar representation and any point.
+    ///
+    /// [`G1Affine::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar below
+    /// the group order. EIP-196 `ECMUL` guarantees neither — the scalar is an arbitrary 32-byte
+    /// word and `(0, 0)` encodes the point at infinity — so callers handling untrusted input want
+    /// this total form.
+    ///
+    /// `Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
+    /// `from_be_bytes_unchecked` do not reduce. BN254 G1 has cofactor 1, so every point on the
+    /// curve has order dividing the group order and reducing the scalar leaves the product
+    /// unchanged.
+    pub fn mul_scalar(&self, scalar: &Scalar) -> Self {
+        if self.is_identity() {
+            return <Self as Group>::IDENTITY;
+        }
+        let reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
+        // SAFETY: `self` is not the identity, and `reduce_le_bytes` returns a value below the group
+        // order.
+        unsafe { self.mul_scalar_le_unchecked(&bytes) }
+    }
 }
 
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
