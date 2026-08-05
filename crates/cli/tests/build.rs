@@ -6,6 +6,8 @@ use cargo_openvm::{
 };
 use eyre::Result;
 use openvm_build::get_rustc_target;
+use openvm_circuit::arch::instructions::exe::VmExe;
+use openvm_sdk::{fs::read_object_from_file, F};
 
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
@@ -124,18 +126,17 @@ fn test_multi_target_build() -> Result<()> {
 #[test]
 fn test_multi_target_transpile_default() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
-    let target_dir = temp_dir.path();
+    let target_dir = temp_dir.path().join("target");
 
     let mut build_args = default_build_test_args("multi");
     let mut cargo_args = default_cargo_test_args("multi");
     build_args.no_transpile = false;
-    cargo_args.manifest.target_dir = Some(target_dir.to_path_buf());
+    cargo_args.manifest.target_dir = Some(target_dir);
     cargo_args.all_targets = true;
 
     build(&build_args, &cargo_args)?;
 
-    // OpenVM artifacts are written to a sibling of --target-dir for consistency.
-    let openvm_dir = target_dir.parent().unwrap_or(target_dir).join("openvm");
+    let openvm_dir = temp_dir.path().join("openvm");
     assert!(openvm_dir.exists(),);
 
     // Check for release directory
@@ -157,6 +158,9 @@ fn test_multi_target_transpile_default() -> Result<()> {
     let palindrome_exe = examples_dir.join("palindrome.vmexe");
     assert!(fibonacci_exe.exists());
     assert!(palindrome_exe.exists());
+
+    let exe: VmExe<F> = read_object_from_file(fibonacci_exe)?;
+    assert!(!exe.cfg_hints.basic_block_starts.is_empty());
 
     Ok(())
 }

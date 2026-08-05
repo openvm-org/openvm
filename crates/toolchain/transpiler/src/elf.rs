@@ -8,7 +8,7 @@ use std::{
 };
 
 use elf::{
-    abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
+    abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD, SHN_UNDEF, STT_FUNC},
     endian::LittleEndian,
     file::Class,
     ElfBytes,
@@ -16,7 +16,10 @@ use elf::{
 use eyre::{self, bail, ContextCompat};
 #[cfg(feature = "function-span")]
 use openvm_instructions::exe::FnBound;
-use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
+use openvm_instructions::{
+    exe::{CfgHints, FnBounds},
+    program::MAX_ALLOWED_PC,
+};
 
 /// The size of a RISC-V instruction in bytes.
 const ELF_WORD_SIZE: usize = 4;
@@ -42,6 +45,8 @@ pub struct Elf {
     pub(crate) memory_image: BTreeMap<u32, u32>,
     /// Debug info for spanning benchmark metrics by function.
     pub(crate) fn_bounds: FnBounds,
+    /// Control-flow facts retained from the guest build.
+    pub(crate) cfg_hints: CfgHints,
 }
 
 impl Elf {
@@ -52,6 +57,7 @@ impl Elf {
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
         fn_bounds: FnBounds,
+        cfg_hints: CfgHints,
     ) -> Self {
         Self {
             instructions,
@@ -59,7 +65,13 @@ impl Elf {
             pc_base,
             memory_image,
             fn_bounds,
+            cfg_hints,
         }
+    }
+
+    /// Add control-flow facts supplied alongside this final ELF.
+    pub fn merge_cfg_hints(&mut self, hints: &CfgHints) {
+        self.cfg_hints.merge(hints);
     }
 
     /// Parse the ELF file into a vector of 32-bit encoded instructions and the first memory
@@ -76,6 +88,21 @@ impl Elf {
         // Parse the ELF file assuming that it is little-endian..
         let elf = ElfBytes::<LittleEndian>::minimal_parse(input)
             .map_err(|err| eyre::eyre!("Elf parse error: {err}"))?;
+
+        let mut cfg_hints = CfgHints::default();
+        if let Ok(Some((symbols, _))) = elf.symbol_table() {
+            for symbol in symbols
+                .iter()
+                .filter(|symbol| symbol.st_symtype() == STT_FUNC && symbol.st_shndx != SHN_UNDEF)
+            {
+                let Ok(start_pc) = u32::try_from(symbol.st_value) else {
+                    continue;
+                };
+                if start_pc.is_multiple_of(ELF_WORD_SIZE as u32) {
+                    cfg_hints.basic_block_starts.insert(u64::from(start_pc));
+                }
+            }
+        }
 
         // Some sanity checks to make sure that the ELF file is valid.
         if elf.ehdr.class != Class::ELF64 {
@@ -251,12 +278,19 @@ impl Elf {
             }
         }
 
+        let code_end = u64::from(base_address)
+            .checked_add((instructions.len() as u64) * (ELF_WORD_SIZE as u64));
+        cfg_hints.basic_block_starts.retain(|&pc| {
+            code_end.is_some_and(|code_end| u64::from(base_address) <= pc && pc < code_end)
+        });
+
         Ok(Elf::new(
             instructions,
             entry,
             base_address,
             image,
             fn_bounds,
+            cfg_hints,
         ))
     }
 }

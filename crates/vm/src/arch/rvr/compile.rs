@@ -13,7 +13,6 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, RvrExecutionKind};
-use rvr_openvm_ir::CfgHints;
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, AirIndex, ExtensionRegistry, TraceChipIndex,
 };
@@ -319,8 +318,6 @@ pub fn build_pc_to_chip<F, E>(
 pub struct RvrProgramMetadata<'a> {
     /// OpenVM PC to source location mapping.
     pub debug_map: Option<&'a GuestDebugMap>,
-    /// Additive CFG facts derived from higher-level program information.
-    pub cfg_hints: Option<&'a CfgHints>,
 }
 
 /// Options for the compilation pipeline.
@@ -575,7 +572,7 @@ fn compile_impl<F: PrimeField32>(
     let extra_targets = opts
         .extensions
         .extra_cfg_targets(&exe.init_memory, &valid_pcs);
-    let mut hints = opts.program_metadata.cfg_hints.cloned().unwrap_or_default();
+    let mut hints = exe.cfg_hints.clone();
     hints.potential_targets.extend(extra_targets);
     let blocks = build_blocks(&ir, &hints);
 

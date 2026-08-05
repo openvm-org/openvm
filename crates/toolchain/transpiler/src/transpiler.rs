@@ -14,6 +14,11 @@ pub struct Transpiler<F> {
     processors: Vec<Rc<dyn TranspilerExtension<F>>>,
 }
 
+pub(crate) struct Transpilation<F> {
+    pub instructions: Vec<Option<Instruction<F>>>,
+    pub preserves_pcs: bool,
+}
+
 impl<F: PrimeField32> Default for Transpiler<F> {
     fn default() -> Self {
         Self::new()
@@ -59,7 +64,16 @@ impl<F: PrimeField32> Transpiler<F> {
         &self,
         instructions_u32: &[u32],
     ) -> Result<Vec<Option<Instruction<F>>>, TranspilerError> {
+        self.transpile_with_pc_preservation(instructions_u32)
+            .map(|output| output.instructions)
+    }
+
+    pub(crate) fn transpile_with_pc_preservation(
+        &self,
+        instructions_u32: &[u32],
+    ) -> Result<Transpilation<F>, TranspilerError> {
         let mut instructions = Vec::new();
+        let mut preserves_pcs = true;
         let mut ptr = 0;
         while ptr < instructions_u32.len() {
             let mut options = self
@@ -75,10 +89,14 @@ impl<F: PrimeField32> Transpiler<F> {
                 // trap only if execution reaches it.
                 TranspilerOutput::one_to_one(unimp())
             });
+            preserves_pcs &= transpiler_output.preserves_pc_slots;
             instructions.extend(transpiler_output.instructions);
             ptr += transpiler_output.used_u32s;
         }
-        Ok(instructions)
+        Ok(Transpilation {
+            instructions,
+            preserves_pcs,
+        })
     }
 
     /// Allows each processor to modify the initial memory state as needed.

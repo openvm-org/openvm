@@ -6,12 +6,13 @@
 use std::collections::{BTreeSet, HashSet};
 
 use openvm_instructions::{
+    exe::CfgHints,
     metering::MAX_METERED_BLOCK_INSNS,
     program::{DEFAULT_PC_STEP as INSTR_SIZE, MAX_ALLOWED_PC},
 };
 use rustc_hash::FxHashMap;
 use rvr_openvm_ir::{
-    Block, CfgEffect, CfgHints, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, InstrAt,
+    Block, CfgEffect, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, InstrAt,
     LiftedInstr, Terminator, Variable,
 };
 

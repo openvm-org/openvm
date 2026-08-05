@@ -38,6 +38,7 @@ pub use execute::ExecuteError;
 pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
+pub use openvm_instructions::exe::CfgHints;
 pub use preflight::{
     PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
 };
@@ -49,6 +50,5 @@ pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
     default_linker, runtime_toolchain, RuntimeToolchain, RuntimeToolchainError, RvrExecutionKind,
 };
-pub use rvr_openvm_ir::CfgHints;
 
 pub use crate::arch::execution_mode::metered::segment_ctx::SegmentationLimits;

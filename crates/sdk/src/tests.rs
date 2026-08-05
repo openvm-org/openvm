@@ -576,6 +576,7 @@ fn test_sdk_cfg_hints_affect_compilation() -> Result<()> {
     let elf_bytes = include_bytes!("../programs/examples/fibonacci.elf");
     let elf = Elf::decode(elf_bytes, MEM_SIZE as u32)?;
     let exe = sdk.convert_to_exe(elf)?;
+    assert!(!exe.cfg_hints.basic_block_starts.is_empty());
     let baseline = sdk.compile(exe.clone())?;
     let baseline_source = generated_source(&baseline)?;
     let hinted_pc = exe
@@ -587,6 +588,12 @@ fn test_sdk_cfg_hints_affect_compilation() -> Result<()> {
         .map(|(index, _)| u64::from(exe.program.pc_base) + (index as u64) * 4)
         .find(|pc| !baseline_source.contains(&format!("block_0x{pc:08x}")))
         .expect("fibonacci program has a non-leader instruction");
+
+    let mut hinted_exe = exe.as_ref().clone();
+    hinted_exe.cfg_hints.basic_block_starts.insert(hinted_pc);
+    let directly_hinted = sdk.compile(hinted_exe)?;
+    let directly_hinted_source = generated_source(&directly_hinted)?;
+    assert!(directly_hinted_source.contains(&format!("block_0x{hinted_pc:08x}")));
 
     let elf_file = tempfile::NamedTempFile::new()?;
     fs::write(elf_file.path(), elf_bytes)?;

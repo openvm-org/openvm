@@ -19,5 +19,8 @@ elf = "0.7.4"
 openvm-decoder.workspace = true
 rustc-demangle = { version = "0.1.24", optional = true }
 
+[dev-dependencies]
+p3-baby-bear.workspace = true
+
 [features]
 function-span = ["dep:rustc-demangle"]

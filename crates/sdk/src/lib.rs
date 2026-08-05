@@ -121,19 +121,11 @@ struct CompileInput {
     executable: ExecutableFormat,
     #[cfg(feature = "rvr")]
     elf_path: Option<PathBuf>,
-    #[cfg(feature = "rvr")]
-    cfg_hints: Option<CfgHints>,
 }
 
 #[cfg(feature = "rvr")]
-fn program_metadata<'a>(
-    cfg_hints: &'a Option<CfgHints>,
-    debug_map: Option<&'a GuestDebugMap>,
-) -> RvrProgramMetadata<'a> {
-    RvrProgramMetadata {
-        debug_map,
-        cfg_hints: cfg_hints.as_ref(),
-    }
+fn program_metadata(debug_map: Option<&GuestDebugMap>) -> RvrProgramMetadata<'_> {
+    RvrProgramMetadata { debug_map }
 }
 
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
@@ -456,8 +448,6 @@ where
                 executable: format,
                 #[cfg(feature = "rvr")]
                 elf_path: None,
-                #[cfg(feature = "rvr")]
-                cfg_hints: None,
             }),
             ExecutableInput::ElfFile(path) => {
                 let bytes = read(&path)?;
@@ -466,8 +456,6 @@ where
                     executable: ExecutableFormat::Elf(elf),
                     #[cfg(feature = "rvr")]
                     elf_path: Some(path),
-                    #[cfg(feature = "rvr")]
-                    cfg_hints: None,
                 })
             }
             #[cfg(feature = "rvr")]
@@ -477,7 +465,6 @@ where
             } => Ok(CompileInput {
                 executable,
                 elf_path: Some(elf_path),
-                cfg_hints: None,
             }),
             #[cfg(feature = "rvr")]
             ExecutableInput::ElfFileWithCfgHints {
@@ -485,11 +472,11 @@ where
                 cfg_hints,
             } => {
                 let elf_bytes = read(&elf_path)?;
-                let elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
+                let mut elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
+                elf.merge_cfg_hints(&cfg_hints);
                 Ok(CompileInput {
                     executable: ExecutableFormat::Elf(elf),
                     elf_path: Some(elf_path),
-                    cfg_hints: Some(cfg_hints),
                 })
             }
         }
@@ -557,7 +544,7 @@ where
         #[cfg(feature = "rvr")]
         {
             let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-            let metadata = program_metadata(&input.cfg_hints, guest_debug_map.as_ref());
+            let metadata = program_metadata(guest_debug_map.as_ref());
             self.executor
                 .instance(&exe, metadata)
                 .map(CompiledExePure::new)
@@ -583,7 +570,7 @@ where
         let input = self.compile_input(app_exe)?;
         let exe = self.convert_to_exe(input.executable)?;
         let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-        let metadata = program_metadata(&input.cfg_hints, guest_debug_map.as_ref());
+        let metadata = program_metadata(guest_debug_map.as_ref());
         self.executor
             .instret_tracking_instance(&exe, metadata)
             .map(CompiledExePureWithInstretTracking::new)
@@ -653,7 +640,7 @@ where
         #[cfg(feature = "rvr")]
         {
             let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-            let metadata = program_metadata(&input.cfg_hints, guest_debug_map.as_ref());
+            let metadata = program_metadata(guest_debug_map.as_ref());
             self.executor
                 .preflight_instance(&exe, metadata)
                 .map(CompiledExePreflight::new)
@@ -724,7 +711,7 @@ where
         #[cfg(feature = "rvr")]
         let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
         #[cfg(feature = "rvr")]
-        let metadata = program_metadata(&input.cfg_hints, guest_debug_map.as_ref());
+        let metadata = program_metadata(guest_debug_map.as_ref());
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
@@ -820,7 +807,7 @@ where
         #[cfg(feature = "rvr")]
         let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
         #[cfg(feature = "rvr")]
-        let metadata = program_metadata(&input.cfg_hints, guest_debug_map.as_ref());
+        let metadata = program_metadata(guest_debug_map.as_ref());
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
