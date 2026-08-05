@@ -13,6 +13,7 @@ use std::{
     sync::Arc,
 };
 
+use openvm_cuda_backend::prelude::F as CudaField;
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::{DeviceBuffer, DeviceBufferView},
@@ -24,7 +25,6 @@ use openvm_instructions::{
     instruction::Instruction, program::Program, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use p3_baby_bear::BabyBear;
 use rvr_state::{
     PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent,
 };
@@ -38,7 +38,7 @@ use crate::{
         POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
     },
     cuda_abi::postflight,
-    system::TouchedBlock,
+    system::{program::trace::instruction_operand_to_field, TouchedBlock},
 };
 
 #[cfg(all(test, feature = "rvr"))]
@@ -457,8 +457,8 @@ fn validated_history_write_masks(
 impl GpuPostflightProgram {
     /// Uploads the immutable program metadata used by history-driven
     /// postflight and trace generation.
-    pub fn upload<F: PrimeField32>(
-        program: &Program<F>,
+    pub fn upload(
+        program: &Program,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
     ) -> Result<Self, GpuPostflightError> {
@@ -470,17 +470,12 @@ impl GpuPostflightProgram {
     /// The validator sees the exact canonical instruction representation that
     /// is uploaded, allowing an extension-owned replay producer to reject
     /// unsupported instruction layouts without moving ISA semantics into the VM.
-    pub fn upload_with_instruction_validation<F: PrimeField32>(
-        program: &Program<F>,
+    pub fn upload_with_instruction_validation(
+        program: &Program,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
         mut validate_instruction: impl FnMut(&GpuReplayInstruction) -> Result<(), GpuPostflightError>,
     ) -> Result<Self, GpuPostflightError> {
-        if F::ORDER_U32 != BabyBear::ORDER_U32 || size_of::<F>() != size_of::<BabyBear>() {
-            return Err(GpuPostflightError::InvalidMemoryConfig(
-                "GPU postflight currently requires the BabyBear proof field".to_string(),
-            ));
-        }
         validate_postflight_memory_config(memory_config)
             .map_err(GpuPostflightError::InvalidMemoryConfig)?;
         let dimensions = GpuMemoryDimensions::from_validated(memory_config);
@@ -714,21 +709,21 @@ fn ensure_same_context(
     }
 }
 
-fn instruction_to_replay<F: PrimeField32>(
-    instruction: &Instruction<F>,
+fn instruction_to_replay(
+    instruction: &Instruction,
 ) -> Result<GpuReplayInstruction, GpuPostflightError> {
     let opcode = u32::try_from(instruction.opcode.as_usize())
         .map_err(|_| GpuPostflightError::OpcodeTooLarge(instruction.opcode.as_usize()))?;
     Ok(GpuReplayInstruction {
         words: [
             opcode,
-            instruction.a.as_canonical_u32(),
-            instruction.b.as_canonical_u32(),
-            instruction.c.as_canonical_u32(),
-            instruction.d.as_canonical_u32(),
-            instruction.e.as_canonical_u32(),
-            instruction.f.as_canonical_u32(),
-            instruction.g.as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.a).as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.b).as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.c).as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.d).as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.e).as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.f).as_canonical_u32(),
+            instruction_operand_to_field::<CudaField>(instruction.g).as_canonical_u32(),
         ],
     })
 }
@@ -743,7 +738,7 @@ pub(crate) fn gpu_buffer<T>(len: usize, device_ctx: &GpuDeviceCtx) -> DeviceBuff
 
 struct GpuMemoryIndex {
     predecessors: DeviceBuffer<u32>,
-    touched_blocks: DeviceBuffer<TouchedBlock<BabyBear>>,
+    touched_blocks: DeviceBuffer<TouchedBlock>,
     num_touched_blocks: usize,
 }
 
@@ -916,7 +911,7 @@ fn build_gpu_memory_chronology(
     let counts = GpuChronologyCounts::validated(&counts, num_entries, field_values.len())?;
     let seeds = gpu_buffer::<PreflightInitialWrite>(counts.num_seeds, device_ctx);
     let field_seeds = gpu_buffer::<PreflightFieldBlock>(counts.num_field_seeds, device_ctx);
-    let touched_blocks = gpu_buffer::<TouchedBlock<BabyBear>>(counts.num_touched, device_ctx);
+    let touched_blocks = gpu_buffer::<TouchedBlock>(counts.num_touched, device_ctx);
     unsafe {
         postflight::memory_chronology_resolve(
             memory.view(),
@@ -976,7 +971,7 @@ pub struct GpuPostflightTranscript {
     field_values: DeviceBuffer<PreflightFieldBlock>,
     field_initial_values: DeviceBuffer<PreflightFieldBlock>,
     memory_predecessors: DeviceBuffer<u32>,
-    touched_blocks: DeviceBuffer<TouchedBlock<BabyBear>>,
+    touched_blocks: DeviceBuffer<TouchedBlock>,
     num_touched_blocks: usize,
     error: DeviceBuffer<u32>,
     device_ctx: GpuDeviceCtx,
@@ -1028,12 +1023,12 @@ impl GpuPostflightTranscript {
         self.initial_write_log.view()
     }
 
-    /// Full-width raw-Montgomery values for field-cell memory events.
+    /// Canonical field values for field-cell memory events.
     pub fn field_values(&self) -> DeviceBufferView {
         self.field_values.view()
     }
 
-    /// Full-width raw-Montgomery values for first-write field seeds.
+    /// Canonical field values for first-write field seeds.
     pub fn field_initial_values(&self) -> DeviceBufferView {
         self.field_initial_values.view()
     }
@@ -1047,7 +1042,7 @@ impl GpuPostflightTranscript {
     pub(crate) fn touched_blocks_on(
         &self,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<(&DeviceBuffer<TouchedBlock<BabyBear>>, usize), GpuPostflightError> {
+    ) -> Result<(&DeviceBuffer<TouchedBlock>, usize), GpuPostflightError> {
         ensure_same_context(&self.device_ctx, device_ctx)?;
         debug_assert!(self.num_touched_blocks <= self.touched_blocks.len());
         Ok((&self.touched_blocks, self.num_touched_blocks))
@@ -1229,5 +1224,50 @@ impl GpuPostflightPlan {
     /// before launching any opcode kernel to reject unported instructions.
     pub fn executed_opcodes(&self) -> impl Iterator<Item = u32> + '_ {
         self.opcode_ranges.keys().copied()
+    }
+}
+
+#[cfg(test)]
+mod instruction_tests {
+    use openvm_instructions::{instruction::InstructionOperand, PhantomDiscriminant};
+
+    use super::*;
+
+    #[test]
+    fn replay_instruction_canonicalizes_signed_operand_boundaries_without_collision() {
+        let instruction = Instruction::new(
+            VmOpcode::from_usize(7),
+            InstructionOperand::from_i32(InstructionOperand::MIN),
+            InstructionOperand::from_i32(-1),
+            InstructionOperand::ZERO,
+            InstructionOperand::ONE,
+            InstructionOperand::from_i32(InstructionOperand::MAX),
+            InstructionOperand::from_i32(-2),
+            InstructionOperand::TWO,
+        );
+
+        assert_eq!(
+            instruction_to_replay(&instruction).unwrap().words,
+            [
+                7,
+                CudaField::ORDER_U32 - InstructionOperand::MIN.unsigned_abs(),
+                CudaField::ORDER_U32 - 1,
+                0,
+                1,
+                InstructionOperand::MAX as u32,
+                CudaField::ORDER_U32 - 2,
+                2,
+            ]
+        );
+    }
+
+    #[test]
+    fn replay_instruction_preserves_split_phantom_operands() {
+        let instruction =
+            Instruction::phantom(PhantomDiscriminant(0x7ffe), 0x1234u16, 0x5678u16, 0xabcd);
+        let words = instruction_to_replay(&instruction).unwrap().words;
+
+        assert_eq!(words[3], 0x7ffe);
+        assert_eq!(words[4], 0xabcd);
     }
 }

@@ -2,7 +2,6 @@ use openvm_decoder::instruction_formats::RType;
 use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
 use openvm_instructions_derive::LocalOpcode;
 use openvm_sha2_guest::{Sha2BaseFunct7, OPCODE, SHA2_FUNCT3};
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -21,8 +20,8 @@ pub enum Sha2Opcode {
 #[derive(Default)]
 pub struct Sha2TranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for Sha2TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for Sha2TranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }

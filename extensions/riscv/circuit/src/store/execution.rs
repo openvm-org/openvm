@@ -22,7 +22,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{store_width_for_opcode, StoreExecutor};
 use crate::adapters::{
@@ -39,10 +38,10 @@ struct StorePreCompute {
 }
 
 impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut StorePreCompute,
     ) -> Result<LoadStoreOpcode, StaticProgramError> {
         let Instruction {
@@ -61,7 +60,7 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != MEMORY_AS {
+        if d.as_u32() != REGISTER_AS || e.as_u32() != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -73,12 +72,12 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
+        let imm = c.as_u32();
+        let imm_sign = g.as_u32();
         *data = StorePreCompute {
             imm_extended: sign_extend_imm16(imm, imm_sign),
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok(local_opcode)
     }
@@ -96,10 +95,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const STORE_WIDTH: usize> InterpreterExecutor<F> for StoreExecutor<STORE_WIDTH>
-where
-    F: PrimeField32,
-{
+impl<const STORE_WIDTH: usize> InterpreterExecutor for StoreExecutor<STORE_WIDTH> {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", LoadStoreOpcode::from_usize(opcode - self.offset))
     }
@@ -114,7 +110,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut StorePreCompute = data.borrow_mut();
@@ -126,7 +122,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -138,10 +134,7 @@ where
     }
 }
 
-impl<F, const STORE_WIDTH: usize> InterpreterMeteredExecutor<F> for StoreExecutor<STORE_WIDTH>
-where
-    F: PrimeField32,
-{
+impl<const STORE_WIDTH: usize> InterpreterMeteredExecutor for StoreExecutor<STORE_WIDTH> {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<StorePreCompute>>()
     }
@@ -151,7 +144,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -168,7 +161,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -308,14 +301,13 @@ mod tests {
         LocalOpcode,
     };
     use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{StoreExecutor, StorePreCompute};
     use crate::adapters::{
         BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
     };
 
-    fn instruction(opcode: LoadStoreOpcode, address_space: u32) -> Instruction<BabyBear> {
+    fn instruction(opcode: LoadStoreOpcode, address_space: u32) -> Instruction {
         Instruction::from_usize(
             opcode.global_opcode(),
             [8, 16, 0, REGISTER_AS as usize, address_space as usize, 1, 0],

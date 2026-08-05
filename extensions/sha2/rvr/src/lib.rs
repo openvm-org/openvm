@@ -4,6 +4,7 @@
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
 use openvm_instructions::{
+    instruction::Instruction,
     riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
 };
@@ -14,7 +15,7 @@ use rvr_openvm_ir::{
 };
 use rvr_openvm_lift::{
     decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
-    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
 };
 
 // SHA-512 has three independent ranges; its largest range is the 128-byte block.
@@ -166,13 +167,13 @@ impl Sha2Extension {
 }
 
 impl RvrExtension for Sha2Extension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == Sha2Opcode::SHA256.global_opcode_usize() {
-            let dst_ptr_reg = decode_reg(insn.a);
-            let state_ptr_reg = decode_reg(insn.b);
-            let input_ptr_reg = decode_reg(insn.c);
+            let dst_ptr_reg = decode_reg(insn.a.as_u32());
+            let state_ptr_reg = decode_reg(insn.b.as_u32());
+            let input_ptr_reg = decode_reg(insn.c.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(Sha256Instr {
@@ -186,9 +187,9 @@ impl RvrExtension for Sha2Extension {
         }
 
         if opcode == Sha2Opcode::SHA512.global_opcode_usize() {
-            let dst_ptr_reg = decode_reg(insn.a);
-            let state_ptr_reg = decode_reg(insn.b);
-            let input_ptr_reg = decode_reg(insn.c);
+            let dst_ptr_reg = decode_reg(insn.a.as_u32());
+            let state_ptr_reg = decode_reg(insn.b.as_u32());
+            let input_ptr_reg = decode_reg(insn.c.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(Sha512Instr {

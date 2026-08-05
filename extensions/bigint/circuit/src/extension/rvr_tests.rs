@@ -11,7 +11,6 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{BaseAluOpcode, BranchEqualOpcode};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::Int256Rv64Config;
 
@@ -49,7 +48,7 @@ fn add_replay_values(equal: bool) -> [u64; 4] {
     })
 }
 
-fn fixture_with_pointer_offset(equal: bool, pointer_offset: u32) -> VmExe<BabyBear> {
+fn fixture_with_pointer_offset(equal: bool, pointer_offset: u32) -> VmExe {
     let program = Program::from_instructions(&[
         Instruction::from_usize(
             BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
@@ -93,7 +92,7 @@ fn fixture_with_pointer_offset(equal: bool, pointer_offset: u32) -> VmExe<BabyBe
     VmExe::new(program).with_init_memory(memory)
 }
 
-fn fixture(equal: bool) -> VmExe<BabyBear> {
+fn fixture(equal: bool) -> VmExe {
     fixture_with_pointer_offset(equal, 0)
 }
 

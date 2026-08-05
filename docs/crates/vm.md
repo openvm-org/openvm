@@ -8,7 +8,10 @@ consists of executor structs that handle specific instruction opcodes. The same 
 transition runs in pure and preflight contexts, while `MeteredExecutor` supplies segmentation
 metadata.
 
-We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor that contains the logic for executing the instruction.
+We define an **instruction** to be an **opcode** combined with the **operands** for the opcode.
+`Instruction`, `Program`, and `VmExe` store field-independent `InstructionOperand` values; operands
+are converted into the proof field only during trace generation. Each opcode must be mapped to a
+specific executor that contains the logic for executing the instruction.
 There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
 
 ### Execution Modes
@@ -17,16 +20,17 @@ There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which 
 
 Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
 
-The `InterpreterExecutor<F>` trait defines the interface for pure execution (aliased as `Executor<F>` via a supertrait):
+The `InterpreterExecutor` trait defines the field-independent interface for pure execution
+(aliased as `Executor` via a supertrait):
 
 ```rust
-pub trait InterpreterExecutor<F> {
+pub trait InterpreterExecutor {
     fn pre_compute_size(&self) -> usize;
 
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -47,17 +51,18 @@ Each executor pre-computes instruction-specific data during a preprocessing step
 
 Metered execution tracks the trace heights for each chip along with normal execution. This mode divides the execution into segments, where each segment consists of an instruction range and an (over)estimate of the resulting trace heights for each chip in the segment. Segmentation is done based on configurable limits like maximum trace height, maximum trace cells etc.
 
-The `InterpreterMeteredExecutor<F>` trait defines the interface for metered execution (aliased as `MeteredExecutor<F>` via a supertrait):
+The `InterpreterMeteredExecutor` trait defines the field-independent interface for metered
+execution (aliased as `MeteredExecutor` via a supertrait):
 
 ```rust
-pub trait InterpreterMeteredExecutor<F> {
+pub trait InterpreterMeteredExecutor {
     fn metered_pre_compute_size(&self) -> usize;
 
     fn metered_pre_compute<Ctx>(
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -190,7 +195,7 @@ pub trait VmConfig<SC>:
     + Serialize
     + DeserializeOwned
     + InitFileGenerator
-    + VmExecutionConfig<Val<SC>>
+    + VmFieldExecutionConfig<Val<SC>>
     + VmCircuitConfig<SC>
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
@@ -200,13 +205,24 @@ where
 }
 ```
 
-A `VmConfig` should implement the `VmExecutionConfig` trait which provides execution configuration. The `Executor` type is typically an enum over executor structs that handle instruction execution.
+A field-independent execution configuration implements `VmExecutionConfig`. A full `VmConfig`
+implements `VmFieldExecutionConfig<Val<SC>>`; ordinary configurations receive a delegating
+implementation, while configurations containing field-dependent runtime semantics implement it
+directly. The `Executor` type is typically an enum over executor structs that handle instruction
+execution.
 
 ```rust
-pub trait VmExecutionConfig<F> {
+pub trait VmExecutionConfig {
     type Executor: AnyEnum;
 
     fn create_executors(&self)
+        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+}
+
+pub trait VmFieldExecutionConfig<F: VmField> {
+    type Executor: AnyEnum;
+
+    fn create_field_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 }
 ```
@@ -394,8 +410,9 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 
 Execution and trace generation are deliberately separate:
 
-- `Executor<F>` provides the opcode state transition used by pure and preflight execution.
-- `MeteredExecutor<F>` adds the AIR-index metadata needed for segmentation.
+- `Executor` provides the field-independent opcode state transition used by pure and preflight
+  execution.
+- `MeteredExecutor` adds the AIR-index metadata needed for segmentation.
 - A prover extension registers backend-specific postflight generators. Each generator replays the
   opcode steps assigned to its AIR from immutable preflight history.
 

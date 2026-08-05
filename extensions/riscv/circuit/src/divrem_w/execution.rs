@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::DivRemWCoreExecutor;
 
@@ -26,24 +25,24 @@ struct DivRemWPreCompute {
 
 impl DivRemWCoreExecutor {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut DivRemWPreCompute,
     ) -> Result<DivRemWOpcode, StaticProgramError> {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
         let local_opcode = DivRemWOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        if d.as_canonical_u32() != REGISTER_AS {
+        if d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let pre_compute: &mut DivRemWPreCompute = data.borrow_mut();
         *pre_compute = DivRemWPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
         Ok(local_opcode)
     }
@@ -60,10 +59,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for DivRemWCoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterExecutor for DivRemWCoreExecutor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
     }
@@ -78,7 +74,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut DivRemWPreCompute = data.borrow_mut();
@@ -90,7 +86,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -102,10 +98,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for DivRemWCoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterMeteredExecutor for DivRemWCoreExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DivRemWPreCompute>>()
     }
@@ -115,7 +108,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -132,7 +125,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

@@ -16,7 +16,6 @@ use openvm_instructions::{
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::EcDoubleExecutor;
 use crate::weierstrass_chip::curves::{ec_double, get_curve_type, CurveType};
@@ -31,10 +30,10 @@ struct EcDoublePreCompute<'a> {
 }
 
 impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &'a self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut EcDoublePreCompute<'a>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
@@ -42,10 +41,10 @@ impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
         } = inst;
 
         // Validate instruction format
-        let a = a.as_canonical_u32();
-        let b = b.as_canonical_u32();
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
+        let a = a.as_u32();
+        let b = b.as_u32();
+        let d = d.as_u32();
+        let e = e.as_u32();
         if d != REGISTER_AS || e != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -125,7 +124,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleExecutor<BLOCKS> {
+impl<const BLOCKS: usize> InterpreterExecutor for EcDoubleExecutor<BLOCKS> {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         self.inner.name.clone()
     }
@@ -139,7 +138,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -155,7 +154,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -168,9 +167,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
-    for EcDoubleExecutor<BLOCKS>
-{
+impl<const BLOCKS: usize> InterpreterMeteredExecutor for EcDoubleExecutor<BLOCKS> {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<EcDoublePreCompute>>()
@@ -181,7 +178,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -200,7 +197,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

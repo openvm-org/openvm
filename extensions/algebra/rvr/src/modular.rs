@@ -6,10 +6,10 @@ use openvm_algebra_transpiler::{ModularArithmeticOpcode, ModularPhantom};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 #[cfg(test)]
 use openvm_instructions::MEMORY_BLOCK_BYTES;
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
-use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension};
 use strum::EnumCount;
 
 #[cfg(test)]
@@ -248,7 +248,7 @@ impl ModularRvrExtension {
 }
 
 impl RvrExtension for ModularRvrExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if let Some(lifted) = self.try_lift_modular(insn, pc, opcode) {
@@ -731,12 +731,7 @@ mod tests {
 }
 
 impl ModularRvrExtension {
-    fn try_lift_modular(
-        &self,
-        insn: &RvrInstruction,
-        pc: u64,
-        opcode: usize,
-    ) -> Option<LiftedInstr> {
+    fn try_lift_modular(&self, insn: &Instruction, pc: u64, opcode: usize) -> Option<LiftedInstr> {
         let base_offset = ModularArithmeticOpcode::CLASS_OFFSET;
         let count = ModularArithmeticOpcode::COUNT;
 
@@ -750,7 +745,7 @@ impl ModularRvrExtension {
         if mod_idx >= self.moduli.len() {
             return None;
         }
-        if insn.a == 0
+        if insn.a.is_zero()
             && matches!(
                 ModularArithmeticOpcode::from_repr(local),
                 Some(ModularArithmeticOpcode::IS_EQ | ModularArithmeticOpcode::SETUP_ISEQ)
@@ -760,9 +755,9 @@ impl ModularRvrExtension {
         }
 
         let info = &self.moduli[mod_idx];
-        let rd_reg = decode_reg(insn.a);
-        let rs1_reg = decode_reg(insn.b);
-        let rs2_reg = decode_reg(insn.c);
+        let rd_reg = decode_reg(insn.a.as_u32());
+        let rs1_reg = decode_reg(insn.b.as_u32());
+        let rs2_reg = decode_reg(insn.c.as_u32());
 
         let instr: Box<dyn ExtInstr> = match local {
             x if x == ModularArithmeticOpcode::ADD as usize => Box::new(ModArithInstr::new(
@@ -839,10 +834,9 @@ impl ModularRvrExtension {
         }))
     }
 
-    fn try_lift_phantom(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
-        let c_val = insn.c;
-        let discriminant = (c_val & 0xffff) as u16;
-        let mod_idx = (c_val >> 16) as usize;
+    fn try_lift_phantom(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
+        let discriminant = u16::try_from(insn.c.as_u32()).ok()?;
+        let mod_idx = usize::try_from(insn.d.as_u32()).ok()?;
 
         match ModularPhantom::from_repr(discriminant) {
             Some(ModularPhantom::HintNonQr) => {
@@ -857,7 +851,7 @@ impl ModularRvrExtension {
             }
             Some(ModularPhantom::HintSqrt) => {
                 let info = self.moduli.get(mod_idx)?;
-                let rs1_reg = decode_reg(insn.a);
+                let rs1_reg = decode_reg(insn.a.as_u32());
                 Some(LiftedInstr::Body(InstrAt {
                     pc,
                     instr: Box::new(HintSqrtInstr {

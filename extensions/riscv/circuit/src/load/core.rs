@@ -274,7 +274,7 @@ pub(crate) fn generate_trace_from_postflight<
     const NUM_OVERLAP_CELLS: usize,
 >(
     chip: &VmChipWrapper<F, LoadFiller<LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(load_opcode::<LOAD_WIDTH>().global_opcode());
     let adapter_width = LoadMultiByteAdapterCols::<F>::width();

@@ -22,7 +22,7 @@ use crate::{
 
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftRightArithmeticImmChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = ShiftImmOpcode::SRAI.global_opcode();
     let rows_used = postflight.steps(opcode).len();
@@ -34,7 +34,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let instruction = postflight.instruction(step);
-        let shamt = instruction.c.as_canonical_u32() as usize;
+        let shamt = instruction.c.as_u32() as usize;
         if shamt >= BLOCK_FE_WIDTH * U16_BITS {
             return Err(PostflightError::new(
                 "arithmetic shift immediate is out of range",
@@ -73,7 +73,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
 pub fn generate_word_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftWRightArithmeticImmChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = ShiftWImmOpcode::SRAIW.global_opcode();
     let rows_used = postflight.steps(opcode).len();
@@ -86,7 +86,7 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let instruction = postflight.instruction(step);
-        let shamt = instruction.c.as_canonical_u32() as usize;
+        let shamt = instruction.c.as_u32() as usize;
         if shamt >= WORD_U16_LIMBS * U16_BITS {
             return Err(PostflightError::new(
                 "word arithmetic shift immediate is out of range",

@@ -5,9 +5,7 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-};
+use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::instrument;
@@ -24,8 +22,8 @@ mod index;
 pub(crate) use index::validate_postflight_memory_config;
 pub use index::PostflightProgramIndex;
 use index::{
-    decode_field_block, field_reference, memory_index, memory_starts, resolve_program_slot,
-    validate_endpoint, validate_memory_config, validate_step,
+    field_reference, memory_index, memory_starts, resolve_program_slot, validate_endpoint,
+    validate_memory_config, validate_step,
 };
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -45,8 +43,8 @@ pub(crate) const fn memory_key(address_space: u32, pointer: u32) -> u64 {
 #[derive(Clone, Copy, Debug)]
 pub struct PostflightStep(u32);
 
-pub struct PostflightReplay<'a, 'history, F> {
-    postflight: &'a Postflight<'history, F>,
+pub struct PostflightReplay<'a, 'history> {
+    postflight: &'a Postflight<'history>,
     step: PostflightStep,
     memory_cursor: usize,
     timestamp: u32,
@@ -61,7 +59,16 @@ pub struct MemoryAccess<T> {
 
 pub type U8Access = MemoryAccess<u8>;
 pub type U16Access = MemoryAccess<u16>;
-pub type Field32Access<F> = MemoryAccess<F>;
+
+/// Raw integer words logged for a field-width memory access.
+///
+/// Consumers must validate the postflight values for their target field before conversion.
+pub struct Field32Access {
+    pub value: [u32; BLOCK_FE_WIDTH],
+    pub previous_value: [u32; BLOCK_FE_WIDTH],
+    pub previous_timestamp: u32,
+    pub timestamp: u32,
+}
 
 /// Fills one contiguous range of trace rows from independent preflight steps.
 ///
@@ -96,8 +103,8 @@ where
 /// Steps are grouped by opcode for parallel trace generation. Memory remains
 /// in chronological order; predecessor indexes resolve the value immediately
 /// before each timed access without reconstructing mutable RAM.
-pub struct Postflight<'a, F> {
-    program: &'a Program<F>,
+pub struct Postflight<'a> {
+    program: &'a Program,
     history: &'a PreflightHistory,
     memory_config: MemoryConfig,
     exit_code: Option<u32>,
@@ -106,7 +113,8 @@ pub struct Postflight<'a, F> {
     opcode_ranges: BTreeMap<u32, Range<usize>>,
     filtered_exec_frequencies: Vec<u32>,
     memory_predecessors: Vec<u32>,
-    touched_memory: TouchedMemory<F>,
+    touched_memory: TouchedMemory,
+    max_field_value: Option<u32>,
 }
 
 #[derive(Debug, Error)]
@@ -119,9 +127,9 @@ impl PostflightError {
     }
 }
 
-impl<'a, F: PrimeField32> Postflight<'a, F> {
+impl<'a> Postflight<'a> {
     pub fn new(
-        program: &'a Program<F>,
+        program: &'a Program,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
         exit_code: Option<u32>,
@@ -138,7 +146,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     }
 
     pub(crate) fn new_prepared(
-        program: &'a Program<F>,
+        program: &'a Program,
         program_index: &PostflightProgramIndex,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
@@ -156,7 +164,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
 
     #[instrument(name = "postflight", skip_all)]
     fn new_inner(
-        program: &'a Program<F>,
+        program: &'a Program,
         program_index: &PostflightProgramIndex,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
@@ -181,12 +189,15 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                 .0;
             let opcode = instruction.opcode;
             validate_step(history, program_event_index, opcode, exit_code)?;
-            if opcode == SystemOpcode::TERMINATE.global_opcode()
-                && exit_code != Some(instruction.c.as_canonical_u32())
-            {
-                return Err(PostflightError::new(
-                    "TERMINATE exit code does not match the fetched instruction",
-                ));
+            if opcode == SystemOpcode::TERMINATE.global_opcode() {
+                let expected_exit_code = instruction.c.checked_as_u32().ok_or_else(|| {
+                    PostflightError::new("TERMINATE exit code must be non-negative")
+                })?;
+                if exit_code != Some(expected_exit_code) {
+                    return Err(PostflightError::new(
+                        "TERMINATE exit code does not match the fetched instruction",
+                    ));
+                }
             }
             let opcode = u32::try_from(opcode.as_usize())
                 .map_err(|_| PostflightError::new("instruction opcode exceeds u32::MAX"))?;
@@ -229,7 +240,8 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             *destination += 1;
         }
 
-        let (memory_predecessors, touched_memory) = memory_index::<F>(history, memory_config)?;
+        let (memory_predecessors, touched_memory, max_field_value) =
+            memory_index(history, memory_config)?;
         Ok(Self {
             program,
             history,
@@ -241,6 +253,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             filtered_exec_frequencies,
             memory_predecessors,
             touched_memory,
+            max_field_value,
         })
     }
 
@@ -264,7 +277,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             .map_or(0, |range| range.len() as u64)
     }
 
-    pub fn instruction(&self, step: PostflightStep) -> &Instruction<F> {
+    pub fn instruction(&self, step: PostflightStep) -> &Instruction {
         let pc = self.pc(step);
         debug_assert!(pc >= self.program.pc_base);
         debug_assert!(pc
@@ -307,11 +320,24 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         &self.filtered_exec_frequencies
     }
 
-    pub fn touched_memory(&self) -> &TouchedMemory<F> {
+    pub fn touched_memory(&self) -> &TouchedMemory {
         &self.touched_memory
     }
 
-    pub fn replay(&self, step: PostflightStep) -> PostflightReplay<'_, 'a, F> {
+    /// Checks that every raw field-memory word is canonical for `field_order`.
+    pub fn validate_field_values(&self, field_order: u32) -> Result<(), PostflightError> {
+        if self
+            .max_field_value
+            .is_some_and(|max_value| max_value >= field_order)
+        {
+            return Err(PostflightError::new(format!(
+                "field sidecar contains a value outside field order {field_order}",
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn replay(&self, step: PostflightStep) -> PostflightReplay<'_, 'a> {
         let memory_cursor = self.memory_starts[step.0 as usize] as usize;
         PostflightReplay {
             postflight: self,
@@ -354,30 +380,27 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         }
     }
 
-    fn field_value(&self, event_index: usize) -> [F; BLOCK_FE_WIDTH] {
-        decode_field_block::<F>(
-            self.history.memory.field_values
-                [field_reference(self.history.memory.accesses[event_index].value)],
-        )
+    fn field_value(&self, event_index: usize) -> [u32; BLOCK_FE_WIDTH] {
+        self.history.memory.field_values
+            [field_reference(self.history.memory.accesses[event_index].value)]
+        .values
     }
 
-    fn previous_field32(&self, event_index: usize) -> [F; BLOCK_FE_WIDTH] {
+    fn previous_field32(&self, event_index: usize) -> [u32; BLOCK_FE_WIDTH] {
         let predecessor = self.memory_predecessors[event_index];
         if predecessor == 0 {
             self.field_value(event_index)
         } else if predecessor & PREDECESSOR_SEED_BIT != 0 {
             let seed =
                 self.history.memory.initial_writes[(predecessor & PREDECESSOR_INDEX_MASK) as usize];
-            decode_field_block::<F>(
-                self.history.memory.field_initial_values[field_reference(seed.initial_value)],
-            )
+            self.history.memory.field_initial_values[field_reference(seed.initial_value)].values
         } else {
             self.field_value(predecessor as usize - 1)
         }
     }
 }
 
-impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
+impl PostflightReplay<'_, '_> {
     pub fn read_u8(
         &mut self,
         address_space: u32,
@@ -426,7 +449,7 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
         &mut self,
         address_space: u32,
         pointer: u32,
-    ) -> Result<Field32Access<F>, PostflightError> {
+    ) -> Result<Field32Access, PostflightError> {
         self.access_field32(address_space, pointer, false, None)
     }
 
@@ -434,8 +457,8 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
         &mut self,
         address_space: u32,
         pointer: u32,
-        expected_value: [F; BLOCK_FE_WIDTH],
-    ) -> Result<Field32Access<F>, PostflightError> {
+        expected_value: [u32; BLOCK_FE_WIDTH],
+    ) -> Result<Field32Access, PostflightError> {
         self.access_field32(address_space, pointer, true, Some(expected_value))
     }
 
@@ -571,8 +594,8 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
         address_space: u32,
         pointer: u32,
         is_write: bool,
-        expected_write: Option<[F; BLOCK_FE_WIDTH]>,
-    ) -> Result<Field32Access<F>, PostflightError> {
+        expected_write: Option<[u32; BLOCK_FE_WIDTH]>,
+    ) -> Result<Field32Access, PostflightError> {
         let (event_index, event) =
             self.consume_event(address_space, pointer, is_write, MemoryCellType::field32())?;
         let value = self.postflight.field_value(event_index);

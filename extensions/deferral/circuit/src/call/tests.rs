@@ -63,7 +63,7 @@ const NUM_DEFERRALS: usize = 4;
 const DEFERRAL_COUNT_BUS: BusIndex = 20;
 const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 
-type Harness = TestChipHarness<F, DeferralCallExecutor, DeferralCallAir, DeferralCallChip<F>>;
+type Harness = TestChipHarness<F, DeferralCallExecutor<F>, DeferralCallAir, DeferralCallChip<F>>;
 type BitwisePeriphery = (
     BitwiseOperationLookupAir<BYTE_BITS>,
     SharedBitwiseOperationLookupChip<BYTE_BITS>,
@@ -74,7 +74,7 @@ type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
-    DeferralCallExecutor,
+    DeferralCallExecutor<F>,
     DeferralCallAir,
     DeferralCallChipGpu,
     DeferralCallChip<F>,
@@ -135,12 +135,12 @@ fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
 fn set_and_execute_call<E, T>(
     tester: &mut T,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     num_deferrals: usize,
-) -> Instruction<F>
+) -> Instruction
 where
-    E: Executor<F> + Clone,
+    E: Executor + Clone,
     T: TestBuilder<F>,
 {
     let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
@@ -441,6 +441,33 @@ fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() 
     let actual = super::generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
     assert!(!actual.values.is_empty());
     drop(postflight);
+
+    let field_index = history.memory.field_values.len() - 1;
+    let original_value = history.memory.field_values[field_index].values[0];
+    history.memory.field_values[field_index].values[0] = F::ORDER_U32;
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
+    let counts_before = count
+        .1
+        .count
+        .iter()
+        .map(|count| count.load(Ordering::Relaxed))
+        .collect::<Vec<_>>();
+    let poseidon_records_before = poseidon2.1.records.len();
+    let error = super::generate_trace_from_postflight(&harness.chip, &postflight)
+        .expect_err("noncanonical CALL field values must be rejected");
+    assert!(error.to_string().contains("outside field order"));
+    assert_eq!(
+        counts_before,
+        count
+            .1
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(poseidon_records_before, poseidon2.1.records.len());
+    drop(postflight);
+    history.memory.field_values[field_index].values[0] = original_value;
 
     let removed = history
         .memory

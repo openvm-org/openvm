@@ -4,8 +4,10 @@
 #include <cstddef>
 #include <cstdint>
 
-// CUDA layout of `TouchedBlock<F>`: one fixed memory-bus block, its last
+// CUDA layout of `TouchedBlock`: one fixed memory-bus block, its last
 // timestamp, and whether any access to the block in this segment was a write.
+// Values are canonical field representatives; the memory-inventory kernel
+// converts them to Montgomery form at the proof boundary.
 struct MemoryTouchedBlock {
     uint32_t address_space;
     uint32_t ptr;

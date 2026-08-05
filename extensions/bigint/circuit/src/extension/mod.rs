@@ -80,7 +80,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
+impl VmRvrExtension for Int256 {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(Int256Extension::new());
     }

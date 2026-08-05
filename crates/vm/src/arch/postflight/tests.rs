@@ -1,7 +1,8 @@
 use openvm_instructions::{
-    program::Program, riscv::REGISTER_AS, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+    instruction::InstructionOperand, program::Program, riscv::REGISTER_AS, SystemOpcode,
+    DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::PREFLIGHT_WRITE_BIT;
 
@@ -21,8 +22,7 @@ fn fill_trace_rows_skips_empty_ranges() {
 fn peek_uses_the_already_consumed_timed_event_prefix() {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -74,8 +74,7 @@ fn peek_uses_the_already_consumed_timed_event_prefix() {
 fn peek_before_a_first_read_uses_the_read_value() {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -114,25 +113,20 @@ fn field_block(values: [u32; BLOCK_FE_WIDTH]) -> PreflightFieldBlock {
 }
 
 #[test]
-fn field_sidecars_are_canonical_not_field_representations() {
+fn field_sidecars_store_raw_words() {
     let canonical = [1, 2, 3, BabyBear::ORDER_U32 - 1];
     let block = field_block(canonical);
     assert_eq!(block.values, canonical);
-    assert_eq!(
-        decode_field_block::<BabyBear>(block).map(|value| value.as_canonical_u32()),
-        canonical
-    );
 }
 
 fn compact_reference(index: u32) -> [u16; BLOCK_FE_WIDTH] {
     [index as u16, (index >> 16) as u16, 0, 0]
 }
 
-fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
+fn mixed_history() -> (Program, PreflightHistory) {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -187,8 +181,7 @@ fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
 fn u8_history_replays_packed_event_and_seed() {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let initial = [1, 2, 3, 4];
     let written = [5, 6, 7, 8];
     let history = PreflightHistory {
@@ -227,10 +220,7 @@ fn u8_history_replays_packed_event_and_seed() {
 
     let touched = &postflight.touched_memory()[0];
     assert_eq!(touched.address_space, PUBLIC_VALUES_AS);
-    assert_eq!(
-        touched.values.map(|value| value.as_canonical_u32()),
-        written.map(u32::from)
-    );
+    assert_eq!(touched.values, written.map(u32::from));
 }
 
 #[test]
@@ -247,7 +237,7 @@ fn rejects_invalid_program_boundaries() {
     let terminate =
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
     let phantom = Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program = Program::<BabyBear>::new_without_debug_infos(&[terminate, phantom], 0);
+    let program = Program::new_without_debug_infos(&[terminate, phantom], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -291,18 +281,8 @@ fn derives_boundary_frequencies_and_mixed_touched_memory() {
             .collect::<Vec<_>>(),
         [(REGISTER_AS, 0, 1, 2), (DEFERRAL_AS, 0, 1, 4),]
     );
-    assert_eq!(
-        postflight.touched_memory()[0]
-            .values
-            .map(|value| value.as_canonical_u32()),
-        [5, 6, 7, 8]
-    );
-    assert_eq!(
-        postflight.touched_memory()[1]
-            .values
-            .map(|value| value.as_canonical_u32()),
-        [31, 32, 33, 34]
-    );
+    assert_eq!(postflight.touched_memory()[0].values, [5, 6, 7, 8]);
+    assert_eq!(postflight.touched_memory()[1].values, [31, 32, 33, 34]);
 
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     let mut replay = postflight.replay(step);
@@ -312,21 +292,11 @@ fn derives_boundary_frequencies_and_mixed_touched_memory() {
     let write = replay.write_u16(REGISTER_AS, 0, [5, 6, 7, 8]).unwrap();
     assert_eq!(write.previous_value, [1, 2, 3, 4]);
     let field_write = replay
-        .write_field32(DEFERRAL_AS, 0, [21, 22, 23, 24].map(BabyBear::from_u32))
+        .write_field32(DEFERRAL_AS, 0, [21, 22, 23, 24])
         .unwrap();
-    assert_eq!(
-        field_write
-            .previous_value
-            .map(|value| value.as_canonical_u32()),
-        [11, 12, 13, 14]
-    );
+    assert_eq!(field_write.previous_value, [11, 12, 13, 14]);
     let field_read = replay.read_field32(DEFERRAL_AS, 0).unwrap();
-    assert_eq!(
-        field_read
-            .previous_value
-            .map(|value| value.as_canonical_u32()),
-        [21, 22, 23, 24]
-    );
+    assert_eq!(field_read.previous_value, [21, 22, 23, 24]);
     replay.finish(4).unwrap();
 }
 
@@ -337,7 +307,7 @@ fn retains_a_terminated_boundary_and_frequency() {
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, exit_code as usize, 0, 0],
     );
-    let program = Program::<BabyBear>::new_without_debug_infos(&[terminate], 0);
+    let program = Program::new_without_debug_infos(&[terminate], 0);
     let boundary = PreflightProgramEvent {
         pc: 0,
         timestamp: 1,
@@ -355,14 +325,34 @@ fn retains_a_terminated_boundary_and_frequency() {
     assert_eq!(postflight.filtered_exec_frequencies(), [1]);
 }
 
+#[test]
+fn rejects_negative_terminate_exit_code() {
+    let terminate = Instruction {
+        opcode: SystemOpcode::TERMINATE.global_opcode(),
+        c: InstructionOperand::from_i32(-1),
+        ..Default::default()
+    };
+    let program = Program::new_without_debug_infos(&[terminate], 0);
+    let boundary = PreflightProgramEvent {
+        pc: 0,
+        timestamp: 1,
+    };
+    let history = PreflightHistory {
+        program: vec![boundary, boundary],
+        ..Default::default()
+    };
+
+    let error = Postflight::new(&program, &history, &MemoryConfig::default(), Some(u32::MAX))
+        .err()
+        .unwrap();
+    assert!(error.to_string().contains("must be non-negative"));
+}
+
 #[cfg(feature = "metrics")]
 #[test]
 fn derives_opcode_counts_from_validated_history() {
     let phantom = Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program = Program::<BabyBear>::new_without_debug_infos(
-        &[phantom.clone(), phantom.clone(), phantom],
-        0,
-    );
+    let program = Program::new_without_debug_infos(&[phantom.clone(), phantom.clone(), phantom], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -434,11 +424,23 @@ fn rejects_invalid_memory_domains_and_field_sidecars() {
 
     let (program, mut history) = mixed_history();
     history.memory.field_values[0].values[0] = BabyBear::ORDER_U32;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    assert!(postflight
+        .validate_field_values(BabyBear::ORDER_U32)
         .err()
         .unwrap()
         .to_string()
-        .contains("non-canonical"));
+        .contains("outside field order"));
+
+    let (program, mut history) = mixed_history();
+    history.memory.field_initial_values[0].values[0] = BabyBear::ORDER_U32;
+    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    assert!(postflight
+        .validate_field_values(BabyBear::ORDER_U32)
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("outside field order"));
 
     let (program, mut history) = mixed_history();
     history.program[1].timestamp = 1 << memory_config.timestamp_max_bits;
@@ -486,9 +488,7 @@ fn rejects_invalid_memory_chronology() {
         ..Default::default()
     };
     let error = |history: &PreflightHistory, config: &MemoryConfig| {
-        memory_index::<BabyBear>(history, config)
-            .unwrap_err()
-            .to_string()
+        memory_index(history, config).unwrap_err().to_string()
     };
     let config = MemoryConfig::default();
 

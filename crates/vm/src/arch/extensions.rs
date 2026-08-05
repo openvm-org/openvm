@@ -35,7 +35,9 @@ use tracing::info_span;
 
 #[cfg(feature = "cuda")]
 use super::cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript};
-use super::{GenerationError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig};
+use super::{
+    GenerationError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig, VmField,
+};
 #[cfg(feature = "cuda")]
 use crate::system::cuda::SystemChipInventoryGPU;
 use crate::system::{
@@ -93,6 +95,20 @@ pub trait VmExecutionExtension {
     ) -> Result<(), ExecutorInventoryError>;
 }
 
+/// Extension of VM execution whose executor depends on the VM field.
+///
+/// Most extensions should implement [`VmExecutionExtension`]. This trait is reserved for
+/// extensions such as Deferral whose runtime semantics directly operate on field-valued memory.
+pub trait VmFieldExecutionExtension<F: VmField> {
+    /// Enum of executor variants.
+    type Executor: AnyEnum;
+
+    fn extend_field_execution(
+        &self,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
+    ) -> Result<(), ExecutorInventoryError>;
+}
+
 /// Extension of the VM circuit. Allows _in-order_ addition of new AIRs with interactions.
 pub trait VmCircuitExtension<SC: StarkProtocolConfig> {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
@@ -100,13 +116,14 @@ pub trait VmCircuitExtension<SC: StarkProtocolConfig> {
 
 /// Backend-specific trace generation for one VM extension.
 ///
-/// Note that this trait differs from [VmExecutionExtension] and [VmCircuitExtension]. This trait is
-/// meant to be implemented on a separate ZST which may be different for different [ProverBackend]s.
-/// This is done to get around Rust orphan rules.
+/// Note that this trait differs from [`VmExecutionExtension`],
+/// [`VmFieldExecutionExtension`], and [`VmCircuitExtension`]. This trait is meant to be implemented
+/// on a separate ZST which may be different for different [ProverBackend]s. This is done to get
+/// around Rust orphan rules.
 pub trait VmProverExtension<E, EXT>
 where
     E: StarkEngine,
-    EXT: VmExecutionExtension + VmCircuitExtension<E::SC>,
+    EXT: VmCircuitExtension<E::SC>,
 {
     /// The chips added to `inventory` should exactly match the order of AIRs in the
     /// [VmCircuitExtension] implementation of `EXT`.
@@ -224,10 +241,7 @@ where
 }
 
 type PostflightGenerator<PB> = Box<
-    dyn for<'a> Fn(
-            &dyn Any,
-            &Postflight<'a, <PB as ProverBackend>::Val>,
-        ) -> Result<AirProvingContext<PB>, PostflightError>
+    dyn for<'a> Fn(&dyn Any, &Postflight<'a>) -> Result<AirProvingContext<PB>, PostflightError>
         + Send
         + Sync,
 >;
@@ -236,7 +250,7 @@ fn erase_postflight_generator<PB, C, G>(generate: G) -> PostflightGenerator<PB>
 where
     PB: ProverBackend,
     C: 'static,
-    G: for<'a> Fn(&C, &Postflight<'a, PB::Val>) -> Result<AirProvingContext<PB>, PostflightError>
+    G: for<'a> Fn(&C, &Postflight<'a>) -> Result<AirProvingContext<PB>, PostflightError>
         + Send
         + Sync
         + 'static,
@@ -315,8 +329,37 @@ impl<E> ExecutorInventory<E> {
         EXT: VmExecutionExtension,
         EXT::Executor: Into<CombinedE>,
     {
-        let mut builder: ExecutorInventoryBuilder<EXT::Executor> = self.builder();
-        other.extend_execution(&mut builder)?;
+        self.extend_with(|builder| other.extend_execution(builder))
+    }
+
+    /// Extend the inventory with an extension whose executor depends on the VM field.
+    pub fn extend_field<F, CombinedE, EXT>(
+        self,
+        other: &EXT,
+    ) -> Result<ExecutorInventory<CombinedE>, ExecutorInventoryError>
+    where
+        F: VmField,
+        E: Into<CombinedE> + AnyEnum,
+        CombinedE: AnyEnum,
+        EXT: VmFieldExecutionExtension<F>,
+        EXT::Executor: Into<CombinedE>,
+    {
+        self.extend_with(|builder| other.extend_field_execution(builder))
+    }
+
+    fn extend_with<CombinedE, ExtensionE>(
+        self,
+        extend: impl FnOnce(
+            &mut ExecutorInventoryBuilder<ExtensionE>,
+        ) -> Result<(), ExecutorInventoryError>,
+    ) -> Result<ExecutorInventory<CombinedE>, ExecutorInventoryError>
+    where
+        E: Into<CombinedE> + AnyEnum,
+        CombinedE: AnyEnum,
+        ExtensionE: Into<CombinedE> + AnyEnum,
+    {
+        let mut builder: ExecutorInventoryBuilder<ExtensionE> = self.builder();
+        extend(&mut builder)?;
         let other_inventory = builder.new_inventory;
         let other_phantom_executors = builder.phantom_executors;
         let mut inventory_ext = self.transmute();
@@ -334,7 +377,6 @@ impl<E> ExecutorInventory<E> {
                 return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
             }
         }
-
         Ok(inventory_ext)
     }
 
@@ -619,8 +661,7 @@ where
         self.chips.iter().filter_map(|c| c.as_any().downcast_ref())
     }
 
-    /// Adds a chip that is not associated with any executor, as defined by the
-    /// [VmExecutionExtension] trait.
+    /// Adds a chip that is not associated with any registered executor.
     pub fn add_periphery_chip<C: Chip<PB> + 'static>(&mut self, chip: C) {
         let constant_trace_height = chip.constant_trace_height();
         self.add_periphery_chip_with_height(chip, constant_trace_height);
@@ -637,7 +678,7 @@ where
 
     /// Adds a chip and associates it to the next executor.
     /// **Caution:** you must add chips in the order matching the order that executors were added in
-    /// the [VmExecutionExtension] implementation.
+    /// the corresponding execution extension implementation.
     pub fn add_executor_chip<C: 'static>(&mut self, chip: C) {
         tracing::debug!("add_executor_chip: {}", type_name::<C>());
         self.executor_idx_to_insertion_idx.push(self.chips.len());
@@ -648,10 +689,7 @@ where
     pub fn add_periphery_chip_with_tracegen<C, G>(&mut self, chip: C, generate: G)
     where
         C: Chip<PB> + 'static,
-        G: for<'a> Fn(
-                &C,
-                &Postflight<'a, PB::Val>,
-            ) -> Result<AirProvingContext<PB>, PostflightError>
+        G: for<'a> Fn(&C, &Postflight<'a>) -> Result<AirProvingContext<PB>, PostflightError>
             + Send
             + Sync
             + 'static,
@@ -668,10 +706,7 @@ where
         generate: G,
     ) where
         C: 'static,
-        G: for<'a> Fn(
-                &C,
-                &Postflight<'a, PB::Val>,
-            ) -> Result<AirProvingContext<PB>, PostflightError>
+        G: for<'a> Fn(&C, &Postflight<'a>) -> Result<AirProvingContext<PB>, PostflightError>
             + Send
             + Sync
             + 'static,
@@ -686,10 +721,7 @@ where
     pub fn add_executor_chip_with_tracegen<C, G>(&mut self, chip: C, generate: G)
     where
         C: 'static,
-        G: for<'a> Fn(
-                &C,
-                &Postflight<'a, PB::Val>,
-            ) -> Result<AirProvingContext<PB>, PostflightError>
+        G: for<'a> Fn(&C, &Postflight<'a>) -> Result<AirProvingContext<PB>, PostflightError>
             + Send
             + Sync
             + 'static,
@@ -856,11 +888,13 @@ where
     /// Generates CPU traces directly from immutable preflight history.
     pub(crate) fn generate_proving_ctx_from_postflight(
         &mut self,
-        postflight: &Postflight<'_, Val<SC>>,
+        postflight: &Postflight<'_>,
     ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
         let sys_ctxs = {
             let _span = info_span!("system_trace_gen").entered();
-            self.system.generate_proving_ctx_from_postflight(postflight)
+            self.system
+                .generate_proving_ctx_from_postflight(postflight)
+                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
         };
 
         let mut exec_ctxs = Vec::new();
@@ -972,6 +1006,21 @@ impl<EXT: VmExecutionExtension> VmExecutionExtension for Option<EXT> {
     ) -> Result<(), ExecutorInventoryError> {
         if let Some(extension) = self {
             extension.extend_execution(inventory)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<F: VmField, EXT: VmFieldExecutionExtension<F>> VmFieldExecutionExtension<F> for Option<EXT> {
+    type Executor = EXT::Executor;
+
+    fn extend_field_execution(
+        &self,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        if let Some(extension) = self {
+            extension.extend_field_execution(inventory)
         } else {
             Ok(())
         }

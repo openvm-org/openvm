@@ -113,25 +113,25 @@ pub struct BranchAdapterFiller;
 
 impl BranchAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut BranchAdapterCols<F>,
-        next_pc: impl FnOnce(u32, [[u16; BLOCK_FE_WIDTH]; 2], u32) -> u32,
+        next_pc: impl FnOnce(u32, [[u16; BLOCK_FE_WIDTH]; 2], i32) -> u32,
     ) -> Result<([[u16; BLOCK_FE_WIDTH]; 2], u32), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != REGISTER_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != REGISTER_AS {
             return Err(PostflightError::new(
                 "branch instruction has invalid address spaces",
             ));
         }
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
-        let rs1_ptr = instruction.a.as_canonical_u32();
-        let rs2_ptr = instruction.b.as_canonical_u32();
-        let immediate = instruction.c.as_canonical_u32();
+        let rs1_ptr = instruction.a.as_u32();
+        let rs2_ptr = instruction.b.as_u32();
+        let immediate =
+            super::decode_signed_instruction_imm(instruction.c, super::RV_B_TYPE_IMM_BITS)
+                .ok_or_else(|| PostflightError::new("branch instruction has invalid immediate"))?;
         let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
         let rs2_u16_ptr = checked_register_u16_pointer(rs2_ptr)?;
         let mut replay = postflight.replay(step);

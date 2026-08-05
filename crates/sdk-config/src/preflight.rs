@@ -20,11 +20,9 @@ use openvm_riscv_circuit::preflight::{PostflightAccessRegistry, PreflightReplayP
 use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 use openvm_sha2_circuit::Sha2PreflightGpuTracegen;
 use openvm_stark_backend::{
-    p3_field::PrimeField32,
     prover::{AirProvingContext, ProvingContext},
     StarkEngine,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{SdkVmConfig, SdkVmGpuBuilder};
 
@@ -52,12 +50,11 @@ impl SdkVmGpuBuilder {
     /// Uploads the immutable program used by interpreter preflight postflight
     /// and trace generation.
     #[cfg(not(feature = "rvr"))]
-    pub(crate) fn upload_preflight_program<F: PrimeField32>(
+    pub(crate) fn upload_preflight_program(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &Program<F>,
+        program: &Program,
     ) -> Result<GpuPostflightProgram, GpuPostflightError> {
         validate_preflight_config(vm.config())?;
-        let config = vm.config().to_inner();
         GpuPostflightProgram::upload(
             program,
             &vm.config().as_ref().memory_config,
@@ -68,9 +65,9 @@ impl SdkVmGpuBuilder {
     /// Uploads one immutable program together with all postflight access
     /// schedules enabled by this SDK configuration.
     #[cfg(feature = "rvr")]
-    pub(crate) fn upload_preflight_program<F: PrimeField32>(
+    pub(crate) fn upload_preflight_program(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &Program<F>,
+        program: &Program,
     ) -> Result<PreflightReplayProgram, GpuPostflightError> {
         validate_preflight_config(vm.config())?;
         let config = vm.config().to_inner();
@@ -157,14 +154,14 @@ impl PostflightTracegen<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
 
     fn prepare_postflight(
         vm: &VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &Program<BabyBear>,
+        program: &Program,
     ) -> Result<Self::Prepared, GenerationError> {
         prepare_gpu_postflight(vm, program)
     }
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        _host_program: &Program<BabyBear>,
+        _host_program: &Program,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
@@ -421,8 +418,10 @@ mod tests {
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::{
         rvr::{PreflightEndpoint, PreflightLimits},
-        MemoryConfig, SystemConfig, VmExecutor,
+        MemoryConfig, SystemConfig, VmFieldExecutor,
     };
+    #[cfg(feature = "rvr")]
+    use openvm_cuda_backend::prelude::F;
     #[cfg(feature = "rvr")]
     use openvm_instructions::{
         exe::VmExe,
@@ -434,8 +433,6 @@ mod tests {
     use openvm_instructions::{LocalOpcode, SystemOpcode};
     #[cfg(feature = "rvr")]
     use openvm_stark_backend::SystemParams;
-    #[cfg(feature = "rvr")]
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
 
@@ -451,14 +448,14 @@ mod tests {
     #[cfg(feature = "rvr")]
     #[test]
     fn standard_sdk_inventory_proves_from_record_free_preflight() {
-        let program = Program::from_instructions(&[Instruction::<BabyBear>::from_usize(
+        let program = Program::from_instructions(&[Instruction::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
             [0; 7],
         )]);
         let exe = VmExe::new(program.clone());
         let mut config = SdkVmConfig::standard();
         config.system.config = small_system_config();
-        let executor = VmExecutor::new(config.clone()).unwrap();
+        let executor = VmFieldExecutor::<F, _>::new(config.clone()).unwrap();
         let preflight = executor.preflight_instance(&exe).unwrap();
         let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
 

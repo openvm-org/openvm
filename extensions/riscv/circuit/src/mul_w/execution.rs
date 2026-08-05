@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{MulOpcode, MulWOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::MulWCoreExecutor;
 #[derive(AlignedBytesBorrow, Clone)]
@@ -24,33 +23,30 @@ struct MulWPreCompute {
 }
 
 impl MulWCoreExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut MulWPreCompute,
     ) -> Result<(), StaticProgramError> {
         assert_eq!(
             MulWOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulWOpcode::MULW
         );
-        if inst.d.as_canonical_u32() != REGISTER_AS {
+        if inst.d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = MulWPreCompute {
-            a: inst.a.as_canonical_u32() as u8,
-            b: inst.b.as_canonical_u32() as u8,
-            c: inst.c.as_canonical_u32() as u8,
+            a: inst.a.as_u32() as u8,
+            b: inst.b.as_u32() as u8,
+            c: inst.c.as_u32() as u8,
         };
         Ok(())
     }
 }
 
-impl<F> InterpreterExecutor<F> for MulWCoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterExecutor for MulWCoreExecutor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
     }
@@ -62,7 +58,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -77,7 +73,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -89,10 +85,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for MulWCoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterMeteredExecutor for MulWCoreExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MulWPreCompute>>()
     }
@@ -102,7 +95,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -119,7 +112,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

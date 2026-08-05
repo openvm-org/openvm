@@ -1,7 +1,8 @@
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
 
-static constexpr uint32_t NUM_PHANTOM_OPERANDS = 3;
+static constexpr uint32_t NUM_PHANTOM_OPERANDS = 4;
+static constexpr uint32_t INSTRUCTION_OPERAND_MAX = (1u << 29) - 1;
 
 template <typename T> struct PhantomCols {
     T pc;
@@ -49,9 +50,11 @@ __global__ void phantom_replay_tracegen(
     auto const &from = *transition.from;
     auto const &to = *transition.to;
     auto const &instruction = *transition.instruction;
-    if (instruction.words[0] != phantom_opcode || instruction.words[4] != 0 ||
-        instruction.words[5] != 0 || instruction.words[6] != 0 ||
-        instruction.words[7] != 0) {
+    if (instruction.words[0] != phantom_opcode ||
+        instruction.words[1] > INSTRUCTION_OPERAND_MAX ||
+        instruction.words[2] > INSTRUCTION_OPERAND_MAX || instruction.words[3] > UINT16_MAX ||
+        instruction.words[4] > UINT16_MAX || instruction.words[5] != 0 ||
+        instruction.words[6] != 0 || instruction.words[7] != 0) {
         preflight_set_error(error, 854);
         return;
     }
@@ -64,7 +67,7 @@ __global__ void phantom_replay_tracegen(
     }
 
     uint32_t operands[NUM_PHANTOM_OPERANDS] = {
-        instruction.words[1], instruction.words[2], instruction.words[3]
+        instruction.words[1], instruction.words[2], instruction.words[3], instruction.words[4]
     };
     COL_WRITE_VALUE(row, PhantomCols, pc, from.pc);
     COL_WRITE_ARRAY(row, PhantomCols, operands, operands);

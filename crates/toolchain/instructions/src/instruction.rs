@@ -1,53 +1,261 @@
 use backtrace::Backtrace;
-use openvm_stark_backend::p3_field::Field;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 
-use crate::{utils::isize_to_field, LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode};
+use crate::{LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
 
-#[repr(C)]
-#[allow(clippy::too_many_arguments)]
-#[derive(Clone, Debug, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
-pub struct Instruction<F> {
-    pub opcode: VmOpcode,
-    pub a: F,
-    pub b: F,
-    pub c: F,
-    pub d: F,
-    pub e: F,
-    pub f: F,
-    pub g: F,
+/// Field-independent value stored in an OpenVM instruction operand.
+///
+/// Operands use an `i32` representation so signed values such as control-flow offsets do not
+/// depend on a field modulus. Every operand is restricted to the signed 30-bit interval
+/// `[-2^29, 2^29)`. This makes conversion into any supported proof field (whose order is at least
+/// `2^30`) injective while keeping instructions field-independent and compact.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct InstructionOperand(i32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InstructionOperandOutOfRange;
+
+impl std::fmt::Display for InstructionOperandOutOfRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("instruction operand must fit in signed 30 bits")
+    }
 }
 
-impl<F: Field> Instruction<F> {
+impl std::error::Error for InstructionOperandOutOfRange {}
+
+impl InstructionOperand {
+    pub const MIN: i32 = -(1 << 29);
+    pub const MAX: i32 = (1 << 29) - 1;
+
+    pub const ZERO: Self = Self(0);
+    pub const ONE: Self = Self(1);
+    pub const TWO: Self = Self(2);
+
+    /// Creates an operand from a signed 32-bit value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `value` does not fit in the signed 30-bit operand domain.
+    pub const fn from_i32(value: i32) -> Self {
+        assert!(
+            value >= Self::MIN && value <= Self::MAX,
+            "instruction operand must fit in signed 30 bits"
+        );
+        Self(value)
+    }
+
+    /// Creates an operand from a non-negative value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `value` does not fit in the signed 30-bit operand domain.
+    pub fn from_u32(value: u32) -> Self {
+        Self::from_i32(
+            value
+                .try_into()
+                .expect("instruction operand must fit in signed 30 bits"),
+        )
+    }
+
+    /// Creates an operand from a signed, pointer-sized value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `value` does not fit in the signed 30-bit operand domain.
+    pub fn from_isize(value: isize) -> Self {
+        Self::from_i32(
+            value
+                .try_into()
+                .expect("instruction operand must fit in signed 30 bits"),
+        )
+    }
+
+    /// Creates an operand from a non-negative, pointer-sized value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `value` does not fit in the signed 30-bit operand domain.
+    pub fn from_usize(value: usize) -> Self {
+        Self::from_i32(
+            value
+                .try_into()
+                .expect("instruction operand must fit in signed 30 bits"),
+        )
+    }
+
+    pub const fn as_i32(self) -> i32 {
+        self.0
+    }
+
+    /// Returns the raw two's-complement representation of this operand.
+    pub const fn as_u32(self) -> u32 {
+        self.0 as u32
+    }
+
+    /// Returns this operand as a non-negative integer, or `None` if it is signed.
+    pub fn checked_as_u32(self) -> Option<u32> {
+        self.0.try_into().ok()
+    }
+
+    pub const fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn is_one(self) -> bool {
+        self.0 == 1
+    }
+}
+
+impl<'de> Deserialize<'de> for InstructionOperand {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = i32::deserialize(deserializer)?;
+        if !(Self::MIN..=Self::MAX).contains(&value) {
+            return Err(D::Error::custom(format_args!(
+                "instruction operand {value} is outside the signed 30-bit domain"
+            )));
+        }
+        Ok(Self(value))
+    }
+}
+
+impl TryFrom<i32> for InstructionOperand {
+    type Error = InstructionOperandOutOfRange;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        (Self::MIN..=Self::MAX)
+            .contains(&value)
+            .then_some(Self(value))
+            .ok_or(InstructionOperandOutOfRange)
+    }
+}
+
+impl TryFrom<isize> for InstructionOperand {
+    type Error = InstructionOperandOutOfRange;
+
+    fn try_from(value: isize) -> Result<Self, Self::Error> {
+        i32::try_from(value)
+            .map_err(|_| InstructionOperandOutOfRange)?
+            .try_into()
+    }
+}
+
+impl TryFrom<u32> for InstructionOperand {
+    type Error = InstructionOperandOutOfRange;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        i32::try_from(value)
+            .map_err(|_| InstructionOperandOutOfRange)?
+            .try_into()
+    }
+}
+
+impl TryFrom<usize> for InstructionOperand {
+    type Error = InstructionOperandOutOfRange;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        i32::try_from(value)
+            .map_err(|_| InstructionOperandOutOfRange)?
+            .try_into()
+    }
+}
+
+impl From<bool> for InstructionOperand {
+    fn from(value: bool) -> Self {
+        Self::from_u32(value.into())
+    }
+}
+
+macro_rules! impl_infallible_operand_from {
+    ($($ty:ty),* $(,)?) => {
+        $(impl From<$ty> for InstructionOperand {
+            fn from(value: $ty) -> Self {
+                Self(value.into())
+            }
+        })*
+    };
+}
+
+impl_infallible_operand_from!(i8, u8, i16, u16);
+
+impl std::fmt::Display for InstructionOperand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[repr(C)]
+#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Instruction {
+    pub opcode: VmOpcode,
+    pub a: InstructionOperand,
+    pub b: InstructionOperand,
+    pub c: InstructionOperand,
+    pub d: InstructionOperand,
+    pub e: InstructionOperand,
+    pub f: InstructionOperand,
+    pub g: InstructionOperand,
+}
+
+impl Instruction {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        opcode: VmOpcode,
+        a: impl Into<InstructionOperand>,
+        b: impl Into<InstructionOperand>,
+        c: impl Into<InstructionOperand>,
+        d: impl Into<InstructionOperand>,
+        e: impl Into<InstructionOperand>,
+        f: impl Into<InstructionOperand>,
+        g: impl Into<InstructionOperand>,
+    ) -> Self {
+        Self {
+            opcode,
+            a: a.into(),
+            b: b.into(),
+            c: c.into(),
+            d: d.into(),
+            e: e.into(),
+            f: f.into(),
+            g: g.into(),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn from_isize(opcode: VmOpcode, a: isize, b: isize, c: isize, d: isize, e: isize) -> Self {
         Self {
             opcode,
-            a: isize_to_field::<F>(a),
-            b: isize_to_field::<F>(b),
-            c: isize_to_field::<F>(c),
-            d: isize_to_field::<F>(d),
-            e: isize_to_field::<F>(e),
-            f: isize_to_field::<F>(0),
-            g: isize_to_field::<F>(0),
+            a: InstructionOperand::from_isize(a),
+            b: InstructionOperand::from_isize(b),
+            c: InstructionOperand::from_isize(c),
+            d: InstructionOperand::from_isize(d),
+            e: InstructionOperand::from_isize(e),
+            f: InstructionOperand::ZERO,
+            g: InstructionOperand::ZERO,
         }
     }
 
     pub fn from_usize<const N: usize>(opcode: VmOpcode, operands: [usize; N]) -> Self {
-        let mut operands = operands.map(F::from_usize).to_vec();
-        operands.resize(NUM_OPERANDS, F::ZERO);
+        let operand = |index| {
+            operands
+                .get(index)
+                .copied()
+                .map(InstructionOperand::from_usize)
+                .unwrap_or(InstructionOperand::ZERO)
+        };
         Self {
             opcode,
-            a: operands[0],
-            b: operands[1],
-            c: operands[2],
-            d: operands[3],
-            e: operands[4],
-            f: operands[5],
-            g: operands[6],
+            a: operand(0),
+            b: operand(1),
+            c: operand(2),
+            d: operand(3),
+            e: operand(4),
+            f: operand(5),
+            g: operand(6),
         }
     }
 
@@ -64,22 +272,28 @@ impl<F: Field> Instruction<F> {
     ) -> Self {
         Self {
             opcode,
-            a: isize_to_field::<F>(a),
-            b: isize_to_field::<F>(b),
-            c: isize_to_field::<F>(c),
-            d: isize_to_field::<F>(d),
-            e: isize_to_field::<F>(e),
-            f: isize_to_field::<F>(f),
-            g: isize_to_field::<F>(g),
+            a: InstructionOperand::from_isize(a),
+            b: InstructionOperand::from_isize(b),
+            c: InstructionOperand::from_isize(c),
+            d: InstructionOperand::from_isize(d),
+            e: InstructionOperand::from_isize(e),
+            f: InstructionOperand::from_isize(f),
+            g: InstructionOperand::from_isize(g),
         }
     }
 
-    pub fn phantom(discriminant: PhantomDiscriminant, a: F, b: F, c_upper: u16) -> Self {
+    pub fn phantom(
+        discriminant: PhantomDiscriminant,
+        a: impl Into<InstructionOperand>,
+        b: impl Into<InstructionOperand>,
+        c_upper: u16,
+    ) -> Self {
         Self {
             opcode: SystemOpcode::PHANTOM.global_opcode(),
-            a,
-            b,
-            c: F::from_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
+            a: a.into(),
+            b: b.into(),
+            c: InstructionOperand::from_u32(discriminant.0.into()),
+            d: InstructionOperand::from_u32(c_upper.into()),
             ..Default::default()
         }
     }
@@ -87,29 +301,111 @@ impl<F: Field> Instruction<F> {
     pub fn debug(discriminant: PhantomDiscriminant) -> Self {
         Self {
             opcode: SystemOpcode::PHANTOM.global_opcode(),
-            c: F::from_u32(discriminant.0 as u32),
+            c: InstructionOperand::from_u32(discriminant.0 as u32),
             ..Default::default()
         }
     }
 
-    pub fn operands(&self) -> Vec<F> {
-        vec![self.a, self.b, self.c, self.d, self.e, self.f, self.g]
+    pub const fn operands(&self) -> [InstructionOperand; NUM_OPERANDS] {
+        [self.a, self.b, self.c, self.d, self.e, self.f, self.g]
     }
 }
 
-impl<T: Default> Default for Instruction<T> {
+impl Default for Instruction {
     fn default() -> Self {
         Self {
             opcode: VmOpcode::from_usize(0), /* there is no real default opcode, this field must
                                               * always be set */
-            a: T::default(),
-            b: T::default(),
-            c: T::default(),
-            d: T::default(),
-            e: T::default(),
-            f: T::default(),
-            g: T::default(),
+            a: InstructionOperand::ZERO,
+            b: InstructionOperand::ZERO,
+            c: InstructionOperand::ZERO,
+            d: InstructionOperand::ZERO,
+            e: InstructionOperand::ZERO,
+            f: InstructionOperand::ZERO,
+            g: InstructionOperand::ZERO,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::de::value::{Error, I32Deserializer};
+
+    use super::*;
+
+    #[test]
+    fn operand_i32_boundaries() {
+        assert_eq!(
+            InstructionOperand::from_i32(InstructionOperand::MIN).as_i32(),
+            InstructionOperand::MIN
+        );
+        assert_eq!(InstructionOperand::from_i32(-1).as_i32(), -1);
+        assert_eq!(InstructionOperand::ZERO.as_i32(), 0);
+        assert_eq!(
+            InstructionOperand::from_u32(InstructionOperand::MAX as u32).as_u32(),
+            InstructionOperand::MAX as u32
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "instruction operand must fit in signed 30 bits")]
+    fn operand_rejects_value_above_signed_30_bit_domain() {
+        InstructionOperand::from_u32(InstructionOperand::MAX as u32 + 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "instruction operand must fit in signed 30 bits")]
+    fn operand_rejects_value_below_signed_30_bit_domain() {
+        InstructionOperand::from_i32(InstructionOperand::MIN - 1);
+    }
+
+    #[test]
+    fn operand_deserialization_enforces_signed_30_bit_domain() {
+        let valid =
+            InstructionOperand::deserialize(I32Deserializer::<Error>::new(InstructionOperand::MIN))
+                .unwrap();
+        assert_eq!(valid.as_i32(), InstructionOperand::MIN);
+        assert!(
+            InstructionOperand::deserialize(I32Deserializer::<Error>::new(
+                InstructionOperand::MAX + 1,
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn signed_operand_exposes_raw_bits_and_checked_unsigned_access() {
+        let operand = InstructionOperand::from_i32(-1);
+        assert_eq!(operand.as_u32(), u32::MAX);
+        assert_eq!(operand.checked_as_u32(), None);
+    }
+
+    #[test]
+    fn from_usize_pads_without_allocating() {
+        let instruction = Instruction::from_usize(VmOpcode::from_usize(7), [1, 2, 3]);
+        assert_eq!(
+            instruction.operands(),
+            [
+                InstructionOperand::ONE,
+                InstructionOperand::TWO,
+                InstructionOperand::from_i32(3),
+                InstructionOperand::ZERO,
+                InstructionOperand::ZERO,
+                InstructionOperand::ZERO,
+                InstructionOperand::ZERO,
+            ]
+        );
+    }
+
+    #[test]
+    fn phantom_keeps_discriminant_and_upper_bits_in_separate_operands() {
+        let instruction = Instruction::phantom(PhantomDiscriminant(u16::MAX), 0u8, 0u8, u16::MAX);
+        assert_eq!(instruction.c.as_u32(), u32::from(u16::MAX));
+        assert_eq!(instruction.d.as_u32(), u32::from(u16::MAX));
+        assert_eq!(
+            instruction.c.as_u32() | (instruction.d.as_u32() << 16),
+            u32::MAX
+        );
     }
 }
 

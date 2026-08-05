@@ -19,8 +19,6 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-#[cfg(feature = "rvr")]
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_pairing::PairingExtension as PairingRvrExtension;
@@ -71,7 +69,7 @@ pub struct PairingExtension {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
+impl VmRvrExtension for PairingExtension {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(PairingRvrExtension::new());
     }

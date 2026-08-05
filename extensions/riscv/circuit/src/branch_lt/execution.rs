@@ -9,14 +9,14 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode,
 };
 use openvm_riscv_transpiler::BranchLessThanOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BranchLessThanCoreExecutor;
+use crate::adapters::{decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct BranchLePreCompute {
-    imm: isize,
+    imm: i32,
     a: u8,
     b: u8,
 }
@@ -36,38 +36,32 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut BranchLePreCompute,
     ) -> Result<BranchLessThanOpcode, StaticProgramError> {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
         let local_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let c = c.as_canonical_u32();
-        let imm = if F::ORDER_U32 - c < c {
-            -((F::ORDER_U32 - c) as isize)
-        } else {
-            c as isize
-        };
-        if d.as_canonical_u32() != REGISTER_AS {
+        let imm = decode_signed_instruction_imm(c, RV_B_TYPE_IMM_BITS)
+            .ok_or(StaticProgramError::InvalidInstruction(pc))?;
+        if d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchLePreCompute {
             imm,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok(local_opcode)
     }
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -86,7 +80,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut BranchLePreCompute = data.borrow_mut();
@@ -98,7 +92,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -110,10 +104,8 @@ where
     }
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
     for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLePreCompute>>()
@@ -124,7 +116,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -141,7 +133,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -164,7 +156,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     let rs2 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.b as u32);
     let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
     if jmp {
-        pc = (pc as isize + pre_compute.imm) as u32;
+        pc = pc.wrapping_add_signed(pre_compute.imm);
     } else {
         pc = pc.wrapping_add(DEFAULT_PC_STEP);
     };

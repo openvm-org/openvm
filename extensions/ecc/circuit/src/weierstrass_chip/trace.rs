@@ -72,8 +72,8 @@ fn add_byte_offset(
     Ok(pointer)
 }
 
-fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
-    postflight: &Postflight<'_, F>,
+fn project_step<const NUM_READS: usize, const BLOCKS: usize>(
+    postflight: &Postflight<'_>,
     step: PostflightStep,
     local_opcode: usize,
     pointer_max_bits: usize,
@@ -84,16 +84,14 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
             "unsupported vector-heap read count {NUM_READS}"
         )));
     }
-    if instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-    {
+    if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
         return Err(PostflightError::new(
             "vector-heap instruction uses invalid address spaces",
         ));
     }
-    if (NUM_READS == 1 && instruction.c.as_canonical_u32() != 0)
-        || instruction.f.as_canonical_u32() != 0
-        || instruction.g.as_canonical_u32() != 0
+    if (NUM_READS == 1 && instruction.c.as_u32() != 0)
+        || instruction.f.as_u32() != 0
+        || instruction.g.as_u32() != 0
     {
         return Err(PostflightError::new(
             "vector-heap instruction has nonzero unused operands",
@@ -102,12 +100,12 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
 
     let rs_ptrs = std::array::from_fn(|index| {
         if index == 0 {
-            instruction.b.as_canonical_u32()
+            instruction.b.as_u32()
         } else {
-            instruction.c.as_canonical_u32()
+            instruction.c.as_u32()
         }
     });
-    let rd_ptr = instruction.a.as_canonical_u32();
+    let rd_ptr = instruction.a.as_u32();
     let mut replay = postflight.replay(step);
 
     let mut rs_vals = [0u32; NUM_READS];
@@ -181,7 +179,7 @@ fn generate_trace_from_postflights<
     const BLOCKS: usize,
 >(
     chip: &VmChipWrapper<F, FieldExpressionFiller<VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>>,
-    postflights: &[Postflight<'_, F>],
+    postflights: &[Postflight<'_>],
     opcode_base: usize,
     local_opcodes: &[WeierstrassOpcode],
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -235,7 +233,7 @@ fn generate_trace_from_postflights<
         .par_chunks_exact_mut(width)
         .zip(selected_steps.par_iter().copied())
         .try_for_each(|(row, (postflight_index, step, local_opcode))| {
-            let input = project_step::<F, NUM_READS, BLOCKS>(
+            let input = project_step::<NUM_READS, BLOCKS>(
                 &postflights[postflight_index],
                 step,
                 local_opcode,
@@ -297,7 +295,7 @@ pub(crate) fn generate_add_ne_trace_from_postflight<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 2, BLOCKS>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(
@@ -317,7 +315,7 @@ pub(crate) fn generate_add_ne_trace_from_postflights<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 2, BLOCKS>,
-    postflights: &[Postflight<'_, F>],
+    postflights: &[Postflight<'_>],
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(
@@ -336,7 +334,7 @@ pub(crate) fn generate_double_trace_from_postflight<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 1, BLOCKS>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(
@@ -356,7 +354,7 @@ pub(crate) fn generate_double_trace_from_postflights<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 1, BLOCKS>,
-    postflights: &[Postflight<'_, F>],
+    postflights: &[Postflight<'_>],
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(

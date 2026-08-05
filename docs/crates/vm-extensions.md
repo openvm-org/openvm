@@ -28,9 +28,11 @@ pub trait VmExecutionExtension {
 
 The `VmExecutionExtension` provides a way to specify hooks for handling new instructions.
 The associated type `Executor` is an enum containing the opcode executors introduced by the
-extension. Each variant supplies pure/preflight execution through `Executor<F>` and metering
-through `MeteredExecutor<F>`. The enum does not need to handle instructions outside of this
-extension. The VM execution extension registers these hooks using the
+extension. Each variant supplies pure/preflight execution through `Executor` and metering
+through `MeteredExecutor`. Their instruction-facing APIs are field-independent. Extensions such as
+Deferral whose runtime semantics directly operate on field-valued memory instead implement the
+narrowly scoped `VmFieldExecutionExtension<F>` trait. The enum does not need to handle instructions
+outside of this extension. The VM execution extension registers these hooks using the
 `ExecutorInventoryBuilder` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventoryBuilder.html). The main APIs are
 - `inventory.add_executor(executor, opcodes)` to associate an executor with a set of opcodes.
 - `inventory.add_phantom_sub_executor(sub_executor, discriminant)` to associate a phantom sub-executor with a phantom discriminant.
@@ -57,7 +59,7 @@ The added AIRs may have dependencies on previously added AIRs, including those t
 pub trait VmProverExtension<E, EXT>
 where
     E: StarkEngine,
-    EXT: VmExecutionExtension + VmCircuitExtension<E::SC>,
+    EXT: VmCircuitExtension<E::SC>,
 {
     fn extend_prover(
         &self,
@@ -67,16 +69,16 @@ where
 }
 ```
 
-The `VmProverExtension` trait is the most customizable, and hence (unfortunately) has the most generics.
-The generics are `E` for [StarkEngine](https://docs.openvm.dev/docs/openvm/openvm_stark_backend/engine/trait.StarkEngine.html) and `EXT` for execution and circuit extension. Note that the `StarkEngine` trait itself has associated types `SC: StarkProtocolConfig` and `PB: ProverBackend`.
-The `VmProverExtension` trait is therefore generic over the `ProverBackend` and the trait is designed to allow for different implementations of the prover extension for _the same_ execution and circuit extension `EXT` targeting different prover backends.
+The `VmProverExtension` trait is the most customizable, and hence has the most generics.
+The generics are `E` for [StarkEngine](https://docs.openvm.dev/docs/openvm/openvm_stark_backend/engine/trait.StarkEngine.html) and `EXT` for the circuit extension. Note that the `StarkEngine` trait itself has associated types `SC: StarkProtocolConfig` and `PB: ProverBackend`.
+The trait is generic over the `ProverBackend` so the same circuit extension can have different prover implementations for different backends. It does not depend on how runtime executors are registered.
 
 Since there are intended to be multiple `VmProverExtension`s for the same `EXT`, the `VmProverExtension` trait is meant to be implemented on a separate struct from `EXT` to get around Rust orphan rules. This separate struct is usually a [zero sized type](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZST).
 
 The VM prover extension is specified by adding new chips in order using the `ChipInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ChipInventory.html). The main functions are:
 - `inventory.add_postflight_executor_chip(chip, generator)` adds a chip and the backend-specific
   function that replays its opcode steps from immutable preflight history. Executor chips must be
-  added in the same order as executors in the `VmExecutionExtension` implementation.
+  added in the same order as executors in the corresponding execution extension implementation.
 - `inventory.add_postflight_periphery_chip(chip, generator)` adds a chip without an associated
   executor and its postflight generator.
 - `inventory.add_periphery_chip(chip)` adds a chip without an associated executor. Not every chip needs to have a corresponding executor.
@@ -93,7 +95,7 @@ pub trait VmConfig<SC>:
     + Serialize
     + DeserializeOwned
     + InitFileGenerator
-    + VmExecutionConfig<Val<SC>>
+    + VmFieldExecutionConfig<Val<SC>>
     + VmCircuitConfig<SC>
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
@@ -104,21 +106,32 @@ where
 ```
 A VM configuration, represented by a struct implementing the `VmConfig` trait is the minimum serializable format to be able to create the execution
 environment and circuit for a zkVM supporting a fixed set of instructions.
-This trait contains the sub-traits `VmExecutionConfig` and `VmCircuitConfig`.
+This trait contains the sub-traits `VmFieldExecutionConfig` and `VmCircuitConfig`.
 The `InitFileGenerator` sub-trait provides custom [build hooks](#build-hooks) to generate code for initializing some VM extensions. The `VmConfig` is expected to contain the `SystemConfig` internally.
 
 This trait does not contain the [`VmBuilder`](#vmbuilder) trait, because a single VM configuration may
 implement multiple `VmBuilder`s for different prover backends.
 
 ```rust
-pub trait VmExecutionConfig<F> {
+pub trait VmExecutionConfig {
     type Executor: AnyEnum;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 }
+
+pub trait VmFieldExecutionConfig<F: VmField> {
+    type Executor: AnyEnum;
+
+    fn create_field_executors(&self)
+        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+}
 ```
 The `VmExecutionConfig` defines the collection of `VmExecutionExtension`s that together define the VM's runtime execution environment. The implementation should use the `ExecutorInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventory.html) to define the collection of executors and the mapping from opcodes to executors. The associate type `Executor` is expected to be an enum of all executor types necessary to handle all instructions in the VM's instruction set.
+
+`VmFieldExecutionConfig<F>` is reserved for a configuration containing a field-bound execution
+extension or field-specific RVR runtime hooks. Ordinary configurations implement the non-generic
+`VmExecutionConfig` and receive a delegating field-aware implementation for proving.
 
 Users typically should not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
 
@@ -154,11 +167,20 @@ pub struct Rv64ImConfig {
 }
 ```
 
-The struct deriving `VmConfig` should have fields which are given the attribute `#[config]` or `#[extension]`. Exactly one field should have the attribute `#[config]` and its type should implement `VmConfig`. The other fields should have the attribute `#[extension]` and their types should implement `VmExecutionExtension` and `VmCircuitExtension<SC>`. Each field has associated type `Executor`: the macro by default assumes the executor type name is `{FieldTypeName}Executor` without any type generics. A different executor type name can be specified using the `executor` attribute.
+The struct deriving `VmConfig` should have fields which are given the attribute `#[config]` or `#[extension]`. Exactly one field should have the `#[config]` attribute and its type should implement `VmConfig`. Ordinary extension fields implement `VmExecutionExtension` and `VmCircuitExtension<SC>`. A field-bound extension uses `#[extension(field, executor = "ExecutorType<F>")]` and implements `VmFieldExecutionExtension<F>` instead. With the `rvr` feature, the same marker selects `VmFieldRvrExtension<F>` instead of `VmRvrExtension`. The macro otherwise assumes the executor type name is `{FieldTypeName}Executor`; a different name can be specified with `executor`.
 
 The macro will create a new enum named `{ConfigTypeName}Executor` with variants equal to the associated `Executor` types of each attributed field.
 
-The macro derives `VmExecutionConfig<F>` with associated type `Executor = {ConfigTypeName}Executor` on the new config struct for all `F` where the `#[config]` field implements `VmExecutionConfig<F>` and the `#[extension]` fields all implement `VmExecutionExtension`. The derived `create_executors` function adds executors in the order of the fields, first calling `create_executors` on the inner config and then calling `extend_execution` on each `#[extension]` field.
+For a configuration containing only ordinary extensions, the macro derives non-generic
+`VmExecutionConfig` and a delegating `VmFieldExecutionConfig<F>` implementation. If an extension is
+marked `#[extension(field, ...)]`, it instead derives `VmFieldExecutionConfig<F>` directly and the
+generated executor enum is generic only when one of its variants requires `F`. Both construction
+paths add executors in field order.
+
+When the parent `#[config]` field is itself field-aware, mark it explicitly with
+`#[config(field, executor = "ParentExecutor")]`. This remains necessary even when the parent's
+executor type is non-generic: field-awareness describes how the inventory is constructed, not how
+the executor enum stores its variants.
 
 The macro derives `VmCircuitConfig<SC>` on the new config struct for all `SC` where the `#[config]` field implements `VmCircuitConfig<SC>` and the `#[extension]` fields all implement `VmCircuitExtension<SC>`. The derived `create_airs` function adds AIRs in the order of the fields, first calling `create_airs` on the inner config and then calling `extend_circuit` on each `#[extension]` field.
 

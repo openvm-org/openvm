@@ -3,7 +3,6 @@
 use elf::Elf;
 use openvm_instructions::{exe::VmExe, program::Program};
 pub use openvm_platform;
-use openvm_stark_backend::p3_field::PrimeField32;
 use transpiler::{Transpiler, TranspilerError};
 
 use crate::util::elf_memory_image_to_openvm_memory_image;
@@ -22,8 +21,8 @@ pub trait FromElf {
         Self: Sized;
 }
 
-impl<F: PrimeField32> FromElf for VmExe<F> {
-    type ElfContext = Transpiler<F>;
+impl FromElf for VmExe {
+    type ElfContext = Transpiler;
     fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Result<Self, TranspilerError> {
         let instructions = transpiler.transpile(&elf.instructions)?;
         let program = Program::new_without_debug_infos_with_option(&instructions, elf.pc_base);

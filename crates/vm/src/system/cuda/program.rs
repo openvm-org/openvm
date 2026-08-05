@@ -14,6 +14,7 @@ use p3_field::PrimeCharacteristicRing;
 use crate::{
     arch::cuda::postflight::{GpuPostflightError, GpuPostflightPlan},
     cuda_abi::program,
+    system::program::trace::instruction_operand_to_field,
 };
 
 pub struct ProgramChipGPU {
@@ -29,24 +30,21 @@ impl ProgramChipGPU {
         }
     }
 
-    pub fn generate_cached_trace(
-        program: Program<F>,
-        device_ctx: &GpuDeviceCtx,
-    ) -> DeviceMatrix<F> {
+    pub fn generate_cached_trace(program: Program, device_ctx: &GpuDeviceCtx) -> DeviceMatrix<F> {
         let instructions = program
             .enumerate_by_pc()
             .into_iter()
             .map(|(pc, instruction, _)| {
                 [
                     F::from_u32(pc),
-                    instruction.opcode.to_field(),
-                    instruction.a,
-                    instruction.b,
-                    instruction.c,
-                    instruction.d,
-                    instruction.e,
-                    instruction.f,
-                    instruction.g,
+                    F::from_usize(instruction.opcode.as_usize()),
+                    instruction_operand_to_field(instruction.a),
+                    instruction_operand_to_field(instruction.b),
+                    instruction_operand_to_field(instruction.c),
+                    instruction_operand_to_field(instruction.d),
+                    instruction_operand_to_field(instruction.e),
+                    instruction_operand_to_field(instruction.f),
+                    instruction_operand_to_field(instruction.g),
                 ]
             })
             .collect::<Vec<_>>();
@@ -205,7 +203,7 @@ impl ProgramChipGPU {
 mod tests {
     use std::sync::Arc;
 
-    use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::F};
+    use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix;
     use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
     use openvm_instructions::{
         instruction::Instruction,
@@ -227,7 +225,7 @@ mod tests {
         utils::{test_cpu_engine, test_gpu_engine},
     };
 
-    fn test_cached_committed_trace_data(program: Program<F>) {
+    fn test_cached_committed_trace_data(program: Program) {
         let gpu_engine = test_gpu_engine();
         let gpu_device = gpu_engine.device();
         let gpu_trace =

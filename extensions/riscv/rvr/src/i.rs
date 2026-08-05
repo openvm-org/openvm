@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use openvm_instructions::{
     exe::SparseMemoryImage,
+    instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{IMM_AS, MEMORY_AS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode,
@@ -18,7 +19,7 @@ use openvm_riscv_transpiler::{
 use rvr_openvm_ir::{
     CfgBranchCond, CfgOperand, ExtInstr, InstrAt, LiftedInstr, MemWidth, Terminator,
 };
-use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension};
 
 use self::instruction::{AluOp, Rv64IInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, ZERO};
@@ -43,7 +44,7 @@ impl Default for Rv64IExtension {
 }
 
 impl RvrExtension for Rv64IExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         try_lift(insn, pc)
     }
 
@@ -94,7 +95,7 @@ impl RvrExtension for Rv64IExtension {
     }
 }
 
-pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+pub(crate) fn try_lift(insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
     let opcode = insn.opcode.as_usize();
 
     let alu_reg = [
@@ -128,7 +129,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         .into_iter()
         .find(|(candidate, _)| *candidate == opcode)
     {
-        let raw = insn.c;
+        let raw = insn.c.as_u32();
         let imm = sign_extend_12(raw);
         if raw != (imm as u32 & U24_MASK) {
             return None;
@@ -151,7 +152,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         .into_iter()
         .find(|(candidate, _)| *candidate == opcode)
     {
-        if insn.c >= 64 {
+        if insn.c.as_u32() >= 64 {
             return None;
         }
         return lift_alu(
@@ -159,7 +160,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
             pc,
             op,
             false,
-            Some(CfgOperand::Const(u64::from(insn.c))),
+            Some(CfgOperand::Const(u64::from(insn.c.as_u32()))),
         );
     }
 
@@ -178,7 +179,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
     }
 
     if opcode == BaseAluWImmOpcode::ADDIW.global_opcode_usize() {
-        let raw = insn.c;
+        let raw = insn.c.as_u32();
         let imm = sign_extend_12(raw);
         if raw != (imm as u32 & U24_MASK) {
             return None;
@@ -201,7 +202,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         .into_iter()
         .find(|(candidate, _)| *candidate == opcode)
     {
-        if insn.c >= 32 {
+        if insn.c.as_u32() >= 32 {
             return None;
         }
         return lift_alu(
@@ -209,7 +210,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
             pc,
             op,
             true,
-            Some(CfgOperand::Const(u64::from(insn.c))),
+            Some(CfgOperand::Const(u64::from(insn.c.as_u32()))),
         );
     }
 
@@ -332,7 +333,7 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
 }
 
 fn lift_alu(
-    insn: &RvrInstruction,
+    insn: &Instruction,
     pc: u64,
     op: AluOp,
     word: bool,
@@ -343,13 +344,13 @@ fn lift_alu(
     } else {
         REGISTER_AS
     };
-    if insn.d != REGISTER_AS || insn.e != expected_e {
+    if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != expected_e {
         return None;
     }
 
-    let rd = decode_reg(insn.a);
-    let lhs = decode_reg(insn.b);
-    let rhs_reg = immediate.is_none().then(|| decode_reg(insn.c));
+    let rd = decode_reg(insn.a.as_u32());
+    let lhs = decode_reg(insn.b.as_u32());
+    let rhs_reg = immediate.is_none().then(|| decode_reg(insn.c.as_u32()));
     let rhs = immediate.unwrap_or_else(|| reg_operand(rhs_reg.unwrap()));
     Some(body(
         pc,
@@ -367,18 +368,18 @@ fn lift_alu(
 
 /// Lift a load encoded as `rd=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
-fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> Option<LiftedInstr> {
-    if insn.d != REGISTER_AS || insn.e != MEMORY_AS {
+fn lift_load(insn: &Instruction, pc: u64, width: MemWidth, signed: bool) -> Option<LiftedInstr> {
+    if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
         return None;
     }
-    let rd = decode_reg(insn.a);
+    let rd = decode_reg(insn.a.as_u32());
     Some(body(
         pc,
         Rv64IInstr::Load {
             width,
             signed,
             rd,
-            base: decode_reg(insn.b),
+            base: decode_reg(insn.b.as_u32()),
             offset: decode_imm_cg(insn) as i16,
         },
     ))
@@ -386,70 +387,69 @@ fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> O
 
 /// Lift a store encoded as `rs2=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
-fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedInstr> {
-    if insn.d != REGISTER_AS || insn.e != MEMORY_AS {
+fn lift_store(insn: &Instruction, pc: u64, width: MemWidth) -> Option<LiftedInstr> {
+    if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
         return None;
     }
     Some(body(
         pc,
         Rv64IInstr::Store {
             width,
-            base: decode_reg(insn.b),
-            src: decode_reg(insn.a),
+            base: decode_reg(insn.b.as_u32()),
+            src: decode_reg(insn.a.as_u32()),
             offset: decode_imm_cg(insn) as i16,
         },
     ))
 }
 
 /// Lift a branch encoded as `rs1=a/8`, `rs2=b/8`, and an offset in `c`
-/// interpreted as a signed source-field value.
-fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
+/// interpreted as a signed instruction operand.
+fn lift_branch(insn: &Instruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
     term(
         pc,
         Rv64IInstr::Branch {
             cond,
-            lhs: decode_reg(insn.a),
-            rhs: decode_reg(insn.b),
-            target: pc.wrapping_add_signed(i64::from(insn.signed_c())),
+            lhs: decode_reg(insn.a.as_u32()),
+            rhs: decode_reg(insn.b.as_u32()),
+            target: pc.wrapping_add_signed(i64::from(insn.c.as_i32())),
         },
     )
 }
 
-/// Lift JAL encoded as `rd=a/8` and an offset in `c` interpreted as a signed
-/// source-field value.
-fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
-    let rd = decode_reg(insn.a);
+/// Lift JAL encoded as `rd=a/8` and a signed instruction operand in `c`.
+fn lift_jal(insn: &Instruction, pc: u64) -> LiftedInstr {
+    let rd = decode_reg(insn.a.as_u32());
     term(
         pc,
         Rv64IInstr::Jump {
             link_dst: (rd != ZERO).then_some(rd),
-            target: pc.wrapping_add_signed(i64::from(insn.signed_c())),
+            target: pc.wrapping_add_signed(i64::from(insn.c.as_i32())),
         },
     )
 }
 
 /// Lift JALR encoded as `rd=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
-fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
-    let rd = decode_reg(insn.a);
+fn lift_jalr(insn: &Instruction, pc: u64) -> LiftedInstr {
+    let rd = decode_reg(insn.a.as_u32());
     term(
         pc,
         Rv64IInstr::JumpIndirect {
             link_dst: (rd != ZERO).then_some(rd),
-            base: decode_reg(insn.b),
+            base: decode_reg(insn.b.as_u32()),
             offset: decode_imm_cg(insn) as i32,
         },
     )
 }
 
 /// Lift LUI encoded as `rd=a/8` and the upper immediate in `c << 12`.
-fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
+fn lift_lui(insn: &Instruction, pc: u64) -> LiftedInstr {
     body(
         pc,
         Rv64IInstr::Const {
             name: "lui",
-            rd: decode_reg(insn.a),
-            value: sign_extend_32(insn.c << 12),
+            rd: decode_reg(insn.a.as_u32()),
+            value: sign_extend_32(insn.c.as_u32() << 12),
         },
     )
 }
@@ -458,13 +458,13 @@ fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 ///
 /// The transpiler stores `(imm & 0xfffff000) >> 8` in `c`, so shifting by
 /// eight reconstructs the upper 20 bits with twelve low zero bits.
-fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
-    let upper = insn.c << 8;
+fn lift_auipc(insn: &Instruction, pc: u64) -> LiftedInstr {
+    let upper = insn.c.as_u32() << 8;
     body(
         pc,
         Rv64IInstr::Const {
             name: "auipc",
-            rd: decode_reg(insn.a),
+            rd: decode_reg(insn.a.as_u32()),
             value: pc.wrapping_add(sign_extend_32(upper)),
         },
     )
@@ -503,21 +503,17 @@ fn sign_extend_32(value: u32) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{
-        instruction::Instruction, riscv::REGISTER_NUM_LIMBS, VmOpcode, DEFERRAL_AS,
-        PUBLIC_VALUES_AS,
-    };
-    use p3_baby_bear::BabyBear;
+    use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, VmOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS};
 
     use super::*;
     use crate::instruction::Reg;
 
-    fn instruction(opcode: impl LocalOpcode, operands: [usize; 7]) -> RvrInstruction {
+    fn instruction(opcode: impl LocalOpcode, operands: [usize; 7]) -> Instruction {
         instruction_for_opcode(opcode.global_opcode(), operands)
     }
 
-    fn instruction_for_opcode(opcode: VmOpcode, operands: [usize; 7]) -> RvrInstruction {
-        RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(opcode, operands))
+    fn instruction_for_opcode(opcode: VmOpcode, operands: [usize; 7]) -> Instruction {
+        Instruction::from_usize(opcode, operands)
     }
 
     fn alu_operands(c: usize, d: u32, e: u32) -> [usize; 7] {
@@ -532,7 +528,7 @@ mod tests {
         ]
     }
 
-    fn lifted_name(insn: &RvrInstruction) -> Option<String> {
+    fn lifted_name(insn: &Instruction) -> Option<String> {
         try_lift(insn, 0x100).map(|lifted| match lifted {
             LiftedInstr::Body(InstrAt { instr, .. }) => instr.opname().to_string(),
             LiftedInstr::Term { terminator, .. } => terminator.opname().to_string(),
@@ -677,15 +673,13 @@ mod tests {
     }
 
     #[test]
-    fn control_flow_preserves_negative_field_offsets() {
+    fn control_flow_preserves_negative_offsets() {
         let pc = 0x1000;
         for opcode in [
             BranchEqualOpcode::BEQ.global_opcode(),
             JalLuiOpcode::JAL.global_opcode(),
         ] {
-            let insn = RvrInstruction::from_field(&Instruction::<BabyBear>::from_isize(
-                opcode, 8, 16, -12, 0, 0,
-            ));
+            let insn = Instruction::from_isize(opcode, 8, 16, -12, 0, 0);
             let LiftedInstr::Term { terminator, .. } = try_lift(&insn, pc).unwrap() else {
                 panic!("expected terminator");
             };

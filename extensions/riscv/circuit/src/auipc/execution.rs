@@ -7,7 +7,6 @@ use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
 use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{run_auipc, AuipcExecutor};
 use crate::adapters::byte_ptr_to_u16_ptr_value;
@@ -19,30 +18,27 @@ struct AuiPcPreCompute {
 }
 
 impl AuipcExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut AuiPcPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, c: imm, d, .. } = inst;
-        if d.as_canonical_u32() != REGISTER_AS {
+        if d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let imm = imm.as_canonical_u32();
+        let imm = imm.as_u32();
         let data: &mut AuiPcPreCompute = data.borrow_mut();
         *data = AuiPcPreCompute {
             imm,
-            a: a.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
         };
         Ok(())
     }
 }
 
-impl<F> InterpreterExecutor<F> for AuipcExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterExecutor for AuipcExecutor {
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{AUIPC:?}")
     }
@@ -57,7 +53,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut AuiPcPreCompute = data.borrow_mut();
@@ -69,7 +65,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -81,10 +77,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for AuipcExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterMeteredExecutor for AuipcExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AuiPcPreCompute>>()
     }
@@ -94,7 +87,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -111,7 +104,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

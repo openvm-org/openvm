@@ -1,19 +1,17 @@
-use std::marker::PhantomData;
-
 use openvm_decoder::{
     instruction_formats::{IType, RType},
     process_instruction,
 };
 use openvm_instructions::{
-    instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
-    SystemOpcode, PUBLIC_VALUES_AS,
+    instruction::{Instruction, InstructionOperand},
+    riscv::REGISTER_NUM_LIMBS,
+    LocalOpcode, PhantomDiscriminant, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_guest::{
     PhantomImm, ALU_OPCODE, ALU_OP_32, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3,
     HINT_STORED_IMM, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
     util::{nop, unimp},
     TranspilerExtension, TranspilerOutput,
@@ -33,9 +31,9 @@ pub struct Rv64MTranspilerExtension;
 #[derive(Default)]
 pub struct Rv64IoTranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
-        let mut transpiler = InstructionTranspiler::<F>(PhantomData);
+impl TranspilerExtension for Rv64ITranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
+        let mut transpiler = InstructionTranspiler;
         if instruction_stream.is_empty() {
             return None;
         }
@@ -62,9 +60,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
             }
             (SYSTEM_OPCODE, TERMINATE_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
+                let Ok(exit_code) = u8::try_from(dec_insn.imm) else {
+                    return Some(TranspilerOutput::one_to_one(unimp()));
+                };
                 Some(Instruction {
                     opcode: SystemOpcode::TERMINATE.global_opcode(),
-                    c: F::from_u8(dec_insn.imm.try_into().expect("exit code must be byte")),
+                    c: InstructionOperand::from(exit_code),
                     ..Default::default()
                 })
             }
@@ -73,20 +74,20 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
                     PhantomImm::HintInput => Instruction::phantom(
                         PhantomDiscriminant(Rv64Phantom::HintInput as u16),
-                        F::ZERO,
-                        F::ZERO,
+                        InstructionOperand::ZERO,
+                        InstructionOperand::ZERO,
                         0,
                     ),
                     PhantomImm::HintRandom => Instruction::phantom(
                         PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
-                        F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
-                        F::ZERO,
+                        InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
+                        InstructionOperand::ZERO,
                         0,
                     ),
                     PhantomImm::PrintStr => Instruction::phantom(
                         PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
-                        F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
-                        F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
+                        InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
+                        InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
                         0,
                     ),
                 })
@@ -107,8 +108,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
     }
 }
 
-impl<F: PrimeField32> TranspilerExtension<F> for Rv64MTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for Rv64MTranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -125,17 +126,14 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64MTranspilerExtension {
             return None;
         }
 
-        let instruction = process_instruction(
-            &mut InstructionTranspiler::<F>(PhantomData),
-            instruction_u32,
-        );
+        let instruction = process_instruction(&mut InstructionTranspiler, instruction_u32);
 
         instruction.map(TranspilerOutput::one_to_one)
     }
 }
 
-impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for Rv64IoTranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -199,10 +197,9 @@ mod tests {
         instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PUBLIC_VALUES_AS,
     };
     use openvm_riscv_guest::{ALU_OPCODE, REVEAL_FUNCT3, SYSTEM_OPCODE};
-    use openvm_transpiler::TranspilerExtension;
-    use p3_baby_bear::BabyBear;
+    use openvm_transpiler::{util::unimp, TranspilerExtension};
 
-    use super::{RevealOpcode, Rv64IoTranspilerExtension};
+    use super::{RevealOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension};
 
     fn encode_reveal(rs1: u32, rd: u32, imm: i32) -> u32 {
         debug_assert!((-(1 << 11)..(1 << 11)).contains(&imm));
@@ -213,14 +210,12 @@ mod tests {
             | u32::from(SYSTEM_OPCODE)
     }
 
-    fn transpile(instruction: u32) -> Option<Instruction<BabyBear>> {
-        <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
-            &Rv64IoTranspilerExtension,
-            &[instruction],
-        )?
-        .instructions
-        .into_iter()
-        .next()?
+    fn transpile(instruction: u32) -> Option<Instruction> {
+        Rv64IoTranspilerExtension
+            .process_custom(&[instruction])?
+            .instructions
+            .into_iter()
+            .next()?
     }
 
     #[test]
@@ -250,12 +245,30 @@ mod tests {
 
         assert!(transpile(wrong_opcode).is_none());
         assert!(transpile(wrong_funct3).is_none());
-        assert!(
-            <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
-                &Rv64IoTranspilerExtension,
-                &[],
-            )
-            .is_none()
-        );
+        assert!(Rv64IoTranspilerExtension.process_custom(&[]).is_none());
+    }
+
+    fn terminate_instruction(exit_code: u32) -> u32 {
+        (exit_code << 20) | (u32::from(TERMINATE_FUNCT3) << 12) | u32::from(SYSTEM_OPCODE)
+    }
+
+    #[test]
+    fn terminate_accepts_byte_exit_code() {
+        let output = Rv64ITranspilerExtension
+            .process_custom(&[terminate_instruction(u8::MAX.into())])
+            .unwrap();
+        let instruction = output.instructions[0].as_ref().unwrap();
+
+        assert_eq!(instruction.c.as_u32(), u32::from(u8::MAX));
+    }
+
+    #[test]
+    fn terminate_maps_non_byte_exit_code_to_unimp() {
+        let output = Rv64ITranspilerExtension
+            .process_custom(&[terminate_instruction(u8::MAX as u32 + 1)])
+            .unwrap();
+        let instruction = output.instructions[0].as_ref().unwrap();
+
+        assert_eq!(instruction, &unimp());
     }
 }

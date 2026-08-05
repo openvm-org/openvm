@@ -4,7 +4,7 @@ use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_sdk::{
-    config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
+    config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk,
 };
 use openvm_sdk_config::SdkVmConfig;
 
@@ -235,7 +235,7 @@ impl RunCmd {
 
         let (manifest_path, manifest_dir) =
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
-        let exe: VmExe<F> = read_object_from_file(exe_path)?;
+        let exe: VmExe = read_object_from_file(exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;
 
         let sdk = if matches!(

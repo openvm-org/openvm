@@ -677,7 +677,7 @@ __global__ void finalize_chronology_touched(
     if (preflight_address_space(event) == register_address_space) {
 #pragma unroll
         for (uint32_t lane = 0; lane < 4; ++lane) {
-            record.values[lane] = Fp(event.value[lane]).asRaw();
+            record.values[lane] = event.value[lane];
         }
         return;
     }
@@ -690,7 +690,7 @@ __global__ void finalize_chronology_touched(
         }
 #pragma unroll
         for (uint32_t lane = 0; lane < 4; ++lane) {
-            record.values[lane] = Fp(field_values[reference].values[lane]).asRaw();
+            record.values[lane] = field_values[reference].values[lane];
         }
     } else if (config.cell_type == CELL_U8) {
         uint8_t bytes[4];
@@ -702,7 +702,7 @@ __global__ void finalize_chronology_touched(
     } else {
 #pragma unroll
         for (uint32_t lane = 0; lane < 4; ++lane) {
-            record.values[lane] = Fp(event.value[lane]).asRaw();
+            record.values[lane] = event.value[lane];
         }
     }
 }

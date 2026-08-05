@@ -30,9 +30,9 @@ mod trace;
 pub(crate) use trace::generate_trace_from_postflight;
 
 /// PhantomAir still needs columns for each nonzero operand in a phantom instruction.
-/// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction]
-/// discriminant.
-const NUM_PHANTOM_OPERANDS: usize = 3;
+/// We allow `a,b,c,d`, where `c` is the 16-bit phantom discriminant and `d` is the
+/// instruction-specific 16-bit `c_upper` value.
+const NUM_PHANTOM_OPERANDS: usize = 4;
 
 #[derive(Clone, Debug, ColumnsAir)]
 #[columns_via(PhantomCols<u8>)]
@@ -74,7 +74,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
         builder.assert_bool(is_valid);
         self.execution_bridge
             .execute_and_increment_or_set_pc(
-                self.phantom_opcode.to_field::<AB::F>(),
+                AB::F::from_usize(self.phantom_opcode.as_usize()),
                 operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
                 AB::Expr::ONE,

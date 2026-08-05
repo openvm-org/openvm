@@ -134,12 +134,12 @@ fn make_result(
 fn set_and_execute_output<E, T>(
     tester: &mut T,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     num_deferrals: usize,
-) -> Instruction<F>
+) -> Instruction
 where
-    E: Executor<F> + Clone,
+    E: Executor + Clone,
     T: TestBuilder<F>,
 {
     let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);

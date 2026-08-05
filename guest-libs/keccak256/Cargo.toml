@@ -20,7 +20,6 @@ spin = { workspace = true, features = ["mutex", "spin_mutex"] }
 hex = { workspace = true }
 openvm-instructions = { path = "../../crates/toolchain/instructions", default-features = false }
 openvm-sdk = { path = "../../crates/sdk", default-features = false }
-openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }

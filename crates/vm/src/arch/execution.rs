@@ -141,7 +141,7 @@ pub type Handler<CTX> = unsafe fn(
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
-pub trait InterpreterExecutor<F> {
+pub trait InterpreterExecutor {
     /// Returns the display name for an absolute opcode supported by this executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -151,7 +151,7 @@ pub trait InterpreterExecutor<F> {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -165,20 +165,20 @@ pub trait InterpreterExecutor<F> {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 }
 
-pub trait Executor<F>: InterpreterExecutor<F> {}
-impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
+pub trait Executor: InterpreterExecutor {}
+impl<T> Executor for T where T: InterpreterExecutor {}
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
-pub trait InterpreterMeteredExecutor<F> {
+pub trait InterpreterMeteredExecutor {
     fn metered_pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -186,7 +186,7 @@ pub trait InterpreterMeteredExecutor<F> {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -202,15 +202,15 @@ pub trait InterpreterMeteredExecutor<F> {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 }
 
-pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
-impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
+pub trait MeteredExecutor: InterpreterMeteredExecutor {}
+impl<T> MeteredExecutor for T where T: InterpreterMeteredExecutor {}
 
 /// Global VM state accessible during instruction execution.
 /// The state is generic in guest memory `MEM` and execution context `CTX`.
@@ -445,7 +445,7 @@ impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///
 /// Phantom sub-instructions are only allowed to use operands
-/// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+/// `a,b`, the phantom discriminant in `c`, and `c_upper` in `d`.
 #[allow(clippy::too_many_arguments)]
 pub trait PhantomSubExecutor: Send + Sync {
     fn phantom_execute(

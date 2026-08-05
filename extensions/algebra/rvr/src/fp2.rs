@@ -2,11 +2,11 @@
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_instructions::LocalOpcode;
 #[cfg(test)]
 use openvm_instructions::MEMORY_BLOCK_BYTES;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension};
 use strum::EnumCount;
 
 use crate::{
@@ -366,7 +366,7 @@ mod tests {
 }
 
 impl RvrExtension for Fp2RvrExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         self.try_lift_fp2(insn, pc, opcode)
     }
@@ -392,7 +392,7 @@ impl RvrExtension for Fp2RvrExtension {
 }
 
 impl Fp2RvrExtension {
-    fn try_lift_fp2(&self, insn: &RvrInstruction, pc: u64, opcode: usize) -> Option<LiftedInstr> {
+    fn try_lift_fp2(&self, insn: &Instruction, pc: u64, opcode: usize) -> Option<LiftedInstr> {
         let base_offset = Fp2Opcode::CLASS_OFFSET;
         let count = Fp2Opcode::COUNT;
 
@@ -408,9 +408,9 @@ impl Fp2RvrExtension {
         }
 
         let info = &self.fp2_moduli[fp2_idx];
-        let rd_reg = decode_reg(insn.a);
-        let rs1_reg = decode_reg(insn.b);
-        let rs2_reg = decode_reg(insn.c);
+        let rd_reg = decode_reg(insn.a.as_u32());
+        let rs1_reg = decode_reg(insn.b.as_u32());
+        let rs2_reg = decode_reg(insn.c.as_u32());
 
         let instr: Box<dyn ExtInstr> = match local {
             x if x == Fp2Opcode::ADD as usize => Box::new(Fp2ArithInstr::new(

@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::MulHOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::MulHCoreExecutor;
 
@@ -26,15 +25,15 @@ struct MulHPreCompute {
 
 impl<const LIMB_BITS: usize> MulHCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut MulHPreCompute,
     ) -> Result<MulHOpcode, StaticProgramError> {
         *data = MulHPreCompute {
-            a: inst.a.as_canonical_u32() as u8,
-            b: inst.b.as_canonical_u32() as u8,
-            c: inst.c.as_canonical_u32() as u8,
+            a: inst.a.as_u32() as u8,
+            b: inst.b.as_u32() as u8,
+            c: inst.c.as_u32() as u8,
         };
         Ok(MulHOpcode::from_usize(
             inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET),
@@ -52,10 +51,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+impl<const LIMB_BITS: usize> InterpreterExecutor
     for MulHCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -74,7 +71,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         _pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
@@ -86,7 +83,7 @@ where
     fn handler<Ctx>(
         &self,
         _pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -98,10 +95,8 @@ where
     }
 }
 
-impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+impl<const LIMB_BITS: usize> InterpreterMeteredExecutor
     for MulHCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MulHPreCompute>>()
@@ -112,7 +107,7 @@ where
         &self,
         chip_idx: usize,
         _pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -129,7 +124,7 @@ where
         &self,
         chip_idx: usize,
         _pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

@@ -11,11 +11,8 @@ mod tests {
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-    type F = BabyBear;
 
     #[cfg(test)]
     fn test_rv64modular_config(moduli: Vec<BigUint>) -> Rv64ModularConfig {
@@ -36,7 +33,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -55,7 +52,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "fermat", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -74,7 +71,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "sqrt", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -98,7 +95,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -122,7 +119,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -146,7 +143,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -170,7 +167,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)

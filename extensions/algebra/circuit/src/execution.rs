@@ -15,7 +15,6 @@ use openvm_instructions::{
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::FieldExprVecHeapExecutor;
 use crate::fields::{
@@ -152,10 +151,10 @@ struct FieldExpressionPreCompute<'a> {
 }
 
 impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &'a self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut FieldExpressionPreCompute<'a>,
     ) -> Result<Option<Operation>, StaticProgramError> {
         let Instruction {
@@ -168,11 +167,11 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
             ..
         } = inst;
 
-        let a = a.as_canonical_u32();
-        let b = b.as_canonical_u32();
-        let c = c.as_canonical_u32();
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
+        let a = a.as_u32();
+        let b = b.as_u32();
+        let c = c.as_u32();
+        let d = d.as_u32();
+        let e = e.as_u32();
         if d != REGISTER_AS || e != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -240,7 +239,7 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor<F>
+impl<const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor
     for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
     fn get_opcode_name(&self, _opcode: usize) -> String {
@@ -256,7 +255,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -278,7 +277,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -297,7 +296,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor<F>
+impl<const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor
     for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
     #[inline(always)]
@@ -310,7 +309,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMetere
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -336,7 +335,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMetere
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
