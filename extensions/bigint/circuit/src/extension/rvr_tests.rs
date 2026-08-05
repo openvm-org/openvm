@@ -113,9 +113,7 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
     };
     let executor = VmExecutor::new(config).unwrap();
     for (equal, expected_pc, expected_branch_replay_value) in [(false, 8, 0u64), (true, 12, 1u64)] {
-        let checkpoint = executor
-            .preflight_instance(&fixture(equal), Default::default())
-            .unwrap();
+        let checkpoint = executor.preflight_instance(&fixture(equal)).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let execution = checkpoint
             .execute_from_state(state, PreflightLimits::new(3, 5, 1))
@@ -142,7 +140,7 @@ fn int256_heap_pointers_follow_the_eight_byte_memory_equipartition() {
         let state = interpreter.create_initial_vm_state(Vec::<Vec<u8>>::new());
         interpreter.execute_from_state(state).unwrap();
 
-        let rvr = executor.instance(&exe, Default::default()).unwrap();
+        let rvr = executor.instance(&exe).unwrap();
         let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
         rvr.execute_from_state(state).unwrap();
     }
@@ -157,7 +155,7 @@ fn int256_heap_pointers_follow_the_eight_byte_memory_equipartition() {
         };
         assert!(error.to_string().contains("eight-byte aligned"), "{error}");
 
-        let rvr = executor.instance(&exe, Default::default()).unwrap();
+        let rvr = executor.instance(&exe).unwrap();
         let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
         assert!(rvr.execute_from_state(state).is_err());
     }

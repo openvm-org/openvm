@@ -459,9 +459,7 @@ mod tests {
         let mut config = SdkVmConfig::standard();
         config.system.config = small_system_config();
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let preflight = executor
-            .preflight_instance(&exe, Default::default())
-            .unwrap();
+        let preflight = executor.preflight_instance(&exe).unwrap();
         let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
 
         let mut params = SystemParams::new_for_testing(21);

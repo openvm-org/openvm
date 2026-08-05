@@ -100,7 +100,7 @@ impl PreparedSegment {
         let preflight = instance
             .vm
             .executor()
-            .preflight_instance(exe, Default::default())
+            .preflight_instance(exe)
             .map_err(VirtualMachineError::from)?
             .into_owned();
         #[cfg(not(feature = "rvr"))]
@@ -269,11 +269,11 @@ impl PreparedContinuation {
             let metered = instance
                 .vm
                 .executor()
-                .metered_instance(
+                .metered_instance_with_debug_map(
                     exe,
                     &executor_idx_to_air_idx,
                     metered_ctx.trace_heights.len(),
-                    Default::default(),
+                    None,
                 )
                 .map_err(VirtualMachineError::from)?
                 .into_owned();

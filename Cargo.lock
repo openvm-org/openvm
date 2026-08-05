@@ -5798,7 +5798,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-platform",
  "openvm-stark-backend",
- "p3-baby-bear",
  "rustc-demangle",
  "thiserror 1.0.69",
 ]

@@ -69,9 +69,9 @@ use super::execution_mode::PreflightCtx;
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile::compile_preflight,
     compile_metered, compile_metered_cost, compile_metered_segment_boundary,
-    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, PreflightInstance,
-    RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrProgramMetadata, RvrPureInstance,
+    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
+    PreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
+    RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
 #[cfg(feature = "cuda")]
@@ -387,6 +387,11 @@ where
             tracing::info_span!("compile_pure", backend = "interpreter").entered();
         InterpretedInstance::new(&self.inventory, exe)
     }
+
+    #[cfg(feature = "rvr")]
+    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<'_>, StaticProgramError> {
+        self.instance_with_debug_map(exe, None)
+    }
 }
 
 #[cfg(feature = "rvr")]
@@ -407,16 +412,16 @@ where
     VC: VmExecutionConfig<F>,
     VC::Executor: Executor<F>,
 {
-    pub fn instance(
+    pub fn instance_with_debug_map(
         &self,
         exe: &VmExe<F>,
-        program_metadata: RvrProgramMetadata<'_>,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_pure", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
         let compiled =
-            compile(exe, extensions.lifters(), program_metadata).map_err(map_rvr_compile_error)?;
+            compile(exe, extensions.lifters(), guest_debug_map).map_err(map_rvr_compile_error)?;
         Ok(RvrPureInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
@@ -429,12 +434,12 @@ where
     pub fn instret_tracking_instance(
         &self,
         exe: &VmExe<F>,
-        program_metadata: RvrProgramMetadata<'_>,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrPureWithInstretTrackingInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_pure", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile_with_instret_tracking(exe, extensions.lifters(), program_metadata)
+        let compiled = compile_with_instret_tracking(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         Ok(RvrPureWithInstretTrackingInstance::new(
             self.inventory.config(),
@@ -450,13 +455,20 @@ where
     pub fn preflight_instance(
         &self,
         exe: &VmExe<F>,
-        program_metadata: RvrProgramMetadata<'_>,
+    ) -> Result<PreflightInstance<'_>, StaticProgramError> {
+        self.preflight_instance_with_debug_map(exe, None)
+    }
+
+    pub fn preflight_instance_with_debug_map(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<PreflightInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_preflight", backend = "compiled").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile_preflight(exe, extensions.lifters(), program_metadata)
+        let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         Ok(PreflightInstance::new(
             self.inventory.config(),
@@ -594,7 +606,16 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         num_airs: usize,
-        program_metadata: RvrProgramMetadata<'_>,
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
+        self.metered_instance_with_debug_map(exe, executor_idx_to_air_idx, num_airs, None)
+    }
+
+    pub fn metered_instance_with_debug_map(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
@@ -607,7 +628,7 @@ where
             chip_widths: None,
         };
         let uses_deferral_address_space = extensions.lifters().uses_deferral_address_space();
-        let compiled = compile_metered(exe, extensions.lifters(), &chips, program_metadata)
+        let compiled = compile_metered(exe, extensions.lifters(), &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         let runtime_hooks = extensions.into_runtime_hooks();
 
@@ -625,7 +646,7 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         num_airs: usize,
-        program_metadata: RvrProgramMetadata<'_>,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
@@ -639,7 +660,7 @@ where
         };
         let uses_deferral_address_space = extensions.lifters().uses_deferral_address_space();
         let compiled =
-            compile_metered_segment_boundary(exe, extensions.lifters(), &chips, program_metadata)
+            compile_metered_segment_boundary(exe, extensions.lifters(), &chips, guest_debug_map)
                 .map_err(map_rvr_compile_error)?;
         let runtime_hooks = extensions.into_runtime_hooks();
 
@@ -650,6 +671,15 @@ where
             compiled,
             uses_deferral_address_space,
         ))
+    }
+
+    pub fn metered_cost_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
+        self.metered_cost_instance_with_debug_map(exe, executor_idx_to_air_idx, widths, None)
     }
 
     /// Load a previously saved metered-mode artifact. Its generated execution
@@ -730,12 +760,12 @@ where
         })
     }
 
-    pub fn metered_cost_instance(
+    pub fn metered_cost_instance_with_debug_map(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
-        program_metadata: RvrProgramMetadata<'_>,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
@@ -748,7 +778,7 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: Some(emitted_widths),
         };
-        let compiled = compile_metered_cost(exe, extensions.lifters(), &chips, program_metadata)
+        let compiled = compile_metered_cost(exe, extensions.lifters(), &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         let runtime_hooks = extensions.into_runtime_hooks();
 
@@ -917,8 +947,7 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        self.executor()
-            .preflight_instance(exe, RvrProgramMetadata::default())
+        self.executor().preflight_instance(exe)
     }
 
     /// Pure execution instance.
@@ -943,7 +972,7 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        self.executor().instance(exe, RvrProgramMetadata::default())
+        self.executor().instance(exe)
     }
 
     // Interpreter access when RVR is enabled.
@@ -983,12 +1012,8 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor().metered_instance(
-            exe,
-            &executor_idx_to_air_idx,
-            self.num_airs(),
-            RvrProgramMetadata::default(),
-        )
+        self.executor()
+            .metered_instance(exe, &executor_idx_to_air_idx, self.num_airs())
     }
 
     #[cfg(feature = "rvr")]
@@ -1005,7 +1030,7 @@ where
             exe,
             &executor_idx_to_air_idx,
             self.num_airs(),
-            RvrProgramMetadata::default(),
+            None,
         )
     }
 
@@ -1083,11 +1108,11 @@ where
             .iter()
             .map(|pk| pk.vk.params.width.total_width())
             .collect();
-        self.executor().metered_cost_instance(
+        self.executor().metered_cost_instance_with_debug_map(
             exe,
             &executor_idx_to_air_idx,
             &widths,
-            RvrProgramMetadata::default(),
+            None,
         )
     }
 

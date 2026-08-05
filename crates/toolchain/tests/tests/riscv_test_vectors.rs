@@ -40,10 +40,7 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv64IoTranspilerExtension),
                 )?;
                 let executor = VmExecutor::new(config.clone())?;
-                #[cfg(not(feature = "rvr"))]
                 let instance = executor.instance(&exe)?;
-                #[cfg(feature = "rvr")]
-                let instance = executor.instance(&exe, Default::default())?;
                 #[allow(unused_variables)]
                 let state = instance.execute(vec![])?;
 

@@ -31,14 +31,12 @@ pub use compile::{
     build_pc_to_chip, compile, compile_metered, compile_metered_cost,
     compile_metered_segment_boundary, compile_with_instret_tracking, compile_with_options,
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
-    RvrProgramMetadata,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::ExecuteError;
 pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
-pub use openvm_instructions::exe::CfgHints;
 pub use preflight::{
     PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
 };

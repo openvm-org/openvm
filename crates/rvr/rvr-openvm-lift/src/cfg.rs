@@ -6,7 +6,6 @@
 use std::collections::{BTreeSet, HashSet};
 
 use openvm_instructions::{
-    exe::CfgHints,
     metering::MAX_METERED_BLOCK_INSNS,
     program::{DEFAULT_PC_STEP as INSTR_SIZE, MAX_ALLOWED_PC},
 };
@@ -355,17 +354,6 @@ fn is_indirect_jump(li: &LiftedInstr) -> bool {
         cfg_term_of(li),
         Some(CfgTerm::JumpIndirect {
             kind: CfgJumpKind::Jump,
-            ..
-        })
-    )
-}
-
-/// An indirect control-flow transfer whose destination may be supplied by analysis hints.
-fn accepts_indirect_target_hint(li: &LiftedInstr) -> bool {
-    matches!(
-        cfg_term_of(li),
-        Some(CfgTerm::JumpIndirect {
-            kind: CfgJumpKind::Jump | CfgJumpKind::Call,
             ..
         })
     )
@@ -938,12 +926,17 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-/// Build basic blocks using optional program-analysis hints.
+/// Build basic blocks from a flat `LiftedInstr` sequence using multi-value
+/// constant propagation with worklist fixpoint to resolve dynamic jump targets.
 ///
-/// Only PCs that decode to real instructions are accepted. Invalid
-/// control-flow edges are retained and trap at runtime, so block construction
-/// cannot fail.
-pub fn build_blocks(instructions: &[LiftedInstr], hints: &CfgHints) -> Vec<Block> {
+/// `extra_targets` provides additional block entry points discovered externally,
+/// e.g. by scanning read-only data segments for code pointers (switch tables,
+/// function pointer arrays).
+///
+/// Returns `Vec<Block>` with resolved indirect-jump targets filled in.
+/// Invalid control-flow edges are kept and handled at runtime (they dispatch
+/// to `rv_trap`), so block construction itself cannot fail.
+pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<Block> {
     if instructions.is_empty() {
         return Vec::new();
     }
@@ -959,12 +952,13 @@ pub fn build_blocks(instructions: &[LiftedInstr], hints: &CfgHints) -> Vec<Block
     let (function_entries, mut internal_targets, return_sites) =
         collect_potential_targets(instructions, &pc_to_idx);
 
-    // Source-less targets participate in the existing binary fallback analysis.
-    for &target in &hints.potential_targets {
+    // Incorporate externally discovered targets (e.g. from rodata scanning).
+    for &target in extra_targets {
         if pc_to_idx.contains_key(&target) {
             internal_targets.insert(target);
         }
     }
+
     // Phase 2: Build call-return map.
     let call_return_map = build_call_return_map(instructions, &pc_to_idx);
 
@@ -995,38 +989,8 @@ pub fn build_blocks(instructions: &[LiftedInstr], hints: &CfgHints) -> Vec<Block
 
     let WorklistResult {
         successors,
-        mut resolved_jumps,
+        resolved_jumps,
     } = worklist(&ctx, &function_entries, &internal_targets);
-
-    // Explicit block boundaries do not become fallback targets for unrelated
-    // unresolved jumps.
-    internal_targets.extend(
-        hints
-            .basic_block_starts
-            .iter()
-            .copied()
-            .filter(|target| pc_to_idx.contains_key(target)),
-    );
-
-    // Hinted targets are block leaders, but must not enter the decoded-target
-    // fallback pool used for unrelated unresolved jumps in the same function.
-    for (&source, targets) in &hints.indirect_targets {
-        let Some(&source_idx) = pc_to_idx.get(&source) else {
-            continue;
-        };
-        if !accepts_indirect_target_hint(&instructions[source_idx]) {
-            continue;
-        }
-        let targets = targets
-            .iter()
-            .copied()
-            .filter(|target| pc_to_idx.contains_key(target));
-        let resolved = resolved_jumps.entry(source).or_default();
-        for target in targets {
-            internal_targets.insert(target);
-            resolved.insert(target);
-        }
-    }
 
     // Phase 7: Compute leaders.
     let leaders = compute_leaders(
@@ -1220,13 +1184,6 @@ mod tests {
             .unwrap_or_else(|| panic!("no block starts at {start_pc:#x}"))
     }
 
-    fn block_ranges(blocks: &[Block]) -> Vec<(u64, u64)> {
-        blocks
-            .iter()
-            .map(|block| (block.start_pc, block.end_pc))
-            .collect()
-    }
-
     const fn var(index: u32) -> Variable {
         Variable::new(index)
     }
@@ -1272,7 +1229,7 @@ mod tests {
                 ),
                 term(4, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &[],
         );
 
         assert!(matches!(
@@ -1298,7 +1255,7 @@ mod tests {
                     term: None,
                 },
             )],
-            &CfgHints::default(),
+            &[],
         );
 
         let block = block_at(&blocks, 0);
@@ -1347,10 +1304,7 @@ mod tests {
                 ),
                 term(16, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints {
-                potential_targets: BTreeSet::from([4]),
-                ..Default::default()
-            },
+            &[4],
         );
 
         assert_eq!(block_at(&blocks, 4).terminator.successors(4, 8), vec![16]);
@@ -1391,7 +1345,7 @@ mod tests {
                 term(12, Terminator::Exit { code: 0 }),
                 term(16, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &[],
         );
 
         assert!(block_at(&blocks, 0).terminator.successors(8, 12).is_empty());
@@ -1432,7 +1386,7 @@ mod tests {
                 term(12, Terminator::Exit { code: 0 }),
                 term(16, Terminator::Exit { code: 0 }),
             ],
-            &CfgHints::default(),
+            &[],
         );
 
         assert!(block_at(&blocks, 8).terminator.successors(8, 12).is_empty());
@@ -1459,228 +1413,5 @@ mod tests {
             ),
             u64::MAX - 1
         );
-    }
-
-    #[test]
-    fn valid_block_hint_adds_a_boundary_without_changing_instructions() {
-        let instructions = [
-            body(
-                0,
-                TestInstr {
-                    effect: CfgEffect::None,
-                    term: None,
-                },
-            ),
-            body(
-                4,
-                TestInstr {
-                    effect: CfgEffect::None,
-                    term: None,
-                },
-            ),
-            body(
-                8,
-                TestInstr {
-                    effect: CfgEffect::None,
-                    term: None,
-                },
-            ),
-            term(12, Terminator::Exit { code: 0 }),
-        ];
-
-        let baseline = build_blocks(&instructions, &CfgHints::default());
-        let hinted = build_blocks(
-            &instructions,
-            &CfgHints {
-                basic_block_starts: BTreeSet::from([8]),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(block_ranges(&baseline), vec![(0, 16)]);
-        assert_eq!(block_ranges(&hinted), vec![(0, 8), (8, 16)]);
-        assert_eq!(
-            baseline.iter().map(Block::insn_count).sum::<u32>(),
-            hinted.iter().map(Block::insn_count).sum::<u32>()
-        );
-    }
-
-    #[test]
-    fn invalid_hints_are_ignored() {
-        let instructions = [
-            body(
-                0,
-                TestInstr {
-                    effect: CfgEffect::None,
-                    term: None,
-                },
-            ),
-            term(4, Terminator::Exit { code: 0 }),
-        ];
-        let baseline = build_blocks(&instructions, &CfgHints::default());
-        let hinted = build_blocks(
-            &instructions,
-            &CfgHints {
-                basic_block_starts: BTreeSet::from([6, 104]),
-                indirect_targets: [(0, BTreeSet::from([4, 100]))].into(),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(block_ranges(&baseline), block_ranges(&hinted));
-    }
-
-    #[test]
-    fn indirect_target_hint_augments_binary_analysis() {
-        let instructions = [
-            body(
-                0,
-                TestInstr {
-                    effect: CfgEffect::WriteUnknown { dst: var(5) },
-                    term: None,
-                },
-            ),
-            instruction_term(
-                4,
-                CfgTerm::JumpIndirect {
-                    kind: CfgJumpKind::Jump,
-                    link_dst: None,
-                    has_link_write_slot: false,
-                    base_value: CfgOperand::Var(var(5)),
-                    offset: 0,
-                    target_mask: !1,
-                },
-            ),
-            term(8, Terminator::Exit { code: 0 }),
-            term(12, Terminator::Exit { code: 0 }),
-        ];
-        let baseline = build_blocks(&instructions, &CfgHints::default());
-        let hinted = build_blocks(
-            &instructions,
-            &CfgHints {
-                indirect_targets: [(4, BTreeSet::from([12, 100]))].into(),
-                ..Default::default()
-            },
-        );
-
-        assert!(block_at(&baseline, 0)
-            .terminator
-            .successors(4, 8)
-            .is_empty());
-        assert_eq!(block_at(&hinted, 0).terminator.successors(4, 8), vec![12]);
-    }
-
-    #[test]
-    fn indirect_target_hint_is_unioned_with_a_decoded_target() {
-        let instructions = [
-            body(
-                0,
-                TestInstr {
-                    effect: CfgEffect::WriteConst {
-                        dst: var(5),
-                        value: 12,
-                    },
-                    term: None,
-                },
-            ),
-            instruction_term(
-                4,
-                CfgTerm::JumpIndirect {
-                    kind: CfgJumpKind::Jump,
-                    link_dst: None,
-                    has_link_write_slot: false,
-                    base_value: CfgOperand::Var(var(5)),
-                    offset: 0,
-                    target_mask: !1,
-                },
-            ),
-            term(8, Terminator::Exit { code: 0 }),
-            term(12, Terminator::Exit { code: 0 }),
-        ];
-        let blocks = build_blocks(
-            &instructions,
-            &CfgHints {
-                indirect_targets: [(4, BTreeSet::from([8]))].into(),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(
-            block_at(&blocks, 0).terminator.successors(4, 8),
-            vec![8, 12]
-        );
-    }
-
-    #[test]
-    fn indirect_target_hint_applies_to_an_unreachable_source() {
-        let instructions = [
-            term(0, Terminator::Exit { code: 0 }),
-            instruction_term(
-                4,
-                CfgTerm::JumpIndirect {
-                    kind: CfgJumpKind::Jump,
-                    link_dst: None,
-                    has_link_write_slot: false,
-                    base_value: CfgOperand::Var(var(5)),
-                    offset: 0,
-                    target_mask: !1,
-                },
-            ),
-            term(8, Terminator::Exit { code: 0 }),
-        ];
-        let blocks = build_blocks(
-            &instructions,
-            &CfgHints {
-                indirect_targets: [(4, BTreeSet::from([8]))].into(),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(block_at(&blocks, 4).terminator.successors(4, 8), vec![8]);
-    }
-
-    #[test]
-    fn indirect_target_hint_applies_to_an_indirect_call() {
-        let instructions = [
-            instruction_term(
-                0,
-                CfgTerm::JumpIndirect {
-                    kind: CfgJumpKind::Call,
-                    link_dst: Some(var(1)),
-                    has_link_write_slot: true,
-                    base_value: CfgOperand::Var(var(5)),
-                    offset: 0,
-                    target_mask: !1,
-                },
-            ),
-            body(
-                4,
-                TestInstr {
-                    effect: CfgEffect::None,
-                    term: None,
-                },
-            ),
-            body(
-                8,
-                TestInstr {
-                    effect: CfgEffect::None,
-                    term: None,
-                },
-            ),
-            term(12, Terminator::Exit { code: 0 }),
-        ];
-        let blocks = build_blocks(
-            &instructions,
-            &CfgHints {
-                indirect_targets: [(0, BTreeSet::from([8]))].into(),
-                ..Default::default()
-            },
-        );
-
-        assert!(block_ranges(&blocks).contains(&(8, 16)));
-        assert!(block_at(&blocks, 0)
-            .terminator
-            .successors(0, 4)
-            .contains(&8));
     }
 }

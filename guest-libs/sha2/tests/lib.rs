@@ -98,10 +98,7 @@ mod tests {
             air_test_with_min_segments(Sha2Rv64Builder, config, openvm_exe, stdin, 1);
         } else {
             let executor = VmExecutor::new(config.clone())?;
-            #[cfg(not(feature = "rvr"))]
             let instance = executor.instance(&openvm_exe)?;
-            #[cfg(feature = "rvr")]
-            let instance = executor.instance(&openvm_exe, Default::default())?;
             #[allow(unused_variables)]
             let state = instance.execute(stdin.clone())?;
 
@@ -134,10 +131,7 @@ mod tests {
 
         let stdin = StdIn::default();
         let executor = VmExecutor::new(config.clone())?;
-        #[cfg(not(feature = "rvr"))]
         let instance = executor.instance(&openvm_exe)?;
-        #[cfg(feature = "rvr")]
-        let instance = executor.instance(&openvm_exe, Default::default())?;
         #[allow(unused_variables)]
         let state = instance.execute(stdin.clone())?;
 

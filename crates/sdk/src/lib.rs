@@ -17,12 +17,12 @@ use openvm_build::{
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 #[cfg(feature = "rvr")]
-pub use openvm_circuit::arch::rvr::{CfgHints, RvrTrackedExecution, RvrTrackedExecutionOutcome};
+pub use openvm_circuit::arch::rvr::{RvrTrackedExecution, RvrTrackedExecutionOutcome};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
     instructions::program::DEFAULT_PC_STEP,
-    rvr::{default_addr2line_cmd, GuestDebugMap, RvrProgramMetadata},
+    rvr::{default_addr2line_cmd, GuestDebugMap},
 };
 pub use openvm_circuit::{self, arch::ExecutionOutcome};
 use openvm_circuit::{
@@ -121,11 +121,6 @@ struct CompileInput {
     executable: ExecutableFormat,
     #[cfg(feature = "rvr")]
     elf_path: Option<PathBuf>,
-}
-
-#[cfg(feature = "rvr")]
-fn program_metadata(debug_map: Option<&GuestDebugMap>) -> RvrProgramMetadata<'_> {
-    RvrProgramMetadata { debug_map }
 }
 
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
@@ -466,31 +461,7 @@ where
                 executable,
                 elf_path: Some(elf_path),
             }),
-            #[cfg(feature = "rvr")]
-            ExecutableInput::ElfFileWithCfgHints {
-                elf_path,
-                cfg_hints,
-            } => {
-                let elf_bytes = read(&elf_path)?;
-                let mut elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
-                elf.merge_cfg_hints(&cfg_hints);
-                Ok(CompileInput {
-                    executable: ExecutableFormat::Elf(elf),
-                    elf_path: Some(elf_path),
-                })
-            }
         }
-    }
-
-    #[cfg(feature = "rvr")]
-    fn optional_guest_debug_map(
-        &self,
-        elf_path: Option<&Path>,
-        exe: &VmExe<F>,
-    ) -> Result<Option<GuestDebugMap>, SdkError> {
-        elf_path
-            .map(|elf_path| self.guest_debug_map(elf_path, exe))
-            .transpose()
     }
 
     #[cfg(feature = "rvr")]
@@ -543,10 +514,13 @@ where
         let exe = self.convert_to_exe(input.executable)?;
         #[cfg(feature = "rvr")]
         {
-            let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-            let metadata = program_metadata(guest_debug_map.as_ref());
+            let guest_debug_map = input
+                .elf_path
+                .as_deref()
+                .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+                .transpose()?;
             self.executor
-                .instance(&exe, metadata)
+                .instance_with_debug_map(&exe, guest_debug_map.as_ref())
                 .map(CompiledExePure::new)
                 .map_err(VirtualMachineError::from)
                 .map_err(SdkError::from)
@@ -569,10 +543,13 @@ where
     ) -> Result<CompiledExePureWithInstretTracking<'_>, SdkError> {
         let input = self.compile_input(app_exe)?;
         let exe = self.convert_to_exe(input.executable)?;
-        let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-        let metadata = program_metadata(guest_debug_map.as_ref());
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
         self.executor
-            .instret_tracking_instance(&exe, metadata)
+            .instret_tracking_instance(&exe, guest_debug_map.as_ref())
             .map(CompiledExePureWithInstretTracking::new)
             .map_err(VirtualMachineError::from)
             .map_err(SdkError::from)
@@ -639,10 +616,13 @@ where
         let exe = self.convert_to_exe(input.executable)?;
         #[cfg(feature = "rvr")]
         {
-            let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-            let metadata = program_metadata(guest_debug_map.as_ref());
+            let guest_debug_map = input
+                .elf_path
+                .as_deref()
+                .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+                .transpose()?;
             self.executor
-                .preflight_instance(&exe, metadata)
+                .preflight_instance_with_debug_map(&exe, guest_debug_map.as_ref())
                 .map(CompiledExePreflight::new)
                 .map_err(VirtualMachineError::from)
                 .map_err(SdkError::from)
@@ -709,17 +689,19 @@ where
         let ctx = vm.build_metered_ctx(&exe);
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
-        let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-        #[cfg(feature = "rvr")]
-        let metadata = program_metadata(guest_debug_map.as_ref());
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
-            .metered_instance(
+            .metered_instance_with_debug_map(
                 &exe,
                 &executor_idx_to_air_idx,
                 ctx.trace_heights.len(),
-                metadata,
+                guest_debug_map.as_ref(),
             )
             .map_err(VirtualMachineError::from)?;
         #[cfg(not(feature = "rvr"))]
@@ -805,13 +787,20 @@ where
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
-        let guest_debug_map = self.optional_guest_debug_map(input.elf_path.as_deref(), &exe)?;
-        #[cfg(feature = "rvr")]
-        let metadata = program_metadata(guest_debug_map.as_ref());
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
-            .metered_cost_instance(&exe, &executor_idx_to_air_idx, &ctx.widths, metadata)
+            .metered_cost_instance_with_debug_map(
+                &exe,
+                &executor_idx_to_air_idx,
+                &ctx.widths,
+                guest_debug_map.as_ref(),
+            )
             .map_err(VirtualMachineError::from)?;
         #[cfg(not(feature = "rvr"))]
         let instance = self

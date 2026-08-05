@@ -305,9 +305,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     let (program, exe) = field_expr_fixture(&modulus);
     let config = field_expr_config(modulus);
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .preflight_instance(&exe, Default::default())
-        .unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
         test_gpu_engine(),
@@ -368,9 +366,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
 fn modular_checkpoint_executor_records_only_irreducible_results() {
     let (_, exe) = fixture();
     let executor = VmExecutor::new(config()).unwrap();
-    let checkpoint = executor
-        .preflight_instance(&exe, Default::default())
-        .unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let execution = checkpoint
         .execute_from_state(state, PreflightLimits::new(5, 5, 1))
@@ -425,9 +421,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
         let exe = VmExe::new(program);
         let executor = VmExecutor::new(config()).unwrap();
         assert!(executor.interpreter_instance(&exe).is_err());
-        assert!(executor
-            .preflight_instance(&exe, Default::default())
-            .is_err());
+        assert!(executor.preflight_instance(&exe).is_err());
     }
 }
 
@@ -441,7 +435,7 @@ fn modular_heap_pointers_follow_the_eight_byte_memory_equipartition() {
         let state = interpreter.create_initial_vm_state(Vec::<Vec<u8>>::new());
         interpreter.execute_from_state(state).unwrap();
 
-        let rvr = executor.instance(&exe, Default::default()).unwrap();
+        let rvr = executor.instance(&exe).unwrap();
         let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
         rvr.execute_from_state(state).unwrap();
     }
@@ -456,7 +450,7 @@ fn modular_heap_pointers_follow_the_eight_byte_memory_equipartition() {
         };
         assert!(error.to_string().contains("eight-byte aligned"), "{error}");
 
-        let rvr = executor.instance(&exe, Default::default()).unwrap();
+        let rvr = executor.instance(&exe).unwrap();
         let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
         assert!(rvr.execute_from_state(state).is_err());
     }
@@ -468,9 +462,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
     let (program, exe) = fixture();
     let config = config();
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .preflight_instance(&exe, Default::default())
-        .unwrap();
+    let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
         test_gpu_engine(),

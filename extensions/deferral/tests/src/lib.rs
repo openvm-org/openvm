@@ -221,7 +221,7 @@ mod tests {
             ..Default::default()
         };
         let executor = VmExecutor::new(config)?;
-        let checkpoint = executor.preflight_instance(&exe, Default::default())?;
+        let checkpoint = executor.preflight_instance(&exe)?;
         let mut initial = checkpoint.create_initial_vm_state(streams);
         let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
         initial.memory.memory.touched_pages[DEFERRAL_AS as usize] =
@@ -280,14 +280,14 @@ mod tests {
 
         let executor = VmExecutor::new(config.clone())?;
         let pure_error = executor
-            .instance(&exe, Default::default())?
+            .instance(&exe)?
             .execute(Streams::default())
             .err()
             .expect("pure RVR must trap an out-of-bounds OUTPUT key");
         assert_rvr_trap(pure_error);
 
         let checkpoint_error = executor
-            .preflight_instance(&exe, Default::default())?
+            .preflight_instance(&exe)?
             .execute(
                 Streams::default(),
                 PreflightLimits::new(instructions.len(), 0, 1),

@@ -77,10 +77,7 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     )?;
     let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config)?;
-    #[cfg(not(feature = "rvr"))]
     let instance = executor.instance(&exe)?;
-    #[cfg(feature = "rvr")]
-    let instance = executor.instance(&exe, Default::default())?;
     instance.execute(vec![])?;
     Ok(())
 }
@@ -144,10 +141,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Fp2TranspilerExtension),
     )?;
     let executor = VmExecutor::new(config)?;
-    #[cfg(not(feature = "rvr"))]
     let instance = executor.instance(&openvm_exe)?;
-    #[cfg(feature = "rvr")]
-    let instance = executor.instance(&openvm_exe, Default::default())?;
     instance.execute(vec![])?;
     Ok(())
 }

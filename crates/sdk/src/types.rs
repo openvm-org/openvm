@@ -6,8 +6,6 @@ use std::{
 use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::CfgHints;
 #[cfg(feature = "evm-prove")]
 use openvm_circuit::arch::U16_CELL_SIZE;
 use openvm_circuit::{
@@ -58,12 +56,6 @@ pub enum ExecutableInput {
     WithElfPath {
         executable: ExecutableFormat,
         elf_path: PathBuf,
-    },
-    /// A final ELF file with additive build-system CFG hints.
-    #[cfg(feature = "rvr")]
-    ElfFileWithCfgHints {
-        elf_path: PathBuf,
-        cfg_hints: CfgHints,
     },
 }
 
