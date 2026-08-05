@@ -528,9 +528,10 @@ __device__ __forceinline__ bool validate_reveal(
 }
 
 __device__ __forceinline__ uint32_t branch_target(uint32_t pc, uint32_t encoded_offset) {
-    uint64_t sum = uint64_t(pc) + encoded_offset;
-    if (sum >= BABY_BEAR_ORDER) sum -= BABY_BEAR_ORDER;
-    return uint32_t(sum);
+    // `encoded_offset` is the canonical field encoding of a signed byte offset; byte pcs span
+    // the full 32-bit range, so the target is computed with integer arithmetic (wrapping like
+    // the host interpreter), not field arithmetic.
+    return replay_taken_branch_pc(pc, encoded_offset);
 }
 
 __device__ __forceinline__ bool execute_branch_condition(

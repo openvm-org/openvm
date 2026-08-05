@@ -5,7 +5,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, PC_BITS},
+    program::{pc_to_idx, DEFAULT_PC_STEP},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
@@ -13,7 +13,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{run_auipc, AuipcChip, AuipcCoreCols};
 use crate::adapters::{
-    ptr_to_u16_limbs, RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, U16_BITS,
+    sext32_to_u64, RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, PC_IDX_LOW_BITS, U16_BITS,
 };
 
 /// Generates the AUIPC trace directly from immutable preflight history.
@@ -37,6 +37,14 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 "AUIPC immediate exceeds its 24-bit instruction encoding",
             ));
         }
+        // The circuit sign-extends negative results but cannot represent results at or above
+        // 2^32 (a positive-immediate carry out of the low 32 bits is unsatisfiable).
+        let result = from_pc as i64 + sext32_to_u64(immediate << BYTE_BITS) as i64;
+        if result > u32::MAX as i64 {
+            return Err(PostflightError::new(
+                "AUIPC result exceeds implemented PC address space",
+            ));
+        }
         let (rd_data, _) = RdWriteAdapterFiller::replay(
             postflight,
             step,
@@ -49,7 +57,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let imm_bytes = immediate.to_le_bytes();
         let imm_low_8 = imm_bytes[0];
         let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << BYTE_BITS);
-        let [pc_low, pc_high] = ptr_to_u16_limbs(from_pc);
+        let pc_idx = pc_to_idx(from_pc);
+        let pc_idx_low = pc_idx & ((1 << PC_IDX_LOW_BITS) - 1);
+        let pc_high = pc_idx >> PC_IDX_LOW_BITS;
         let rd_lo = rd_data[0];
         let rd_hi = rd_data[1];
         let is_sign_extend = rd_data[2] != 0;
@@ -58,10 +68,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
         chip.inner
             .range_checker_chip
-            .add_count(pc_low as u32, U16_BITS);
-        chip.inner
-            .range_checker_chip
-            .add_count(pc_high as u32, PC_BITS - U16_BITS);
+            .add_count(pc_idx_low, PC_IDX_LOW_BITS);
+        chip.inner.range_checker_chip.add_count(pc_high, U16_BITS);
         chip.inner
             .range_checker_chip
             .add_count(imm_low_8 as u32, BYTE_BITS);
@@ -82,7 +90,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         core_row.is_sign_extend = F::from_bool(is_sign_extend);
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
-        core_row.pc_high = F::from_u16(pc_high);
+        core_row.pc_high = F::from_u32(pc_high);
         core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
         Ok(())
     })?;

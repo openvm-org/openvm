@@ -69,7 +69,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         if let Some((instruction, _)) = option {
             program_cells.extend([
                 BabyBear::from_u32(frequency),
-                BabyBear::from_usize(index * (DEFAULT_PC_STEP as usize)),
+                // The program bus carries pc indices; with pc_base = 0 that is the slot index.
+                BabyBear::from_usize(index),
                 instruction.opcode.to_field(),
                 instruction.a,
                 instruction.b,

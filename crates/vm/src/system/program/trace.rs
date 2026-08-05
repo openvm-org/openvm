@@ -5,7 +5,7 @@ use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
-    program::{Program, DEFAULT_PC_STEP},
+    program::{pc_to_idx, Program},
     LocalOpcode, SystemOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
@@ -84,14 +84,14 @@ pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
         &hasher,
         program_commitment,
         &init_memory_commit,
-        F::from_u32(exe.pc_start),
+        F::from_u32(pc_to_idx(exe.pc_start)),
     )
 }
 
 /// Computes a Merklelized hash of:
 /// - Program code commitment (commitment of the cached trace)
 /// - Merkle root of the initial memory
-/// - Starting program counter (`pc_start`)
+/// - Starting program counter as a pc index (`pc_to_idx(pc_start)`)
 ///
 /// The Merklelization uses [Poseidon2Hasher] as a cryptographic hash function (for the leaves)
 /// and a cryptographic compression function (for internal nodes).
@@ -111,16 +111,18 @@ pub fn compute_exe_commit<F: PrimeField32>(
 
 pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
+    // The pc column contains pc indices (see [pc_to_idx]): byte pcs span 32 bits and do not fit
+    // in a field element.
     let mut instructions = program
         .enumerate_by_pc()
         .into_iter()
-        .map(|(pc, instruction, _)| (pc, instruction))
+        .map(|(pc, instruction, _)| (pc_to_idx(pc), instruction))
         .collect_vec();
 
     let padding = padding_instruction();
     while !instructions.len().is_power_of_two() {
         instructions.push((
-            program.pc_base + instructions.len() as u32 * DEFAULT_PC_STEP,
+            pc_to_idx(program.pc_base) + instructions.len() as u32,
             padding.clone(),
         ));
     }
@@ -128,10 +130,10 @@ pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorM
     let mut rows = F::zero_vec(instructions.len() * width);
     rows.par_chunks_mut(width)
         .zip(instructions)
-        .for_each(|(row, (pc, instruction))| {
+        .for_each(|(row, (pc_idx, instruction))| {
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
-                pc: F::from_u32(pc),
+                pc: F::from_u32(pc_idx),
                 opcode: instruction.opcode.to_field(),
                 a: instruction.a,
                 b: instruction.b,

@@ -31,6 +31,31 @@ static constexpr __host__ __device__ bool replay_canonical_register_pointer(uint
     return pointer < 32u * 8u && (pointer & 7u) == 0;
 }
 
+// Decodes the canonical field encoding of a signed byte pc offset (negatives are encoded as
+// p - |offset|).
+static constexpr __host__ __device__ int64_t replay_decode_signed_pc_offset(uint32_t encoded) {
+    constexpr uint32_t FIELD_ORDER = 2013265921u; // BabyBear
+    return encoded > FIELD_ORDER / 2 ? int64_t(encoded) - int64_t(FIELD_ORDER)
+                                     : int64_t(encoded);
+}
+
+// Byte target of a taken branch/jump, wrapping like the host interpreter.
+static constexpr __host__ __device__ uint32_t replay_taken_branch_pc(
+    uint32_t pc, uint32_t encoded
+) {
+    return uint32_t(int64_t(pc) + replay_decode_signed_pc_offset(encoded));
+}
+
+// True if a taken branch/jump from byte pc `pc` lands inside the implemented PC address space
+// on a DEFAULT_PC_STEP-aligned slot.
+static constexpr __host__ __device__ bool replay_branch_target_in_bounds(
+    uint32_t pc, uint32_t encoded
+) {
+    int64_t target = int64_t(pc) + replay_decode_signed_pc_offset(encoded);
+    return target >= 0 && target <= int64_t(::program::MAX_ALLOWED_PC) &&
+           target % int64_t(::program::DEFAULT_PC_STEP) == 0;
+}
+
 static_assert(replay_canonical_register_pointer(0));
 static_assert(replay_canonical_register_pointer(31u * 8u));
 static_assert(!replay_canonical_register_pointer(2));

@@ -3,6 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit::arch::*;
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -105,9 +106,14 @@ where
             })
             + AB::Expr::from_usize(self.offset);
 
+        // `imm` is a byte offset (a multiple of DEFAULT_PC_STEP, possibly negative as a field
+        // element) and `pc_step` is a byte step; pc values on the buses are pc indices, so the
+        // byte delta is scaled down by DEFAULT_PC_STEP.
+        let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
         let to_pc = from_pc
-            + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_u32(self.pc_step);
+            + (cols.cmp_result * cols.imm
+                + not(cols.cmp_result) * AB::Expr::from_u32(self.pc_step))
+                * pc_step_inv;
 
         AdapterAirContext {
             to_pc: Some(to_pc),

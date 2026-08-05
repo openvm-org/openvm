@@ -160,9 +160,14 @@ where
             })
             + AB::Expr::from_usize(self.offset);
 
+        // `imm` is a byte offset (a multiple of DEFAULT_PC_STEP, possibly negative as a field
+        // element); pc values on the buses are pc indices, so the byte delta is scaled down by
+        // DEFAULT_PC_STEP.
+        let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
         let to_pc = from_pc
-            + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_u32(DEFAULT_PC_STEP);
+            + (cols.cmp_result * cols.imm
+                + not(cols.cmp_result) * AB::Expr::from_u32(DEFAULT_PC_STEP))
+                * pc_step_inv;
 
         AdapterAirContext {
             to_pc: Some(to_pc),

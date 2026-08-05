@@ -29,7 +29,8 @@ __global__ void program_cached_tracegen(
         COL_WRITE_VALUE(row, ProgramExecutionCols, f, rec.f);
         COL_WRITE_VALUE(row, ProgramExecutionCols, g, rec.g);
     } else {
-        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, pc_base + (idx * program::DEFAULT_PC_STEP));
+        // The pc column contains pc indices; records are already converted host-side.
+        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, program::pc_to_idx(pc_base) + idx);
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, terminate_opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, Fp::zero());
         COL_WRITE_VALUE(row, ProgramExecutionCols, b, Fp::zero());

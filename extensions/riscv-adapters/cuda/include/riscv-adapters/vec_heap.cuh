@@ -189,7 +189,7 @@ struct VecHeapAdapter {
         }
 
         COL_WRITE_VALUE(row, Cols, from_state.timestamp, record.from_timestamp);
-        COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, Cols, from_state.pc, ::program::pc_to_idx(record.from_pc));
     }
 };
 

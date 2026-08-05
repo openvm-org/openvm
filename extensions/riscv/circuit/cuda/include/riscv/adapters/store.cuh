@@ -55,7 +55,7 @@ struct StoreAdapter {
         uint16_t imm,
         uint8_t imm_sign
     ) {
-        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, rs1_ptr, rs1_ptr);
 
@@ -170,7 +170,7 @@ struct StoreByteAdapter {
         uint16_t imm,
         uint8_t imm_sign
     ) {
-        COL_WRITE_VALUE(row, StoreByteAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, StoreByteAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         COL_WRITE_VALUE(
             row, StoreByteAdapterCols, from_state.timestamp, from_timestamp
         );
