@@ -21,7 +21,7 @@ use openvm_ecc_transpiler::{EccTranspilerExtension, WeierstrassOpcode};
 use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode,
 };
-use openvm_pairing_circuit::{PairingConfig, PairingCurve, PairingGpuBuilder};
+use openvm_pairing_circuit::{PairingCurve, Rv64PairingConfig, Rv64PairingGpuBuilder};
 use openvm_pairing_guest::{
     bls12_381::BLS12_381_COMPLEX_STRUCT_NAME, bn254::BN254_COMPLEX_STRUCT_NAME,
 };
@@ -115,7 +115,7 @@ fn discover_pairing_split(
 }
 
 fn prove_pairing_checkpoint(
-    mut config: PairingConfig,
+    mut config: Rv64PairingConfig,
     exe: VmExe<BabyBear>,
     input: Vec<Vec<u8>>,
 ) -> Result<()> {
@@ -148,7 +148,7 @@ fn prove_pairing_checkpoint(
     );
 
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), PairingGpuBuilder, config.clone())?;
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64PairingGpuBuilder, config.clone())?;
     let cached_program = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program);
     let replay_program = WeierstrassPreflightGpuTracegen::upload_postflight_program(
@@ -242,7 +242,7 @@ fn prove_pairing_checkpoint(
             );
         }
 
-        let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
+        let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             replay_program.program(),
@@ -279,7 +279,7 @@ fn prove_pairing_checkpoint(
 
 fn transpile_pairing_fixture(
     curve_feature: &str,
-    config: &PairingConfig,
+    config: &Rv64PairingConfig,
 ) -> Result<VmExe<BabyBear>> {
     let elf = build_example_program_at_path_with_features(
         get_programs_dir!("tests/programs"),
@@ -302,7 +302,7 @@ fn transpile_pairing_fixture(
 
 #[cfg(feature = "bn254")]
 fn prove_bn254_pairing_checkpoint() -> Result<()> {
-    let config = PairingConfig::new(
+    let config = Rv64PairingConfig::new(
         vec![PairingCurve::Bn254],
         vec![BN254_COMPLEX_STRUCT_NAME.to_string()],
     );
@@ -340,7 +340,7 @@ fn prove_bn254_pairing_checkpoint() -> Result<()> {
 
 #[cfg(feature = "bls12_381")]
 fn prove_bls12_381_pairing_checkpoint() -> Result<()> {
-    let config = PairingConfig::new(
+    let config = Rv64PairingConfig::new(
         vec![PairingCurve::Bls12_381],
         vec![BLS12_381_COMPLEX_STRUCT_NAME.to_string()],
     );

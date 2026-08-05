@@ -20,12 +20,12 @@ use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear};
 
-use super::{DeferralGpuBuilder, DeferralPreflightCoverage, DeferralPreflightGpuTracegen};
+use super::{DeferralPreflightCoverage, DeferralPreflightGpuTracegen, Rv64DeferralGpuBuilder};
 use crate::{
     generate_deferral_results,
     poseidon2::deferral_poseidon2_chip,
     utils::{combine_output, COMMIT_NUM_BYTES},
-    DeferralExtension, DeferralFn, DeferralVmConfig, RawDeferralResult,
+    DeferralExtension, DeferralFn, RawDeferralResult, Rv64DeferralConfig,
 };
 
 type F = BabyBear;
@@ -112,7 +112,7 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
     );
     insert_bytes(&mut init_memory, MEMORY_AS, input_ptr, &output_key);
 
-    let config = DeferralVmConfig {
+    let config = Rv64DeferralConfig {
         system: test_system_config(),
         rv64i: Rv64I,
         rv64m: Rv64M::default(),
@@ -130,7 +130,7 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
         ..Default::default()
     });
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), DeferralGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -250,7 +250,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
 
     let mut system = test_system_config();
     system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
-    let config = DeferralVmConfig {
+    let config = Rv64DeferralConfig {
         system,
         rv64i: Rv64I,
         rv64m: Rv64M::default(),
@@ -274,7 +274,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(streams);
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), DeferralGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);

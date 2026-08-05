@@ -23,8 +23,8 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{Int256GpuBuilder, Int256PreflightGpuTracegen};
-use crate::Int256Config;
+use super::{Int256PreflightGpuTracegen, Int256Rv64GpuBuilder};
+use crate::Int256Rv64Config;
 
 type F = BabyBear;
 
@@ -247,7 +247,7 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
 #[test]
 fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let (cases, program, exe) = all_opcode_fixture();
-    let config = Int256Config {
+    let config = Int256Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -255,7 +255,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -305,7 +305,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
 
     let invalid_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut invalid_vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
             .unwrap();
     let cached_program = invalid_vm.commit_program_on_device(&program);
     invalid_vm.load_program(cached_program);
@@ -378,7 +378,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
             .map(|(offset, byte)| ((MEMORY_AS, RHS_PTR + offset as u32), byte)),
     );
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = Int256Config {
+    let config = Int256Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -386,7 +386,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut source_vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
             .unwrap();
     let cached_program = source_vm.commit_program_on_device(&program);
     source_vm.load_program(cached_program);
@@ -422,9 +422,12 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
 
     for corrupt_timestamp in [true, false] {
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-        let (mut vm, _) =
-            VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
-                .unwrap();
+        let (mut vm, _) = VirtualMachine::new_with_keygen(
+            test_gpu_engine(),
+            Int256Rv64GpuBuilder,
+            config.clone(),
+        )
+        .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
@@ -470,16 +473,19 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
     for (equal, expected_pc, expected_branch_replay_value) in [(false, 12, 0u64), (true, 16, 1u64)]
     {
         let (program, exe) = fixture(equal);
-        let config = Int256Config {
+        let config = Int256Rv64Config {
             system: test_system_config(),
             ..Default::default()
         };
         let executor = VmExecutor::new(config.clone()).unwrap();
         let checkpoint = executor.preflight_instance(&exe).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-        let (mut vm, pk) =
-            VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
-                .unwrap();
+        let (mut vm, pk) = VirtualMachine::new_with_keygen(
+            test_gpu_engine(),
+            Int256Rv64GpuBuilder,
+            config.clone(),
+        )
+        .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);

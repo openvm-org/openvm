@@ -315,9 +315,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Sha2> for Sha2GpuProverExt {
     }
 }
 
-pub struct Sha2GpuBuilder;
+pub struct Sha2Rv64GpuBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Sha2GpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Sha2Rv64GpuBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -342,13 +342,13 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Sha2GpuBuilder {
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Sha2GpuBuilder {
-    type VmConfig = Sha2VmConfig;
+impl VmBuilder<E> for Sha2Rv64GpuBuilder {
+    type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &Sha2VmConfig,
+        config: &Sha2Rv64Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<

@@ -13,7 +13,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{BaseAluOpcode, BranchEqualOpcode};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use crate::Int256Config;
+use crate::Int256Rv64Config;
 
 const DST_PTR: u32 = 0x100;
 const LHS_PTR: u32 = 0x200;
@@ -99,7 +99,7 @@ fn fixture(equal: bool) -> VmExe<BabyBear> {
 
 #[test]
 fn checkpoint_execution_preserves_int256_branch_outcomes() {
-    let config = Int256Config {
+    let config = Int256Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -120,7 +120,7 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
 
 #[test]
 fn int256_heap_pointers_follow_the_eight_byte_memory_equipartition() {
-    let config = Int256Config {
+    let config = Int256Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };

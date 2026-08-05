@@ -81,10 +81,10 @@ cfg_if::cfg_if! {
         mod cuda;
         pub use self::cuda::*;
         pub use self::cuda::Sha2GpuProverExt as Sha2ProverExt;
-        pub use self::cuda::Sha2GpuBuilder as Sha2Builder;
+        pub use self::cuda::Sha2Rv64GpuBuilder as Sha2Rv64Builder;
     } else {
         pub use self::Sha2CpuProverExt as Sha2ProverExt;
-        pub use self::Sha2CpuBuilder as Sha2Builder;
+        pub use self::Sha2Rv64CpuBuilder as Sha2Rv64Builder;
     }
 }
 ```

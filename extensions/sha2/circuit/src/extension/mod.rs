@@ -41,15 +41,15 @@ cfg_if::cfg_if! {
         mod cuda;
         pub use self::cuda::*;
         pub use self::cuda::Sha2GpuProverExt as Sha2ProverExt;
-        pub use self::cuda::Sha2GpuBuilder as Sha2Builder;
+        pub use self::cuda::Sha2Rv64GpuBuilder as Sha2Rv64Builder;
     } else {
         pub use self::Sha2CpuProverExt as Sha2ProverExt;
-        pub use self::Sha2CpuBuilder as Sha2Builder;
+        pub use self::Sha2Rv64CpuBuilder as Sha2Rv64Builder;
     }
 }
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Sha2VmConfig {
+pub struct Sha2Rv64Config {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
@@ -62,7 +62,7 @@ pub struct Sha2VmConfig {
     pub sha2: Sha2,
 }
 
-impl Default for Sha2VmConfig {
+impl Default for Sha2Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
@@ -75,24 +75,24 @@ impl Default for Sha2VmConfig {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Sha2VmConfig {}
+impl InitFileGenerator for Sha2Rv64Config {}
 
 #[derive(Clone)]
-pub struct Sha2CpuBuilder;
+pub struct Sha2Rv64CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Sha2CpuBuilder
+impl<E, SC> VmBuilder<E> for Sha2Rv64CpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Sha2VmConfig;
+    type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
-        config: &Sha2VmConfig,
+        config: &Sha2Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {

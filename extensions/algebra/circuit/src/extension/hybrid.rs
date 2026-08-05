@@ -55,7 +55,7 @@ use crate::{
         generate_field_expression_trace_from_postflight,
         generate_modular_is_equal_trace_from_postflight,
     },
-    Fp2Extension, ModularConfig, ModularExtension, ModularWithFp2Config, FP2_BLOCKS_32,
+    Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config, FP2_BLOCKS_32,
     FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16,
     NUM_LIMBS_48, NUM_LIMBS_48_U16,
 };
@@ -1179,9 +1179,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Fp2Extension> for AlgebraHybr
 
 /// GPU builder for RV64IM and modular extensions.
 #[derive(Clone)]
-pub struct ModularHybridBuilder;
+pub struct Rv64ModularHybridBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for ModularHybridBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64ModularHybridBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -1214,13 +1214,13 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for ModularHybridBuilder {
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for ModularHybridBuilder {
-    type VmConfig = ModularConfig;
+impl VmBuilder<E> for Rv64ModularHybridBuilder {
+    type VmConfig = Rv64ModularConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &ModularConfig,
+        config: &Rv64ModularConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
@@ -1245,9 +1245,9 @@ impl VmBuilder<E> for ModularHybridBuilder {
 
 /// GPU builder for RV64IM, modular, and complex extensions.
 #[derive(Clone)]
-pub struct ModularWithFp2HybridBuilder;
+pub struct Rv64ModularWithFp2HybridBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for ModularWithFp2HybridBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64ModularWithFp2HybridBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -1278,18 +1278,18 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for ModularWithFp2HybridBuil
     }
 }
 
-impl VmBuilder<E> for ModularWithFp2HybridBuilder {
-    type VmConfig = ModularWithFp2Config;
+impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
+    type VmConfig = Rv64ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &ModularWithFp2Config,
+        config: &Rv64ModularWithFp2Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &ModularHybridBuilder,
+            &Rv64ModularHybridBuilder,
             &config.modular,
             circuit,
             device_ctx,

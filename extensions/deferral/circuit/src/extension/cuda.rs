@@ -51,7 +51,7 @@ use crate::{
     count::{DeferralCircuitCountAir, DeferralCircuitCountChipGpu},
     output::{DeferralOutputAir, DeferralOutputChipGpu},
     poseidon2::{DeferralPoseidon2Air, DeferralPoseidon2ChipGpu},
-    DeferralExtension, DeferralVmConfig,
+    DeferralExtension, Rv64DeferralConfig,
 };
 
 pub struct DeferralGpuProverExt;
@@ -387,9 +387,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DeferralExtension> for Deferr
 }
 
 #[derive(Clone)]
-pub struct DeferralGpuBuilder;
+pub struct Rv64DeferralGpuBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for DeferralGpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -415,8 +415,8 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for DeferralGpuBuilder {
     }
 }
 
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for DeferralGpuBuilder {
-    type VmConfig = DeferralVmConfig;
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
+    type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(

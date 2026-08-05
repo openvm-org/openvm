@@ -1193,7 +1193,7 @@ mod ec_addne_tests {
             );
         }
         let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-        let mut vm_config = crate::WeierstrassConfig::new(vec![
+        let mut vm_config = crate::Rv64WeierstrassConfig::new(vec![
             crate::SECP256K1_CONFIG.clone(),
             crate::SECP256K1_CONFIG.clone(),
         ]);
@@ -1205,11 +1205,11 @@ mod ec_addne_tests {
             .create_initial_vm_state(Vec::<Vec<u8>>::new());
 
         let mut incomplete_config =
-            crate::WeierstrassConfig::new(vec![crate::SECP256K1_CONFIG.clone()]);
+            crate::Rv64WeierstrassConfig::new(vec![crate::SECP256K1_CONFIG.clone()]);
         *incomplete_config.as_mut() = test_system_config();
         let (mut poisoned_vm, _) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
-            crate::WeierstrassHybridBuilder,
+            crate::Rv64WeierstrassHybridBuilder,
             incomplete_config.clone(),
         )
         .unwrap();
@@ -1250,7 +1250,7 @@ mod ec_addne_tests {
 
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
-            crate::WeierstrassHybridBuilder,
+            crate::Rv64WeierstrassHybridBuilder,
             vm_config.clone(),
         )
         .unwrap();

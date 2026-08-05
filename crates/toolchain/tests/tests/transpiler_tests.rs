@@ -83,7 +83,7 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
 }
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
-pub struct ModularFp2Int256Config {
+pub struct Rv64ModularFp2Int256Config {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
@@ -100,7 +100,7 @@ pub struct ModularFp2Int256Config {
     pub int256: Int256,
 }
 
-impl ModularFp2Int256Config {
+impl Rv64ModularFp2Int256Config {
     pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<(String, BigUint)>) -> Self {
         Self {
             system: SystemConfig::default(),
@@ -114,7 +114,7 @@ impl ModularFp2Int256Config {
     }
 }
 
-impl InitFileGenerator for ModularFp2Int256Config {
+impl InitFileGenerator for Rv64ModularFp2Int256Config {
     fn generate_init_file_contents(&self) -> Option<String> {
         Some(format!(
             "{}\n{}\n",
@@ -126,7 +126,7 @@ impl InitFileGenerator for ModularFp2Int256Config {
 
 #[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
-    let config = ModularFp2Int256Config::new(
+    let config = Rv64ModularFp2Int256Config::new(
         vec![SECP256K1_MODULUS.clone(), SECP256K1_ORDER.clone()],
         vec![("Secp256k1Coord".to_string(), SECP256K1_MODULUS.clone())],
     );

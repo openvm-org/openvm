@@ -53,11 +53,11 @@ cfg_if::cfg_if! {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
         pub use self::cuda::DeferralPreflightGpuTracegen;
-        pub use self::cuda::DeferralGpuBuilder as DeferralBuilder;
+        pub use self::cuda::Rv64DeferralGpuBuilder as Rv64DeferralBuilder;
 
     } else {
         pub use self::DeferralCpuProverExt as DeferralProverExt;
-        pub use self::DeferralCpuBuilder as DeferralBuilder;
+        pub use self::Rv64DeferralCpuBuilder as Rv64DeferralBuilder;
     }
 }
 
@@ -258,7 +258,7 @@ where
 // ====================================== VM Config and Builder ==================================
 
 #[derive(Clone, VmConfig, Serialize, Deserialize)]
-pub struct DeferralVmConfig {
+pub struct Rv64DeferralConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
@@ -272,19 +272,19 @@ pub struct DeferralVmConfig {
     pub deferral: DeferralExtension,
 }
 
-impl InitFileGenerator for DeferralVmConfig {}
+impl InitFileGenerator for Rv64DeferralConfig {}
 
 #[derive(Clone)]
-pub struct DeferralCpuBuilder;
+pub struct Rv64DeferralCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for DeferralCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv64DeferralCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = DeferralVmConfig;
+    type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(

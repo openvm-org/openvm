@@ -145,7 +145,7 @@ pub struct BranchLessThan256Executor;
 pub type BranchLessThan256Chip<F> = VmChipWrapper<F, BranchLessThanFiller>;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Int256Config {
+pub struct Int256Rv64Config {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
@@ -159,9 +159,9 @@ pub struct Int256Config {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Int256Config {}
+impl InitFileGenerator for Int256Rv64Config {}
 
-impl Default for Int256Config {
+impl Default for Int256Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),

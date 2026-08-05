@@ -398,9 +398,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
 }
 
 #[derive(Clone)]
-pub struct Int256GpuBuilder;
+pub struct Int256Rv64GpuBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256GpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256Rv64GpuBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -425,13 +425,13 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256GpuBuilder {
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Int256GpuBuilder {
-    type VmConfig = Int256Config;
+impl VmBuilder<E> for Int256Rv64GpuBuilder {
+    type VmConfig = Int256Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &Int256Config,
+        config: &Int256Rv64Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<

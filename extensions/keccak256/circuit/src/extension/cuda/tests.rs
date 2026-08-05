@@ -26,8 +26,8 @@ use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::PreflightProgramEvent;
 
-use super::{Keccak256GpuBuilder, Keccak256PreflightGpuTracegen};
-use crate::Keccak256Config;
+use super::{Keccak256PreflightGpuTracegen, Keccak256Rv64GpuBuilder};
+use crate::Keccak256Rv64Config;
 
 type F = BabyBear;
 
@@ -158,7 +158,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         )
     }));
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = Keccak256Config {
+    let config = Keccak256Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -166,7 +166,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Keccak256GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Keccak256Rv64GpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);

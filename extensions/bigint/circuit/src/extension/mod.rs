@@ -47,12 +47,12 @@ cfg_if::cfg_if! {
         pub use self::cuda::*;
         pub use self::cuda::{
             Int256GpuProverExt as Int256ProverExt,
-            Int256GpuBuilder as Int256Builder,
+            Int256Rv64GpuBuilder as Int256Rv64Builder,
         };
     } else {
         pub use self::{
             Int256CpuProverExt as Int256ProverExt,
-            Int256CpuBuilder as Int256Builder,
+            Int256Rv64CpuBuilder as Int256Rv64Builder,
         };
     }
 }
@@ -448,21 +448,21 @@ where
 }
 
 #[derive(Clone)]
-pub struct Int256CpuBuilder;
+pub struct Int256Rv64CpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Int256CpuBuilder
+impl<SC, E> VmBuilder<E> for Int256Rv64CpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Int256Config;
+    type VmConfig = Int256Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
-        config: &Int256Config,
+        config: &Int256Rv64Config,
         circuit: AirInventory<E::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {

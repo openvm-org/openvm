@@ -21,8 +21,8 @@ use rvr_state::{
 };
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
-use super::{Sha2GpuBuilder, Sha2PreflightGpuTracegen};
-use crate::Sha2VmConfig;
+use super::{Sha2PreflightGpuTracegen, Sha2Rv64GpuBuilder};
+use crate::Sha2Rv64Config;
 
 type F = BabyBear;
 
@@ -251,7 +251,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
 #[test]
 fn mixed_rv64_sha_checkpoint_expansion_proves() {
     let (program, exe, _) = fixture(false);
-    let config = Sha2VmConfig {
+    let config = Sha2Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -259,7 +259,8 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2GpuBuilder, config.clone()).unwrap();
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
+            .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
@@ -289,7 +290,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
 #[test]
 fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
     let (program, exe, corrupt) = fixture(true);
-    let config = Sha2VmConfig {
+    let config = Sha2Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -299,7 +300,8 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
         .unwrap()
         .create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2GpuBuilder, config.clone()).unwrap();
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
+            .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
@@ -328,7 +330,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
 #[test]
 fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
     let (program, exe, _) = fixture(false);
-    let config = Sha2VmConfig {
+    let config = Sha2Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -353,7 +355,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         output.value[0] ^= 1;
 
         let (mut vm, _) =
-            VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2GpuBuilder, config.clone())
+            VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
                 .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
@@ -378,7 +380,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
 #[test]
 fn sha_coordinator_requires_both_producers_per_executed_opcode() {
     let (program, _, transcript) = fixture(false);
-    let config = Sha2VmConfig {
+    let config = Sha2Rv64Config {
         system: test_system_config(),
         ..Default::default()
     };

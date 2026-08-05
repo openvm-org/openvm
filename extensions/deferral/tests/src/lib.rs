@@ -18,9 +18,9 @@ mod tests {
         utils::test_cpu_engine,
     };
     #[cfg(feature = "rvr")]
-    use openvm_deferral_circuit::DeferralCpuBuilder;
+    use openvm_deferral_circuit::Rv64DeferralCpuBuilder;
     use openvm_deferral_circuit::{
-        DeferralBuilder, DeferralExtension, DeferralFn, DeferralVmConfig,
+        DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
     };
     #[cfg(feature = "rvr")]
     use openvm_deferral_transpiler::DeferralOpcode;
@@ -57,10 +57,10 @@ mod tests {
     const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
     const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
-    fn make_config(num_deferrals: usize) -> DeferralVmConfig {
+    fn make_config(num_deferrals: usize) -> Rv64DeferralConfig {
         let mut system = test_system_config();
         system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-        DeferralVmConfig {
+        Rv64DeferralConfig {
             system,
             rv64i: Rv64I,
             rv64m: Rv64M::default(),
@@ -102,7 +102,7 @@ mod tests {
         DeferralExtension::new(fns, commits)
     }
 
-    fn run_test(config: DeferralVmConfig, example_name: &str, streams: Streams) -> Result<()> {
+    fn run_test(config: Rv64DeferralConfig, example_name: &str, streams: Streams) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -114,7 +114,7 @@ mod tests {
                     config.deferral.def_circuit_commits.clone(),
                 )),
         )?;
-        air_test_with_min_segments(DeferralBuilder, config, exe, streams, 1).unwrap();
+        air_test_with_min_segments(Rv64DeferralBuilder, config, exe, streams, 1).unwrap();
         Ok(())
     }
 
@@ -288,7 +288,7 @@ mod tests {
         assert_rvr_trap(checkpoint_error);
 
         let (vm, _) =
-            VirtualMachine::new_with_keygen(test_cpu_engine(), DeferralCpuBuilder, config)?;
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64DeferralCpuBuilder, config)?;
         let metered_error = vm
             .metered_instance(&exe)?
             .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))

@@ -22,11 +22,11 @@ use openvm_instructions::{
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{modular_is_eq_x0_destination, ModularConfig, ModularCpuBuilder};
+use super::{modular_is_eq_x0_destination, Rv64ModularConfig, Rv64ModularCpuBuilder};
 #[cfg(feature = "cuda")]
 use super::{
-    AlgebraPreflightGpuTracegen, ModularHybridBuilder, ModularWithFp2Config,
-    ModularWithFp2HybridBuilder,
+    AlgebraPreflightGpuTracegen, Rv64ModularHybridBuilder, Rv64ModularWithFp2Config,
+    Rv64ModularWithFp2HybridBuilder,
 };
 
 const SETUP_DST_PTR: u32 = 0x100;
@@ -161,8 +161,8 @@ fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
     fixture_with_pointer_offset(0)
 }
 
-fn config() -> ModularConfig {
-    let mut config = ModularConfig::new(vec![secp256k1_coord_prime()]);
+fn config() -> Rv64ModularConfig {
+    let mut config = Rv64ModularConfig::new(vec![secp256k1_coord_prime()]);
     config.system = test_system_config();
     config
 }
@@ -294,8 +294,8 @@ fn field_expr_fixture(modulus: &BigUint) -> (Program<BabyBear>, VmExe<BabyBear>)
 }
 
 #[cfg(feature = "cuda")]
-fn field_expr_config(modulus: BigUint) -> ModularWithFp2Config {
-    let mut config = ModularWithFp2Config::new(vec![("FieldExprTest".to_string(), modulus)]);
+fn field_expr_config(modulus: BigUint) -> Rv64ModularWithFp2Config {
+    let mut config = Rv64ModularWithFp2Config::new(vec![("FieldExprTest".to_string(), modulus)]);
     config.modular.system = test_system_config();
     config
 }
@@ -309,7 +309,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
         test_gpu_engine(),
-        ModularWithFp2HybridBuilder,
+        Rv64ModularWithFp2HybridBuilder,
         config.clone(),
     )
     .unwrap();
@@ -384,7 +384,8 @@ fn modular_checkpoint_executor_records_only_irreducible_results() {
 fn modular_metering_counts_only_irreducible_results() {
     let (_, exe) = fixture();
     let (vm, _) =
-        VirtualMachine::new_with_keygen(test_cpu_engine(), ModularCpuBuilder, config()).unwrap();
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ModularCpuBuilder, config())
+            .unwrap();
     let metered_ctx = vm.build_metered_ctx(&exe);
     let (segments, _) = vm
         .metered_instance(&exe)
@@ -463,9 +464,12 @@ fn modular_checkpoint_expansion_proves_without_records() {
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-    let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), ModularHybridBuilder, config.clone())
-            .unwrap();
+    let (mut vm, pk) = VirtualMachine::new_with_keygen(
+        test_gpu_engine(),
+        Rv64ModularHybridBuilder,
+        config.clone(),
+    )
+    .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);

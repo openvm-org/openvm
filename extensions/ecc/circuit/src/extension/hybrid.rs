@@ -5,7 +5,7 @@ use std::{any::Any, collections::BTreeSet, sync::Arc};
 
 use openvm_algebra_circuit::{
     cuda::field_expr::FieldExprReplayChip, AlgebraPreflightGpuTracegen, Fp2Extension,
-    ModularExtension, ModularHybridBuilder,
+    ModularExtension, Rv64ModularHybridBuilder,
 };
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use openvm_circuit::arch::rvr::PreflightExecution;
@@ -51,7 +51,7 @@ use crate::{
     weierstrass_chip::{
         generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
     },
-    WeierstrassAir, WeierstrassChip, WeierstrassConfig, WeierstrassExtension, ECC_BLOCKS_32,
+    Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32,
     ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
@@ -646,9 +646,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
 
 /// GPU builder for RV64IM, modular, and elliptic-curve extensions.
 #[derive(Clone)]
-pub struct WeierstrassHybridBuilder;
+pub struct Rv64WeierstrassHybridBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for WeierstrassHybridBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -680,18 +680,18 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for WeierstrassHybridBuilder
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for WeierstrassHybridBuilder {
-    type VmConfig = WeierstrassConfig;
+impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
+    type VmConfig = Rv64WeierstrassConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &WeierstrassConfig,
+        config: &Rv64WeierstrassConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &ModularHybridBuilder,
+            &Rv64ModularHybridBuilder,
             &config.modular,
             circuit,
             device_ctx,
