@@ -32,7 +32,7 @@ use openvm_cuda_common::{
 use openvm_instructions::{
     instruction::Instruction,
     program::{Program, PC_BITS},
-    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
+    riscv::REGISTER_NUM_LIMBS,
 };
 #[cfg(feature = "rvr")]
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode};
