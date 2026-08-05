@@ -6,9 +6,13 @@
 
 use std::{ffi::c_void, iter, sync::LazyLock};
 
-use halo2curves_axiom::ff::Field;
+use halo2curves_axiom::{
+    ff::Field,
+    group::{Curve, Group as _},
+    CurveAffine,
+};
 use openvm_circuit_primitives::U16_BITS;
-use openvm_ecc_circuit::{ec_add_ne_program, ec_double_ne_program, CurveType};
+use openvm_ecc_circuit::{ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, CurveType};
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilderConfig, FieldExpressionProgram,
 };
@@ -99,6 +103,56 @@ unsafe fn ec_double_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_2
     write_field_256(state, rd_ptr + BN254_FQ_BYTES, &y3);
 }
 
+// ── Scalar multiplication ─────────────────────────────────────────────────────
+
+/// Scalar operand width in bits, matching the circuit's ladder length.
+const SCALAR_BITS: usize = 256;
+/// Scalar operand width in bytes.
+const SCALAR_BYTES: u32 = (SCALAR_BITS / 8) as u32;
+
+/// MSB-first double-and-add over the raw bits of `scalar_le`.
+///
+/// This mirrors the circuit's ladder one iteration per bit. The accumulator stays projective so the
+/// whole multiplication costs a single inversion, in `to_affine`, rather than one per step.
+///
+/// No case analysis is needed: halo2curves' projective formulas are exception-free, and its affine
+/// identity is `(0, 0)` — the same sentinel the circuit uses — so leading zero bits and an identity
+/// base both fall out of the general case.
+fn ec_mul_ladder<C: CurveAffine>(base: C, scalar_le: &[u8]) -> C {
+    let mut acc = C::Curve::identity();
+    for byte in scalar_le.iter().rev() {
+        for shift in (0..8).rev() {
+            acc = acc.double();
+            if (byte >> shift) & 1 == 1 {
+                acc += base;
+            }
+        }
+    }
+    acc.to_affine()
+}
+
+/// Execute `EC_MUL` for a curve over a 256-bit base field.
+#[inline(always)]
+unsafe fn ec_mul_256<C>(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64, rs2_ptr: u64)
+where
+    C: CurveAffine,
+    C::Base: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_256_BYTES]>,
+{
+    let x: C::Base = read_field_256(state, rs1_ptr);
+    let y: C::Base = read_field_256(state, rs1_ptr + BN254_FQ_BYTES);
+    // `is_on_curve` admits `(0, 0)`, so this also accepts the identity.
+    let base = Option::<C>::from(C::from_xy(x, y)).unwrap_or_else(C::identity);
+
+    let scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
+    let result = ec_mul_ladder(base, &scalar);
+
+    let (rx, ry) = Option::<_>::from(result.coordinates())
+        .map(|c: halo2curves_axiom::Coordinates<C>| (*c.x(), *c.y()))
+        .unwrap_or((C::Base::ZERO, C::Base::ZERO));
+    write_field_256(state, rd_ptr, &rx);
+    write_field_256(state, rd_ptr + BN254_FQ_BYTES, &ry);
+}
+
 // ── Curve constants ──────────────────────────────────────────────────────────
 
 const P256_A_ABS: u64 = 3;
@@ -138,6 +192,14 @@ fn ec_add_ne_setup_program(curve: CurveType, coord_bytes: usize) -> FieldExpress
 
 fn ec_double_setup_program(curve: CurveType, coord_bytes: usize) -> FieldExpressionProgram {
     ec_double_ne_program(
+        field_config(curve, coord_bytes),
+        U16_BITS,
+        curve.a_coefficient().clone(),
+    )
+}
+
+fn ec_mul_setup_program(curve: CurveType, coord_bytes: usize) -> FieldExpressionProgram {
+    ec_mul_step_program(
         field_config(curve, coord_bytes),
         U16_BITS,
         curve.a_coefficient().clone(),
@@ -204,6 +266,32 @@ unsafe fn ec_double_setup(
     let Some(output) = ecc_setup_expr(program, point_bytes, &setup_bytes) else {
         return false;
     };
+    trace_write_bytes(state, rd_ptr, &output);
+    true
+}
+
+/// `SETUP_EC_MUL` reads `(modulus, a)` from the point operand, like `SETUP_EC_DOUBLE`. Its scalar
+/// operand is unused.
+///
+/// The circuit evaluates a setup row from the program's own setup inputs — the modulus, then the
+/// setup values, then zero padding — rather than from the base-point operand, so the validated
+/// operand bytes are extended with zeros to the expression's full input width.
+unsafe fn ec_mul_setup(
+    state: *mut c_void,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    point_bytes: u32,
+    program: &FieldExpressionProgram,
+) -> bool {
+    let coord_bytes = (point_bytes / 2) as usize;
+    let mut setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
+    if !setup_values_match(program, coord_bytes, &setup_bytes) {
+        return false;
+    }
+    setup_bytes.resize(program.num_inputs() * coord_bytes, 0);
+    let flag_idx = program.num_flags();
+    let output: Vec<u8> =
+        run_field_expression_precomputed::<true>(program, flag_idx, &setup_bytes).into();
     trace_write_bytes(state, rd_ptr, &output);
     true
 }
@@ -296,6 +384,39 @@ macro_rules! ecc_double_setup_entry {
     };
 }
 
+macro_rules! ecc_mul_entry {
+    ($name:ident, $curve:ty) => {
+        /// # Safety
+        ///
+        /// `state` must point to a valid native tracer state for this execution.
+        /// Pointer parameters must point to valid affine point coordinates.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(
+            state: *mut c_void,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
+        ) {
+            ec_mul_256::<$curve>(state, rd_ptr, rs1_ptr, rs2_ptr);
+        }
+    };
+}
+
+macro_rules! ecc_mul_setup_entry {
+    ($name:ident, $point_bytes:expr, $curve:expr) => {
+        /// # Safety
+        ///
+        /// `state` must point to a valid native tracer state for this execution.
+        /// Pointer parameters must point to valid affine point coordinates.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) -> bool {
+            static PROGRAM: LazyLock<FieldExpressionProgram> =
+                LazyLock::new(|| ec_mul_setup_program($curve, ($point_bytes / 2) as usize));
+            ec_mul_setup(state, rd_ptr, rs1_ptr, $point_bytes, &PROGRAM)
+        }
+    };
+}
+
 ecc_add_ne_setup_entry!(
     rvr_ext_setup_ec_add_ne_k256,
     POINT_256_BYTES,
@@ -306,6 +427,11 @@ ecc_double_setup_entry!(
     POINT_256_BYTES,
     CurveType::K256
 );
+ecc_mul_entry!(
+    rvr_ext_ec_mul_k256,
+    halo2curves_axiom::secp256k1::Secp256k1Affine
+);
+ecc_mul_setup_entry!(rvr_ext_setup_ec_mul_k256, POINT_256_BYTES, CurveType::K256);
 
 ecc_add_ne_entry!(rvr_ext_ec_add_ne_p256, halo2curves_axiom::secp256r1::Fp);
 ecc_add_ne_setup_entry!(
@@ -323,6 +449,11 @@ ecc_double_setup_entry!(
     POINT_256_BYTES,
     CurveType::P256
 );
+ecc_mul_entry!(
+    rvr_ext_ec_mul_p256,
+    halo2curves_axiom::secp256r1::Secp256r1Affine
+);
+ecc_mul_setup_entry!(rvr_ext_setup_ec_mul_p256, POINT_256_BYTES, CurveType::P256);
 
 ecc_add_ne_entry!(rvr_ext_ec_add_ne_bn254, halo2curves_axiom::bn256::Fq);
 ecc_add_ne_setup_entry!(
@@ -337,6 +468,12 @@ ecc_double_entry!(
 );
 ecc_double_setup_entry!(
     rvr_ext_setup_ec_double_bn254,
+    POINT_256_BYTES,
+    CurveType::BN254
+);
+ecc_mul_entry!(rvr_ext_ec_mul_bn254, halo2curves_axiom::bn256::G1Affine);
+ecc_mul_setup_entry!(
+    rvr_ext_setup_ec_mul_bn254,
     POINT_256_BYTES,
     CurveType::BN254
 );
@@ -355,12 +492,95 @@ ecc_double_setup_entry!(
 
 #[cfg(test)]
 mod tests {
+    use halo2curves_axiom::group::prime::PrimeCurveAffine;
     use num_bigint::BigUint;
 
     use super::*;
 
     fn parse_hex(value: &str) -> BigUint {
         BigUint::parse_bytes(value.as_bytes(), 16).unwrap()
+    }
+
+    /// The circuit's ladder, evaluated in affine coordinates with `(0, 0)` for the identity and the
+    /// same incomplete formulas the `EC_ADD_NE` and `EC_DOUBLE` opcodes use.
+    ///
+    /// [`ec_mul_ladder`] must agree with this for every scalar below the group order, which is the
+    /// precondition that keeps the doubling and addition steps non-exceptional.
+    fn affine_ladder<C: CurveAffine>(
+        px: C::Base,
+        py: C::Base,
+        scalar_le: &[u8],
+    ) -> (C::Base, C::Base) {
+        let a = C::a();
+        let mut rx = C::Base::ZERO;
+        let mut ry = C::Base::ZERO;
+        let mut is_inf = true;
+
+        for i in (0..SCALAR_BITS).rev() {
+            let bit = (scalar_le[i / 8] >> (i % 8)) & 1 == 1;
+            if is_inf {
+                if bit {
+                    (rx, ry) = (px, py);
+                    is_inf = false;
+                }
+            } else {
+                let (dx, dy) = ec_double_impl(rx, ry, a);
+                (rx, ry) = if bit {
+                    ec_add_ne_impl(dx, dy, px, py)
+                } else {
+                    (dx, dy)
+                };
+            }
+        }
+        (rx, ry)
+    }
+
+    fn coordinates<C: CurveAffine>(point: C) -> (C::Base, C::Base) {
+        Option::<halo2curves_axiom::Coordinates<C>>::from(point.coordinates())
+            .map(|c| (*c.x(), *c.y()))
+            .unwrap_or((C::Base::ZERO, C::Base::ZERO))
+    }
+
+    fn scalar_le(value: u64) -> [u8; SCALAR_BITS / 8] {
+        let mut bytes = [0u8; SCALAR_BITS / 8];
+        bytes[..8].copy_from_slice(&value.to_le_bytes());
+        bytes
+    }
+
+    fn check_ladder_against_affine<C: CurveAffine>() {
+        let generator = C::generator();
+        let (px, py) = coordinates(generator);
+
+        for k in [0u64, 1, 2, 3, 4, 255, 256, 0x1234_5678, u64::MAX] {
+            let bytes = scalar_le(k);
+            let expected = affine_ladder::<C>(px, py, &bytes);
+            let actual = coordinates(ec_mul_ladder(generator, &bytes));
+            assert_eq!(actual, expected, "k = {k}");
+        }
+    }
+
+    #[test]
+    fn ladder_matches_affine_formulas() {
+        check_ladder_against_affine::<halo2curves_axiom::secp256k1::Secp256k1Affine>();
+        check_ladder_against_affine::<halo2curves_axiom::secp256r1::Secp256r1Affine>();
+        check_ladder_against_affine::<halo2curves_axiom::bn256::G1Affine>();
+    }
+
+    #[test]
+    fn ladder_handles_degenerate_inputs() {
+        type C = halo2curves_axiom::bn256::G1Affine;
+        let zero = <C as CurveAffine>::Base::ZERO;
+
+        // A zero scalar sends any point to the identity, which the circuit encodes as `(0, 0)`.
+        let product = ec_mul_ladder(C::generator(), &scalar_le(0));
+        assert_eq!(coordinates(product), (zero, zero));
+
+        // An identity base stays at the identity for every scalar. The circuit cannot prove this
+        // case, but execution must still terminate with the mathematically correct value.
+        for k in [0u64, 1, 9] {
+            let product = ec_mul_ladder(<C as PrimeCurveAffine>::identity(), &scalar_le(k));
+            assert_eq!(coordinates(product), (zero, zero), "k = {k}");
+        }
     }
 
     fn write_le(value: &BigUint, out: &mut [u8]) {

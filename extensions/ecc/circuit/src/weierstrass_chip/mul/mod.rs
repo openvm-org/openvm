@@ -114,6 +114,14 @@ pub const EC_MUL_COMPUTE_ROWS: usize = EC_MUL_SCALAR_BITS;
 /// Total trace rows per instruction: [`EC_MUL_COMPUTE_ROWS`] plus the digest row.
 pub const EC_MUL_TOTAL_ROWS: usize = EC_MUL_COMPUTE_ROWS + 1;
 
+// The rvr lifter restates these values, since it cannot depend on this crate. Metered execution
+// through either backend has to report the same trace height and read the same scalar width.
+#[cfg(feature = "rvr")]
+const _: () = {
+    assert!(rvr_openvm_ext_ecc::EC_MUL_TRACE_ROWS as usize == EC_MUL_TOTAL_ROWS);
+    assert!(rvr_openvm_ext_ecc::EC_MUL_SCALAR_DWORDS as usize == SCALAR_BLOCKS);
+};
+
 /// Scalar width in 8-bit limbs, matching the coordinate `limb_bits` used by the ECC chips.
 pub const SCALAR_LIMBS: usize = EC_MUL_SCALAR_BITS / 8;
 /// Memory blocks spanned by the scalar.
