@@ -139,8 +139,7 @@ impl VmExecutionExtension for WeierstrassExtension {
         inventory: &mut ExecutorInventoryBuilder<WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         for (i, curve) in self.supported_curves.iter().enumerate() {
-            let start_offset =
-                WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
+            let start_offset = WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {
@@ -240,8 +239,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
         let range_checker_bus = inventory.range_checker().bus;
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, curve) in self.supported_curves.iter().enumerate() {
-            let start_offset =
-                WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
+            let start_offset = WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {

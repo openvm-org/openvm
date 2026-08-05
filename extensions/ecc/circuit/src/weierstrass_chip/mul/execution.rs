@@ -15,15 +15,15 @@ use std::borrow::{Borrow, BorrowMut};
 use num_bigint::BigUint;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_mod_circuit_builder::FieldExpressionProgram;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
+use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
@@ -62,7 +62,7 @@ impl<'a, const BLOCKS: usize> EcMulExecutor<BLOCKS> {
         let a = a.as_canonical_u32();
         let b = b.as_canonical_u32();
         let c = c.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -73,7 +73,7 @@ impl<'a, const BLOCKS: usize> EcMulExecutor<BLOCKS> {
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        Ok(local_opcode == Rv64WeierstrassOpcode::SETUP_EC_MUL as usize)
+        Ok(local_opcode == WeierstrassOpcode::SETUP_EC_MUL as usize)
     }
 }
 
@@ -171,23 +171,23 @@ unsafe fn execute_e12_impl<
     // rs1 holds the base point pointer, rs2 the scalar pointer, rd the destination.
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+        .map(|addr| bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, addr as u32)));
     for &address in &rs_vals {
         validate_memory_block_byte_ptr(pc, address)?;
     }
     let rd_val = validate_memory_block_byte_ptr(
         pc,
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)),
+        bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32)),
     )?;
 
     debug_assert!(rs_vals[0] as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
     let point_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = std::array::from_fn(|i| {
-        exec_state.vm_read_bytes(RV64_MEMORY_AS, rs_vals[0] + (i * MEMORY_BLOCK_BYTES) as u32)
+        exec_state.vm_read_bytes(MEMORY_AS, rs_vals[0] + (i * MEMORY_BLOCK_BYTES) as u32)
     });
 
     debug_assert!(rs_vals[1] as usize + MEMORY_BLOCK_BYTES * SCALAR_BLOCKS - 1 < MEM_SIZE);
     let scalar_blocks: [[u8; MEMORY_BLOCK_BYTES]; SCALAR_BLOCKS] = std::array::from_fn(|i| {
-        exec_state.vm_read_bytes(RV64_MEMORY_AS, rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32)
+        exec_state.vm_read_bytes(MEMORY_AS, rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32)
     });
     let scalar: &[u8; SCALAR_LIMBS] = scalar_blocks.as_flattened().try_into().unwrap();
 
@@ -214,11 +214,7 @@ unsafe fn execute_e12_impl<
 
     debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
     for (i, block) in output_data.into_iter().enumerate() {
-        exec_state.vm_write_bytes(
-            RV64_MEMORY_AS,
-            rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
-            &block,
-        );
+        exec_state.vm_write_bytes(MEMORY_AS, rd_val + (i * MEMORY_BLOCK_BYTES) as u32, &block);
     }
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
