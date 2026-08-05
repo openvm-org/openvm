@@ -1,6 +1,7 @@
 mod add_ne;
 mod curves;
 mod double;
+mod mul;
 mod trace;
 
 pub use add_ne::*;
@@ -8,6 +9,7 @@ pub use add_ne::*;
 pub(crate) use curves::get_curve_type;
 pub use curves::CurveType;
 pub use double::*;
+pub use mul::*;
 pub(crate) use trace::{
     generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
 };
