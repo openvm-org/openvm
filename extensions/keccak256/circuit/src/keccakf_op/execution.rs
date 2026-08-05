@@ -15,7 +15,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_byte_span};
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
@@ -79,7 +79,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
     {
         let data: &mut KeccakfPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_impl::<_>)
+        Ok(execute_e1_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -117,7 +117,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
         let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl::<_>)
+        Ok(execute_e2_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -143,19 +143,21 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
 unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &KeccakfPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<KeccakfPreCompute>()).borrow();
-    execute_e12_impl::<CTX, true>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, true>(pre_compute, exec_state)
 }
 
 #[inline(always)]
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &KeccakfPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     let rd_ptr = pre_compute.a as u32;
     let buffer_ptr = rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, rd_ptr));
+    validate_memory_byte_span(pc, buffer_ptr, KECCAK_WIDTH_BYTES)?;
 
     let preimage: &[u8] =
         exec_state.host_read_u8_slice(RV64_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
@@ -173,8 +175,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
         }
     }
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[create_handler]
@@ -182,7 +184,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
 unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<KeccakfPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakfPreCompute>>())
             .borrow();
@@ -204,5 +206,5 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
         .ctx
         .on_height_change(perm_air_idx, NUM_ROUNDS as u32);
 
-    execute_e12_impl::<CTX, false>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, false>(&pre_compute.data, exec_state)
 }

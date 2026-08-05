@@ -14,7 +14,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_span};
 
 use super::{accumulator_ptrs, DeferralCallExecutor};
 use crate::{
@@ -174,14 +174,8 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
     let input_ptr =
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
-    if !output_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32)
-        || !input_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32)
-    {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "deferral pointers must be eight-byte aligned",
-        });
-    }
+    validate_memory_block_byte_span(pc, output_ptr, OUTPUT_TOTAL_MEMORY_OPS)?;
+    validate_memory_block_byte_span(pc, input_ptr, COMMIT_MEMORY_OPS)?;
 
     let input_commit_chunks: [[u8; MEMORY_BLOCK_BYTES]; COMMIT_MEMORY_OPS] = from_fn(|i| {
         exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)

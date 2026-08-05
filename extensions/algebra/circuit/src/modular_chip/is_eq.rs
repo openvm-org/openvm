@@ -21,7 +21,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::{
-    rv64_bytes_to_u16_block, rv64_bytes_to_u32, validate_memory_block_byte_ptr,
+    rv64_bytes_to_u16_block, rv64_bytes_to_u32, validate_memory_block_byte_span,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -592,15 +592,11 @@ unsafe fn execute_e12_impl<
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
     for &address in &rs_vals {
-        validate_memory_block_byte_ptr(pc, address)?;
+        validate_memory_block_byte_span(pc, address, NUM_LANES)?;
     }
 
     // Read memory values
     let [b, c]: [[u16; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        debug_assert!(
-            address as usize + TOTAL_READ_SIZE * U16_CELL_SIZE - 1
-                < DEFAULT_RV64_MEMORY_BYTE_CAPACITY
-        );
         let mut limbs = [0u16; TOTAL_READ_SIZE];
         for i in 0..NUM_LANES {
             let block = rv64_bytes_to_u16_block(exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
