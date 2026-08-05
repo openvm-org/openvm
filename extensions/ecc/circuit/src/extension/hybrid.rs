@@ -513,14 +513,17 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             self.pending_opcodes.remove(&opcode);
         }
 
+        // Every configured curve registers an `EC_MUL` chip whether or not the program uses one.
+        // An unused chip yields a zero-row trace, which cannot be uploaded: the device allocator
+        // rejects a zero-capacity request. Return the dummy matrix instead, as the field-expression
+        // replay path does for an empty projection.
+        if used == 0 {
+            return Ok(AirProvingContext::simple_no_pis(
+                openvm_cuda_backend::base::DeviceMatrix::dummy(),
+            ));
+        }
+
         let Some(postflight) = self.cpu_postflight else {
-            // Every configured curve registers an `EC_MUL` chip whether or not the program uses
-            // one, so an unused chip must still succeed here.
-            if used == 0 {
-                return Ok(AirProvingContext::simple_no_pis(
-                    openvm_cuda_backend::base::DeviceMatrix::dummy(),
-                ));
-            }
             // `sw_declare!`'s one-time setup emits SETUP_EC_MUL for every declared curve, so any
             // program touching a Weierstrass curve reaches this even without a multiplication.
             return Err(GpuPostflightError::InvalidTranscript(format!(
