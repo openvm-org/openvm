@@ -81,3 +81,27 @@ impl Secp256k1Point {
         <Self as WeierstrassPoint>::y(self).to_be_bytes()
     }
 }
+
+// Host-side coverage for the ladder that `sw_declare!` generates for non-openvm targets. Guest
+// programs are run on the host through that path, so it has to agree with the windowed method the
+// rest of the guest library uses.
+#[cfg(all(test, not(any(openvm_intrinsics, target_os = "openvm"))))]
+mod tests {
+    use openvm_algebra_guest::IntMod;
+    use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup};
+
+    use super::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
+
+    #[test]
+    fn mul_scalar_matches_msm() {
+        for k in [1u64, 2, 3, 255, 0x1234_5678, u32::MAX as u64] {
+            let scalar = Secp256k1Scalar::from_u64(k);
+            let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
+
+            let via_ladder = unsafe { Secp256k1Point::GENERATOR.mul_scalar_le_unchecked(&bytes) };
+            let via_msm = Secp256k1::msm(&[scalar], &[Secp256k1Point::GENERATOR]);
+
+            assert_eq!(via_ladder, via_msm, "k = {k}");
+        }
+    }
+}
