@@ -287,6 +287,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             header.is_digest = F::ZERO;
             header.is_first_compute = if row_idx == 0 { F::ONE } else { F::ZERO };
             header.is_setup = F::from_bool(input.is_setup);
+            header.is_ladder = F::from_bool(!input.is_setup && row_idx != 0);
             header.row_idx = F::from_usize(row_idx);
 
             // scalar_acc holds the value before this step; the carries relate it to the next row's
@@ -352,6 +353,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         header.is_digest = F::ONE;
         header.is_first_compute = F::ZERO;
         header.is_setup = F::from_bool(input.is_setup);
+        header.is_real_digest = F::from_bool(!input.is_setup);
         header.row_idx = F::from_usize(EC_MUL_DIGEST_ROW_IDX);
         let acc_limbs = scalar_acc.to_bytes_le();
         for (i, limb) in header.scalar_acc.iter_mut().enumerate() {

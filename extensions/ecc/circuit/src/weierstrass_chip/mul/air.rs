@@ -1,9 +1,17 @@
 //! AIR for the `EC_MUL` chip.
 //!
 //! Constrains the ladder over [`EC_MUL_COMPUTE_ROWS`] rows and the instruction's memory accesses on
-//! the digest row. Every transition constraint is gated by at most a degree-2 selector, keeping the
-//! AIR's maximum constraint degree low enough not to raise the application's `log_blowup`;
-//! `tests/ecmul_air.rs` asserts the bound.
+//! the digest row.
+//!
+//! Transition constraints are gated by degree-1 selectors, which keeps the AIR at the same maximum
+//! constraint degree as the neighbouring chips. That bound matters beyond this chip: `log_blowup`
+//! is derived from the configuration's `max_constraint_degree` and applies to every AIR in the
+//! application, so exceeding it here would raise the proving cost of all of them.
+//! `tests/ecmul_air.rs` asserts it.
+//!
+//! Two of those selectors are stored as columns ([`EcMulHeaderCols::is_ladder`] and
+//! [`EcMulHeaderCols::is_real_digest`]) rather than formed inline, because the conjunctions they
+//! stand for are degree 2 and would push the constraints they gate over the bound.
 //!
 //! Three properties are assumed rather than constrained here:
 //!
@@ -245,6 +253,14 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         // compute row the sequencing constraint forces `next.is_first_compute + local.is_compute`
         // to be 1, so subtracting the first-row flag leaves `local.is_compute`.
         let continuation: AB::Expr = next.is_compute - next.is_first_compute;
+        // is_ladder = is_compute AND NOT is_setup AND NOT is_first_compute, so it can gate the data
+        // links at degree 1.
+        builder.assert_eq(
+            local.is_ladder,
+            local.is_compute
+                * (AB::Expr::ONE - local.is_setup)
+                * (AB::Expr::ONE - local.is_first_compute),
+        );
         let to_digest: AB::Expr = next.is_digest.into();
         let in_instruction = continuation.clone() + to_digest.clone();
 
@@ -273,12 +289,8 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         // Setup rows are excluded from the data links below: every setup row must carry the prime
         // and the setup values in the accumulator inputs, so those inputs are re-supplied each row
         // rather than threaded from the previous one.
-        // Setup rows are excluded from the data links below: every setup row must carry the prime
-        // and the setup values in the accumulator inputs, so those inputs are re-supplied each row
-        // rather than threaded from the previous one.
-        let not_setup = AB::Expr::ONE - local.is_setup;
         let mut when_both_compute = builder.when_transition();
-        let mut when_both_compute = when_both_compute.when(continuation * not_setup.clone());
+        let mut when_both_compute = when_both_compute.when(next.is_ladder);
 
         // The accumulator is carried through the trace rather than memory: the next row's
         // accumulator inputs are this row's outputs.
@@ -298,7 +310,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 
         // ==== Compute → digest handoff ======================================================
         let mut when_to_digest = builder.when_transition();
-        let mut when_to_digest = when_to_digest.when(to_digest * not_setup);
+        let mut when_to_digest = when_to_digest.when(next.is_real_digest);
 
         for i in 0..NUM_LIMBS {
             // The result written to memory is the last step's output.
@@ -314,10 +326,9 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         // The accumulated scalar must equal the scalar read from memory. This is also what pins the
         // per-row case flags: any row implying the wrong bit changes `scalar_acc` and fails here.
         // Skipped for setup, whose scalar operand is a dummy.
-        let check_scalar = local.is_digest * (AB::Expr::ONE - local.is_setup);
         for i in 0..SCALAR_LIMBS {
             builder
-                .when(check_scalar.clone())
+                .when(local.is_real_digest)
                 .assert_eq(local.scalar_acc[i], local_digest.scalar_data[i]);
         }
 
