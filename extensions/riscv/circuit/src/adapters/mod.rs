@@ -102,6 +102,45 @@ pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, Executio
     Ok(ptr)
 }
 
+/// Validate a contiguous span of memory-bus blocks starting at a guest byte pointer.
+///
+/// This check must happen before computing per-block `u32` addresses so an access crossing the
+/// top of the 32-bit RV64 memory domain cannot wrap back to address zero in release builds.
+#[inline(always)]
+pub fn validate_memory_block_byte_span(
+    pc: u32,
+    ptr: u32,
+    num_blocks: usize,
+) -> Result<u32, ExecutionError> {
+    validate_memory_block_byte_ptr(pc, ptr)?;
+    let Some(num_bytes) = num_blocks.checked_mul(MEMORY_BLOCK_BYTES) else {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "memory block span exceeds implemented memory address space",
+        });
+    };
+    validate_memory_byte_span(pc, ptr, num_bytes)
+}
+
+/// Validate a contiguous byte span without imposing an instruction-specific alignment rule.
+#[inline(always)]
+pub fn validate_memory_byte_span(
+    pc: u32,
+    ptr: u32,
+    num_bytes: usize,
+) -> Result<u32, ExecutionError> {
+    let end = u64::try_from(num_bytes)
+        .ok()
+        .and_then(|bytes| u64::from(ptr).checked_add(bytes));
+    if end.is_none_or(|end| end > DEFAULT_RV64_MEMORY_BYTE_CAPACITY as u64) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "memory block span exceeds implemented memory address space",
+        });
+    }
+    Ok(ptr)
+}
+
 /// Supported load/store access widths in bytes.
 pub(crate) const BYTE_ACCESS_WIDTH: usize = 1;
 pub(crate) const HALFWORD_ACCESS_WIDTH: usize = 2;
@@ -730,7 +769,8 @@ mod tests {
 
     use super::{
         checked_register_u16_pointer, decode_signed_instruction_imm,
-        validate_memory_block_byte_ptr, RV_B_TYPE_IMM_BITS,
+        validate_memory_block_byte_ptr, validate_memory_block_byte_span, validate_memory_byte_span,
+        RV_B_TYPE_IMM_BITS,
     };
 
     #[test]
@@ -772,6 +812,29 @@ mod tests {
             let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
             assert!(error.to_string().contains("eight-byte aligned"), "{error}");
         }
+    }
+
+    #[test]
+    fn memory_block_span_rejects_32_bit_wraparound() {
+        let final_block = u32::MAX - 7;
+        assert_eq!(
+            validate_memory_block_byte_span(12, final_block, 1).unwrap(),
+            final_block
+        );
+
+        let error = validate_memory_block_byte_span(12, final_block, 2).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("span exceeds implemented memory address space"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn memory_byte_span_does_not_impose_block_alignment() {
+        assert_eq!(validate_memory_byte_span(12, 2, 8).unwrap(), 2);
+        assert!(validate_memory_byte_span(12, u32::MAX - 1, 4).is_err());
     }
 
     #[test]
