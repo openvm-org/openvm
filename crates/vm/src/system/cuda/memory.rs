@@ -1096,9 +1096,10 @@ mod tests {
     fn test_set_initial_memory_rejects_nonzero_unmarked_page() {
         let (mem_config, _) = single_block_setup();
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
-        unsafe {
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(MEMORY_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-        }
+        // Raw mutable access is the documented escape hatch that does NOT mark touched pages
+        // (see `AddressMap::touched_pages`); tracked writers like `write_bytes` mark them.
+        memory.memory.get_memory_mut()[MEMORY_AS as usize].as_mut_slice()[..MEMORY_BLOCK_BYTES]
+            .copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
         assert!(memory.memory.touched_pages[MEMORY_AS as usize]
             .touched_byte_ranges(MEMORY_BLOCK_BYTES)
             .is_empty());
