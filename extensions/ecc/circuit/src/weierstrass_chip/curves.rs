@@ -114,6 +114,30 @@ pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize>(
     }
 }
 
+/// Dispatch variable-base scalar multiplication on the const generic curve type.
+///
+/// `scalar` is little-endian. Keyed on [`CurveType`] rather than `FieldType` because the ladder's
+/// doublings need the curve's `a` coefficient.
+#[inline(always)]
+pub fn ec_mul<const CURVE_TYPE: u8, const BLOCKS: usize>(
+    point: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+    scalar: &[u8],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    match CURVE_TYPE {
+        x if x == CurveType::K256 as u8 => {
+            ec_mul_256bit::<halo2curves_axiom::secq256k1::Fq, 0, BLOCKS>(point, scalar)
+        }
+        x if x == CurveType::P256 as u8 => {
+            ec_mul_256bit::<halo2curves_axiom::secp256r1::Fp, P256_NEG_A, BLOCKS>(point, scalar)
+        }
+        x if x == CurveType::BN254 as u8 => {
+            ec_mul_256bit::<halo2curves_axiom::bn256::Fq, 0, BLOCKS>(point, scalar)
+        }
+        x if x == CurveType::BLS12_381 as u8 => ec_mul_bls12_381::<BLOCKS>(point, scalar),
+        _ => panic!("Unsupported curve type: {CURVE_TYPE}"),
+    }
+}
+
 #[inline(always)]
 fn ec_add_ne_256bit<F: PrimeField<Repr = [u8; 32]>, const BLOCKS: usize>(
     input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
@@ -139,6 +163,26 @@ fn ec_double_256bit<F: PrimeField<Repr = [u8; 32]>, const NEG_A: u64, const BLOC
     let y1 = blocks_to_field_element::<F>(input_data[BLOCKS / 2..].as_flattened());
 
     let (x3, y3) = ec_double_impl::<F, NEG_A>(x1, y1);
+
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
+    field_element_to_blocks::<F>(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks::<F>(&y3, &mut output[BLOCKS / 2..]);
+    output
+}
+
+#[inline(always)]
+fn ec_mul_256bit<
+    F: PrimeField<Repr = [u8; 32]> + From<u64>,
+    const NEG_A: u64,
+    const BLOCKS: usize,
+>(
+    point: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+    scalar: &[u8],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    let px = blocks_to_field_element::<F>(point[..BLOCKS / 2].as_flattened());
+    let py = blocks_to_field_element::<F>(point[BLOCKS / 2..].as_flattened());
+
+    let (x3, y3) = ec_mul_impl::<F, NEG_A>(px, py, scalar, scalar.len() * 8);
 
     let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     field_element_to_blocks::<F>(&x3, &mut output[..BLOCKS / 2]);
@@ -187,6 +231,22 @@ fn ec_double_bls12_381<const BLOCKS: usize>(
 }
 
 #[inline(always)]
+fn ec_mul_bls12_381<const BLOCKS: usize>(
+    point: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+    scalar: &[u8],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    let px = blocks_to_field_element_bls12_381_coordinate(point[..BLOCKS / 2].as_flattened());
+    let py = blocks_to_field_element_bls12_381_coordinate(point[BLOCKS / 2..].as_flattened());
+
+    let (x3, y3) = ec_mul_impl::<blstrs::Fp, 0>(px, py, scalar, scalar.len() * 8);
+
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
+    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS / 2..]);
+    output
+}
+
+#[inline(always)]
 pub fn ec_add_ne_impl<F: Field>(x1: F, y1: F, x2: F, y2: F) -> (F, F) {
     // Calculate lambda = (y2 - y1) / (x2 - x1)
     let lambda = (y2 - y1) * (x2 - x1).invert().unwrap();
@@ -222,4 +282,48 @@ pub fn ec_double_impl<F: Field + From<u64>, const NEG_A: u64>(x1: F, y1: F) -> (
     let y3 = lambda * (x1 - x3) - y1;
 
     (x3, y3)
+}
+
+/// MSB-first binary double-and-add over affine coordinates, with the point at infinity carried as
+/// the `(0, 0)` sentinel.
+///
+/// Must agree byte for byte with `ec_mul_step_expr` iterated over the same bits: the executor
+/// writes this result to memory while trace generation records the field expression's, and the
+/// memory argument only balances if the two match. The four branches below correspond to that
+/// expression's four case flags.
+#[inline(always)]
+pub fn ec_mul_impl<F: Field + From<u64>, const NEG_A: u64>(
+    px: F,
+    py: F,
+    scalar_le_bytes: &[u8],
+    scalar_bits: usize,
+) -> (F, F) {
+    let mut rx = F::ZERO;
+    let mut ry = F::ZERO;
+    let mut is_inf = true;
+
+    for i in (0..scalar_bits).rev() {
+        let bit = (scalar_le_bytes[i / 8] >> (i % 8)) & 1 == 1;
+        if is_inf {
+            // Take P on a set bit, otherwise leave the sentinel untouched.
+            if bit {
+                rx = px;
+                ry = py;
+                is_inf = false;
+            }
+        } else {
+            let (dx, dy) = ec_double_impl::<F, NEG_A>(rx, ry);
+            if bit {
+                // Incomplete formula: requires dx != px, the chip's documented precondition.
+                let (ax, ay) = ec_add_ne_impl::<F>(dx, dy, px, py);
+                rx = ax;
+                ry = ay;
+            } else {
+                rx = dx;
+                ry = dy;
+            }
+        }
+    }
+
+    (rx, ry)
 }
