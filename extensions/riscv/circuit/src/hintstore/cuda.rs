@@ -11,22 +11,22 @@ use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED};
+use openvm_riscv_transpiler::HintStoreOpcode::{HINT_BUFFER, HINT_STORED};
 use openvm_stark_backend::prover::AirProvingContext;
 
-use crate::Rv64HintStoreCols;
+use crate::HintStoreCols;
 
 #[derive(new)]
-pub struct Rv64HintStoreChipGpu {
+pub struct HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64HintStoreChipGpu {
+impl HintStoreChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -73,7 +73,7 @@ impl Rv64HintStoreChipGpu {
                 step_range.start,
                 num_steps,
                 opcodes,
-                [RV64_REGISTER_AS, RV64_MEMORY_AS],
+                [REGISTER_AS, MEMORY_AS],
                 self.pointer_max_bits as u32,
                 &d_counts,
                 transcript.error_ptr(),
@@ -106,7 +106,7 @@ impl Rv64HintStoreChipGpu {
         let rows_used = *row_offsets.last().unwrap() as usize;
         let d_row_offsets = row_offsets.to_device_on(device_ctx)?;
         let trace_height = next_power_of_two_or_zero(rows_used);
-        let width = Rv64HintStoreCols::<u8>::width();
+        let width = HintStoreCols::<u8>::width();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, width, device_ctx);
         unsafe {
             crate::cuda_abi::hintstore_cuda::replay_tracegen(
@@ -123,7 +123,7 @@ impl Rv64HintStoreChipGpu {
                 num_steps,
                 d_row_offsets.view(),
                 opcodes,
-                [RV64_REGISTER_AS, RV64_MEMORY_AS],
+                [REGISTER_AS, MEMORY_AS],
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,

@@ -117,7 +117,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BitwiseLogicExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BitwiseLogicCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
@@ -137,7 +137,7 @@ pub(crate) fn run_bitwise_logic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         BaseAluOpcode::XOR => run_xor::<NUM_LIMBS>(x, y),
         BaseAluOpcode::OR => run_or::<NUM_LIMBS>(x, y),
         BaseAluOpcode::AND => run_and::<NUM_LIMBS>(x, y),
-        _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
+        _ => unreachable!("BitwiseLogicCoreExecutor received non-XOR/OR/AND opcode"),
     }
 }
 

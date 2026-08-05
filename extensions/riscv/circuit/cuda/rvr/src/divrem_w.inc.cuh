@@ -2,7 +2,7 @@
 #include "riscv/reg_reg_write_replay.cuh"
 
 
-__global__ void rv64_div_rem_w_replay_tracegen(
+__global__ void div_rem_w_replay_tracegen(
     Fp *trace, size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions, uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program_log,
@@ -19,7 +19,7 @@ __global__ void rv64_div_rem_w_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64DivRemWCols<uint8_t>));
+    row.fill_zero(0, sizeof(DivRemWCols<uint8_t>));
     size_t total = div_count + divu_count + rem_count + remu_count;
     if (idx >= total) return;
     size_t step_index;
@@ -51,65 +51,65 @@ __global__ void rv64_div_rem_w_replay_tracegen(
         )) {
         return;
     }
-    Rv64RegRegWriteReplay replay;
+    RegRegWriteReplay replay;
     if (!replay_reg_reg_write(
             transition, expected_opcode, register_address_space,
             step, memory, seeds, predecessors, replay, error, 684
         )) return;
-    uint8_t quotient[RV64_WORD_NUM_LIMBS];
-    uint8_t remainder[RV64_WORD_NUM_LIMBS];
-    replay_divrem_values<RV64_WORD_NUM_LIMBS>(
+    uint8_t quotient[WORD_NUM_LIMBS];
+    uint8_t remainder[WORD_NUM_LIMBS];
+    replay_divrem_values<WORD_NUM_LIMBS>(
         replay.rs1, replay.rs2, local_opcode, quotient, remainder
     );
     uint8_t *expected_low = (local_opcode == DIV || local_opcode == DIVU) ? quotient : remainder;
-    uint8_t sign = expected_low[RV64_WORD_NUM_LIMBS - 1] >> 7;
+    uint8_t sign = expected_low[WORD_NUM_LIMBS - 1] >> 7;
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
-        uint8_t expected = i < RV64_WORD_NUM_LIMBS ? expected_low[i] : (sign ? 0xff : 0);
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
+        uint8_t expected = i < WORD_NUM_LIMBS ? expected_low[i] : (sign ? 0xff : 0);
         if (replay.result[i] != expected) { preflight_set_error(error, 689); return; }
     }
-    Rv64MultWAdapterRecord adapter_record{};
+    MultWAdapterRecord adapter_record{};
     adapter_record.from_pc = replay.from_pc;
     adapter_record.from_timestamp = replay.from_timestamp;
     adapter_record.rd_ptr = replay.rd_ptr;
     adapter_record.rs1_ptr = replay.rs1_ptr;
     adapter_record.rs2_ptr = replay.rs2_ptr;
     adapter_record.result_sign = sign;
-    adapter_record.result_word_msl = expected_low[RV64_WORD_NUM_LIMBS - 1];
+    adapter_record.result_word_msl = expected_low[WORD_NUM_LIMBS - 1];
     adapter_record.reads_aux[0].prev_timestamp = replay.rs1_previous_timestamp;
     adapter_record.reads_aux[1].prev_timestamp = replay.rs2_previous_timestamp;
     adapter_record.writes_aux.prev_timestamp = replay.result_previous_timestamp;
 #pragma unroll
-    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i++) {
-        adapter_record.rs1_high[i] = replay.rs1[RV64_WORD_NUM_LIMBS + i];
-        adapter_record.rs2_high[i] = replay.rs2[RV64_WORD_NUM_LIMBS + i];
+    for (size_t i = 0; i < WORD_NUM_LIMBS; i++) {
+        adapter_record.rs1_high[i] = replay.rs1[WORD_NUM_LIMBS + i];
+        adapter_record.rs2_high[i] = replay.rs2[WORD_NUM_LIMBS + i];
     }
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++)
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++)
         adapter_record.writes_aux.prev_data[i] = replay.previous_result[i];
-    DivRemCoreRecords<RV64_WORD_NUM_LIMBS> core_record{};
+    DivRemCoreRecords<WORD_NUM_LIMBS> core_record{};
     core_record.local_opcode = static_cast<uint8_t>(local_opcode);
 #pragma unroll
-    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < WORD_NUM_LIMBS; i++) {
         core_record.b[i] = replay.rs1[i]; core_record.c[i] = replay.rs2[i];
     }
     auto bitwise = BitwiseOperationLookup(bitwise_lookup);
-    Rv64MultWAdapter adapter(
+    MultWAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_bins), bitwise, timestamp_max_bits
     );
     adapter.fill_trace_row(row, adapter_record);
-    DivRemCore<RV64_WORD_NUM_LIMBS> core(
+    DivRemCore<WORD_NUM_LIMBS> core(
         bitwise,
         RangeTupleChecker<2>(
             range_tuple, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         )
     );
-    core.fill_trace_row(row.slice_from(COL_INDEX(Rv64DivRemWCols, core)), core_record);
+    core.fill_trace_row(row.slice_from(COL_INDEX(DivRemWCols, core)), core_record);
 }
 
 
 
-extern "C" int _rv64_div_rem_w_replay_tracegen(
+extern "C" int _div_rem_w_replay_tracegen(
     Fp *trace, size_t height, size_t width,
     DeviceBufferConstView<RvrReplayInstruction> instructions, uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program_log,
@@ -124,7 +124,7 @@ extern "C" int _rv64_div_rem_w_replay_tracegen(
     uint32_t *range_tuple, uint2 range_tuple_sizes, uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64DivRemWCols<uint8_t>));
+    assert(width == sizeof(DivRemWCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(div_start <= steps.len() && div_count <= steps.len() - div_start);
     assert(divu_start <= steps.len() && divu_count <= steps.len() - divu_start);
@@ -133,8 +133,8 @@ extern "C" int _rv64_div_rem_w_replay_tracegen(
     size_t total = div_count + divu_count + rem_count + remu_count;
     assert(total >= div_count && total >= divu_count && total >= rem_count && total >= remu_count);
     assert(height >= total);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_div_rem_w_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    div_rem_w_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         div_start, div_count, divu_start, divu_count, rem_start, rem_count, remu_start, remu_count,
         error, div_opcode, divu_opcode, rem_opcode, remu_opcode, register_address_space,

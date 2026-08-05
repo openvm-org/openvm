@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use crate::adapters::{Rv64BranchAdapterAir, U16_BITS};
+use crate::adapters::{BranchAdapterAir, U16_BITS};
 
 mod core;
 mod execution;
@@ -14,7 +14,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64BranchLessThanAir =
-    VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
-pub type Rv64BranchLessThanExecutor = BranchLessThanExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64BranchLessThanChip<F> = VmChipWrapper<F, BranchLessThanFiller>;
+pub type BranchLessThanAir =
+    VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type BranchLessThanExecutor = BranchLessThanCoreExecutor<BLOCK_FE_WIDTH, U16_BITS>;
+pub type BranchLessThanChip<F> = VmChipWrapper<F, BranchLessThanFiller>;

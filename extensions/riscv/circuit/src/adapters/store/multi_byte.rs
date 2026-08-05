@@ -19,7 +19,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::{
@@ -29,9 +29,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, checked_register_pointer,
-    expand_to_rv64_block, is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    rv64_address_add_imm, sign_extend_imm16, RV64_PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value,
+    checked_register_pointer, expand_to_block, is_multi_byte_access_width, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct StoreInstruction<T> {
@@ -45,13 +45,13 @@ pub struct StoreInstruction<T> {
     pub store_cross: T,
 }
 
-pub struct Rv64StoreMultiByteAdapterAirInterface;
+pub struct StoreMultiByteAdapterAirInterface;
 
 /// The previous contents of the two consecutive memory blocks (the second is used only when the
 /// access crosses a block boundary), followed by the source register data. The previous contents
 /// feed both write auxes, so the core's read-modify-write inputs and the offline checker's
 /// receive-side data are the same expressions by construction.
-impl<T> VmAdapterInterface<T> for Rv64StoreMultiByteAdapterAirInterface {
+impl<T> VmAdapterInterface<T> for StoreMultiByteAdapterAirInterface {
     type Reads = ([[T; BLOCK_FE_WIDTH]; 2], [T; BLOCK_FE_WIDTH]);
     type Writes = [[T; BLOCK_FE_WIDTH]; 2];
     type ProcessedInstruction = StoreInstruction<T>;
@@ -59,11 +59,11 @@ impl<T> VmAdapterInterface<T> for Rv64StoreMultiByteAdapterAirInterface {
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64StoreMultiByteAdapterCols<T> {
+pub struct StoreMultiByteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     /// Low 32 bits of the rs1 register, packed as two u16 cells.
-    pub rs1_data: [T; RV64_PTR_U16_LIMBS],
+    pub rs1_data: [T; PTR_U16_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     /// Source register pointer.
     pub rs2_ptr: T,
@@ -81,22 +81,22 @@ pub struct Rv64StoreMultiByteAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64StoreMultiByteAdapterCols<u8>)]
-pub struct Rv64StoreMultiByteAdapterAir {
+#[columns_via(StoreMultiByteAdapterCols<u8>)]
+pub struct StoreMultiByteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
     pub range_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv64StoreMultiByteAdapterAir {
+impl<F: Field> BaseAir<F> for StoreMultiByteAdapterAir {
     fn width(&self) -> usize {
-        Rv64StoreMultiByteAdapterCols::<F>::width()
+        StoreMultiByteAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
-    type Interface = Rv64StoreMultiByteAdapterAirInterface;
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
+    type Interface = StoreMultiByteAdapterAirInterface;
 
     fn eval(
         &self,
@@ -104,7 +104,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64StoreMultiByteAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &StoreMultiByteAdapterCols<AB::Var> = local.borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -118,11 +118,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
         let cross = ctx.instruction.store_cross;
 
         // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
-        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
+        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&local_cols.rs1_data);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
                 ),
                 rs1_data,
@@ -181,7 +181,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs2_ptr),
                 ),
                 read_data,
@@ -236,7 +236,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
                     local_cols.rs2_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     local_cols.mem_as.into(),
                     is_valid.clone(),
                     local_cols.imm_sign.into(),
@@ -251,26 +251,26 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let local_cols: &Rv64StoreMultiByteAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &StoreMultiByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64StoreMultiByteAdapterFiller {
+pub struct StoreMultiByteAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 type StoreMultiReplay = ([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2], usize);
 
-impl Rv64StoreMultiByteAdapterFiller {
+impl StoreMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const STORE_WIDTH: usize>(
         &self,
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64StoreMultiByteAdapterCols<F>,
+        adapter_row: &mut StoreMultiByteAdapterCols<F>,
         compute: impl FnOnce(
             [u16; BLOCK_FE_WIDTH],
             [[u16; BLOCK_FE_WIDTH]; 2],
@@ -284,8 +284,8 @@ impl Rv64StoreMultiByteAdapterFiller {
         }
         let instruction = postflight.instruction(step);
         let mem_as = instruction.e.as_canonical_u32();
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || !matches!(mem_as, RV64_MEMORY_AS | PUBLIC_VALUES_AS)
+        if instruction.d.as_canonical_u32() != REGISTER_AS
+            || !matches!(mem_as, MEMORY_AS | PUBLIC_VALUES_AS)
         {
             return Err(PostflightError::new(
                 "multi-byte store has invalid address spaces",
@@ -318,20 +318,16 @@ impl Rv64StoreMultiByteAdapterFiller {
         let from_timestamp = postflight.timestamp(step);
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             checked_byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr))?,
         )?;
-        if rs1.value[RV64_PTR_U16_LIMBS..]
-            .iter()
-            .any(|&limb| limb != 0)
-        {
+        if rs1.value[PTR_U16_LIMBS..].iter().any(|&limb| limb != 0) {
             return Err(PostflightError::new(
                 "multi-byte store base register is not a low-32-bit pointer",
             ));
         }
         let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
-        let effective_ptr =
-            rv64_address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let effective_ptr = address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
         let pointer_limit = 1u64
             .checked_shl(self.pointer_max_bits as u32)
             .unwrap_or(u64::MAX);
@@ -351,7 +347,7 @@ impl Rv64StoreMultiByteAdapterFiller {
         }
 
         let read_data = replay.read_u16(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             checked_byte_ptr_to_u16_ptr_value(u32::from(rs2_ptr))?,
         )?;
         let block0_ptr = checked_byte_ptr_to_u16_ptr_value(aligned_ptr)?;

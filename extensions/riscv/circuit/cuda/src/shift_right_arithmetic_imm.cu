@@ -11,15 +11,10 @@ using namespace riscv;
 using namespace program;
 
 // SRAI uses u16 limbs (4 limbs of 16 bits) and the immediate-only u16 ALU adapter.
-using Rv64ShiftRightArithmeticImmCore =
-    ShiftRightArithmeticImmCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64ShiftRightArithmeticImmCoreCols =
-    ShiftRightArithmeticImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftRightArithmeticImmCols {
-    Rv64BaseAluImmU16AdapterCols<T> adapter;
-    Rv64ShiftRightArithmeticImmCoreCols<T> core;
+    BaseAluImmU16AdapterCols<T> adapter;
+    ShiftRightArithmeticImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/shift_right_arithmetic_imm.inc.cuh"

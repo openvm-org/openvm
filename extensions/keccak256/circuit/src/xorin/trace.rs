@@ -6,13 +6,13 @@ use openvm_circuit::{
 use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_bytes_to_u16_block,
-    rv64_u16_block_to_bytes, try_rv64_bytes_to_u32,
+    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, ptr_bound_from_ptr, ptr_to_field_u16_limbs,
+    try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
@@ -30,8 +30,8 @@ impl XorinVmFiller {
         row_slice: &mut [F],
     ) -> Result<(), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+        if instruction.d.as_canonical_u32() != REGISTER_AS
+            || instruction.e.as_canonical_u32() != MEMORY_AS
         {
             return Err(PostflightError::new(
                 "XORIN instruction has invalid address spaces",
@@ -53,13 +53,13 @@ impl XorinVmFiller {
 
         let mut replay = postflight.replay(step);
         let register_reads = [
-            replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr))?,
-            replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs1_ptr))?,
-            replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rs2_ptr))?,
+            replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr))?,
+            replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(rs1_ptr))?,
+            replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(rs2_ptr))?,
         ];
         let [Some(buffer), Some(input), Some(len)] = register_reads
             .each_ref()
-            .map(|access| try_rv64_bytes_to_u32(rv64_u16_block_to_bytes(access.value)))
+            .map(|access| try_bytes_to_u32(u16_block_to_bytes(access.value)))
         else {
             return Err(PostflightError::new("XORIN register value exceeds 32 bits"));
         };
@@ -96,20 +96,20 @@ impl XorinVmFiller {
         let mut input_read_prev_timestamps = [0; KECCAK_RATE_MEM_OPS];
         for index in 0..num_reads {
             let access = replay.read_u16(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 byte_ptr_to_u16_ptr_value(buffer) + (index * BLOCK_FE_WIDTH) as u32,
             )?;
             buffer_limbs[index * MEMORY_BLOCK_BYTES..(index + 1) * MEMORY_BLOCK_BYTES]
-                .copy_from_slice(&rv64_u16_block_to_bytes(access.value));
+                .copy_from_slice(&u16_block_to_bytes(access.value));
             buffer_read_prev_timestamps[index] = access.previous_timestamp;
         }
         for index in 0..num_reads {
             let access = replay.read_u16(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 byte_ptr_to_u16_ptr_value(input) + (index * BLOCK_FE_WIDTH) as u32,
             )?;
             input_limbs[index * MEMORY_BLOCK_BYTES..(index + 1) * MEMORY_BLOCK_BYTES]
-                .copy_from_slice(&rv64_u16_block_to_bytes(access.value));
+                .copy_from_slice(&u16_block_to_bytes(access.value));
             input_read_prev_timestamps[index] = access.previous_timestamp;
         }
 
@@ -125,9 +125,9 @@ impl XorinVmFiller {
                 *output_byte = buffer_limbs[offset] ^ input_limbs[offset];
             }
             let access = replay.write_u16(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 byte_ptr_to_u16_ptr_value(buffer) + (index * BLOCK_FE_WIDTH) as u32,
-                rv64_bytes_to_u16_block(output),
+                bytes_to_u16_block(output),
             )?;
             *prev_timestamp = access.previous_timestamp;
         }

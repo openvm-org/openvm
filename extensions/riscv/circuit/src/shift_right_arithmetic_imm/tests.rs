@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
     BLOCK_FE_WIDTH,
 };
-use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -15,38 +15,38 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64ShiftRightArithmeticImmChipGpu,
+    crate::ShiftRightArithmeticImmChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
 use super::{
-    trace::generate_trace_from_postflight, Rv64ShiftRightArithmeticImmAir,
-    Rv64ShiftRightArithmeticImmChip, Rv64ShiftRightArithmeticImmExecutor,
-    ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmFiller,
+    trace::generate_trace_from_postflight, ShiftRightArithmeticImmAir, ShiftRightArithmeticImmChip,
+    ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmCoreCols,
+    ShiftRightArithmeticImmExecutor, ShiftRightArithmeticImmFiller,
 };
 use crate::{
-    adapters::{Rv64BaseAluImmU16AdapterAir, U16_BITS},
-    test_utils::rv64_rand_write_register_or_imm,
+    adapters::{BaseAluImmU16AdapterAir, U16_BITS},
+    test_utils::rand_write_register_or_imm,
 };
 
 type F = BabyBear;
 type Harness = TestChipHarness<
     F,
-    Rv64ShiftRightArithmeticImmExecutor,
-    Rv64ShiftRightArithmeticImmAir,
-    Rv64ShiftRightArithmeticImmChip<F>,
+    ShiftRightArithmeticImmExecutor,
+    ShiftRightArithmeticImmAir,
+    ShiftRightArithmeticImmChip<F>,
 >;
 
 fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker();
-    let air = Rv64ShiftRightArithmeticImmAir::new(
-        Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+    let air = ShiftRightArithmeticImmAir::new(
+        BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
-    let chip = Rv64ShiftRightArithmeticImmChip::new(
+    let executor = ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
+    let chip = ShiftRightArithmeticImmChip::new(
         ShiftRightArithmeticImmFiller::new(range_checker),
         tester.memory_helper(),
     );
@@ -54,17 +54,17 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
 }
 
 #[test]
-fn rv64_shift_right_arithmetic_immediate_boundaries() {
+fn shift_right_arithmetic_immediate_boundaries() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
 
     for source in [0x0123_4567_89ab_cdefu64, 0x8123_4567_89ab_cdef, u64::MAX] {
         for shamt in [0usize, 1, 15, 16, 31, 32, 63] {
-            let (instruction, rd) = rv64_rand_write_register_or_imm(
+            let (instruction, rd) = rand_write_register_or_imm(
                 &mut tester,
                 source.to_le_bytes(),
-                [0; RV64_REGISTER_NUM_LIMBS],
+                [0; REGISTER_NUM_LIMBS],
                 Some(shamt),
                 ShiftImmOpcode::SRAI.global_opcode().as_usize(),
                 &mut rng,
@@ -74,7 +74,7 @@ fn rv64_shift_right_arithmetic_immediate_boundaries() {
             let expected = ((source as i64) >> shamt) as u64;
             assert_eq!(
                 expected.to_le_bytes().map(F::from_u8),
-                tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd),
+                tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd),
             );
         }
     }
@@ -88,14 +88,14 @@ fn rv64_shift_right_arithmetic_immediate_boundaries() {
 }
 
 #[test]
-fn rv64_shift_right_arithmetic_immediate_marker_negative() {
+fn shift_right_arithmetic_immediate_marker_negative() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
-    let (instruction, _) = rv64_rand_write_register_or_imm(
+    let (instruction, _) = rand_write_register_or_imm(
         &mut tester,
         0x8123_4567_89ab_cdefu64.to_le_bytes(),
-        [0; RV64_REGISTER_NUM_LIMBS],
+        [0; REGISTER_NUM_LIMBS],
         Some(1),
         ShiftImmOpcode::SRAI.global_opcode().as_usize(),
         &mut rng,
@@ -124,10 +124,10 @@ fn rv64_shift_right_arithmetic_immediate_marker_negative() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64ShiftRightArithmeticImmExecutor,
-    Rv64ShiftRightArithmeticImmAir,
-    Rv64ShiftRightArithmeticImmChipGpu,
-    Rv64ShiftRightArithmeticImmChip<F>,
+    ShiftRightArithmeticImmExecutor,
+    ShiftRightArithmeticImmAir,
+    ShiftRightArithmeticImmChipGpu,
+    ShiftRightArithmeticImmChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -135,19 +135,17 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_checker = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
-    let air = Rv64ShiftRightArithmeticImmAir::new(
-        Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+    let air = ShiftRightArithmeticImmAir::new(
+        BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
-    let cpu_chip = Rv64ShiftRightArithmeticImmChip::new(
+    let executor = ShiftRightArithmeticImmExecutor::new(ShiftImmOpcode::CLASS_OFFSET);
+    let cpu_chip = ShiftRightArithmeticImmChip::new(
         ShiftRightArithmeticImmFiller::new(range_checker),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64ShiftRightArithmeticImmChipGpu::new(
-        tester.range_checker(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip =
+        ShiftRightArithmeticImmChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 32).with_trace_generators(
         generate_trace_from_postflight,
         |chip, program, transcript, plan| {
@@ -172,10 +170,10 @@ fn test_cuda_shift_right_arithmetic_immediate_boundaries_tracegen() {
         (0x8123_4567_89ab_cdef, 32),
         (u64::MAX, 63),
     ] {
-        let (instruction, _) = rv64_rand_write_register_or_imm(
+        let (instruction, _) = rand_write_register_or_imm(
             &mut tester,
             source.to_le_bytes(),
-            [0; RV64_REGISTER_NUM_LIMBS],
+            [0; REGISTER_NUM_LIMBS],
             Some(shamt),
             ShiftImmOpcode::SRAI.global_opcode().as_usize(),
             &mut rng,
@@ -193,48 +191,48 @@ fn test_cuda_shift_right_arithmetic_immediate_boundaries_tracegen() {
 
 mod word {
     use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
-    use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+    use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, LocalOpcode};
     use openvm_riscv_transpiler::ShiftWImmOpcode;
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
-        crate::Rv64ShiftWRightArithmeticImmChipGpu,
+        crate::ShiftWRightArithmeticImmChipGpu,
         openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
         openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
         std::sync::Arc,
     };
 
     use crate::{
-        adapters::Rv64BaseAluWImmU16AdapterAir,
+        adapters::BaseAluWImmU16AdapterAir,
         shift_right_arithmetic_imm::{
-            trace::generate_word_trace_from_postflight, Rv64ShiftWRightArithmeticImmAir,
-            Rv64ShiftWRightArithmeticImmChip, Rv64ShiftWRightArithmeticImmExecutor,
-            ShiftRightArithmeticImmCoreAir, ShiftRightArithmeticImmFiller,
+            trace::generate_word_trace_from_postflight, ShiftRightArithmeticImmCoreAir,
+            ShiftRightArithmeticImmFiller, ShiftWRightArithmeticImmAir,
+            ShiftWRightArithmeticImmChip, ShiftWRightArithmeticImmExecutor,
         },
-        test_utils::rv64_rand_write_register_or_imm,
+        test_utils::rand_write_register_or_imm,
     };
 
     type F = BabyBear;
     type Harness = TestChipHarness<
         F,
-        Rv64ShiftWRightArithmeticImmExecutor,
-        Rv64ShiftWRightArithmeticImmAir,
-        Rv64ShiftWRightArithmeticImmChip<F>,
+        ShiftWRightArithmeticImmExecutor,
+        ShiftWRightArithmeticImmAir,
+        ShiftWRightArithmeticImmChip<F>,
     >;
 
     fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
         let range_checker = tester.range_checker();
-        let air = Rv64ShiftWRightArithmeticImmAir::new(
-            Rv64BaseAluWImmU16AdapterAir::new(
+        let air = ShiftWRightArithmeticImmAir::new(
+            BaseAluWImmU16AdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 range_checker.bus(),
             ),
             ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
-        let chip = Rv64ShiftWRightArithmeticImmChip::new(
+        let executor = ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
+        let chip = ShiftWRightArithmeticImmChip::new(
             ShiftRightArithmeticImmFiller::new(range_checker),
             tester.memory_helper(),
         );
@@ -242,17 +240,17 @@ mod word {
     }
 
     #[test]
-    fn rv64_shift_w_right_arithmetic_immediate_boundaries() {
+    fn shift_w_right_arithmetic_immediate_boundaries() {
         let mut rng = create_seeded_rng();
         let mut tester = VmChipTestBuilder::default();
         let mut harness = create_harness(&tester);
 
         for source in [0xa5a5_a5a5_1234_5678u64, 0x5a5a_5a5a_8765_4321] {
             for shamt in [0usize, 1, 15, 16, 31] {
-                let (instruction, rd) = rv64_rand_write_register_or_imm(
+                let (instruction, rd) = rand_write_register_or_imm(
                     &mut tester,
                     source.to_le_bytes(),
-                    [0; RV64_REGISTER_NUM_LIMBS],
+                    [0; REGISTER_NUM_LIMBS],
                     Some(shamt),
                     ShiftWImmOpcode::SRAIW.global_opcode().as_usize(),
                     &mut rng,
@@ -262,7 +260,7 @@ mod word {
                 let expected = ((source as u32 as i32) >> shamt) as i64 as u64;
                 assert_eq!(
                     expected.to_le_bytes().map(F::from_u8),
-                    tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd),
+                    tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd),
                     "SRAIW source={source:#018x} shamt={shamt}",
                 );
             }
@@ -285,10 +283,10 @@ mod word {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     type GpuHarness = GpuTestChipHarness<
         F,
-        Rv64ShiftWRightArithmeticImmExecutor,
-        Rv64ShiftWRightArithmeticImmAir,
-        Rv64ShiftWRightArithmeticImmChipGpu,
-        Rv64ShiftWRightArithmeticImmChip<F>,
+        ShiftWRightArithmeticImmExecutor,
+        ShiftWRightArithmeticImmAir,
+        ShiftWRightArithmeticImmChipGpu,
+        ShiftWRightArithmeticImmChip<F>,
     >;
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -296,20 +294,20 @@ mod word {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
         ));
-        let air = Rv64ShiftWRightArithmeticImmAir::new(
-            Rv64BaseAluWImmU16AdapterAir::new(
+        let air = ShiftWRightArithmeticImmAir::new(
+            BaseAluWImmU16AdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 range_checker.bus(),
             ),
             ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
-        let executor = Rv64ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
-        let cpu_chip = Rv64ShiftWRightArithmeticImmChip::new(
+        let executor = ShiftWRightArithmeticImmExecutor::new(ShiftWImmOpcode::CLASS_OFFSET);
+        let cpu_chip = ShiftWRightArithmeticImmChip::new(
             ShiftRightArithmeticImmFiller::new(range_checker),
             tester.dummy_memory_helper(),
         );
-        let gpu_chip = Rv64ShiftWRightArithmeticImmChipGpu::new(
+        let gpu_chip = ShiftWRightArithmeticImmChipGpu::new(
             tester.range_checker(),
             tester.timestamp_max_bits(),
         );
@@ -337,10 +335,10 @@ mod word {
             (0x5a5a_5a5a_ffff_ffff, 16),
             (0xa5a5_a5a5_8000_0000, 31),
         ] {
-            let (instruction, _) = rv64_rand_write_register_or_imm(
+            let (instruction, _) = rand_write_register_or_imm(
                 &mut tester,
                 source.to_le_bytes(),
-                [0; RV64_REGISTER_NUM_LIMBS],
+                [0; REGISTER_NUM_LIMBS],
                 Some(shamt),
                 ShiftWImmOpcode::SRAIW.global_opcode().as_usize(),
                 &mut rng,

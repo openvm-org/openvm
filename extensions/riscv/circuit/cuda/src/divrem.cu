@@ -8,9 +8,9 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64DivRemCols {
-    Rv64MultAdapterCols<T> adapter;
-    DivRemCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
+template <typename T> struct DivRemCols {
+    MultAdapterCols<T> adapter;
+    DivRemCoreCols<T, REGISTER_NUM_LIMBS> core;
 };
 
 #include "../rvr/src/divrem.inc.cuh"

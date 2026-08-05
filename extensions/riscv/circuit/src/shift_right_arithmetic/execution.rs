@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::ShiftRightArithmeticExecutor;
+use super::ShiftRightArithmeticCoreExecutor;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct ShiftRightArithmeticPreCompute {
@@ -23,7 +23,7 @@ struct ShiftRightArithmeticPreCompute {
     b: u8,
 }
 
-impl<const LIMB_BITS: usize> ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> ShiftRightArithmeticCoreExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -38,8 +38,7 @@ impl<const LIMB_BITS: usize> ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LI
         if shift_opcode != ShiftOpcode::SRA {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        if inst.d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS
-        {
+        if inst.d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = ShiftRightArithmeticPreCompute {
@@ -58,7 +57,7 @@ macro_rules! dispatch {
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS>
+    for ShiftRightArithmeticCoreExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -99,7 +98,7 @@ where
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftRightArithmeticExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS>
+    for ShiftRightArithmeticCoreExecutor<{ BLOCK_FE_WIDTH }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -141,10 +140,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &ShiftRightArithmeticPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1 =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = exec_state
-        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
+    let rs1 = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2 =
+        exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.rs2_ptr as u32);
     let rs1 = i64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
 
@@ -152,7 +150,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     // RV64: only the low 6 bits of rs2 are used for the shift amount.
     let rd = (rs1 >> (rs2 & 0x3F)).to_le_bytes();
     // Write the result back to memory
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes(REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

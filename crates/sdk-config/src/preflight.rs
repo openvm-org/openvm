@@ -428,7 +428,7 @@ mod tests {
         exe::VmExe,
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        riscv::{MEMORY_AS, REGISTER_AS},
         PUBLIC_VALUES_AS,
     };
     use openvm_instructions::{LocalOpcode, SystemOpcode};
@@ -442,8 +442,8 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn small_system_config() -> SystemConfig {
         let mut address_spaces = MemoryConfig::empty_address_space_configs(5);
-        address_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 12;
-        address_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 22;
+        address_spaces[REGISTER_AS as usize].num_cells = 1 << 12;
+        address_spaces[MEMORY_AS as usize].num_cells = 1 << 22;
         address_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 12;
         SystemConfig::new(3, MemoryConfig::new(2, address_spaces, 29, 29, 17), 32)
     }

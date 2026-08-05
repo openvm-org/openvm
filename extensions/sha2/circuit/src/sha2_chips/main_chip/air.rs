@@ -9,10 +9,10 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, U16_BITS};
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    PTR_U16_LIMBS,
 };
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
@@ -213,11 +213,11 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         ) {
             // Put the two pointer limbs in an array for zero-extension.
             let val = [val[0], val[1]];
-            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&val);
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&val);
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_REGISTER_AS),
+                        AB::Expr::from_u32(REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     bus_payload,
@@ -235,7 +235,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             self.range_bus
                 .range_check(
                     ptr_bound_from_high_u16_expr::<AB::Expr, _>(
-                        limbs[RV64_PTR_U16_LIMBS - 1],
+                        limbs[PTR_U16_LIMBS - 1],
                         self.ptr_max_bits,
                     ),
                     U16_BITS,
@@ -249,8 +249,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                     (*local.instruction.dst_reg_ptr).into(),
                     (*local.instruction.state_reg_ptr).into(),
                     (*local.instruction.input_reg_ptr).into(),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_MEMORY_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(MEMORY_AS),
                 ],
                 *local.instruction.from_state,
                 AB::F::from_usize(C::TIMESTAMP_DELTA),
@@ -272,7 +272,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        AB::Expr::from_u32(MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(
                             input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                         ),
@@ -292,7 +292,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        AB::Expr::from_u32(MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(
                             state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                         ),
@@ -319,7 +319,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        AB::Expr::from_u32(MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(
                             dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_WRITE_SIZE),
                         ),

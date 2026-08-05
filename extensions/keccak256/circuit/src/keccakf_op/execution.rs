@@ -12,10 +12,10 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
@@ -46,7 +46,7 @@ impl KeccakfExecutor {
         } = inst;
 
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -155,18 +155,17 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rd_ptr = pre_compute.a as u32;
-    let buffer_ptr = rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, rd_ptr));
+    let buffer_ptr = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, rd_ptr));
 
-    let preimage: &[u8] =
-        exec_state.host_read_u8_slice(RV64_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
+    let preimage: &[u8] = exec_state.host_read_u8_slice(MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
     let postimage = keccakf_postimage_bytes(preimage.try_into().unwrap());
 
     if IS_E1 {
-        exec_state.vm_write_bytes(RV64_MEMORY_AS, buffer_ptr, &postimage);
+        exec_state.vm_write_bytes(MEMORY_AS, buffer_ptr, &postimage);
     } else {
         for (word_idx, word) in postimage.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
             exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 buffer_ptr + (word_idx * MEMORY_BLOCK_BYTES) as u32,
                 word.try_into().unwrap(),
             );

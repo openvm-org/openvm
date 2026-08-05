@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::{Rv64BaseAluRegAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
+use super::adapters::{BaseAluRegAdapterAir, BYTE_BITS, REGISTER_NUM_LIMBS};
 
 mod core;
 mod execution;
@@ -15,9 +15,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64BitwiseLogicAir = VmAirWrapper<
-    Rv64BaseAluRegAdapterAir,
-    BitwiseLogicCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
->;
-pub type Rv64BitwiseLogicExecutor = BitwiseLogicExecutor<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64BitwiseLogicChip<F> = VmChipWrapper<F, BitwiseLogicFiller<RV64_BYTE_BITS>>;
+pub type BitwiseLogicAir =
+    VmAirWrapper<BaseAluRegAdapterAir, BitwiseLogicCoreAir<REGISTER_NUM_LIMBS, BYTE_BITS>>;
+pub type BitwiseLogicExecutor = BitwiseLogicCoreExecutor<REGISTER_NUM_LIMBS, BYTE_BITS>;
+pub type BitwiseLogicChip<F> = VmChipWrapper<F, BitwiseLogicFiller<BYTE_BITS>>;

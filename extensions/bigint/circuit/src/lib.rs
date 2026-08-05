@@ -12,11 +12,11 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::VmConfig;
 use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterAir, Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapU16AdapterAir,
-    VecToFlatAluAdapterAir, VecToFlatBranchAdapterAir,
+    VecHeapAdapterAir, VecHeapBranchU16AdapterAir, VecHeapU16AdapterAir, VecToFlatAluAdapterAir,
+    VecToFlatBranchAdapterAir,
 };
 use openvm_riscv_circuit::{
-    adapters::{RV64_BYTE_BITS, U16_BITS},
+    adapters::{BYTE_BITS, U16_BITS},
     AddSubCoreAir, AddSubFiller, BitwiseLogicCoreAir, BitwiseLogicFiller, BranchEqualCoreAir,
     BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanFiller, LessThanCoreAir,
     LessThanFiller, MultiplicationCoreAir, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io,
@@ -61,7 +61,7 @@ pub(crate) const NUM_READS: usize = 2;
 
 /// Type alias for the ALU adapter AIR wrapper
 type AluAdapterAir = VecToFlatAluAdapterAir<
-    Rv64VecHeapAdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+    VecHeapAdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
     INT256_NUM_MEMORY_BLOCKS,
     INT256_NUM_MEMORY_BLOCKS,
@@ -71,7 +71,7 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
 >;
 
 type AluU16AdapterAir = VecToFlatAluAdapterAir<
-    Rv64VecHeapU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+    VecHeapU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
     INT256_NUM_MEMORY_BLOCKS,
     INT256_NUM_MEMORY_BLOCKS,
@@ -82,7 +82,7 @@ type AluU16AdapterAir = VecToFlatAluAdapterAir<
 
 /// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv64VecHeapBranchU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
+    VecHeapBranchU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
     INT256_NUM_MEMORY_BLOCKS,
     BLOCK_FE_WIDTH,
@@ -90,59 +90,59 @@ type BranchAdapterAir = VecToFlatBranchAdapterAir<
 >;
 
 /// AddSub256 — u16 limbs, range checker (shares the AluU16 adapter with LessThan256)
-pub type Rv64AddSub256Air =
+pub type AddSub256Air =
     VmAirWrapper<AluU16AdapterAir, AddSubCoreAir<INT256_NUM_U16_LIMBS, U16_BITS, true>>;
 #[derive(Clone, Default)]
-pub struct Rv64AddSub256Executor;
-pub type Rv64AddSub256Chip<F> = VmChipWrapper<F, AddSubFiller>;
+pub struct AddSub256Executor;
+pub type AddSub256Chip<F> = VmChipWrapper<F, AddSubFiller>;
 
 /// BitwiseLogic256 — byte limbs, bitwise lookup for XOR/OR/AND.
-pub type Rv64BitwiseLogic256Air =
-    VmAirWrapper<AluAdapterAir, BitwiseLogicCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub type BitwiseLogic256Air =
+    VmAirWrapper<AluAdapterAir, BitwiseLogicCoreAir<INT256_NUM_U8_LIMBS, BYTE_BITS>>;
 #[derive(Clone, Default)]
-pub struct Rv64BitwiseLogic256Executor;
-pub type Rv64BitwiseLogic256Chip<F> = VmChipWrapper<F, BitwiseLogicFiller<RV64_BYTE_BITS>>;
+pub struct BitwiseLogic256Executor;
+pub type BitwiseLogic256Chip<F> = VmChipWrapper<F, BitwiseLogicFiller<BYTE_BITS>>;
 
 /// LessThan256
-pub type Rv64LessThan256Air =
+pub type LessThan256Air =
     VmAirWrapper<AluU16AdapterAir, LessThanCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, Default)]
-pub struct Rv64LessThan256Executor;
-pub type Rv64LessThan256Chip<F> = VmChipWrapper<F, LessThanFiller>;
+pub struct LessThan256Executor;
+pub type LessThan256Chip<F> = VmChipWrapper<F, LessThanFiller>;
 
 /// Multiplication256
-pub type Rv64Multiplication256Air =
-    VmAirWrapper<AluAdapterAir, MultiplicationCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub type Multiplication256Air =
+    VmAirWrapper<AluAdapterAir, MultiplicationCoreAir<INT256_NUM_U8_LIMBS, BYTE_BITS>>;
 #[derive(Clone, Default)]
-pub struct Rv64Multiplication256Executor;
-pub type Rv64Multiplication256Chip<F> =
-    VmChipWrapper<F, MultiplicationFiller<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub struct Multiplication256Executor;
+pub type Multiplication256Chip<F> =
+    VmChipWrapper<F, MultiplicationFiller<INT256_NUM_U8_LIMBS, BYTE_BITS>>;
 
 /// Shift256 — SLL/SRL/SRA all use u16 limbs (AluU16 adapter).
-pub type Rv64ShiftLogical256Air =
+pub type ShiftLogical256Air =
     VmAirWrapper<AluU16AdapterAir, ShiftLogicalCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
-pub type Rv64ShiftRightArithmetic256Air =
+pub type ShiftRightArithmetic256Air =
     VmAirWrapper<AluU16AdapterAir, ShiftRightArithmeticCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, Default)]
-pub struct Rv64ShiftLogical256Executor;
+pub struct ShiftLogical256Executor;
 #[derive(Clone, Default)]
-pub struct Rv64ShiftRightArithmetic256Executor;
-pub type Rv64ShiftLogical256Chip<F> = VmChipWrapper<F, ShiftLogicalFiller>;
-pub type Rv64ShiftRightArithmetic256Chip<F> = VmChipWrapper<F, ShiftRightArithmeticFiller>;
+pub struct ShiftRightArithmetic256Executor;
+pub type ShiftLogical256Chip<F> = VmChipWrapper<F, ShiftLogicalFiller>;
+pub type ShiftRightArithmetic256Chip<F> = VmChipWrapper<F, ShiftRightArithmeticFiller>;
 
 /// BranchEqual256
-pub type Rv64BranchEqual256Air =
+pub type BranchEqual256Air =
     VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_U16_LIMBS>>;
 #[derive(Clone, Default)]
-pub struct Rv64BranchEqual256Executor;
-pub type Rv64BranchEqual256Chip<F> = VmChipWrapper<F, BranchEqualFiller>;
+pub struct BranchEqual256Executor;
+pub type BranchEqual256Chip<F> = VmChipWrapper<F, BranchEqualFiller>;
 
 /// BranchLessThan256
-pub type Rv64BranchLessThan256Air =
+pub type BranchLessThan256Air =
     VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, Default)]
-pub struct Rv64BranchLessThan256Executor;
-pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<F, BranchLessThanFiller>;
+pub struct BranchLessThan256Executor;
+pub type BranchLessThan256Chip<F> = VmChipWrapper<F, BranchLessThanFiller>;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv64Config {

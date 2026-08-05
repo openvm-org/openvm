@@ -11,12 +11,12 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldExpressionProgram,
 };
-use openvm_riscv_adapters::{Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller};
+use openvm_riscv_adapters::{VecHeapAdapterAir, VecHeapAdapterFiller};
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -93,8 +93,8 @@ fn gen_base_program(
 ) -> (FieldExpressionProgram, Vec<usize>) {
     let program = ec_add_ne_program(config, range_max_bits);
     let local_opcode_idx = vec![
-        Rv64WeierstrassOpcode::EC_ADD_NE as usize,
-        Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        WeierstrassOpcode::EC_ADD_NE as usize,
+        WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     ];
     (program, local_opcode_idx)
 }
@@ -110,7 +110,7 @@ pub fn get_ec_addne_air<const BLOCKS: usize>(
     let (program, local_opcode_idx) = gen_base_program(config, range_checker_bus.range_max_bits);
     let expr = FieldExpr::new(program, range_checker_bus);
     WeierstrassAir::new(
-        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
+        VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, vec![]),
     )
 }
@@ -141,7 +141,7 @@ pub fn get_ec_addne_chip<F, const BLOCKS: usize>(
     let expr = FieldExpr::new(program, range_bus);
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits),
+            VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             vec![],

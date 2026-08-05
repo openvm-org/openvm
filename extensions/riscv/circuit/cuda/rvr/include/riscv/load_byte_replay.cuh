@@ -134,7 +134,7 @@ static __device__ bool replay_load_byte(
 
     uint8_t shift = ptr - aligned_ptr;
     uint16_t selected = load_byte_from_cell(read_data[shift >> 1], shift & 1);
-    uint64_t expected_value = sign_extend && (selected & (1u << (RV64_BYTE_BITS - 1)))
+    uint64_t expected_value = sign_extend && (selected & (1u << (BYTE_BITS - 1)))
                                   ? UINT64_MAX - UINT8_MAX + selected
                                   : selected;
     uint16_t expected_rd[BLOCK_FE_WIDTH];

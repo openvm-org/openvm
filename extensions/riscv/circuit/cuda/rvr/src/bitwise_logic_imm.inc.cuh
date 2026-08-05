@@ -31,7 +31,7 @@ __global__ void bitwise_logic_imm_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64BitwiseLogicImmCols<uint8_t>));
+    row.fill_zero(0, sizeof(BitwiseLogicImmCols<uint8_t>));
     size_t total_steps = num_xori_steps + num_ori_steps + num_andi_steps;
     if (idx >= total_steps) return;
 
@@ -105,8 +105,8 @@ __global__ void bitwise_logic_imm_replay_tracegen(
     uint16_t logged_result_cells[BLOCK_FE_WIDTH];
     replay_u16_block(read.value, source_cells);
     replay_u16_block(write.value, logged_result_cells);
-    uint8_t source[RV64_REGISTER_NUM_LIMBS];
-    uint8_t logged_result[RV64_REGISTER_NUM_LIMBS];
+    uint8_t source[REGISTER_NUM_LIMBS];
+    uint8_t logged_result[REGISTER_NUM_LIMBS];
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
         source[2 * i] = static_cast<uint8_t>(source_cells[i]);
@@ -117,23 +117,23 @@ __global__ void bitwise_logic_imm_replay_tracegen(
     uint8_t c_low[2] = {
         static_cast<uint8_t>(immediate), static_cast<uint8_t>((immediate >> 8) & 0x07)
     };
-    uint8_t c[RV64_REGISTER_NUM_LIMBS];
+    uint8_t c[REGISTER_NUM_LIMBS];
     c[0] = c_low[0];
     c[1] = c_low[1] + static_cast<uint8_t>(imm_sign) * 0xf8;
 #pragma unroll
-    for (size_t i = 2; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 2; i < REGISTER_NUM_LIMBS; i++) {
         c[i] = imm_sign ? 0xff : 0;
     }
-    uint8_t expected_result[RV64_REGISTER_NUM_LIMBS];
+    uint8_t expected_result[REGISTER_NUM_LIMBS];
     if (local_opcode == 1) {
-        run_xor<RV64_REGISTER_NUM_LIMBS>(source, c, expected_result);
+        run_xor<REGISTER_NUM_LIMBS>(source, c, expected_result);
     } else if (local_opcode == 2) {
-        run_or<RV64_REGISTER_NUM_LIMBS>(source, c, expected_result);
+        run_or<REGISTER_NUM_LIMBS>(source, c, expected_result);
     } else {
-        run_and<RV64_REGISTER_NUM_LIMBS>(source, c, expected_result);
+        run_and<REGISTER_NUM_LIMBS>(source, c, expected_result);
     }
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         if (logged_result[i] != expected_result[i]) {
             preflight_set_error(error, 98);
             return;
@@ -152,7 +152,7 @@ __global__ void bitwise_logic_imm_replay_tracegen(
         return;
     }
 
-    auto adapter = Rv64BaseAluImmAdapter(
+    auto adapter = BaseAluImmAdapter(
         VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(
@@ -165,9 +165,9 @@ __global__ void bitwise_logic_imm_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64BitwiseLogicImmCore(BitwiseOperationLookup(bitwise_lookup));
+    auto core = BitwiseLogicImmCore<REGISTER_NUM_LIMBS, BYTE_BITS>(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64BitwiseLogicImmCols, core)),
+        row.slice_from(COL_INDEX(BitwiseLogicImmCols, core)),
         source,
         c_low,
         static_cast<uint8_t>(imm_sign),
@@ -206,7 +206,7 @@ extern "C" int _bitwise_logic_imm_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64BitwiseLogicImmCols<uint8_t>));
+    assert(width == sizeof(BitwiseLogicImmCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(xori_step_start <= steps.len());
     assert(num_xori_steps <= steps.len() - xori_step_start);
@@ -217,7 +217,7 @@ extern "C" int _bitwise_logic_imm_replay_tracegen(
     assert(num_xori_steps <= SIZE_MAX - num_ori_steps);
     assert(num_xori_steps + num_ori_steps <= SIZE_MAX - num_andi_steps);
     assert(height >= num_xori_steps + num_ori_steps + num_andi_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     bitwise_logic_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

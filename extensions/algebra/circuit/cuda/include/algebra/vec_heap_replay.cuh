@@ -15,7 +15,7 @@ static __device__ void fill_vec_heap_adapter_from_projection(
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
-    Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS> record = {};
+    VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS> record = {};
     record.from_pc = input.from_pc;
     record.from_timestamp = input.from_timestamp;
     record.rd_ptr = input.rd_ptr;
@@ -39,7 +39,7 @@ static __device__ void fill_vec_heap_adapter_from_projection(
                 static_cast<uint8_t>(packed >> 8);
         }
     }
-    Rv64VecHeapAdapter<NUM_READS, BLOCKS, BLOCKS> adapter(
+    VecHeapAdapter<NUM_READS, BLOCKS, BLOCKS> adapter(
         pointer_max_bits, range_checker, timestamp_max_bits
     );
     adapter.fill_trace_row(row, record);

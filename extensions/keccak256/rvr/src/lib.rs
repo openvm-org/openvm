@@ -6,7 +6,7 @@
 //! tracer helpers across the call boundary.
 
 use openvm_instructions::{
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
@@ -19,7 +19,7 @@ use rvr_openvm_lift::{
 };
 
 fn decode_reg(value: u32) -> Variable {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;

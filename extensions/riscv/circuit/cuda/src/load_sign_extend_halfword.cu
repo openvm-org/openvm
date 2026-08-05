@@ -2,8 +2,8 @@
 
 using LoadSignExtendHalfwordCore = LoadSignExtendWidthCore<HALFWORD_ACCESS_WIDTH>;
 
-template <typename T> struct Rv64LoadSignExtendHalfwordCols {
-    Rv64LoadMultiByteAdapterCols<T> adapter;
+template <typename T> struct LoadSignExtendHalfwordCols {
+    LoadMultiByteAdapterCols<T> adapter;
     LoadSignExtendWidthCoreCols<T, HALFWORD_ACCESS_WIDTH> core;
 };
 

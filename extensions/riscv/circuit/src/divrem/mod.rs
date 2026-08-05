@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
-use crate::adapters::{Rv64MultAdapterAir, Rv64MultAdapterFiller};
+use super::adapters::{BYTE_BITS, REGISTER_NUM_LIMBS};
+use crate::adapters::{MultAdapterAir, MultAdapterFiller};
 
 mod core;
 mod execution;
@@ -17,8 +17,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64DivRemAir =
-    VmAirWrapper<Rv64MultAdapterAir, DivRemCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
-pub type Rv64DivRemExecutor = DivRemExecutor<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64DivRemChip<F> =
-    VmChipWrapper<F, DivRemFiller<Rv64MultAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
+pub type DivRemAir = VmAirWrapper<MultAdapterAir, DivRemCoreAir<REGISTER_NUM_LIMBS, BYTE_BITS>>;
+pub type DivRemExecutor = DivRemCoreExecutor<REGISTER_NUM_LIMBS, BYTE_BITS>;
+pub type DivRemChip<F> =
+    VmChipWrapper<F, DivRemFiller<MultAdapterFiller, REGISTER_NUM_LIMBS, BYTE_BITS>>;

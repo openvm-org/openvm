@@ -39,7 +39,7 @@ bool openvm_hint_buffer(uint64_t dest_addr, uint32_t num_words) {
 bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
                    uint64_t effective_addr, uint8_t width) {
   void* ctx = openvm_get_io_ctx();
-  Rv64RevealPlan plan;
+  RevealPlan plan;
   if (unlikely(!g_rv64io_host_callbacks.reveal_prepare(
           ctx, src_val, base_addr, effective_addr, width, &plan))) {
     return false;

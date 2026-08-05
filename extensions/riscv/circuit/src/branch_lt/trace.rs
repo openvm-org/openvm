@@ -8,12 +8,12 @@ use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{run_cmp, BranchLessThanCoreCols, Rv64BranchLessThanChip};
-use crate::adapters::{Rv64BranchAdapterCols, Rv64BranchAdapterFiller, U16_BITS};
+use super::{run_cmp, BranchLessThanChip, BranchLessThanCoreCols};
+use crate::adapters::{BranchAdapterCols, BranchAdapterFiller, U16_BITS};
 
 /// Generates the RV64 less-than-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64BranchLessThanChip<F>,
+    chip: &BranchLessThanChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
@@ -26,7 +26,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64BranchAdapterCols::<F>::width();
+    let adapter_width = BranchAdapterCols::<F>::width();
     let width = adapter_width + BranchLessThanCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -38,7 +38,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let local_opcode_u8 = local_opcode as u8;
             let mut comparison = (false, 0, false, false);
-            let (inputs, _) = Rv64BranchAdapterFiller::replay(
+            let (inputs, _) = BranchAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),

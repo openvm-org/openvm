@@ -10,9 +10,9 @@ use openvm_circuit::arch::{
     MemoryConfig, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+    instruction::Instruction, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
@@ -23,9 +23,7 @@ use {
 };
 
 use crate::{
-    adapters::{
-        rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
-    },
+    adapters::{bytes_to_u16_block, bytes_to_u32, sign_extend_imm16, u16_block_to_bytes},
     load_sign_extend::common::load_sign_extend_write_data,
 };
 
@@ -39,7 +37,7 @@ pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    opcode: Rv64LoadStoreOpcode,
+    opcode: LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
@@ -65,7 +63,7 @@ pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
     });
-    let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
+    let ptr_val = imm_ext.wrapping_add(bytes_to_u32(rs1));
     let shift_amount = ptr_val % MEMORY_BLOCK_BYTES as u32;
     let a = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
@@ -80,8 +78,8 @@ pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         [F::ZERO; 8]
     };
 
-    tester.write_bytes(RV64_REGISTER_AS as usize, b, rs1.map(F::from_u8));
-    tester.write_bytes(RV64_REGISTER_AS as usize, a, prev_data);
+    tester.write_bytes(REGISTER_AS as usize, b, rs1.map(F::from_u8));
+    tester.write_bytes(REGISTER_AS as usize, a, prev_data);
     tester.write_bytes(
         2,
         (ptr_val - shift_amount) as usize,
@@ -102,7 +100,7 @@ pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
                 a,
                 b,
                 imm as usize,
-                RV64_REGISTER_AS as usize,
+                REGISTER_AS as usize,
                 2,
                 (a != 0) as usize,
                 imm_sign as usize,
@@ -112,18 +110,18 @@ pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 
     let expected = load_sign_extend_write_data(
         opcode,
-        read_data.map(rv64_bytes_to_u16_block),
+        read_data.map(bytes_to_u16_block),
         shift_amount as usize,
     );
     if a != 0 {
         assert_eq!(
-            rv64_u16_block_to_bytes(expected).map(F::from_u8),
-            tester.read_bytes::<8>(RV64_REGISTER_AS as usize, a)
+            u16_block_to_bytes(expected).map(F::from_u8),
+            tester.read_bytes::<8>(REGISTER_AS as usize, a)
         );
     } else {
         assert_eq!(
             [F::ZERO; 8],
-            tester.read_bytes::<8>(RV64_REGISTER_AS as usize, a)
+            tester.read_bytes::<8>(REGISTER_AS as usize, a)
         );
     }
 }

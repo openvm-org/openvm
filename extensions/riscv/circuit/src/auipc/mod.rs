@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::Rv64RdWriteAdapterAir;
+use crate::adapters::RdWriteAdapterAir;
 
 mod core;
 mod execution;
@@ -16,5 +16,5 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64AuipcAir = VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir>;
-pub type Rv64AuipcChip<F> = VmChipWrapper<F, Rv64AuipcFiller>;
+pub type AuipcAir = VmAirWrapper<RdWriteAdapterAir, AuipcCoreAir>;
+pub type AuipcChip<F> = VmChipWrapper<F, AuipcFiller>;

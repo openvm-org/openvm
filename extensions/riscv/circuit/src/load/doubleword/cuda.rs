@@ -12,28 +12,28 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
+use openvm_riscv_transpiler::LoadStoreOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use super::LOAD_DOUBLEWORD_OVERLAP_CELLS;
 use crate::{
-    adapters::{Rv64LoadMultiByteAdapterCols, RV64_BYTE_BITS},
+    adapters::{LoadMultiByteAdapterCols, BYTE_BITS},
     cuda_abi::load_doubleword_cuda,
     load::core::LoadCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64LoadDoublewordChipGpu {
+pub struct LoadDoublewordChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64LoadDoublewordChipGpu {
+impl LoadDoublewordChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -42,12 +42,12 @@ impl Rv64LoadDoublewordChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let step_range = replay_plan.opcode_range(Rv64LoadStoreOpcode::LOADD.global_opcode());
+        let step_range = replay_plan.opcode_range(LoadStoreOpcode::LOADD.global_opcode());
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64LoadMultiByteAdapterCols::<F>::width()
+        let trace_width = LoadMultiByteAdapterCols::<F>::width()
             + LoadCoreCols::<F, LOAD_DOUBLEWORD_OVERLAP_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
@@ -65,9 +65,9 @@ impl Rv64LoadDoublewordChipGpu {
                 step_range.start,
                 step_range.len(),
                 transcript.error_ptr(),
-                Rv64LoadStoreOpcode::LOADD.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                LoadStoreOpcode::LOADD.global_opcode().as_usize() as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,

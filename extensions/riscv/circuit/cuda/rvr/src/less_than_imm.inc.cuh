@@ -119,7 +119,7 @@ __global__ void less_than_imm_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluImmU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluImmU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -130,7 +130,7 @@ __global__ void less_than_imm_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64LessThanImmCore(checker);
+    auto core = LessThanImmCore<BLOCK_FE_WIDTH, U16_BITS>(checker);
     core.fill_trace_row(
         row.slice_from(COL_INDEX(LessThanImmCols, core)),
         rs1,
@@ -175,7 +175,7 @@ extern "C" int _less_than_imm_replay_tracegen(
     assert(num_sltiu_steps <= steps.len() - sltiu_step_start);
     assert(num_slti_steps <= SIZE_MAX - num_sltiu_steps);
     assert(height >= num_slti_steps + num_sltiu_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     less_than_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

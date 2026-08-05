@@ -12,7 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
+use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -23,7 +23,7 @@ use crate::adapters::{byte_ptr_to_u16_ptr, checked_register_u16_pointer};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
-pub struct Rv64BranchAdapterCols<T> {
+pub struct BranchAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
@@ -31,19 +31,19 @@ pub struct Rv64BranchAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64BranchAdapterCols<u8>)]
-pub struct Rv64BranchAdapterAir {
+#[columns_via(BranchAdapterCols<u8>)]
+pub struct BranchAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv64BranchAdapterAir {
+impl<F: Field> BaseAir<F> for BranchAdapterAir {
     fn width(&self) -> usize {
-        Rv64BranchAdapterCols::<F>::width()
+        BranchAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for BranchAdapterAir {
     type Interface =
         BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 2, 0, BLOCK_FE_WIDTH, 0>;
 
@@ -53,7 +53,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv64BranchAdapterCols<_> = local.borrow();
+        let local: &BranchAdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -64,7 +64,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
                 ),
                 ctx.reads[0].clone(),
@@ -76,7 +76,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
                 ),
                 ctx.reads[1].clone(),
@@ -92,8 +92,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                 ],
                 local.from_state,
                 AB::F::from_usize(timestamp_delta),
@@ -103,25 +103,25 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64BranchAdapterCols<_> = local.borrow();
+        let cols: &BranchAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64BranchAdapterFiller;
+pub struct BranchAdapterFiller;
 
-impl Rv64BranchAdapterFiller {
+impl BranchAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64BranchAdapterCols<F>,
+        adapter_row: &mut BranchAdapterCols<F>,
         next_pc: impl FnOnce(u32, [[u16; BLOCK_FE_WIDTH]; 2], u32) -> u32,
     ) -> Result<([[u16; BLOCK_FE_WIDTH]; 2], u32), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || instruction.e.as_canonical_u32() != RV64_REGISTER_AS
+        if instruction.d.as_canonical_u32() != REGISTER_AS
+            || instruction.e.as_canonical_u32() != REGISTER_AS
         {
             return Err(PostflightError::new(
                 "branch instruction has invalid address spaces",
@@ -135,8 +135,8 @@ impl Rv64BranchAdapterFiller {
         let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
         let rs2_u16_ptr = checked_register_u16_pointer(rs2_ptr)?;
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
-        let rs2 = replay.read_u16(RV64_REGISTER_AS, rs2_u16_ptr)?;
+        let rs1 = replay.read_u16(REGISTER_AS, rs1_u16_ptr)?;
+        let rs2 = replay.read_u16(REGISTER_AS, rs2_u16_ptr)?;
         let inputs = [rs1.value, rs2.value];
         let next_pc = next_pc(from_pc, inputs, immediate);
         replay.finish(next_pc)?;

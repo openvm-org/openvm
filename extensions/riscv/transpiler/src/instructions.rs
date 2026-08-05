@@ -1,7 +1,7 @@
 // =================================================================================================
 // RV64IM support opcodes.
-// Enum types that do not start with Rv64 can be used for generic big integers, but the default
-// offset is reserved for RV64IM.
+// These enum types can be reused for generic big integers, but the default offset is reserved
+// for RV64IM.
 //
 // Create a new wrapper struct U256BaseAluOpcode(pub BaseAluOpcode) with the LocalOpcode macro to
 // specify a different offset.
@@ -99,7 +99,7 @@ pub enum LessThanOpcode {
 )]
 #[opcode_offset = 0x210]
 #[repr(usize)]
-pub enum Rv64LoadStoreOpcode {
+pub enum LoadStoreOpcode {
     // Ordering matters: local opcode values are recorded in traces and mirrored by CUDA kernels.
     LOADD,
     LOADBU,
@@ -169,7 +169,7 @@ pub enum BranchLessThanOpcode {
 #[opcode_offset = 0x230]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv64JalLuiOpcode {
+pub enum JalLuiOpcode {
     JAL,
     LUI,
 }
@@ -180,7 +180,7 @@ pub enum Rv64JalLuiOpcode {
 #[opcode_offset = 0x235]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv64JalrOpcode {
+pub enum JalrOpcode {
     JALR,
 }
 
@@ -190,7 +190,7 @@ pub enum Rv64JalrOpcode {
 #[opcode_offset = 0x240]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv64AuipcOpcode {
+pub enum AuipcOpcode {
     AUIPC,
 }
 
@@ -254,7 +254,7 @@ pub enum DivRemOpcode {
 }
 
 // =================================================================================================
-// Rv64HintStore Instruction
+// HintStore Instruction
 // =================================================================================================
 
 #[derive(
@@ -263,7 +263,7 @@ pub enum DivRemOpcode {
 #[opcode_offset = 0x260]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv64HintStoreOpcode {
+pub enum HintStoreOpcode {
     HINT_STORED,
     HINT_BUFFER,
 }

@@ -31,7 +31,7 @@ static __device__ __forceinline__ uint8_t replay_load_byte(
 ) {
     uint32_t cell = byte >> 1;
     uint16_t value = read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
-    return static_cast<uint8_t>((value >> ((byte & 1) * RV64_BYTE_BITS)) & UINT8_MAX);
+    return static_cast<uint8_t>((value >> ((byte & 1) * BYTE_BITS)) & UINT8_MAX);
 }
 
 template <size_t WIDTH_BYTES, bool SIGN_EXTEND, uint32_t ERROR_BASE = 241>
@@ -188,7 +188,7 @@ static __device__ bool replay_load_multibyte(
     for (size_t byte = 0; byte < WIDTH_BYTES; byte++) {
         expected_rd[byte >> 1] |=
             static_cast<uint16_t>(replay_load_byte(read_data, shift + byte))
-            << ((byte & 1) * RV64_BYTE_BITS);
+            << ((byte & 1) * BYTE_BITS);
     }
     if constexpr (SIGN_EXTEND) {
         if (expected_rd[WIDTH_BYTES / U16_CELL_SIZE - 1] & (uint16_t(1) << (U16_BITS - 1))) {

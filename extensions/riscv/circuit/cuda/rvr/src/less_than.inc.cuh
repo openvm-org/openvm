@@ -1,7 +1,7 @@
 #include "arch/rvr/replay.cuh"
 
 
-__global__ void rv64_less_than_replay_tracegen(
+__global__ void less_than_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -116,7 +116,7 @@ __global__ void rv64_less_than_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluRegU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluRegU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -129,7 +129,7 @@ __global__ void rv64_less_than_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64LessThanCore(checker);
+    auto core = LessThanCore<BLOCK_FE_WIDTH, U16_BITS>(checker);
     core.fill_trace_row(
         row.slice_from(COL_INDEX(LessThanCols, core)), b, c, local_opcode
     );
@@ -137,7 +137,7 @@ __global__ void rv64_less_than_replay_tracegen(
 
 
 
-extern "C" int _rv64_less_than_replay_tracegen(
+extern "C" int _less_than_replay_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -169,8 +169,8 @@ extern "C" int _rv64_less_than_replay_tracegen(
     assert(num_sltu_steps <= steps.len() - sltu_step_start);
     assert(num_slt_steps <= SIZE_MAX - num_sltu_steps);
     assert(height >= num_slt_steps + num_sltu_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_less_than_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    less_than_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,
         instructions,

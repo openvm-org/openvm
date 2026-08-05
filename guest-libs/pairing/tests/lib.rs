@@ -33,7 +33,7 @@ mod bn254 {
     use openvm_instructions::{
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, PhantomDiscriminant, SystemOpcode,
     };
     use openvm_pairing_circuit::{
@@ -473,8 +473,8 @@ mod bn254 {
         let instructions = [
             Instruction::phantom(
                 PhantomDiscriminant(openvm_pairing_transpiler::PairingPhantom::HintFinalExp as u16),
-                F::new((P_REGISTER * RV64_REGISTER_NUM_LIMBS) as u32),
-                F::new((Q_REGISTER * RV64_REGISTER_NUM_LIMBS) as u32),
+                F::new((P_REGISTER * REGISTER_NUM_LIMBS) as u32),
+                F::new((Q_REGISTER * REGISTER_NUM_LIMBS) as u32),
                 PairingCurve::Bn254 as u16,
             ),
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -521,25 +521,25 @@ mod bn254 {
         for (name, p_header, p_ptr, p_len, q_ptr, q_len) in cases {
             let mut state = rvr.create_initial_vm_state(Streams::default());
             write_u64(
-                &mut state.memory.memory.mem[RV64_REGISTER_AS as usize],
-                P_REGISTER * RV64_REGISTER_NUM_LIMBS,
+                &mut state.memory.memory.mem[REGISTER_AS as usize],
+                P_REGISTER * REGISTER_NUM_LIMBS,
                 p_header,
             );
             write_u64(
-                &mut state.memory.memory.mem[RV64_REGISTER_AS as usize],
-                Q_REGISTER * RV64_REGISTER_NUM_LIMBS,
+                &mut state.memory.memory.mem[REGISTER_AS as usize],
+                Q_REGISTER * REGISTER_NUM_LIMBS,
                 Q_HEADER,
             );
             if let Some(p_ptr) = p_ptr {
                 write_slice_header(
-                    &mut state.memory.memory.mem[RV64_MEMORY_AS as usize],
+                    &mut state.memory.memory.mem[MEMORY_AS as usize],
                     P_HEADER as usize,
                     p_ptr,
                     p_len,
                 );
             }
             write_slice_header(
-                &mut state.memory.memory.mem[RV64_MEMORY_AS as usize],
+                &mut state.memory.memory.mem[MEMORY_AS as usize],
                 Q_HEADER as usize,
                 q_ptr,
                 q_len,

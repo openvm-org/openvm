@@ -16,7 +16,7 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
@@ -57,8 +57,8 @@ const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 
 type Harness = TestChipHarness<F, DeferralOutputExecutor, DeferralOutputAir, DeferralOutputChip<F>>;
 type BitwisePeriphery = (
-    BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-    SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    BitwiseOperationLookupAir<BYTE_BITS>,
+    SharedBitwiseOperationLookupChip<BYTE_BITS>,
 );
 type CountPeriphery = (DeferralCircuitCountAir, Arc<DeferralCircuitCountChip>);
 type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>>);
@@ -108,7 +108,7 @@ fn write_output_key(
     for (chunk_idx, chunk) in output_key.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
         let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
         tester.write_bytes(
-            RV64_MEMORY_AS as usize,
+            MEMORY_AS as usize,
             input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
@@ -167,12 +167,12 @@ where
     );
 
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rd,
         (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rs,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
@@ -190,8 +190,8 @@ where
             rd,
             rs,
             deferral_idx,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
         ],
     );
     tester.execute(executor, preflight, &instruction);
@@ -200,9 +200,7 @@ where
 
 fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> CpuHarnessBundle {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
     let count_chip = Arc::new(DeferralCircuitCountChip::new(num_deferrals));
@@ -256,9 +254,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
 #[allow(clippy::type_complexity)]
 fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> CudaHarnessBundle {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
     let count_chip_cpu = Arc::new(DeferralCircuitCountChip::new(num_deferrals));
@@ -473,12 +469,12 @@ fn deferral_output_multi_row_trace_test() {
     );
 
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rd,
         (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rs,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
@@ -499,8 +495,8 @@ fn deferral_output_multi_row_trace_test() {
                 rd,
                 rs,
                 deferral_idx,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
     );

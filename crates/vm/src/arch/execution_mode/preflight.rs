@@ -337,7 +337,7 @@ impl ExecutionCtxTrait for PreflightCtx {
 mod tests {
     use std::mem::size_of;
 
-    use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS};
+    use openvm_instructions::{riscv::MEMORY_AS, DEFERRAL_AS};
     use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -380,15 +380,15 @@ mod tests {
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&MemoryConfig::default()));
         let mut ctx = PreflightCtx::new::<BabyBear>(&memory, None);
 
-        ctx.begin_write(&memory, RV64_MEMORY_AS, 0, size_of::<u16>() as u32);
+        ctx.begin_write(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);
         unsafe {
-            memory.write(RV64_MEMORY_AS, 0, [1u16]);
+            memory.write(MEMORY_AS, 0, [1u16]);
         }
         ctx.finish_write(&memory);
 
-        ctx.begin_write(&memory, RV64_MEMORY_AS, 0, size_of::<u16>() as u32);
+        ctx.begin_write(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);
         unsafe {
-            memory.write(RV64_MEMORY_AS, 0, [2u16]);
+            memory.write(MEMORY_AS, 0, [2u16]);
         }
         ctx.finish_write(&memory);
 
@@ -405,14 +405,14 @@ mod tests {
     fn read_then_write_uses_the_read_as_predecessor() {
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&MemoryConfig::default()));
         unsafe {
-            memory.write(RV64_MEMORY_AS, 0, [7u16]);
+            memory.write(MEMORY_AS, 0, [7u16]);
         }
         let mut ctx = PreflightCtx::new::<BabyBear>(&memory, None);
 
-        ctx.log_read(&memory, RV64_MEMORY_AS, 0, size_of::<u16>() as u32);
-        ctx.begin_write(&memory, RV64_MEMORY_AS, 0, size_of::<u16>() as u32);
+        ctx.log_read(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);
+        ctx.begin_write(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);
         unsafe {
-            memory.write(RV64_MEMORY_AS, 0, [9u16]);
+            memory.write(MEMORY_AS, 0, [9u16]);
         }
         ctx.finish_write(&memory);
 

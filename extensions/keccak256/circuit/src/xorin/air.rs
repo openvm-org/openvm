@@ -14,11 +14,11 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, var_range::VariableRangeCheckerBus,
     ColumnsAir, U16_BITS,
 };
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -130,8 +130,8 @@ impl XorinVmAir {
                     buffer_reg_ptr.into(),
                     input_reg_ptr.into(),
                     len_reg_ptr.into(),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_MEMORY_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(MEMORY_AS),
                 ],
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
@@ -142,11 +142,11 @@ impl XorinVmAir {
 
         // Register reads: low 32 bits as u16 cells, zero-extended to one memory block.
         let buffer_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
-            expand_to_rv64_block(&instruction.buffer_ptr_limbs);
+            expand_to_block(&instruction.buffer_ptr_limbs);
         let input_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
-            expand_to_rv64_block(&instruction.input_ptr_limbs);
+            expand_to_block(&instruction.input_ptr_limbs);
         let len_in_bytes = num_used_blocks * AB::Expr::from_usize(MEMORY_BLOCK_BYTES);
-        let len_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&[len_in_bytes]);
+        let len_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&[len_in_bytes]);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
@@ -157,7 +157,7 @@ impl XorinVmAir {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_REGISTER_AS),
+                        AB::Expr::from_u32(REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     value,
@@ -170,8 +170,8 @@ impl XorinVmAir {
         }
 
         for top_cell in [
-            instruction.buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
-            instruction.input_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
+            instruction.buffer_ptr_limbs[PTR_U16_LIMBS - 1],
+            instruction.input_ptr_limbs[PTR_U16_LIMBS - 1],
         ] {
             self.range_bus
                 .range_check(
@@ -218,7 +218,7 @@ impl XorinVmAir {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        AB::Expr::from_u32(MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     pack_u8_block::<AB>(&[
@@ -254,7 +254,7 @@ impl XorinVmAir {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        AB::Expr::from_u32(MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     pack_u8_block::<AB>(&[
@@ -343,7 +343,7 @@ impl XorinVmAir {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        AB::Expr::from_u32(MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     data,

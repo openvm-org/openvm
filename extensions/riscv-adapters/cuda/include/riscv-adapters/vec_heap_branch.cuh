@@ -9,18 +9,18 @@
 using namespace riscv;
 
 template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv64VecHeapBranchAdapterCols {
+struct VecHeapBranchAdapterCols {
     ExecutionState<T> from_state;
 
     T rs_ptr[NUM_READS];
-    T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
+    T rs_val[NUM_READS][PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
 
     MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv64VecHeapBranchAdapterRecord {
+struct VecHeapBranchAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
@@ -32,12 +32,12 @@ struct Rv64VecHeapBranchAdapterRecord {
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv64VecHeapBranchAdapter {
+struct VecHeapBranchAdapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64VecHeapBranchAdapter(
+    __device__ VecHeapBranchAdapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
@@ -46,11 +46,11 @@ struct Rv64VecHeapBranchAdapter {
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
-    using Cols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, BLOCKS_PER_READ>;
+    using Cols = VecHeapBranchAdapterCols<T, NUM_READS, BLOCKS_PER_READ>;
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv64VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ> record
+        VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ> record
     ) {
         static_assert(NUM_READS == 1 || NUM_READS == 2);
 
@@ -85,7 +85,7 @@ struct Rv64VecHeapBranchAdapter {
         }
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
-            Fp rs_val[RV64_PTR_U16_LIMBS];
+            Fp rs_val[PTR_U16_LIMBS];
             ptr_to_u16_limbs(rs_val, record.rs_vals[i]);
             COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val);
         }
@@ -101,10 +101,10 @@ struct Rv64VecHeapBranchAdapter {
 
 // Type aliases for the simple case with BLOCKS_PER_READ=1
 template <typename T, size_t NUM_READS>
-using Rv64HeapBranchAdapterCols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, 1>;
+using HeapBranchAdapterCols = VecHeapBranchAdapterCols<T, NUM_READS, 1>;
 
 template <size_t NUM_READS>
-using Rv64HeapBranchAdapterRecord = Rv64VecHeapBranchAdapterRecord<NUM_READS, 1>;
+using HeapBranchAdapterRecord = VecHeapBranchAdapterRecord<NUM_READS, 1>;
 
 template <size_t NUM_READS>
-using Rv64HeapBranchAdapter = Rv64VecHeapBranchAdapter<NUM_READS, 1>;
+using HeapBranchAdapter = VecHeapBranchAdapter<NUM_READS, 1>;

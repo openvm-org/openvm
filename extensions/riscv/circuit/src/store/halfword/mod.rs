@@ -1,9 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
-    adapters::{
-        Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH,
-    },
+    adapters::{StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH},
     store::{
         common::StoreExecutor,
         core::{StoreCoreAir, StoreFiller},
@@ -15,11 +13,11 @@ pub const STORE_HALFWORD_VALUE_CELLS: usize = HALFWORD_ACCESS_WIDTH / U16_CELL_S
 
 pub type StoreHalfwordCoreAir = StoreCoreAir<HALFWORD_ACCESS_WIDTH, STORE_HALFWORD_VALUE_CELLS>;
 pub type StoreHalfwordFiller =
-    StoreFiller<Rv64StoreMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH, STORE_HALFWORD_VALUE_CELLS>;
+    StoreFiller<StoreMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH, STORE_HALFWORD_VALUE_CELLS>;
 
-pub type Rv64StoreHalfwordAir = VmAirWrapper<Rv64StoreMultiByteAdapterAir, StoreHalfwordCoreAir>;
-pub type Rv64StoreHalfwordExecutor = StoreExecutor<HALFWORD_ACCESS_WIDTH>;
-pub type Rv64StoreHalfwordChip<F> = VmChipWrapper<F, StoreHalfwordFiller>;
+pub type StoreHalfwordAir = VmAirWrapper<StoreMultiByteAdapterAir, StoreHalfwordCoreAir>;
+pub type StoreHalfwordExecutor = StoreExecutor<HALFWORD_ACCESS_WIDTH>;
+pub type StoreHalfwordChip<F> = VmChipWrapper<F, StoreHalfwordFiller>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

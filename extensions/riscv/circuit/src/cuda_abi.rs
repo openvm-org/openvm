@@ -473,7 +473,7 @@ pub mod less_than_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_less_than_replay_tracegen(
+        fn _less_than_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -522,7 +522,7 @@ pub mod less_than_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_less_than_replay_tracegen(
+        CudaError::from_result(_less_than_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -553,7 +553,7 @@ pub mod load_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_byte_replay_tracegen(
+        fn _load_byte_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -602,7 +602,7 @@ pub mod load_byte_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_byte_replay_tracegen(
+        CudaError::from_result(_load_byte_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -633,7 +633,7 @@ pub mod load_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_halfword_replay_tracegen(
+        fn _load_halfword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -682,7 +682,7 @@ pub mod load_halfword_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_halfword_replay_tracegen(
+        CudaError::from_result(_load_halfword_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -713,7 +713,7 @@ pub mod load_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_word_replay_tracegen(
+        fn _load_word_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -762,7 +762,7 @@ pub mod load_word_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_word_replay_tracegen(
+        CudaError::from_result(_load_word_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -793,7 +793,7 @@ pub mod load_doubleword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_doubleword_replay_tracegen(
+        fn _load_doubleword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -842,7 +842,7 @@ pub mod load_doubleword_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_doubleword_replay_tracegen(
+        CudaError::from_result(_load_doubleword_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -873,7 +873,7 @@ pub mod store_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_byte_replay_tracegen(
+        fn _store_byte_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -924,7 +924,7 @@ pub mod store_byte_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_store_byte_replay_tracegen(
+        CudaError::from_result(_store_byte_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -956,7 +956,7 @@ pub mod store_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_halfword_replay_tracegen(
+        fn _store_halfword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1007,7 +1007,7 @@ pub mod store_halfword_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_store_halfword_replay_tracegen(
+        CudaError::from_result(_store_halfword_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1039,7 +1039,7 @@ pub mod store_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_word_replay_tracegen(
+        fn _store_word_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1090,7 +1090,7 @@ pub mod store_word_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_store_word_replay_tracegen(
+        CudaError::from_result(_store_word_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1122,7 +1122,7 @@ pub mod store_doubleword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_store_doubleword_replay_tracegen(
+        fn _store_doubleword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1173,7 +1173,7 @@ pub mod store_doubleword_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_store_doubleword_replay_tracegen(
+        CudaError::from_result(_store_doubleword_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1205,7 +1205,7 @@ pub mod load_sign_extend_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_sign_extend_byte_replay_tracegen(
+        fn _load_sign_extend_byte_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1254,7 +1254,7 @@ pub mod load_sign_extend_byte_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_sign_extend_byte_replay_tracegen(
+        CudaError::from_result(_load_sign_extend_byte_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1285,7 +1285,7 @@ pub mod load_sign_extend_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_sign_extend_halfword_replay_tracegen(
+        fn _load_sign_extend_halfword_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1334,7 +1334,7 @@ pub mod load_sign_extend_halfword_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_sign_extend_halfword_replay_tracegen(
+        CudaError::from_result(_load_sign_extend_halfword_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1365,7 +1365,7 @@ pub mod load_sign_extend_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_sign_extend_word_replay_tracegen(
+        fn _load_sign_extend_word_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1414,7 +1414,7 @@ pub mod load_sign_extend_word_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_load_sign_extend_word_replay_tracegen(
+        CudaError::from_result(_load_sign_extend_word_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1524,7 +1524,7 @@ pub mod divrem_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_div_rem_replay_tracegen(
+        fn _div_rem_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1590,7 +1590,7 @@ pub mod divrem_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_div_rem_replay_tracegen(
+        CudaError::from_result(_div_rem_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1630,7 +1630,7 @@ pub mod shift_logical_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_logical_replay_tracegen(
+        fn _shift_logical_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1679,7 +1679,7 @@ pub mod shift_logical_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_shift_logical_replay_tracegen(
+        CudaError::from_result(_shift_logical_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1710,7 +1710,7 @@ pub mod shift_right_arithmetic_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_right_arithmetic_replay_tracegen(
+        fn _shift_right_arithmetic_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1753,7 +1753,7 @@ pub mod shift_right_arithmetic_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_shift_right_arithmetic_replay_tracegen(
+        CudaError::from_result(_shift_right_arithmetic_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -2533,7 +2533,7 @@ pub mod shift_w_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_w_logical_replay_tracegen(
+        fn _shift_w_logical_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -2558,7 +2558,7 @@ pub mod shift_w_cuda {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rv64_shift_w_right_arithmetic_replay_tracegen(
+        fn _shift_w_right_arithmetic_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -2604,7 +2604,7 @@ pub mod shift_w_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_shift_w_logical_replay_tracegen(
+        CudaError::from_result(_shift_w_logical_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -2650,7 +2650,7 @@ pub mod shift_w_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two());
-        CudaError::from_result(_rv64_shift_w_right_arithmetic_replay_tracegen(
+        CudaError::from_result(_shift_w_right_arithmetic_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -2678,7 +2678,7 @@ pub mod mul_w_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_mul_w_replay_tracegen(
+        fn _mul_w_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -2726,7 +2726,7 @@ pub mod mul_w_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_mul_w_replay_tracegen(
+        CudaError::from_result(_mul_w_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -2757,7 +2757,7 @@ pub mod divrem_w_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_div_rem_w_replay_tracegen(
+        fn _div_rem_w_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -2823,7 +2823,7 @@ pub mod divrem_w_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_div_rem_w_replay_tracegen(
+        CudaError::from_result(_div_rem_w_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

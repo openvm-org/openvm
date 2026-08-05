@@ -1,7 +1,7 @@
 use num_bigint::BigUint;
 #[cfg(feature = "cuda")]
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 #[cfg(feature = "cuda")]
 use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
@@ -15,7 +15,7 @@ use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode, SystemOpcode,
 };
 #[cfg(feature = "cuda")]
@@ -65,7 +65,7 @@ const FP2_LHS_PTR: u32 = 0x600;
 const FP2_RHS_PTR: u32 = 0x680;
 
 fn reg(index: usize) -> usize {
-    index * RV64_REGISTER_BYTES as usize
+    index * REGISTER_BYTES as usize
 }
 
 fn padded_bytes(value: &BigUint) -> [u8; 32] {
@@ -77,43 +77,43 @@ fn padded_bytes(value: &BigUint) -> [u8; 32] {
 fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program<BabyBear>, VmExe<BabyBear>) {
     let instructions = [
         Instruction::from_usize(
-            Rv64ModularArithmeticOpcode::SETUP_ADDSUB.global_opcode(),
+            ModularArithmeticOpcode::SETUP_ADDSUB.global_opcode(),
             [
                 reg(1),
                 reg(2),
                 reg(0),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::from_usize(
-            Rv64ModularArithmeticOpcode::ADD.global_opcode(),
+            ModularArithmeticOpcode::ADD.global_opcode(),
             [
                 reg(3),
                 reg(4),
                 reg(5),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::from_usize(
-            Rv64ModularArithmeticOpcode::SETUP_ISEQ.global_opcode(),
+            ModularArithmeticOpcode::SETUP_ISEQ.global_opcode(),
             [
                 reg(6),
                 reg(2),
                 reg(0),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::from_usize(
-            Rv64ModularArithmeticOpcode::IS_EQ.global_opcode(),
+            ModularArithmeticOpcode::IS_EQ.global_opcode(),
             [
                 reg(7),
                 reg(4),
                 reg(4),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -134,7 +134,7 @@ fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program<BabyBear>, VmExe
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)),
+                .map(|(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte)),
         );
     }
     for (pointer, value) in [
@@ -147,7 +147,7 @@ fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program<BabyBear>, VmExe
             value
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_MEMORY_AS, pointer + offset as u32), byte)),
+                .map(|(offset, byte)| ((MEMORY_AS, pointer + offset as u32), byte)),
         );
     }
 
@@ -186,7 +186,7 @@ fn write_fixture_bytes(
 fn write_fixture_pointer(memory: &mut SparseMemoryImage, register: usize, pointer: u32) {
     write_fixture_bytes(
         memory,
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         reg(register) as u32,
         u64::from(pointer).to_le_bytes(),
     );
@@ -205,8 +205,8 @@ fn field_expr_instruction(
             reg(destination),
             reg(lhs),
             reg(rhs),
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
         ],
     )
 }
@@ -215,13 +215,13 @@ fn field_expr_instruction(
 fn field_expr_fixture(modulus: &BigUint) -> (Program<BabyBear>, VmExe<BabyBear>) {
     let instructions = [
         field_expr_instruction(
-            Rv64ModularArithmeticOpcode::SETUP_MULDIV.global_opcode(),
+            ModularArithmeticOpcode::SETUP_MULDIV.global_opcode(),
             1,
             2,
             0,
         ),
-        field_expr_instruction(Rv64ModularArithmeticOpcode::MUL.global_opcode(), 3, 4, 5),
-        field_expr_instruction(Rv64ModularArithmeticOpcode::DIV.global_opcode(), 6, 4, 5),
+        field_expr_instruction(ModularArithmeticOpcode::MUL.global_opcode(), 3, 4, 5),
+        field_expr_instruction(ModularArithmeticOpcode::DIV.global_opcode(), 6, 4, 5),
         field_expr_instruction(Fp2Opcode::SETUP_ADDSUB.global_opcode(), 7, 2, 0),
         field_expr_instruction(Fp2Opcode::ADD.global_opcode(), 8, 9, 10),
         field_expr_instruction(Fp2Opcode::SUB.global_opcode(), 11, 9, 10),
@@ -254,25 +254,25 @@ fn field_expr_fixture(modulus: &BigUint) -> (Program<BabyBear>, VmExe<BabyBear>)
 
     write_fixture_bytes(
         &mut memory,
-        RV64_MEMORY_AS,
+        MEMORY_AS,
         FIELD_EXPR_MODULUS_PTR,
         padded_bytes(modulus),
     );
     write_fixture_bytes(
         &mut memory,
-        RV64_MEMORY_AS,
+        MEMORY_AS,
         MOD_LHS_PTR,
         padded_bytes(&BigUint::from(4u32)),
     );
     write_fixture_bytes(
         &mut memory,
-        RV64_MEMORY_AS,
+        MEMORY_AS,
         MOD_RHS_PTR,
         padded_bytes(&BigUint::from(2u32)),
     );
     write_fixture_bytes(
         &mut memory,
-        RV64_MEMORY_AS,
+        MEMORY_AS,
         FP2_LHS_PTR,
         padded_bytes(&(BigUint::from(1u32) << 32))
             .into_iter()
@@ -280,7 +280,7 @@ fn field_expr_fixture(modulus: &BigUint) -> (Program<BabyBear>, VmExe<BabyBear>)
     );
     write_fixture_bytes(
         &mut memory,
-        RV64_MEMORY_AS,
+        MEMORY_AS,
         FP2_RHS_PTR,
         padded_bytes(&BigUint::from(1u32))
             .into_iter()
@@ -334,9 +334,9 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
             .unwrap();
     assert_eq!(transcript.error_code().unwrap(), 0);
     for opcode in [
-        Rv64ModularArithmeticOpcode::SETUP_MULDIV.global_opcode(),
-        Rv64ModularArithmeticOpcode::MUL.global_opcode(),
-        Rv64ModularArithmeticOpcode::DIV.global_opcode(),
+        ModularArithmeticOpcode::SETUP_MULDIV.global_opcode(),
+        ModularArithmeticOpcode::MUL.global_opcode(),
+        ModularArithmeticOpcode::DIV.global_opcode(),
         Fp2Opcode::SETUP_ADDSUB.global_opcode(),
         Fp2Opcode::ADD.global_opcode(),
         Fp2Opcode::SUB.global_opcode(),
@@ -401,8 +401,8 @@ fn modular_metering_counts_only_irreducible_results() {
 #[test]
 fn modular_is_equal_rejects_x0_destination_before_execution() {
     for opcode in [
-        Rv64ModularArithmeticOpcode::IS_EQ,
-        Rv64ModularArithmeticOpcode::SETUP_ISEQ,
+        ModularArithmeticOpcode::IS_EQ,
+        ModularArithmeticOpcode::SETUP_ISEQ,
     ] {
         let program = Program::from_instructions(&[
             Instruction::<BabyBear>::from_usize(
@@ -411,8 +411,8 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
                     reg(0),
                     reg(1),
                     reg(2),
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -503,10 +503,10 @@ fn modular_checkpoint_expansion_proves_without_records() {
     assert_eq!(transcript.error_code().unwrap(), 0);
     assert_eq!(transcript.memory_log_host().unwrap().len(), 52);
     for opcode in [
-        Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
-        Rv64ModularArithmeticOpcode::ADD,
-        Rv64ModularArithmeticOpcode::SETUP_ISEQ,
-        Rv64ModularArithmeticOpcode::IS_EQ,
+        ModularArithmeticOpcode::SETUP_ADDSUB,
+        ModularArithmeticOpcode::ADD,
+        ModularArithmeticOpcode::SETUP_ISEQ,
+        ModularArithmeticOpcode::IS_EQ,
     ] {
         assert_eq!(replay_plan.opcode_range(opcode.global_opcode()).len(), 1);
     }

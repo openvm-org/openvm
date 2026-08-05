@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
     BLOCK_FE_WIDTH,
 };
-use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_riscv_transpiler::LessThanImmOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -15,33 +15,32 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64LessThanImmChipGpu,
+    crate::LessThanImmChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
     std::sync::Arc,
 };
 
 use super::{
-    trace::generate_trace_from_postflight, LessThanImmCoreAir, LessThanImmCoreCols,
-    LessThanImmFiller, Rv64LessThanImmAir, Rv64LessThanImmChip, Rv64LessThanImmExecutor,
+    trace::generate_trace_from_postflight, LessThanImmAir, LessThanImmChip, LessThanImmCoreAir,
+    LessThanImmCoreCols, LessThanImmExecutor, LessThanImmFiller,
 };
 use crate::{
-    adapters::{Rv64BaseAluImmU16AdapterAir, U16_BITS},
-    test_utils::rv64_rand_write_register_or_imm,
+    adapters::{BaseAluImmU16AdapterAir, U16_BITS},
+    test_utils::rand_write_register_or_imm,
 };
 
 type F = BabyBear;
-type Harness =
-    TestChipHarness<F, Rv64LessThanImmExecutor, Rv64LessThanImmAir, Rv64LessThanImmChip<F>>;
+type Harness = TestChipHarness<F, LessThanImmExecutor, LessThanImmAir, LessThanImmChip<F>>;
 
 fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker();
-    let air = Rv64LessThanImmAir::new(
-        Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+    let air = LessThanImmAir::new(
+        BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         LessThanImmCoreAir::new(range_checker.bus(), LessThanImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64LessThanImmExecutor::new(LessThanImmOpcode::CLASS_OFFSET);
-    let chip = Rv64LessThanImmChip::new(
+    let executor = LessThanImmExecutor::new(LessThanImmOpcode::CLASS_OFFSET);
+    let chip = LessThanImmChip::new(
         LessThanImmFiller::new(range_checker),
         tester.memory_helper(),
     );
@@ -61,7 +60,7 @@ fn expected(opcode: LessThanImmOpcode, source: u64, imm: i16) -> bool {
 }
 
 #[test]
-fn rv64_less_than_immediate_boundaries() {
+fn less_than_immediate_boundaries() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
@@ -69,19 +68,19 @@ fn rv64_less_than_immediate_boundaries() {
     for opcode in [LessThanImmOpcode::SLTI, LessThanImmOpcode::SLTIU] {
         for source in [0, 1, i64::MAX as u64, 1u64 << 63, u64::MAX] {
             for imm in [-2048, -1, 0, 1, 2047] {
-                let (instruction, rd) = rv64_rand_write_register_or_imm(
+                let (instruction, rd) = rand_write_register_or_imm(
                     &mut tester,
                     source.to_le_bytes(),
-                    [0; RV64_REGISTER_NUM_LIMBS],
+                    [0; REGISTER_NUM_LIMBS],
                     Some(encode_i12(imm)),
                     opcode.global_opcode().as_usize(),
                     &mut rng,
                 );
                 tester.execute(&mut harness.executor, &mut harness.preflight, &instruction);
 
-                let mut result = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+                let mut result = [F::ZERO; REGISTER_NUM_LIMBS];
                 result[0] = F::from_bool(expected(opcode, source, imm));
-                assert_eq!(result, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd));
+                assert_eq!(result, tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd));
             }
         }
     }
@@ -95,14 +94,14 @@ fn rv64_less_than_immediate_boundaries() {
 }
 
 #[test]
-fn rv64_less_than_immediate_result_negative() {
+fn less_than_immediate_result_negative() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
-    let (instruction, _) = rv64_rand_write_register_or_imm(
+    let (instruction, _) = rand_write_register_or_imm(
         &mut tester,
         0u64.to_le_bytes(),
-        [0; RV64_REGISTER_NUM_LIMBS],
+        [0; REGISTER_NUM_LIMBS],
         Some(encode_i12(1)),
         LessThanImmOpcode::SLTI.global_opcode().as_usize(),
         &mut rng,
@@ -130,10 +129,10 @@ fn rv64_less_than_immediate_result_negative() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64LessThanImmExecutor,
-    Rv64LessThanImmAir,
-    Rv64LessThanImmChipGpu,
-    Rv64LessThanImmChip<F>,
+    LessThanImmExecutor,
+    LessThanImmAir,
+    LessThanImmChipGpu,
+    LessThanImmChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -141,16 +140,16 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_checker = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
-    let air = Rv64LessThanImmAir::new(
-        Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+    let air = LessThanImmAir::new(
+        BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         LessThanImmCoreAir::new(range_checker.bus(), LessThanImmOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64LessThanImmExecutor::new(LessThanImmOpcode::CLASS_OFFSET);
-    let cpu_chip = Rv64LessThanImmChip::new(
+    let executor = LessThanImmExecutor::new(LessThanImmOpcode::CLASS_OFFSET);
+    let cpu_chip = LessThanImmChip::new(
         LessThanImmFiller::new(range_checker),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LessThanImmChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = LessThanImmChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64).with_trace_generators(
         generate_trace_from_postflight,
         |chip, program, transcript, plan| {
@@ -174,10 +173,10 @@ fn test_cuda_less_than_immediate_boundaries_tracegen() {
             (1u64 << 63, 1),
             (u64::MAX, 2047),
         ] {
-            let (instruction, _) = rv64_rand_write_register_or_imm(
+            let (instruction, _) = rand_write_register_or_imm(
                 &mut tester,
                 source.to_le_bytes(),
-                [0; RV64_REGISTER_NUM_LIMBS],
+                [0; REGISTER_NUM_LIMBS],
                 Some(encode_i12(imm)),
                 opcode.global_opcode().as_usize(),
                 &mut rng,

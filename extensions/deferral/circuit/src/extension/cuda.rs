@@ -38,7 +38,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
 };
 #[cfg(feature = "rvr")]
-use {openvm_circuit::arch::MEMORY_BLOCK_BYTES, openvm_instructions::riscv::RV64_MEMORY_AS};
+use {openvm_circuit::arch::MEMORY_BLOCK_BYTES, openvm_instructions::riscv::MEMORY_AS};
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{rvr::PreflightExecution, MemoryConfig},
@@ -141,10 +141,10 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
                 register_as_operand: 4,
                 memory_as_operand: 5,
                 spans: &[
-                    PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+                    PostflightAccessSpan::read_fixed(MEMORY_AS, 1, 4),
                     PostflightAccessSpan::read_deferral_input_accumulator(3),
                     PostflightAccessSpan::read_deferral_output_accumulator(3),
-                    PostflightAccessSpan::write_fixed_from_replay_values(RV64_MEMORY_AS, 0, 5),
+                    PostflightAccessSpan::write_fixed_from_replay_values(MEMORY_AS, 0, 5),
                     PostflightAccessSpan::write_deferral_input_accumulator(3),
                     PostflightAccessSpan::write_deferral_output_accumulator(3),
                 ],
@@ -158,9 +158,9 @@ impl<'a> DeferralPreflightGpuTracegen<'a> {
                 register_as_operand: 4,
                 memory_as_operand: 5,
                 spans: &[
-                    PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
+                    PostflightAccessSpan::read_fixed(MEMORY_AS, 1, 5),
                     PostflightAccessSpan::write_dynamic_from_replay_values(
-                        RV64_MEMORY_AS,
+                        MEMORY_AS,
                         0,
                         u32::MAX / MEMORY_BLOCK_BYTES as u32,
                     ),

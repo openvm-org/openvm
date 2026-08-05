@@ -11,7 +11,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::prover::AirProvingContext;
@@ -25,7 +25,7 @@ use crate::{
 #[derive(new)]
 pub struct DeferralCallChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
@@ -94,8 +94,8 @@ impl DeferralCallChipGpu {
                 step_range.start,
                 step_range.len(),
                 DeferralOpcode::CALL.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 DEFERRAL_AS,
                 self.address_bits as u32,
                 &self.count,

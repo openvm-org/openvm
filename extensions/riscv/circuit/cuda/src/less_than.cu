@@ -9,14 +9,10 @@
 
 using namespace riscv;
 
-using Rv64LessThanCore = LessThanCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64LessThanCoreCols =
-    LessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct LessThanCols {
-    Rv64BaseAluRegU16AdapterCols<T> adapter;
-    Rv64LessThanCoreCols<T> core;
+    BaseAluRegU16AdapterCols<T> adapter;
+    LessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/less_than.inc.cuh"

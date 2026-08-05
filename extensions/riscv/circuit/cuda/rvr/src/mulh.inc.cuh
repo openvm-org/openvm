@@ -60,45 +60,45 @@ __global__ void mulh_replay_tracegen(
         )) {
         return;
     }
-    Rv64RegRegWriteReplay replay;
+    RegRegWriteReplay replay;
     if (!replay_reg_reg_write(
             transition, expected_opcode, register_address_space,
             step, memory, seeds, predecessors, replay, error, 644
         )) return;
 
-    uint32_t b[RV64_REGISTER_NUM_LIMBS];
-    uint32_t c[RV64_REGISTER_NUM_LIMBS];
-    uint32_t expected[RV64_REGISTER_NUM_LIMBS];
-    uint32_t low[RV64_REGISTER_NUM_LIMBS];
-    uint32_t carry[2 * RV64_REGISTER_NUM_LIMBS];
+    uint32_t b[REGISTER_NUM_LIMBS];
+    uint32_t c[REGISTER_NUM_LIMBS];
+    uint32_t expected[REGISTER_NUM_LIMBS];
+    uint32_t low[REGISTER_NUM_LIMBS];
+    uint32_t carry[2 * REGISTER_NUM_LIMBS];
     uint32_t b_ext, c_ext;
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         b[i] = replay.rs1[i];
         c[i] = replay.rs2[i];
     }
-    run_mulh<RV64_REGISTER_NUM_LIMBS>(
+    run_mulh<REGISTER_NUM_LIMBS>(
         local_opcode, b, c, expected, low, carry, b_ext, c_ext
     );
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         if (replay.result[i] != expected[i]) {
             preflight_set_error(error, 649);
             return;
         }
     }
-    MulHCoreRecord<RV64_REGISTER_NUM_LIMBS> core_record{};
+    MulHCoreRecord<REGISTER_NUM_LIMBS> core_record{};
     core_record.local_opcode = static_cast<uint8_t>(local_opcode);
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         core_record.b[i] = replay.rs1[i];
         core_record.c[i] = replay.rs2[i];
     }
-    Rv64MultAdapter adapter(
+    MultAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(row, replay_mult_adapter_record(replay));
-    MulHCore<RV64_REGISTER_NUM_LIMBS> core(
+    MulHCore<REGISTER_NUM_LIMBS> core(
         range_tuple, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y},
         BitwiseOperationLookup(bitwise_lookup)
     );
@@ -134,7 +134,7 @@ extern "C" int _mulh_replay_tracegen(
     assert(mulh_count <= SIZE_MAX - mulhsu_count);
     assert(mulh_count + mulhsu_count <= SIZE_MAX - mulhu_count);
     assert(height >= mulh_count + mulhsu_count + mulhu_count);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     mulh_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         mulh_start, mulh_count, mulhsu_start, mulhsu_count, mulhu_start, mulhu_count, error,

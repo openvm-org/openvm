@@ -20,7 +20,7 @@ template <typename T> struct KeccakfOpCols {
     T timestamp;
     T rd_ptr;
     // Low 32 bits of [rd_ptr:8]_1 as u16 cells.
-    T buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T buffer_ptr_limbs[PTR_U16_LIMBS];
     // Keccak state as u16 cells.
     T preimage[KECCAK_WIDTH_U16S];
     T postimage[KECCAK_WIDTH_U16S];

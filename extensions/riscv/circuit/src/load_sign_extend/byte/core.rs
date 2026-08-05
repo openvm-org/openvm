@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADB;
+use openvm_riscv_transpiler::LoadStoreOpcode::LOADB;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -16,8 +16,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    shift_encoder, LoadByteInstruction, Rv64LoadByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH,
-    RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
+    shift_encoder, LoadByteAdapterFiller, LoadByteInstruction, BYTE_BITS,
+    BYTE_SHIFT_SELECTOR_WIDTH, BYTE_SIGN_BIT,
 };
 
 /// Handles signed byte loads by decomposing the selected u16 cell and sign-extending the chosen
@@ -112,7 +112,7 @@ where
                     )
                 },
             );
-        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let inv_2_pow_8 = AB::F::from_u32(1 << BYTE_BITS).inverse();
         // selected_cell = lo + 2^8 * hi.
         let selected_cell = even_selected_cell + odd_selected_cell.clone();
         let read_cell_hi_byte = (selected_cell - cols.read_cell_lo_byte) * inv_2_pow_8;
@@ -129,8 +129,8 @@ where
         self.range_bus
             .range_check(
                 selected_byte.clone()
-                    - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_BYTE_SIGN_BIT as u32),
-                RV64_BYTE_BITS - 1,
+                    - cols.data_most_sig_bit * AB::Expr::from_u32(BYTE_SIGN_BIT as u32),
+                BYTE_BITS - 1,
             )
             .eval(builder, is_valid.clone());
 
@@ -173,11 +173,11 @@ where
 }
 
 #[derive(Clone)]
-pub struct LoadSignExtendByteFiller<A = Rv64LoadByteAdapterFiller> {
+pub struct LoadSignExtendByteFiller<A = LoadByteAdapterFiller> {
     pub(super) adapter: A,
     pub offset: usize,
     pub(super) encoder: Encoder,
-    pub(super) bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    pub(super) bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
     pub(super) range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -185,7 +185,7 @@ impl<A> LoadSignExtendByteFiller<A> {
     pub fn new(
         adapter: A,
         offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {

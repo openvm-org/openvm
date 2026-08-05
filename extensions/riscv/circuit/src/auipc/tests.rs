@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
-use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
+use openvm_riscv_transpiler::AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -31,37 +31,37 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64AuipcChipGpu,
+    crate::AuipcChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, RV64_BYTE_BITS,
-        RV64_PTR_U16_LIMBS, RV64_WORD_NUM_LIMBS,
+        u16_block_to_bytes, RdWriteAdapterAir, RdWriteAdapterCols, BYTE_BITS, PTR_U16_LIMBS,
+        WORD_NUM_LIMBS,
     },
-    auipc::{run_auipc, Rv64AuipcCoreCols},
-    Rv64AuipcAir, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcExecutor, Rv64AuipcFiller,
+    auipc::{run_auipc, AuipcCoreCols},
+    AuipcAir, AuipcChip, AuipcCoreAir, AuipcExecutor, AuipcFiller,
 };
 
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChip<F>>;
+type Harness = TestChipHarness<F, AuipcExecutor, AuipcAir, AuipcChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64AuipcAir, Rv64AuipcExecutor, Rv64AuipcChip<F>) {
+) -> (AuipcAir, AuipcExecutor, AuipcChip<F>) {
     let air = VmAirWrapper::new(
-        Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge),
-        Rv64AuipcCoreAir::new(range_checker_chip.bus()),
+        RdWriteAdapterAir::new(memory_bridge, execution_bridge),
+        AuipcCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64AuipcExecutor::new();
-    let chip = VmChipWrapper::<F, _>::new(Rv64AuipcFiller::new(range_checker_chip), memory_helper);
+    let executor = AuipcExecutor::new();
+    let chip = VmChipWrapper::<F, _>::new(AuipcFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -70,14 +70,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -100,7 +98,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    opcode: Rv64AuipcOpcode,
+    opcode: AuipcOpcode,
     imm: Option<u32>,
     initial_pc: Option<u32>,
 ) {
@@ -115,7 +113,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
-    let rd_bytes = rv64_u16_block_to_bytes(rd_data);
+    let rd_bytes = u16_block_to_bytes(rd_data);
     assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
 }
 
@@ -162,25 +160,25 @@ fn rand_auipc_test() {
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
     pub is_sign_extend: Option<u32>,
-    pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
+    pub rd_data: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_low_8: Option<u32>,
     pub imm_high_16: Option<u32>,
     pub pc_high: Option<u32>,
 }
 
-fn pack_rd_u8_limbs(limbs: [u32; RV64_WORD_NUM_LIMBS]) -> [u32; RV64_PTR_U16_LIMBS] {
+fn pack_rd_u8_limbs(limbs: [u32; WORD_NUM_LIMBS]) -> [u32; PTR_U16_LIMBS] {
     [
-        limbs[0] + (limbs[1] << RV64_BYTE_BITS),
-        limbs[2] + (limbs[3] << RV64_BYTE_BITS),
+        limbs[0] + (limbs[1] << BYTE_BITS),
+        limbs[2] + (limbs[3] << BYTE_BITS),
     ]
 }
 
-fn split_imm_u8_limbs(limbs: [u32; RV64_WORD_NUM_LIMBS - 1]) -> (u32, u32) {
-    (limbs[0], limbs[1] + (limbs[2] << RV64_BYTE_BITS))
+fn split_imm_u8_limbs(limbs: [u32; WORD_NUM_LIMBS - 1]) -> (u32, u32) {
+    (limbs[0], limbs[1] + (limbs[2] << BYTE_BITS))
 }
 
 fn run_negative_auipc_test(
-    opcode: Rv64AuipcOpcode,
+    opcode: AuipcOpcode,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
     prank_vals: AuipcPrankValues,
@@ -204,7 +202,7 @@ fn run_negative_auipc_test(
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core_cols: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
+        let core_cols: &mut AuipcCoreCols<F> = core_row.borrow_mut();
 
         if let Some(val) = prank_vals.is_sign_extend {
             core_cols.is_sign_extend = F::from_u32(val);
@@ -321,7 +319,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut RdWriteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_cols.rd_aux_cols.prev_data[1] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -429,7 +427,7 @@ fn overflow_negative_tests() {
     );
     run_negative_auipc_test(
         AUIPC,
-        Some((F::ORDER_U32 + 255) >> RV64_BYTE_BITS),
+        Some((F::ORDER_U32 + 255) >> BYTE_BITS),
         Some(0),
         AuipcPrankValues {
             rd_data: Some([255, 0]),
@@ -452,21 +450,15 @@ fn run_auipc_sanity_test() {
     let rd_data = run_auipc(initial_pc, imm);
 
     assert_eq!(
-        rv64_u16_block_to_bytes(rd_data),
+        u16_block_to_bytes(rd_data),
         [210, 107, 113, 186, 255, 255, 255, 255]
     );
 
     let rd_data = run_auipc(0x1000, 0x7f_fff0);
-    assert_eq!(
-        rv64_u16_block_to_bytes(rd_data),
-        [0, 0, 0, 0x80, 0, 0, 0, 0]
-    );
+    assert_eq!(u16_block_to_bytes(rd_data), [0, 0, 0, 0x80, 0, 0, 0, 0]);
 
     let rd_data = run_auipc(0x2000, 0xff_fff0);
-    assert_eq!(
-        rv64_u16_block_to_bytes(rd_data),
-        [0, 0x10, 0, 0, 0, 0, 0, 0]
-    );
+    assert_eq!(u16_block_to_bytes(rd_data), [0, 0x10, 0, 0, 0, 0, 0, 0]);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
@@ -476,8 +468,7 @@ fn run_auipc_sanity_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuHarness =
-    GpuTestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64AuipcChip<F>>;
+type GpuHarness = GpuTestChipHarness<F, AuipcExecutor, AuipcAir, AuipcChipGpu, AuipcChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -491,7 +482,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64AuipcChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = AuipcChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
         .with_trace_generators(
             generate_trace_from_postflight,

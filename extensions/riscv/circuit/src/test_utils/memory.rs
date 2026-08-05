@@ -11,10 +11,10 @@ use openvm_circuit::arch::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{
+use openvm_riscv_transpiler::LoadStoreOpcode::{
     self, LOADBU, LOADD, LOADHU, LOADWU, STOREB, STORED, STOREH, STOREW,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
@@ -27,9 +27,7 @@ use {
 };
 
 use crate::{
-    adapters::{
-        rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
-    },
+    adapters::{bytes_to_u16_block, bytes_to_u32, sign_extend_imm16, u16_block_to_bytes},
     load::common::load_write_data,
     store::common::store_write_data,
 };
@@ -74,14 +72,14 @@ fn random_memory_access(
     let rs1_low = (ptr_val as i64 - imm_signed) as u32;
     let ptr = rs1_low.to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
-    let rs1_low = rv64_bytes_to_u32(rs1);
+    let rs1_low = bytes_to_u32(rs1);
     let ptr_val = imm_ext.wrapping_add(rs1_low);
     let shift_amount = (ptr_val as usize) & 7;
     let base_ptr = (ptr_val as usize) - shift_amount;
 
-    let a = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let a = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
-    let b = gen_nonzero_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let b = gen_nonzero_register_pointer(rng, REGISTER_NUM_LIMBS);
 
     MemoryAccess {
         a,
@@ -100,7 +98,7 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    opcode: Rv64LoadStoreOpcode,
+    opcode: LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
@@ -112,16 +110,12 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
     );
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
-    let mem_as = mem_as.unwrap_or(RV64_MEMORY_AS as usize);
+    let mem_as = mem_as.unwrap_or(MEMORY_AS as usize);
 
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        access.b,
-        access.rs1.map(F::from_u8),
-    );
+    tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
 
     let mut prev_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
-        rv64_bytes_to_u16_block(access.rs1)
+        bytes_to_u16_block(access.rs1)
     } else {
         array::from_fn(|_| rng.random())
     };
@@ -131,19 +125,19 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
         prev_data = [0; BLOCK_FE_WIDTH];
     }
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         access.a,
-        rv64_u16_block_to_bytes(prev_data).map(F::from_u8),
+        u16_block_to_bytes(prev_data).map(F::from_u8),
     );
     tester.write_bytes(
         mem_as,
         access.base_ptr,
-        rv64_u16_block_to_bytes(read_data[0]).map(F::from_u8),
+        u16_block_to_bytes(read_data[0]).map(F::from_u8),
     );
     tester.write_bytes(
         mem_as,
         access.base_ptr + MEMORY_BLOCK_BYTES,
-        rv64_u16_block_to_bytes(read_data[1]).map(F::from_u8),
+        u16_block_to_bytes(read_data[1]).map(F::from_u8),
     );
 
     let enabled_write = access.a != 0;
@@ -156,7 +150,7 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
                 access.a,
                 access.b,
                 access.imm as usize,
-                RV64_REGISTER_AS as usize,
+                REGISTER_AS as usize,
                 mem_as,
                 enabled_write as usize,
                 access.imm_sign as usize,
@@ -166,13 +160,13 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
 
     let write_data = load_write_data(opcode, read_data, access.shift_amount);
     let expected = if enabled_write {
-        rv64_u16_block_to_bytes(write_data).map(F::from_u8)
+        u16_block_to_bytes(write_data).map(F::from_u8)
     } else {
         [F::ZERO; 8]
     };
     assert_eq!(
         expected,
-        tester.read_bytes::<8>(RV64_REGISTER_AS as usize, access.a)
+        tester.read_bytes::<8>(REGISTER_AS as usize, access.a)
     );
 }
 
@@ -182,7 +176,7 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    opcode: Rv64LoadStoreOpcode,
+    opcode: LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
@@ -195,21 +189,17 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or_else(|| {
-        *[RV64_MEMORY_AS as usize, PUBLIC_VALUES_AS as usize]
+        *[MEMORY_AS as usize, PUBLIC_VALUES_AS as usize]
             .choose(rng)
             .unwrap()
     });
 
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        access.b,
-        access.rs1.map(F::from_u8),
-    );
+    tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
 
     let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
         array::from_fn(|_| array::from_fn(|_| rng.random()));
     let mut read_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
-        rv64_bytes_to_u16_block(access.rs1)
+        bytes_to_u16_block(access.rs1)
     } else {
         array::from_fn(|_| rng.random())
     };
@@ -219,17 +209,17 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
     tester.write_bytes(
         mem_as,
         access.base_ptr,
-        rv64_u16_block_to_bytes(prev_data[0]).map(F::from_u8),
+        u16_block_to_bytes(prev_data[0]).map(F::from_u8),
     );
     tester.write_bytes(
         mem_as,
         access.base_ptr + MEMORY_BLOCK_BYTES,
-        rv64_u16_block_to_bytes(prev_data[1]).map(F::from_u8),
+        u16_block_to_bytes(prev_data[1]).map(F::from_u8),
     );
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         access.a,
-        rv64_u16_block_to_bytes(read_data).map(F::from_u8),
+        u16_block_to_bytes(read_data).map(F::from_u8),
     );
 
     tester.execute(
@@ -241,7 +231,7 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
                 access.a,
                 access.b,
                 access.imm as usize,
-                RV64_REGISTER_AS as usize,
+                REGISTER_AS as usize,
                 mem_as,
                 true as usize,
                 access.imm_sign as usize,
@@ -251,13 +241,13 @@ pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone
 
     let write_data = store_write_data(opcode, read_data, prev_data, access.shift_amount);
     assert_eq!(
-        rv64_u16_block_to_bytes(write_data[0]).map(F::from_u8),
+        u16_block_to_bytes(write_data[0]).map(F::from_u8),
         tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr)
     );
     // The second block is either rewritten by the crossing store or untouched; both must match
     // the model.
     assert_eq!(
-        rv64_u16_block_to_bytes(write_data[1]).map(F::from_u8),
+        u16_block_to_bytes(write_data[1]).map(F::from_u8),
         tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr + MEMORY_BLOCK_BYTES)
     );
 }

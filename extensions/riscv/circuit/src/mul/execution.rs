@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::MultiplicationExecutor;
+use crate::MultiplicationCoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -24,7 +24,7 @@ struct MultiPreCompute {
     c: u8,
 }
 
-impl<const LIMB_BITS: usize> MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> MultiplicationCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -35,7 +35,7 @@ impl<const LIMB_BITS: usize> MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS },
             MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
-        if inst.d.as_canonical_u32() != RV64_REGISTER_AS {
+        if inst.d.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -49,7 +49,7 @@ impl<const LIMB_BITS: usize> MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS },
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MultiplicationCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -92,7 +92,7 @@ where
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for MultiplicationExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MultiplicationCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -140,14 +140,12 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &MultiPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs1: [u8; REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(REGISTER_AS, pre_compute.c as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = rs1.wrapping_mul(rs2);
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+    exec_state.vm_write_bytes(REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

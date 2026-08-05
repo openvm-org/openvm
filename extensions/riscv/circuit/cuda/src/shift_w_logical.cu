@@ -9,15 +9,15 @@
 
 using namespace riscv;
 
-// SLLW/SRLW use the u16 shift-logical core (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low
+// SLLW/SRLW use the u16 shift-logical core (WORD_U16_LIMBS limbs of 16 bits) over the low
 // 32-bit word and the u16 W adapter.
-using Rv64ShiftWLogicalCore = ShiftLogicalCore<RV64_WORD_U16_LIMBS, U16_BITS>;
+using ShiftWLogicalCore = ShiftLogicalCore<WORD_U16_LIMBS, U16_BITS>;
 template <typename T>
-using Rv64ShiftWLogicalCoreCols = ShiftLogicalCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
+using ShiftWLogicalCoreCols = ShiftLogicalCoreCols<T, WORD_U16_LIMBS, U16_BITS>;
 
 template <typename T> struct ShiftWLogicalCols {
-    Rv64BaseAluWRegU16AdapterCols<T> adapter;
-    Rv64ShiftWLogicalCoreCols<T> core;
+    BaseAluWRegU16AdapterCols<T> adapter;
+    ShiftWLogicalCoreCols<T> core;
 };
 
 #include "../rvr/src/shift_w_logical.inc.cuh"

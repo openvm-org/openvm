@@ -12,23 +12,23 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BranchAdapterCols, U16_BITS},
+    adapters::{BranchAdapterCols, U16_BITS},
     cuda_abi::branch_lt_cuda,
     BranchLessThanCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64BranchLessThanChipGpu {
+pub struct BranchLessThanChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64BranchLessThanChipGpu {
+impl BranchLessThanChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -58,7 +58,7 @@ impl Rv64BranchLessThanChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BranchAdapterCols::<F>::width()
+        let trace_width = BranchAdapterCols::<F>::width()
             + BranchLessThanCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
@@ -86,7 +86,7 @@ impl Rv64BranchLessThanChipGpu {
                 BranchLessThanOpcode::BLTU.global_opcode().as_usize() as u32,
                 BranchLessThanOpcode::BGE.global_opcode().as_usize() as u32,
                 BranchLessThanOpcode::BGEU.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

@@ -2,7 +2,7 @@
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
@@ -57,8 +57,8 @@ pub fn constants_header(
 #include <stdint.h>
 
 static constexpr uint64_t MEMORY_MASK = 0x{memory_mask:x}ull;
-static constexpr uint32_t AS_REGISTER = {RV64_REGISTER_AS};
-static constexpr uint32_t AS_MEMORY = {RV64_MEMORY_AS};
+static constexpr uint32_t AS_REGISTER = {REGISTER_AS};
+static constexpr uint32_t AS_MEMORY = {MEMORY_AS};
 static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};

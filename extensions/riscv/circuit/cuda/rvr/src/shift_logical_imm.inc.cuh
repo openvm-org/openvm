@@ -121,7 +121,7 @@ __global__ void shift_logical_imm_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluImmU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluImmU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -132,7 +132,7 @@ __global__ void shift_logical_imm_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64ShiftLogicalImmCore(checker);
+    auto core = ShiftLogicalImmCore<BLOCK_FE_WIDTH, U16_BITS>(checker);
     core.fill_trace_row(
         row.slice_from(COL_INDEX(ShiftLogicalImmCols, core)),
         source,
@@ -176,7 +176,7 @@ extern "C" int _shift_logical_imm_replay_tracegen(
     assert(num_srli_steps <= steps.len() - srli_step_start);
     assert(num_slli_steps <= SIZE_MAX - num_srli_steps);
     assert(height >= num_slli_steps + num_srli_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     shift_logical_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

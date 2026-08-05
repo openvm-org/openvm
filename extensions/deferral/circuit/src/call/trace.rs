@@ -10,10 +10,10 @@ use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupCh
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::u16_block_to_bytes;
 use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -81,8 +81,8 @@ pub fn generate_trace_from_postflight<F: VmField>(
     // Validate the complete history before mutating any lookup producer.
     for &step in steps {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+        if instruction.d.as_canonical_u32() != REGISTER_AS
+            || instruction.e.as_canonical_u32() != MEMORY_AS
         {
             return Err(PostflightError::new(
                 "Deferral CALL has invalid address spaces",
@@ -99,11 +99,11 @@ pub fn generate_trace_from_postflight<F: VmField>(
         let mut replay = postflight.replay(step);
 
         let rd = replay.read_u16(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             checked_u16_pointer(rd_ptr, "Deferral CALL destination register")?,
         )?;
         let rs = replay.read_u16(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             checked_u16_pointer(rs_ptr, "Deferral CALL source register")?,
         )?;
         let rd_val = logged_u32_pointer(rd.value, "Deferral CALL output pointer")?;
@@ -120,10 +120,10 @@ pub fn generate_trace_from_postflight<F: VmField>(
                 "Deferral CALL input commit pointer overflow",
             )?;
             let access = replay.read_u16(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 checked_u16_pointer(byte_pointer, "Deferral CALL input commit pointer")?,
             )?;
-            input_commit_bytes.extend(rv64_u16_block_to_bytes(access.value));
+            input_commit_bytes.extend(u16_block_to_bytes(access.value));
             input_commit_accesses.push(access);
         }
         let input_commit: [u8; COMMIT_NUM_BYTES] = input_commit_bytes
@@ -180,10 +180,10 @@ pub fn generate_trace_from_postflight<F: VmField>(
                 "Deferral CALL output key pointer overflow",
             )?;
             let access = replay.write_observed_u16(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 checked_u16_pointer(byte_pointer, "Deferral CALL output key pointer")?,
             )?;
-            output_bytes.extend(rv64_u16_block_to_bytes(access.value));
+            output_bytes.extend(u16_block_to_bytes(access.value));
             output_accesses.push(access);
         }
         let output_bytes: [u8; crate::utils::OUTPUT_TOTAL_BYTES] = output_bytes
@@ -296,11 +296,11 @@ fn fill_call_adapter<F: VmField>(
     cols: &mut DeferralCallAdapterCols<F>,
     replay: &DeferralCallReplay<F>,
 ) {
-    debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= filler.address_bits);
-    let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - filler.address_bits;
+    debug_assert!(BYTE_BITS * WORD_NUM_LIMBS >= filler.address_bits);
+    let limb_shift_bits = BYTE_BITS * WORD_NUM_LIMBS - filler.address_bits;
     filler.bitwise_lookup_chip.request_range(
-        (replay.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-        (replay.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+        (replay.rd_val.to_le_bytes()[WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+        (replay.rs_val.to_le_bytes()[WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
     );
     for pointer in [replay.rd_val, replay.rs_val] {
         for bytes in pointer.to_le_bytes().chunks_exact(2) {
@@ -406,8 +406,8 @@ fn fill_call_core<F: VmField>(
             .bitwise_lookup_chip
             .request_range(bytes[0] as u32, bytes[1] as u32);
     }
-    debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= filler.address_bits);
-    let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - filler.address_bits;
+    debug_assert!(BYTE_BITS * WORD_NUM_LIMBS >= filler.address_bits);
+    let limb_shift_bits = BYTE_BITS * WORD_NUM_LIMBS - filler.address_bits;
     filler.bitwise_lookup_chip.request_range(
         (replay.output_len[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
         0,
@@ -460,7 +460,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
     address_bits: usize,
 }
 
@@ -468,6 +468,6 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
     address_bits: usize,
 }

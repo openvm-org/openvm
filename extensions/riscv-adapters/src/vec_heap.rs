@@ -22,11 +22,11 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
+    ptr_to_field_u16_limbs, u16_limbs_to_ptr, PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -43,7 +43,7 @@ use openvm_stark_backend::{
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv64VecHeapAdapterCols<
+pub struct VecHeapAdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -54,8 +54,8 @@ pub struct Rv64VecHeapAdapterCols<
     pub rs_ptr: [T; NUM_READS],
     pub rd_ptr: T,
 
-    pub rs_val: [[T; RV64_PTR_U16_LIMBS]; NUM_READS],
-    pub rd_val: [T; RV64_PTR_U16_LIMBS],
+    pub rs_val: [[T; PTR_U16_LIMBS]; NUM_READS],
+    pub rd_val: [T; PTR_U16_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T>,
@@ -66,8 +66,8 @@ pub struct Rv64VecHeapAdapterCols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64VecHeapAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>)]
-pub struct Rv64VecHeapAdapterAir<
+#[columns_via(VecHeapAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>)]
+pub struct VecHeapAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -84,16 +84,14 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-    > BaseAir<F> for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+    > BaseAir<F> for VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     fn width(&self) -> usize {
-        Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width()
+        VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width()
     }
 }
 
-impl<const NUM_READS: usize, const BLOCKS: usize>
-    Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>
-{
+impl<const NUM_READS: usize, const BLOCKS: usize> VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS> {
     pub fn fill_trace_row_from_projection<F: PrimeField32>(
         &self,
         range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
@@ -101,8 +99,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize>
         adapter_row: &mut [F],
         input: &VecHeapTraceInput<NUM_READS, BLOCKS>,
     ) {
-        let cols: &mut Rv64VecHeapAdapterCols<F, NUM_READS, BLOCKS, BLOCKS> =
-            adapter_row.borrow_mut();
+        let cols: &mut VecHeapAdapterCols<F, NUM_READS, BLOCKS, BLOCKS> = adapter_row.borrow_mut();
 
         for &ptr in input.rs_vals.iter().chain(once(&input.rd_val)) {
             range_checker.add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
@@ -184,7 +181,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-    > VmAdapterAir<AB> for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+    > VmAdapterAir<AB> for VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     type Interface = VecHeapAdapterInterface<
         AB::Expr,
@@ -201,7 +198,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv64VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+        let cols: &VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -219,10 +216,10 @@ impl<
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::F::from_u32(RV64_REGISTER_AS),
+                        AB::F::from_u32(REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    expand_to_rv64_block(&val),
+                    expand_to_block(&val),
                     timestamp_pp(),
                     aux,
                 )
@@ -244,7 +241,7 @@ impl<
         let rd_val_f: AB::Expr = u16_limbs_to_ptr(&cols.rd_val);
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
-        let e = AB::F::from_u32(RV64_MEMORY_AS);
+        let e = AB::F::from_u32(MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -294,7 +291,7 @@ impl<
                         .get(1)
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -305,7 +302,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+        let cols: &VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             local.borrow();
         cols.from_state.pc
     }
@@ -374,7 +371,7 @@ mod projection_tests {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64VecHeapAdapterFiller<
+pub struct VecHeapAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -383,7 +380,7 @@ pub struct Rv64VecHeapAdapterFiller<
 }
 
 impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const BLOCKS_PER_WRITE: usize>
-    Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+    VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     pub fn pointer_max_bits(&self) -> usize {
         self.pointer_max_bits

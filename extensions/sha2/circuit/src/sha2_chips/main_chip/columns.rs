@@ -3,7 +3,7 @@ use openvm_circuit::{
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use openvm_circuit_primitives::ColsRef;
-use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
+use openvm_riscv_circuit::adapters::PTR_U16_LIMBS;
 
 use crate::{Sha2MainChipConfig, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
@@ -52,11 +52,11 @@ pub struct Sha2InstructionCols<T> {
     /// Pointer to address space 1 `input` register
     pub input_reg_ptr: T,
     /// Low 4 bytes of \[dst_reg_ptr:8\]_1, packed as 2 u16 cells.
-    pub dst_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    pub dst_ptr_limbs: [T; PTR_U16_LIMBS],
     /// Low 4 bytes of \[state_reg_ptr:8\]_1, packed as 2 u16 cells.
-    pub state_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    pub state_ptr_limbs: [T; PTR_U16_LIMBS],
     /// Low 4 bytes of \[input_reg_ptr:8\]_1, packed as 2 u16 cells.
-    pub input_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    pub input_ptr_limbs: [T; PTR_U16_LIMBS],
 }
 
 #[repr(C)]

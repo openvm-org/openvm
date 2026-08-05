@@ -3,7 +3,7 @@ use std::array;
 #[cfg(feature = "cuda")]
 use openvm_instructions::DEFERRAL_AS;
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
@@ -47,8 +47,8 @@ fn test_memory_write(its: usize) {
     let mut mem_config = MemoryConfig::default();
     let small_bits = 10;
     let small = 1 << small_bits;
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = small;
-    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = small;
+    mem_config.addr_spaces[REGISTER_AS as usize].num_cells = small;
+    mem_config.addr_spaces[MEMORY_AS as usize].num_cells = small;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
     let mut tester = VmChipTestBuilder::<F>::from_config(mem_config);
     test_memory_write_by_tester(&mut tester, its);
@@ -64,8 +64,8 @@ fn test_cuda_memory_write(its: usize) {
     let mut mem_config = MemoryConfig::default();
     let small_bits = 10;
     let small = 1 << small_bits;
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = small;
-    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = small;
+    mem_config.addr_spaces[REGISTER_AS as usize].num_cells = small;
+    mem_config.addr_spaces[MEMORY_AS as usize].num_cells = small;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
     mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = small;
     mem_config.pointer_max_bits = small_bits;

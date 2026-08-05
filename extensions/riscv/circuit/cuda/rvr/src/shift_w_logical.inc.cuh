@@ -1,7 +1,7 @@
 #include "arch/rvr/replay.cuh"
 
 
-__global__ void rv64_shift_w_logical_replay_tracegen(
+__global__ void shift_w_logical_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -91,22 +91,22 @@ __global__ void rv64_shift_w_logical_replay_tracegen(
     replay_u16_block(rs1.value, rs1_value);
     replay_u16_block(rs2.value, rs2_value);
     replay_u16_block(write.value, logged_result);
-    uint16_t b[RV64_WORD_U16_LIMBS] = {rs1_value[0], rs1_value[1]};
-    uint16_t c[RV64_WORD_U16_LIMBS] = {rs2_value[0], rs2_value[1]};
-    uint16_t expected_word[RV64_WORD_U16_LIMBS];
+    uint16_t b[WORD_U16_LIMBS] = {rs1_value[0], rs1_value[1]};
+    uint16_t c[WORD_U16_LIMBS] = {rs2_value[0], rs2_value[1]};
+    uint16_t expected_word[WORD_U16_LIMBS];
     size_t limb_shift = 0;
     size_t bit_shift = 0;
     if (is_sllw) {
-        run_shift_left<RV64_WORD_U16_LIMBS, U16_BITS>(
+        run_shift_left<WORD_U16_LIMBS, U16_BITS>(
             b, c, expected_word, limb_shift, bit_shift
         );
     } else {
-        run_shift_right_logical<RV64_WORD_U16_LIMBS, U16_BITS>(
+        run_shift_right_logical<WORD_U16_LIMBS, U16_BITS>(
             b, c, expected_word, limb_shift, bit_shift
         );
     }
     uint16_t sign_extension =
-        expected_word[RV64_WORD_U16_LIMBS - 1] >> (U16_BITS - 1) ? UINT16_MAX : 0;
+        expected_word[WORD_U16_LIMBS - 1] >> (U16_BITS - 1) ? UINT16_MAX : 0;
     if (logged_result[0] != expected_word[0] || logged_result[1] != expected_word[1] ||
         logged_result[2] != sign_extension || logged_result[3] != sign_extension) {
         preflight_set_error(error, 168);
@@ -129,10 +129,10 @@ __global__ void rv64_shift_w_logical_replay_tracegen(
         return;
     }
 
-    uint16_t rs1_high[RV64_WORD_U16_LIMBS] = {rs1_value[2], rs1_value[3]};
-    uint16_t rs2_high[RV64_WORD_U16_LIMBS] = {rs2_value[2], rs2_value[3]};
+    uint16_t rs1_high[WORD_U16_LIMBS] = {rs1_value[2], rs1_value[3]};
+    uint16_t rs2_high[WORD_U16_LIMBS] = {rs2_value[2], rs2_value[3]};
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluWRegU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluWRegU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -142,13 +142,13 @@ __global__ void rv64_shift_w_logical_replay_tracegen(
         rs1_high,
         rs2_ptr,
         rs2_high,
-        expected_word[RV64_WORD_U16_LIMBS - 1],
+        expected_word[WORD_U16_LIMBS - 1],
         rs1_previous.timestamp,
         rs2_previous.timestamp,
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64ShiftWLogicalCore(checker);
+    auto core = ShiftWLogicalCore(checker);
     core.fill_trace_row(
         row.slice_from(COL_INDEX(ShiftWLogicalCols, core)), b, c, local_opcode
     );
@@ -156,7 +156,7 @@ __global__ void rv64_shift_w_logical_replay_tracegen(
 
 
 
-extern "C" int _rv64_shift_w_logical_replay_tracegen(
+extern "C" int _shift_w_logical_replay_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -188,8 +188,8 @@ extern "C" int _rv64_shift_w_logical_replay_tracegen(
     assert(num_srlw_steps <= steps.len() - srlw_step_start);
     assert(num_sllw_steps <= SIZE_MAX - num_srlw_steps);
     assert(height >= num_sllw_steps + num_srlw_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_shift_w_logical_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    shift_w_logical_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,
         instructions,

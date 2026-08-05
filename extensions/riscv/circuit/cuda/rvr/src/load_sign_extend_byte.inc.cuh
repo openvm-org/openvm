@@ -1,7 +1,7 @@
 #include "riscv/load_byte_replay.cuh"
 
 
-__global__ void rv64_load_sign_extend_byte_replay_tracegen(
+__global__ void load_sign_extend_byte_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -26,7 +26,7 @@ __global__ void rv64_load_sign_extend_byte_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64LoadSignExtendByteCols<uint8_t>));
+    row.fill_zero(0, sizeof(LoadSignExtendByteCols<uint8_t>));
     if (idx >= num_steps) return;
 
     ReplayLoadByteInput input = {};
@@ -50,7 +50,7 @@ __global__ void rv64_load_sign_extend_byte_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64LoadByteAdapter(pointer_max_bits, checker, timestamp_max_bits);
+    auto adapter = LoadByteAdapter(pointer_max_bits, checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         input.from_pc,
@@ -68,7 +68,7 @@ __global__ void rv64_load_sign_extend_byte_replay_tracegen(
     );
     auto core = LoadSignExtendByteCore(checker, BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64LoadSignExtendByteCols, core)),
+        row.slice_from(COL_INDEX(LoadSignExtendByteCols, core)),
         input.read_data,
         input.shift
     );
@@ -76,7 +76,7 @@ __global__ void rv64_load_sign_extend_byte_replay_tracegen(
 
 
 
-extern "C" int _rv64_load_sign_extend_byte_replay_tracegen(
+extern "C" int _load_sign_extend_byte_replay_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -100,13 +100,13 @@ extern "C" int _rv64_load_sign_extend_byte_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64LoadSignExtendByteCols<uint8_t>));
+    assert(width == sizeof(LoadSignExtendByteCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_load_sign_extend_byte_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    load_sign_extend_byte_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_instructions,

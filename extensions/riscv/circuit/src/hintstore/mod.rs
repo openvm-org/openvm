@@ -13,9 +13,9 @@ use openvm_circuit_primitives::{
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS};
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
+    HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
     MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS,
 };
 use openvm_stark_backend::{
@@ -27,8 +27,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr, PTR_BITS,
+    PTR_U16_LIMBS, U16_BITS,
 };
 
 mod execution;
@@ -71,7 +71,7 @@ fn validate_hint_buffer_num_words(pc: u32, num_words: u64) -> Result<u16, Execut
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv64HintStoreCols<T> {
+pub struct HintStoreCols<T> {
     // common
     pub is_single: T,
     pub is_buffer: T,
@@ -85,7 +85,7 @@ pub struct Rv64HintStoreCols<T> {
     /// Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`. `mem_ptr` is a
     /// u32 memory address, so the upper 4 bytes are known to be zero and are hardcoded
     /// in the memory bus interaction rather than materialized as columns.
-    pub mem_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    pub mem_ptr_limbs: [T; PTR_U16_LIMBS],
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
@@ -99,8 +99,8 @@ pub struct Rv64HintStoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64HintStoreCols<u8>)]
-pub struct Rv64HintStoreAir {
+#[columns_via(HintStoreCols<u8>)]
+pub struct HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
@@ -108,22 +108,22 @@ pub struct Rv64HintStoreAir {
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv64HintStoreAir {
+impl<F: Field> BaseAir<F> for HintStoreAir {
     fn width(&self) -> usize {
-        Rv64HintStoreCols::<F>::width()
+        HintStoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64HintStoreAir {}
-impl<F: Field> PartitionedBaseAir<F> for Rv64HintStoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for HintStoreAir {}
+impl<F: Field> PartitionedBaseAir<F> for HintStoreAir {}
 
-impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
+impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).unwrap();
-        let local_cols: &Rv64HintStoreCols<AB::Var> = (*local).borrow();
+        let local_cols: &HintStoreCols<AB::Var> = (*local).borrow();
         let next = main.row_slice(1).unwrap();
-        let next_cols: &Rv64HintStoreCols<AB::Var> = (*next).borrow();
+        let next_cols: &HintStoreCols<AB::Var> = (*next).borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -168,12 +168,11 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
         // read mem_ptr
-        let mem_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
-            expand_to_rv64_block(&local_cols.mem_ptr_limbs);
+        let mem_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&local_cols.mem_ptr_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.mem_ptr_ptr),
                 ),
                 mem_ptr_data,
@@ -192,7 +191,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.num_words_ptr),
                 ),
                 num_words_data,
@@ -205,7 +204,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_MEMORY_AS),
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone()),
                 ),
                 local_cols.data.map(Into::into),
@@ -224,8 +223,8 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
                     local_cols.is_buffer * (local_cols.num_words_ptr),
                     local_cols.mem_ptr_ptr.into(),
                     AB::Expr::ZERO,
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_MEMORY_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(MEMORY_AS),
                 ],
                 local_cols.from_state,
                 rem_words.clone() * AB::F::from_usize(timestamp_delta),
@@ -233,7 +232,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, is_start.clone());
 
         assert!(
-            (U16_BITS..=RV64_PTR_BITS).contains(&self.pointer_max_bits),
+            (U16_BITS..=PTR_BITS).contains(&self.pointer_max_bits),
             "pointer_max_bits must fit in the low 32-bit mem_ptr view"
         );
 
@@ -241,7 +240,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.range_bus
             .range_check(
                 ptr_bound_from_high_u16_expr(
-                    local_cols.mem_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
+                    local_cols.mem_ptr_limbs[PTR_U16_LIMBS - 1],
                     self.pointer_max_bits,
                 ),
                 U16_BITS,
@@ -283,7 +282,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // before we overflow the field.
         when_buffer_transition.assert_eq(
             next_mem_ptr.clone() - mem_ptr.clone(),
-            AB::F::from_usize(RV64_REGISTER_NUM_LIMBS),
+            AB::F::from_usize(REGISTER_NUM_LIMBS),
         );
         when_buffer_transition.assert_eq(
             timestamp + AB::F::from_usize(timestamp_delta),
@@ -293,14 +292,14 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64HintStoreExecutor {
+pub struct HintStoreExecutor {
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64HintStoreFiller {
+pub struct HintStoreFiller {
     pointer_max_bits: usize,
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-pub type Rv64HintStoreChip<F> = VmChipWrapper<F, Rv64HintStoreFiller>;
+pub type HintStoreChip<F> = VmChipWrapper<F, HintStoreFiller>;

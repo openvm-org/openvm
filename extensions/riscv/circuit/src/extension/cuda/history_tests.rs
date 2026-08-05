@@ -6,7 +6,7 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, REGISTER_AS},
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
@@ -14,10 +14,10 @@ use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::Rv64ImPreflightGpuTracegen;
-use crate::{adapters::RV64_REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder};
+use crate::{adapters::REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder};
 
 fn register(index: usize) -> usize {
-    index * RV64_REGISTER_NUM_LIMBS
+    index * REGISTER_NUM_LIMBS
 }
 
 fn addi(rd: usize, rs1: usize, immediate: usize) -> Instruction<BabyBear> {
@@ -27,8 +27,8 @@ fn addi(rd: usize, rs1: usize, immediate: usize) -> Instruction<BabyBear> {
             register(rd),
             register(rs1),
             immediate,
-            RV64_REGISTER_AS as usize,
-            RV64_IMM_AS as usize,
+            REGISTER_AS as usize,
+            IMM_AS as usize,
         ],
     )
 }

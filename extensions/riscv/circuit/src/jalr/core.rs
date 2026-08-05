@@ -10,7 +10,7 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
+use openvm_riscv_transpiler::JalrOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -19,18 +19,17 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_u32_to_u16_block,
-    RV64_PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, expand_to_block, ptr_to_u16_limbs, u32_to_u16_block, PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64JalrCoreCols<T> {
+pub struct JalrCoreCols<T> {
     pub imm: T,
     // Low 32 bits of rs1 as u16 cells.
-    pub rs1_data: [T; RV64_PTR_U16_LIMBS],
+    pub rs1_data: [T; PTR_U16_LIMBS],
     // High u16 limb of low-32 rd; the low limb is derived from from_pc.
-    pub rd_high: [T; RV64_PTR_U16_LIMBS - 1],
+    pub rd_high: [T; PTR_U16_LIMBS - 1],
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
@@ -40,20 +39,20 @@ pub struct Rv64JalrCoreCols<T> {
 }
 
 #[derive(Debug, Clone, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64JalrCoreCols<u8>)]
-pub struct Rv64JalrCoreAir {
+#[columns_via(JalrCoreCols<u8>)]
+pub struct JalrCoreAir {
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64JalrCoreAir {
+impl<F: Field> BaseAir<F> for JalrCoreAir {
     fn width(&self) -> usize {
-        Rv64JalrCoreCols::<F>::width()
+        JalrCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64JalrCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for JalrCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for Rv64JalrCoreAir
+impl<AB, I> VmCoreAir<AB, I> for JalrCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -67,8 +66,8 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv64JalrCoreCols<AB::Var> = (*local_core).borrow();
-        let Rv64JalrCoreCols::<AB::Var> {
+        let cols: &JalrCoreCols<AB::Var> = (*local_core).borrow();
+        let JalrCoreCols::<AB::Var> {
             imm,
             rs1_data: rs1,
             rd_high,
@@ -88,8 +87,7 @@ where
         // rd_data_low is the low-32-bit decomposition of `from_pc + DEFAULT_PC_STEP`.
         // The range check on `least_sig_limb` also ensures that `rd_data_low` correctly
         // represents `from_pc + DEFAULT_PC_STEP`.
-        let rd_data_low: [AB::Expr; RV64_PTR_U16_LIMBS] =
-            [least_sig_limb.clone(), rd_high[0].into()];
+        let rd_data_low: [AB::Expr; PTR_U16_LIMBS] = [least_sig_limb.clone(), rd_high[0].into()];
 
         // Constrain rd_data_low.
         // Assumes only from_pc in [0, 2^PC_BITS) is allowed by program bus
@@ -128,8 +126,8 @@ where
         let to_pc = to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << U16_BITS);
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
-        let rs1_data = expand_to_rv64_block(&rs1);
-        let rd_data = expand_to_rv64_block(&rd_data_low);
+        let rs1_data = expand_to_block(&rs1);
+        let rd_data = expand_to_block(&rd_data_low);
 
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
@@ -148,29 +146,29 @@ where
     }
 
     fn start_offset(&self) -> usize {
-        Rv64JalrOpcode::CLASS_OFFSET
+        JalrOpcode::CLASS_OFFSET
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrExecutor;
+pub struct JalrExecutor;
 
 #[derive(Clone)]
-pub struct Rv64JalrFiller {
+pub struct JalrFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl Rv64JalrFiller {
+impl JalrFiller {
     pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         assert!(range_checker_chip.range_max_bits() >= U16_BITS);
         Self { range_checker_chip }
     }
 }
 
-impl Rv64JalrFiller {
+impl JalrFiller {
     pub(crate) fn fill_core_row<F: PrimeField32>(
         &self,
-        core_row: &mut Rv64JalrCoreCols<F>,
+        core_row: &mut JalrCoreCols<F>,
         rs1_val: u32,
         imm: u16,
         imm_sign: bool,
@@ -223,13 +221,13 @@ pub(super) fn try_run_jalr(
     imm_sign: bool,
 ) -> Option<(u32, [u16; BLOCK_FE_WIDTH])> {
     let imm_extended = imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS));
-    let to_pc = rv64_address_add_imm(rs1, imm_extended);
+    let to_pc = address_add_imm(rs1, imm_extended);
     if to_pc > u64::from(MAX_ALLOWED_PC) {
         return None;
     }
     let to_pc = to_pc as u32;
 
     let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
-    let rd_data = rv64_u32_to_u16_block(rd_low_u32);
+    let rd_data = u32_to_u16_block(rd_low_u32);
     Some((to_pc, rd_data))
 }

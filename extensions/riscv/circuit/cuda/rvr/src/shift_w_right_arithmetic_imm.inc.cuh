@@ -24,7 +24,7 @@ __global__ void shift_w_right_arithmetic_imm_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64ShiftWRightArithmeticImmCols<uint8_t>));
+    row.fill_zero(0, sizeof(ShiftWRightArithmeticImmCols<uint8_t>));
     if (idx >= num_steps) return;
 
     size_t step_index = step_start + idx;
@@ -52,7 +52,7 @@ __global__ void shift_w_right_arithmetic_imm_replay_tracegen(
     if (instruction.words[0] != opcode ||
         instruction.words[4] != register_address_space ||
         instruction.words[5] != immediate_address_space || rd_ptr == 0 || !replay_canonical_register_pointer(rd_ptr) ||
-        !replay_canonical_register_pointer(rs1_ptr) || shamt >= RV64_WORD_U16_LIMBS * U16_BITS) {
+        !replay_canonical_register_pointer(rs1_ptr) || shamt >= WORD_U16_LIMBS * U16_BITS) {
         preflight_set_error(error, 84);
         return;
     }
@@ -78,16 +78,16 @@ __global__ void shift_w_right_arithmetic_imm_replay_tracegen(
     uint16_t logged_result[BLOCK_FE_WIDTH];
     replay_u16_block(read.value, source);
     replay_u16_block(write.value, logged_result);
-    uint16_t source_word[RV64_WORD_U16_LIMBS] = {source[0], source[1]};
-    uint16_t shamt_limbs[RV64_WORD_U16_LIMBS] = {static_cast<uint16_t>(shamt), 0};
-    uint16_t expected_word[RV64_WORD_U16_LIMBS];
+    uint16_t source_word[WORD_U16_LIMBS] = {source[0], source[1]};
+    uint16_t shamt_limbs[WORD_U16_LIMBS] = {static_cast<uint16_t>(shamt), 0};
+    uint16_t expected_word[WORD_U16_LIMBS];
     size_t limb_shift = 0;
     size_t bit_shift = 0;
-    run_shift_right_arithmetic<RV64_WORD_U16_LIMBS, U16_BITS>(
+    run_shift_right_arithmetic<WORD_U16_LIMBS, U16_BITS>(
         source_word, shamt_limbs, expected_word, limb_shift, bit_shift
     );
     uint16_t sign_extension =
-        expected_word[RV64_WORD_U16_LIMBS - 1] >> (U16_BITS - 1) ? 0xffffu : 0;
+        expected_word[WORD_U16_LIMBS - 1] >> (U16_BITS - 1) ? 0xffffu : 0;
     if (logged_result[0] != expected_word[0] || logged_result[1] != expected_word[1] ||
         logged_result[2] != sign_extension || logged_result[3] != sign_extension) {
         preflight_set_error(error, 88);
@@ -106,9 +106,9 @@ __global__ void shift_w_right_arithmetic_imm_replay_tracegen(
         return;
     }
 
-    uint16_t source_high[RV64_WORD_U16_LIMBS] = {source[2], source[3]};
+    uint16_t source_high[WORD_U16_LIMBS] = {source[2], source[3]};
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluWImmU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluWImmU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -116,14 +116,14 @@ __global__ void shift_w_right_arithmetic_imm_replay_tracegen(
         rd_ptr,
         rs1_ptr,
         source_high,
-        expected_word[RV64_WORD_U16_LIMBS - 1],
+        expected_word[WORD_U16_LIMBS - 1],
         read_previous.timestamp,
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64ShiftWRightArithmeticImmCore(checker);
+    auto core = ShiftWRightArithmeticImmCore(checker);
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64ShiftWRightArithmeticImmCols, core)),
+        row.slice_from(COL_INDEX(ShiftWRightArithmeticImmCols, core)),
         source_word,
         static_cast<uint8_t>(shamt)
     );
@@ -153,12 +153,12 @@ extern "C" int _shift_w_right_arithmetic_imm_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64ShiftWRightArithmeticImmCols<uint8_t>));
+    assert(width == sizeof(ShiftWRightArithmeticImmCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(step_start <= steps.len());
     assert(num_steps <= steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     shift_w_right_arithmetic_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

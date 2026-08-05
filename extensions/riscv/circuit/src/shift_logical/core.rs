@@ -239,7 +239,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct ShiftLogicalExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftLogicalCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 

@@ -7,7 +7,7 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64JalrAdapterCols {
+template <typename T> struct JalrAdapterCols {
     ExecutionState<T> from_state; // { pc, timestamp }
     T rs1_ptr;
     MemoryReadAuxCols<T> rs1_aux_cols;
@@ -16,7 +16,7 @@ template <typename T> struct Rv64JalrAdapterCols {
     T needs_write;
 };
 
-struct Rv64JalrAdapterRecord {
+struct JalrAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
@@ -28,10 +28,10 @@ struct Rv64JalrAdapterRecord {
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
 
-struct Rv64JalrAdapter {
+struct JalrAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64JalrAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+    __device__ JalrAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
         : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ inline void fill_trace_row(
@@ -45,35 +45,35 @@ struct Rv64JalrAdapter {
         uint32_t rd_prev_timestamp,
         uint16_t const (&rd_prev_data)[BLOCK_FE_WIDTH]
     ) {
-        COL_WRITE_VALUE(row, Rv64JalrAdapterCols, needs_write, do_write);
+        COL_WRITE_VALUE(row, JalrAdapterCols, needs_write, do_write);
 
         if (do_write) {
             Fp prev[BLOCK_FE_WIDTH];
             copy_u16_cells(prev, rd_prev_data);
-            COL_WRITE_ARRAY(row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, prev);
+            COL_WRITE_ARRAY(row, JalrAdapterCols, rd_aux_cols.prev_data, prev);
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64JalrAdapterCols, rd_aux_cols.base)),
+                row.slice_from(COL_INDEX(JalrAdapterCols, rd_aux_cols.base)),
                 rd_prev_timestamp,
                 from_timestamp + 1
             );
-            COL_WRITE_VALUE(row, Rv64JalrAdapterCols, rd_ptr, rd_ptr);
+            COL_WRITE_VALUE(row, JalrAdapterCols, rd_ptr, rd_ptr);
         } else {
-            COL_FILL_ZERO(row, Rv64JalrAdapterCols, rd_aux_cols);
-            COL_WRITE_VALUE(row, Rv64JalrAdapterCols, rd_ptr, 0u);
+            COL_FILL_ZERO(row, JalrAdapterCols, rd_aux_cols);
+            COL_WRITE_VALUE(row, JalrAdapterCols, rd_ptr, 0u);
         }
 
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64JalrAdapterCols, rs1_aux_cols)),
+            row.slice_from(COL_INDEX(JalrAdapterCols, rs1_aux_cols)),
             rs1_prev_timestamp,
             from_timestamp
         );
 
-        COL_WRITE_VALUE(row, Rv64JalrAdapterCols, rs1_ptr, rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64JalrAdapterCols, from_state.timestamp, from_timestamp);
-        COL_WRITE_VALUE(row, Rv64JalrAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, JalrAdapterCols, rs1_ptr, rs1_ptr);
+        COL_WRITE_VALUE(row, JalrAdapterCols, from_state.timestamp, from_timestamp);
+        COL_WRITE_VALUE(row, JalrAdapterCols, from_state.pc, from_pc);
     }
 
-    __device__ void fill_trace_row(RowSlice row, Rv64JalrAdapterRecord record) {
+    __device__ void fill_trace_row(RowSlice row, JalrAdapterRecord record) {
         bool do_write = record.rd_ptr != UINT32_MAX;
         fill_trace_row(
             row,

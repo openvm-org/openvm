@@ -1,9 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
-    adapters::{
-        Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterFiller, DOUBLEWORD_ACCESS_WIDTH,
-    },
+    adapters::{StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, DOUBLEWORD_ACCESS_WIDTH},
     store::{
         common::StoreExecutor,
         core::{StoreCoreAir, StoreFiller},
@@ -15,16 +13,12 @@ pub const STORE_DOUBLEWORD_VALUE_CELLS: usize = DOUBLEWORD_ACCESS_WIDTH / U16_CE
 
 pub type StoreDoublewordCoreAir =
     StoreCoreAir<DOUBLEWORD_ACCESS_WIDTH, STORE_DOUBLEWORD_VALUE_CELLS>;
-pub type StoreDoublewordFiller = StoreFiller<
-    Rv64StoreMultiByteAdapterFiller,
-    DOUBLEWORD_ACCESS_WIDTH,
-    STORE_DOUBLEWORD_VALUE_CELLS,
->;
+pub type StoreDoublewordFiller =
+    StoreFiller<StoreMultiByteAdapterFiller, DOUBLEWORD_ACCESS_WIDTH, STORE_DOUBLEWORD_VALUE_CELLS>;
 
-pub type Rv64StoreDoublewordAir =
-    VmAirWrapper<Rv64StoreMultiByteAdapterAir, StoreDoublewordCoreAir>;
-pub type Rv64StoreDoublewordExecutor = StoreExecutor<DOUBLEWORD_ACCESS_WIDTH>;
-pub type Rv64StoreDoublewordChip<F> = VmChipWrapper<F, StoreDoublewordFiller>;
+pub type StoreDoublewordAir = VmAirWrapper<StoreMultiByteAdapterAir, StoreDoublewordCoreAir>;
+pub type StoreDoublewordExecutor = StoreExecutor<DOUBLEWORD_ACCESS_WIDTH>;
+pub type StoreDoublewordChip<F> = VmChipWrapper<F, StoreDoublewordFiller>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

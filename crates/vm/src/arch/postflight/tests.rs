@@ -1,4 +1,4 @@
-use openvm_instructions::{program::Program, riscv::RV64_REGISTER_AS, SystemOpcode, DEFERRAL_AS};
+use openvm_instructions::{program::Program, riscv::REGISTER_AS, SystemOpcode, DEFERRAL_AS};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::PREFLIGHT_WRITE_BIT;
@@ -146,13 +146,13 @@ fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
             accesses: vec![
                 PreflightMemoryEvent {
                     timestamp: 1,
-                    address_space_and_kind: RV64_REGISTER_AS,
+                    address_space_and_kind: REGISTER_AS,
                     pointer: 0,
                     value: [1, 2, 3, 4],
                 },
                 PreflightMemoryEvent {
                     timestamp: 2,
-                    address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+                    address_space_and_kind: REGISTER_AS | PREFLIGHT_WRITE_BIT,
                     pointer: 0,
                     value: [5, 6, 7, 8],
                 },
@@ -237,7 +237,7 @@ fn derives_boundary_frequencies_and_mixed_touched_memory() {
                 block.timestamp
             ))
             .collect::<Vec<_>>(),
-        [(RV64_REGISTER_AS, 0, 1, 2), (DEFERRAL_AS, 0, 1, 4),]
+        [(REGISTER_AS, 0, 1, 2), (DEFERRAL_AS, 0, 1, 4),]
     );
     assert_eq!(
         postflight.touched_memory()[0]
@@ -254,10 +254,10 @@ fn derives_boundary_frequencies_and_mixed_touched_memory() {
 
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     let mut replay = postflight.replay(step);
-    let read = replay.read_u16(RV64_REGISTER_AS, 0).unwrap();
+    let read = replay.read_u16(REGISTER_AS, 0).unwrap();
     assert_eq!(read.value, [1, 2, 3, 4]);
     assert_eq!(read.previous_value, read.value);
-    let write = replay.write_u16(RV64_REGISTER_AS, 0, [5, 6, 7, 8]).unwrap();
+    let write = replay.write_u16(REGISTER_AS, 0, [5, 6, 7, 8]).unwrap();
     assert_eq!(write.previous_value, [1, 2, 3, 4]);
     let field_write = replay
         .write_field32(DEFERRAL_AS, 0, [21, 22, 23, 24].map(BabyBear::from_u32))
@@ -392,16 +392,16 @@ fn rejects_invalid_memory_domains_and_field_sidecars() {
 fn rejects_invalid_memory_chronology() {
     let read = |timestamp, pointer| PreflightMemoryEvent {
         timestamp,
-        address_space_and_kind: RV64_REGISTER_AS,
+        address_space_and_kind: REGISTER_AS,
         pointer,
         value: [0; BLOCK_FE_WIDTH],
     };
     let write = |timestamp, pointer| PreflightMemoryEvent {
-        address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+        address_space_and_kind: REGISTER_AS | PREFLIGHT_WRITE_BIT,
         ..read(timestamp, pointer)
     };
     let seed = PreflightInitialWrite {
-        address_space: RV64_REGISTER_AS,
+        address_space: REGISTER_AS,
         pointer: 0,
         initial_value: [0; BLOCK_FE_WIDTH],
     };
@@ -425,7 +425,7 @@ fn rejects_invalid_memory_chronology() {
     assert!(error(&history(vec![read(1, 0)], vec![seed]), &config).contains("not referenced"));
 
     let invalid_seed = PreflightInitialWrite {
-        address_space: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+        address_space: REGISTER_AS | PREFLIGHT_WRITE_BIT,
         ..seed
     };
     assert!(

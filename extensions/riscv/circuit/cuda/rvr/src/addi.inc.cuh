@@ -26,7 +26,7 @@ __global__ void addi_replay_tracegen(
         return;
     }
     RowSlice row(d_trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64AddICols<uint8_t>));
+    row.fill_zero(0, sizeof(AddICols<uint8_t>));
     if (idx >= num_steps) {
         return;
     }
@@ -119,7 +119,7 @@ __global__ void addi_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluImmU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluImmU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -130,9 +130,9 @@ __global__ void addi_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64AddICore(checker);
+    auto core = AddICore<BLOCK_FE_WIDTH, U16_BITS, true>(checker);
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64AddICols, core)),
+        row.slice_from(COL_INDEX(AddICols, core)),
         rs1,
         static_cast<uint16_t>(imm_low11),
         static_cast<uint16_t>(imm_sign)
@@ -163,12 +163,12 @@ extern "C" int _addi_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64AddICols<uint8_t>));
+    assert(width == sizeof(AddICols<uint8_t>));
     assert(d_memory_log.len() == d_memory_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     addi_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

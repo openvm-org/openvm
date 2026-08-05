@@ -9,7 +9,7 @@ use openvm_instructions::{
     instruction::Instruction, PhantomDiscriminant, SysPhantom, SystemOpcode, VmOpcode,
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS};
+use openvm_instructions::{program::Program, riscv::MEMORY_AS};
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::rngs::StdRng;
@@ -293,7 +293,7 @@ fn test_cuda_phantom_preflight_replay() {
         memory: PreflightMemoryLog {
             accesses: vec![PreflightMemoryEvent {
                 timestamp: 1,
-                address_space_and_kind: RV64_MEMORY_AS,
+                address_space_and_kind: MEMORY_AS,
                 pointer: 0,
                 value: [0; 4],
             }],

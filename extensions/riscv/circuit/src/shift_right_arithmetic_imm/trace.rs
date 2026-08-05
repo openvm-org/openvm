@@ -10,25 +10,23 @@ use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{
-    Rv64ShiftRightArithmeticImmChip, Rv64ShiftWRightArithmeticImmChip,
-    ShiftRightArithmeticImmCoreCols,
+    ShiftRightArithmeticImmChip, ShiftRightArithmeticImmCoreCols, ShiftWRightArithmeticImmChip,
 };
 use crate::{
     adapters::{
-        Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterFiller,
-        Rv64BaseAluWImmU16AdapterCols, Rv64BaseAluWImmU16AdapterFiller, RV64_WORD_U16_LIMBS,
-        U16_BITS,
+        BaseAluImmU16AdapterCols, BaseAluImmU16AdapterFiller, BaseAluWImmU16AdapterCols,
+        BaseAluWImmU16AdapterFiller, U16_BITS, WORD_U16_LIMBS,
     },
     shift_right_arithmetic::run_shift_right_arithmetic,
 };
 
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64ShiftRightArithmeticImmChip<F>,
+    chip: &ShiftRightArithmeticImmChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = ShiftImmOpcode::SRAI.global_opcode();
     let rows_used = postflight.steps(opcode).len();
-    let adapter_width = Rv64BaseAluImmU16AdapterCols::<F>::width();
+    let adapter_width = BaseAluImmU16AdapterCols::<F>::width();
     let width =
         adapter_width + ShiftRightArithmeticImmCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
@@ -45,7 +43,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let mut shifts = (0, 0);
-        let (input, output) = Rv64BaseAluImmU16AdapterFiller::replay(
+        let (input, output) = BaseAluImmU16AdapterFiller::replay(
             postflight,
             step,
             &chip.mem_helper.as_borrowed(),
@@ -74,22 +72,22 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 }
 
 pub fn generate_word_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64ShiftWRightArithmeticImmChip<F>,
+    chip: &ShiftWRightArithmeticImmChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = ShiftWImmOpcode::SRAIW.global_opcode();
     let rows_used = postflight.steps(opcode).len();
-    let adapter_width = Rv64BaseAluWImmU16AdapterCols::<F>::width();
-    let width = adapter_width
-        + ShiftRightArithmeticImmCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+    let adapter_width = BaseAluWImmU16AdapterCols::<F>::width();
+    let width =
+        adapter_width + ShiftRightArithmeticImmCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
-    let adapter = Rv64BaseAluWImmU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
+    let adapter = BaseAluWImmU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let instruction = postflight.instruction(step);
         let shamt = instruction.c.as_canonical_u32() as usize;
-        if shamt >= RV64_WORD_U16_LIMBS * U16_BITS {
+        if shamt >= WORD_U16_LIMBS * U16_BITS {
             return Err(PostflightError::new(
                 "word arithmetic shift immediate is out of range",
             ));
@@ -103,12 +101,10 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
             &chip.mem_helper.as_borrowed(),
             adapter_row.borrow_mut(),
             |input, immediate| {
-                let mut shamt_limbs = [0u16; RV64_WORD_U16_LIMBS];
+                let mut shamt_limbs = [0u16; WORD_U16_LIMBS];
                 shamt_limbs[0] = immediate as u16;
-                let (output, limb_shift, bit_shift) = run_shift_right_arithmetic::<
-                    RV64_WORD_U16_LIMBS,
-                    U16_BITS,
-                >(&input, &shamt_limbs);
+                let (output, limb_shift, bit_shift) =
+                    run_shift_right_arithmetic::<WORD_U16_LIMBS, U16_BITS>(&input, &shamt_limbs);
                 shifts = (limb_shift, bit_shift);
                 output
             },

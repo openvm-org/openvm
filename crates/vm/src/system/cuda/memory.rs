@@ -692,7 +692,7 @@ mod tests {
     };
     use openvm_instructions::{
         exe::SparseMemoryImage,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        riscv::{MEMORY_AS, REGISTER_AS},
     };
     use openvm_stark_backend::{
         interaction::PermutationCheckBus,
@@ -798,7 +798,7 @@ mod tests {
     /// Single-block register + memory config shared by the empty- and touched-memory tests.
     fn single_block_setup() -> (MemoryConfig, GuestMemory) {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
+        for addr_space in [REGISTER_AS, MEMORY_AS] {
             // num_cells is in u16 cells; allocate 2 * VM_DIGEST_WIDTH = 16 cells.
             addr_spaces[addr_space as usize].num_cells = 2 * VM_DIGEST_WIDTH;
         }
@@ -806,16 +806,12 @@ mod tests {
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
-                0,
-                [9, 10, 11, 12, 0, 0, 0, 0],
-            );
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(MEMORY_AS, 0, [9, 10, 11, 12, 0, 0, 0, 0]);
         }
         // `write_bytes` doesn't mark pages; mark them so `set_initial_memory` transfers them
         // (see `AddressMap::touched_pages`).
-        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
+        for addr_space in [REGISTER_AS, MEMORY_AS] {
             memory.memory.touched_pages[addr_space as usize].mark_byte_range(0, MEMORY_BLOCK_BYTES);
         }
         (mem_config, memory)
@@ -857,12 +853,12 @@ mod tests {
         let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
             final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 MEMORY_BLOCK_BYTES as u32,
                 touched_register_bytes,
             );
             final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 MEMORY_BLOCK_BYTES as u32,
                 touched_bytes_late,
             );
@@ -872,28 +868,28 @@ mod tests {
 
         let touched_memory = vec![
             TouchedBlock {
-                address_space: RV64_REGISTER_AS,
+                address_space: REGISTER_AS,
                 ptr: 0,
                 is_dirty: 0,
                 timestamp: 1,
                 values: pack_u8_block_value(&clean_register_bytes.map(F::from_u8)),
             },
             TouchedBlock {
-                address_space: RV64_REGISTER_AS,
+                address_space: REGISTER_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
                 timestamp: 2,
                 values: pack_u8_block_value(&touched_register_bytes.map(F::from_u8)),
             },
             TouchedBlock {
-                address_space: RV64_MEMORY_AS,
+                address_space: MEMORY_AS,
                 ptr: 0,
                 is_dirty: 0,
                 timestamp: 3,
                 values: pack_u8_block_value(&clean_memory_bytes.map(F::from_u8)),
             },
             TouchedBlock {
-                address_space: RV64_MEMORY_AS,
+                address_space: MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
                 timestamp: 4,
@@ -927,8 +923,8 @@ mod tests {
         let address_height = (num_cells / VM_DIGEST_WIDTH).ilog2() as usize;
 
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 2 * VM_DIGEST_WIDTH;
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells = num_cells;
+        addr_spaces[REGISTER_AS as usize].num_cells = 2 * VM_DIGEST_WIDTH;
+        addr_spaces[MEMORY_AS as usize].num_cells = num_cells;
         let mem_config = MemoryConfig::new(
             2,
             addr_spaces,
@@ -940,24 +936,23 @@ mod tests {
         // Sparse initial image: an 8-byte block at the start of page 0 and another at page 2.
         let mut sparse = SparseMemoryImage::new();
         for (i, b) in [9u8, 10, 11, 12, 13, 14, 15, 16].into_iter().enumerate() {
-            sparse.insert((RV64_MEMORY_AS, i as u32), b);
+            sparse.insert((MEMORY_AS, i as u32), b);
         }
         for (i, b) in [101u8, 102, 103, 104, 105, 106, 107, 108]
             .into_iter()
             .enumerate()
         {
-            sparse.insert((RV64_MEMORY_AS, (2 * PAGE_SIZE + i) as u32), b);
+            sparse.insert((MEMORY_AS, (2 * PAGE_SIZE + i) as u32), b);
         }
         let mut addr_map = AddressMap::from_mem_config(&mem_config);
         addr_map.set_from_sparse(&sparse);
         let memory = GuestMemory::new(addr_map);
 
         // Paging engaged: only pages 0 and 2 are marked, coalesced into two single-page runs.
-        let mem_bytes = memory.memory.get_memory()[RV64_MEMORY_AS as usize]
+        let mem_bytes = memory.memory.get_memory()[MEMORY_AS as usize]
             .as_slice()
             .len();
-        let runs =
-            memory.memory.touched_pages[RV64_MEMORY_AS as usize].touched_byte_ranges(mem_bytes);
+        let runs = memory.memory.touched_pages[MEMORY_AS as usize].touched_byte_ranges(mem_bytes);
         assert_eq!(
             runs,
             vec![(0, PAGE_SIZE), (2 * PAGE_SIZE, 3 * PAGE_SIZE)],
@@ -984,9 +979,9 @@ mod tests {
         let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
         let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
-            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, touched_bytes);
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(MEMORY_AS, 0, touched_bytes);
             final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 MEMORY_BLOCK_BYTES as u32,
                 touched_bytes_late,
             );
@@ -995,14 +990,14 @@ mod tests {
         // GPU trace: both blocks written (is_dirty = 1), forming one dirty leaf.
         let touched_memory = vec![
             TouchedBlock {
-                address_space: RV64_MEMORY_AS,
+                address_space: MEMORY_AS,
                 ptr: 0,
                 is_dirty: 1,
                 timestamp: 1,
                 values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
             },
             TouchedBlock {
-                address_space: RV64_MEMORY_AS,
+                address_space: MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
                 timestamp: 3,
@@ -1020,8 +1015,8 @@ mod tests {
         let md = mem_config.memory_dimensions();
         let hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
 
-        // The two written blocks fall in one 8-cell leaf at (RV64_MEMORY_AS, label 0).
-        let touched_labels: BTreeSet<(u32, u32)> = BTreeSet::from([(RV64_MEMORY_AS, 0)]);
+        // The two written blocks fall in one 8-cell leaf at (MEMORY_AS, label 0).
+        let touched_labels: BTreeSet<(u32, u32)> = BTreeSet::from([(MEMORY_AS, 0)]);
         let final_partition: BTreeMap<(u32, u32), [F; VM_DIGEST_WIDTH]> =
             memory_to_vec_partition::<F, VM_DIGEST_WIDTH>(&final_memory.memory, &md)
                 .into_iter()
@@ -1062,12 +1057,12 @@ mod tests {
         let mut second_memory = first_memory.clone();
         unsafe {
             second_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 0,
                 [31, 32, 33, 34, 35, 36, 37, 38],
             );
         }
-        second_memory.memory.touched_pages[RV64_MEMORY_AS as usize]
+        second_memory.memory.touched_pages[MEMORY_AS as usize]
             .mark_byte_range(0, MEMORY_BLOCK_BYTES);
         let expected_root = cpu_merkle_root(&second_memory.memory, &mem_config);
 
@@ -1098,9 +1093,9 @@ mod tests {
         let (mem_config, _) = single_block_setup();
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(MEMORY_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
         }
-        assert!(memory.memory.touched_pages[RV64_MEMORY_AS as usize]
+        assert!(memory.memory.touched_pages[MEMORY_AS as usize]
             .touched_byte_ranges(MEMORY_BLOCK_BYTES)
             .is_empty());
 

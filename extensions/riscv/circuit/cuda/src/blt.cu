@@ -3,23 +3,17 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/constants.h"
-#include "riscv/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter
+#include "riscv/adapters/branch.cuh" // BranchAdapterCols, BranchAdapterRecord, BranchAdapter
 #include "riscv/cores/blt.cuh"
 #include "riscv/cores/less_than.cuh"
 #include "system/memory/params.cuh" // BLOCK_FE_WIDTH
 
 using namespace riscv;
 
-using Rv64BranchLessThanCoreRecord =
-    BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
-using Rv64BranchLessThanCore = BranchLessThanCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64BranchLessThanCoreCols =
-    BranchLessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct BranchLessThanCols {
-    Rv64BranchAdapterCols<T> adapter;
-    Rv64BranchLessThanCoreCols<T> core;
+    BranchAdapterCols<T> adapter;
+    BranchLessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/blt.inc.cuh"

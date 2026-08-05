@@ -5,21 +5,21 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::STOREB;
+use openvm_riscv_transpiler::LoadStoreOpcode::STOREB;
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
-use super::{Rv64StoreByteChip, StoreByteCoreCols};
-use crate::adapters::Rv64StoreByteAdapterCols;
+use super::{StoreByteChip, StoreByteCoreCols};
+use crate::adapters::StoreByteAdapterCols;
 
 /// Generates the byte-store trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64StoreByteChip<F>,
+    chip: &StoreByteChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(STOREB.global_opcode());
-    let adapter_width = Rv64StoreByteAdapterCols::<F>::width();
+    let adapter_width = StoreByteAdapterCols::<F>::width();
     let width = adapter_width + StoreByteCoreCols::<F>::width();
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -42,7 +42,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 }
 
 pub(crate) fn fill_padding_row<F: PrimeField32>(row: &mut [F]) {
-    let adapter_width = Rv64StoreByteAdapterCols::<F>::width();
-    let adapter_row: &mut Rv64StoreByteAdapterCols<F> = row[..adapter_width].borrow_mut();
+    let adapter_width = StoreByteAdapterCols::<F>::width();
+    let adapter_row: &mut StoreByteAdapterCols<F> = row[..adapter_width].borrow_mut();
     adapter_row.mem_as = F::from_u32(2);
 }
