@@ -99,6 +99,20 @@ fn report(name: &str, air: &EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>) -> usize {
         "",
         width * EC_MUL_TOTAL_ROWS
     );
+    let header = openvm_ecc_circuit::ec_mul_header_width();
+    let digest = openvm_ecc_circuit::ec_mul_digest_width::<NUM_LIMBS_32, ECC_BLOCKS_32>();
+    println!(
+        "{:<12} regions: header={header} expr={expr_width} digest={digest} (sum={})",
+        "",
+        header + expr_width + digest
+    );
+    println!(
+        "{:<12} digest region idle on {} of {EC_MUL_TOTAL_ROWS} rows = {} cells ({:.1}% of chip)",
+        "",
+        EC_MUL_TOTAL_ROWS - 1,
+        digest * (EC_MUL_TOTAL_ROWS - 1),
+        100.0 * (digest * (EC_MUL_TOTAL_ROWS - 1)) as f64 / (width * EC_MUL_TOTAL_ROWS) as f64
+    );
     degree
 }
 
