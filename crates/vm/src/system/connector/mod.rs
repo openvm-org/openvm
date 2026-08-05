@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{program::pc_to_idx, LocalOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
@@ -245,9 +245,11 @@ impl VmConnectorChip {
         }
     }
 
+    /// `state.pc` is a byte program counter; it is stored (and later exposed as a public value)
+    /// as a pc index, matching the circuit representation of the pc.
     pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
-            pc: state.pc,
+            pc: pc_to_idx(state.pc),
             timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,
@@ -256,9 +258,11 @@ impl VmConnectorChip {
         });
     }
 
+    /// `state.pc` is a byte program counter; it is stored (and later exposed as a public value)
+    /// as a pc index, matching the circuit representation of the pc.
     pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
-            pc: state.pc,
+            pc: pc_to_idx(state.pc),
             timestamp: state.timestamp,
             is_terminate: exit_code.is_some() as u32,
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),

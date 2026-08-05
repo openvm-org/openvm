@@ -14,6 +14,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::InstructionOperand,
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS, PC_STEP_BITS},
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_platform::memory::MEM_SIZE;
@@ -53,6 +54,14 @@ pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const PTR_U16_LIMBS: usize = WORD_NUM_LIMBS / 2;
+/// Number of low bits of a pc index (`pc / DEFAULT_PC_STEP`) packed into the low u16 limb of the
+/// corresponding byte pc: the low limb is `DEFAULT_PC_STEP * (pc_idx % 2^PC_IDX_LOW_BITS)`.
+pub const PC_IDX_LOW_BITS: usize = U16_BITS - PC_STEP_BITS;
+/// Number of high bits of a pc index; equals the high u16 limb of the corresponding byte pc.
+pub const PC_IDX_HIGH_BITS: usize = PC_BITS - PC_IDX_LOW_BITS;
+// The pc-arithmetic chips (JAL/JALR/AUIPC) assume a byte pc is exactly two u16 limbs with the
+// high limb equal to the high PC_IDX_HIGH_BITS bits of the pc index.
+const _: () = assert!(PC_IDX_HIGH_BITS == U16_BITS && PC_BITS + PC_STEP_BITS == 32);
 /// Bit width covered by [`PTR_U16_LIMBS`].
 pub const PTR_BITS: usize = U16_BITS * PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
@@ -254,6 +263,25 @@ pub fn sign_extend_imm16(imm: u32, sign: u32) -> u32 {
 #[inline(always)]
 pub fn sext32_to_u64(value: u32) -> u64 {
     value as i32 as i64 as u64
+}
+
+/// Byte program counter after a taken branch: `pc + imm` with the interpreter's wrap-around
+/// semantics (`imm` is a signed byte offset).
+#[inline(always)]
+pub fn taken_branch_pc(pc: u32, imm: i32) -> u32 {
+    pc.wrapping_add_signed(imm)
+}
+
+/// Validates that a taken branch from byte pc `from_pc` with the given signed immediate
+/// lands inside the implemented PC address space on a DEFAULT_PC_STEP-aligned address.
+pub fn checked_branch_target(from_pc: u32, imm: i32) -> Result<(), PostflightError> {
+    let target = from_pc as i64 + imm as i64;
+    if target < 0 || target > MAX_ALLOWED_PC as i64 || target % DEFAULT_PC_STEP as i64 != 0 {
+        return Err(PostflightError::new(
+            "branch target outside implemented PC address space",
+        ));
+    }
+    Ok(())
 }
 
 // For soundness, should be <= 16

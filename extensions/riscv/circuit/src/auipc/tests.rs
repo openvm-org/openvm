@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     },
     var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -38,8 +38,8 @@ use {
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        u16_block_to_bytes, RdWriteAdapterAir, RdWriteAdapterCols, BYTE_BITS, PTR_U16_LIMBS,
-        WORD_NUM_LIMBS,
+        sext32_to_u64, u16_block_to_bytes, RdWriteAdapterAir, RdWriteAdapterCols, BYTE_BITS,
+        PTR_U16_LIMBS, WORD_NUM_LIMBS,
     },
     auipc::{run_auipc, AuipcCoreCols},
     AuipcAir, AuipcChip, AuipcCoreAir, AuipcExecutor, AuipcFiller,
@@ -105,13 +105,20 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.random_range(1..32) << 3;
 
+    let initial_pc = initial_pc.unwrap_or_else(|| {
+        // An aligned byte pc over the full 32-bit range such that pc + sext(imm << 8) stays
+        // below 2^32 (larger results are rejected by tracegen).
+        let offset = sext32_to_u64((imm as u32) << BYTE_BITS) as i64;
+        let max_pc = ((u32::MAX as i64 - offset.max(0)) as u32) & !3;
+        (rng.random::<u32>() & !3).min(max_pc)
+    });
     tester.execute_with_pc(
         executor,
         preflight,
         &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS))),
+        initial_pc,
     );
-    let initial_pc = tester.last_from_pc().as_canonical_u32();
+    let initial_pc = tester.last_from_pc();
     let rd_data = run_auipc(initial_pc, imm as u32);
     let rd_bytes = u16_block_to_bytes(rd_data);
     assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
@@ -142,6 +149,33 @@ fn rand_auipc_test() {
             None,
         );
     }
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn auipc_max_pc_test() {
+    // AUIPC at the second-to-last instruction slot of the 32-bit PC address space (the last
+    // slot cannot fall through) with a negative offset (a positive offset would push the
+    // result past 2^32, which is rejected).
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        AUIPC,
+        Some((1 << 24) - 1),
+        Some((u32::MAX & !3) - 4),
+    );
+
     let tester = tester
         .build()
         .load(harness)
@@ -239,7 +273,7 @@ fn invalid_limb_negative_tests() {
     let (imm_low_8, imm_high_16) = split_imm_u8_limbs([107, 46, 81]);
     run_negative_auipc_test(
         AUIPC,
-        Some(9722891),
+        Some(9722892),
         None,
         AuipcPrankValues {
             imm_low_8: Some(imm_low_8),
@@ -283,7 +317,7 @@ fn invalid_limb_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         None,
-        Some(876487877),
+        Some(876487876),
         AuipcPrankValues {
             rd_data: Some(pack_rd_u8_limbs([197, 202, 49, 70])),
             imm_low_8: Some(imm_low_8),
@@ -416,7 +450,7 @@ fn overflow_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         Some(0),
-        Some(255),
+        Some(256),
         AuipcPrankValues {
             rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1]),
             imm_low_8: Some(0),

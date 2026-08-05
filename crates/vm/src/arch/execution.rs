@@ -1,8 +1,6 @@
 use openvm_circuit_primitives::{AlignedBytesBorrow, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
-};
+use openvm_instructions::{instruction::Instruction, PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_field::PrimeCharacteristicRing,
@@ -378,6 +376,8 @@ impl ExecutionBridge {
         self.execute(opcode, operands, from_state, to_state)
     }
 
+    /// The `pc` in [ExecutionState] is a pc index (see `pc_to_idx`), so advancing to the next
+    /// instruction increments it by one.
     pub fn execute_and_increment_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
@@ -386,7 +386,7 @@ impl ExecutionBridge {
         timestamp_change: impl Into<AB::Expr>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + AB::Expr::from_u32(DEFAULT_PC_STEP),
+            pc: from_state.pc.clone().into() + AB::Expr::ONE,
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -440,7 +440,7 @@ impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
 /// However they all have no AIR constraints besides advancing the pc by
-/// [DEFAULT_PC_STEP].
+/// [`DEFAULT_PC_STEP`](openvm_instructions::program::DEFAULT_PC_STEP) bytes (one pc index).
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///

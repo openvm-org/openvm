@@ -5,7 +5,10 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice}
 #[cfg(test)]
 use openvm_cuda_common::pinned;
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
-use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    program::{pc_to_idx, Program},
+    LocalOpcode, SystemOpcode,
+};
 use openvm_stark_backend::prover::{
     AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
 };
@@ -31,12 +34,14 @@ impl ProgramChipGPU {
     }
 
     pub fn generate_cached_trace(program: Program, device_ctx: &GpuDeviceCtx) -> DeviceMatrix<F> {
+        // The pc column contains pc indices (see `pc_to_idx`): byte pcs span 32 bits and do
+        // not fit in a field element.
         let instructions = program
             .enumerate_by_pc()
             .into_iter()
             .map(|(pc, instruction, _)| {
                 [
-                    F::from_u32(pc),
+                    F::from_u32(pc_to_idx(pc)),
                     F::from_usize(instruction.opcode.as_usize()),
                     instruction_operand_to_field(instruction.a),
                     instruction_operand_to_field(instruction.b),

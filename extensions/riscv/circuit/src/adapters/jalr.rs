@@ -12,7 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
+use openvm_instructions::{program::pc_to_idx, riscv::REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -103,9 +103,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalrAdapterAir {
             )
             .eval(builder, write_count);
 
-        let to_pc = ctx
-            .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP));
+        let to_pc = ctx.to_pc.unwrap_or(local_cols.from_state.pc + AB::F::ONE);
 
         // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
@@ -219,7 +217,7 @@ impl JalrAdapterFiller {
         );
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-        adapter_row.from_state.pc = F::from_u32(from_pc);
+        adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
         Ok((rs1.value, to_pc, rd_data))
     }

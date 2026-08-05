@@ -96,6 +96,6 @@ template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct VecHeapBranchU16Adapt
         }
 
         COL_WRITE_VALUE(row, Cols, from_state.timestamp, record.from_timestamp);
-        COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, Cols, from_state.pc, ::program::pc_to_idx(record.from_pc));
     }
 };

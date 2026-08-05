@@ -15,10 +15,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
-    riscv::{MEMORY_AS, REGISTER_AS},
-};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
     eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
     PTR_U16_LIMBS,
@@ -203,7 +200,7 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (DEFAULT_PC_STEP, ctx.to_pc),
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }

@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::InstructionOperand,
-    program::{DEFAULT_PC_STEP, PC_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
@@ -20,12 +20,11 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, u32_to_u16_block, PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS,
-    U16_BITS,
+    ptr_to_u16_limbs, u32_to_u16_block, PC_IDX_LOW_BITS, PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS,
+    RV_J_TYPE_IMM_BITS, U16_BITS,
 };
 
 pub(super) const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
-pub(super) const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -99,11 +98,13 @@ where
             .eval(builder, is_lui);
 
         let limb_base = AB::F::from_u32(1 << U16_BITS);
+        let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
 
-        // JAL: constrain rd_low_32 = from_pc + DEFAULT_PC_STEP.
+        // JAL: constrain rd_low_32 = 4 * (from_pc + 1), the byte return address for the pc
+        // index `from_pc`.
         builder.when(is_jal).assert_eq(
             rd[0],
-            from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - rd[1] * limb_base,
+            (from_pc + AB::F::ONE) * AB::F::from_u32(DEFAULT_PC_STEP) - rd[1] * limb_base,
         );
 
         // Range-check the low 32-bit rd cells.
@@ -114,20 +115,26 @@ where
             .range_check(rd[1], U16_BITS)
             .eval(builder, is_valid.clone());
 
-        // Tie is_sign_extend to bit 31 of rd.
+        // Tie is_sign_extend to bit 31 of rd for LUI. JAL return addresses are zero-extended
+        // low-32-bit values (the bus address convention), so is_sign_extend must be 0.
         self.range_bus
             .range_check(
                 AB::Expr::from_u32(2) * rd[1] - is_sign_extend * AB::Expr::from_u32(1 << U16_BITS),
                 U16_BITS,
             )
-            .eval(builder, is_valid.clone());
+            .eval(builder, is_lui);
+        builder.when(is_jal).assert_zero(is_sign_extend);
 
-        // JAL cannot write a return address outside PC_BITS.
+        // JAL return addresses are DEFAULT_PC_STEP-aligned: rd[0] = 4 * x with
+        // x < 2^PC_IDX_LOW_BITS. Together with rd[1] < 2^16 this makes the decomposition
+        // rd = 4 * (from_pc + 1) unique: the composed pc index rd[1] * 2^PC_IDX_LOW_BITS + x
+        // is < 2^PC_BITS < p, so it must equal from_pc + 1 over the integers. A JAL at the
+        // last pc index (from_pc + 1 = 2^PC_BITS) is unsatisfiable, hence unprovable.
         self.range_bus
-            .range_check(rd[1] * AB::F::from_u32(1 << PC_HIGH_U16_SHIFT), U16_BITS)
+            .range_check(rd[0] * pc_step_inv, PC_IDX_LOW_BITS)
             .eval(builder, is_jal);
 
-        // Sign-extend bit 31 into the upper RV64 register cells.
+        // Sign-extend bit 31 into the upper RV64 register cells (LUI only; see above).
         let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(u16::MAX as u32);
         let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
             rd[0].into(),
@@ -136,7 +143,9 @@ where
             sign_extend_cell,
         ];
 
-        let to_pc = from_pc + is_lui * AB::F::from_u32(DEFAULT_PC_STEP) + is_jal * imm;
+        // `imm` is a byte offset (a multiple of DEFAULT_PC_STEP, possibly negative as a field
+        // element); pc values on the buses are pc indices, so scale it down by DEFAULT_PC_STEP.
+        let to_pc = from_pc + is_lui * AB::Expr::ONE + is_jal * imm * pc_step_inv;
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
@@ -184,8 +193,9 @@ pub(super) fn get_signed_imm(is_jal: bool, imm: InstructionOperand) -> Option<i3
 pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     if is_jal {
         let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
-        let next_pc = pc.wrapping_add_signed(imm);
-        (next_pc, u32_to_u16_block(rd_low))
+        let next_pc = (pc as i64).wrapping_add(imm as i64);
+        debug_assert!(next_pc >= 0 && next_pc <= MAX_ALLOWED_PC as i64);
+        (next_pc as u32, u32_to_u16_block(rd_low))
     } else {
         let imm = imm as u32;
         let rd_low = imm << RV_IS_TYPE_IMM_BITS;

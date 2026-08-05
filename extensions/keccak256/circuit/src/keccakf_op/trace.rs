@@ -13,7 +13,7 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerChip,
 };
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
+    program::{pc_to_idx, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
@@ -68,7 +68,7 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
         row.fill(F::ZERO);
         let local: &mut KeccakfOpCols<F> = row.borrow_mut();
 
-        local.pc = F::from_u32(replay.pc);
+        local.pc = F::from_u32(pc_to_idx(replay.pc));
         local.is_valid = F::ONE;
         local.timestamp = F::from_u32(replay.timestamp);
         local.rd_ptr = F::from_u32(replay.rd_ptr);

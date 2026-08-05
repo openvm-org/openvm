@@ -229,7 +229,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
         bitwise_buffer.add_range(record.rs_val[i], record.rs_val[i + 1]);
     }
 
-    COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.pc, record.from_pc);
+    COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.pc, ::program::pc_to_idx(record.from_pc));
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.timestamp, record.from_timestamp);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rd_ptr, record.rd_ptr);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rs_ptr, record.rs_ptr);

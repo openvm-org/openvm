@@ -574,7 +574,9 @@ where
             let buf: &mut [u8] = unsafe { &mut *(*buf as *mut [u8]) };
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_metered_pre_compute_instruction {inst:?}");
-                let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
+                // `i` already includes the `get_pc_index(pc_base)` padding, so it is the
+                // absolute pc slot (matching `get_pre_compute_instructions`).
+                let pc = i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(pc, inst, buf)? {
                     PreComputeInstruction {
                         handler,

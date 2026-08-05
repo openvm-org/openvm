@@ -252,7 +252,7 @@ __global__ void xorin_replay_tracegen(
     MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
     BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr);
 
-    XORIN_WRITE(instruction.pc, from.pc);
+    XORIN_WRITE(instruction.pc, ::program::pc_to_idx(from.pc));
     XORIN_WRITE(instruction.is_enabled, 1);
     XORIN_WRITE(instruction.buffer_reg_ptr, buffer_reg_ptr);
     XORIN_WRITE(instruction.input_reg_ptr, input_reg_ptr);

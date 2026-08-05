@@ -5,14 +5,17 @@ use openvm_circuit::{
     system::program::trace::instruction_operand_to_field,
     utils::next_power_of_two_or_zero,
 };
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_STEP_BITS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::JalLuiOpcode::{self, JAL, LUI};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{
-    get_signed_imm, run_jal_lui, JalLuiChip, JalLuiCoreCols, LUI_IMM_LOW_BITS, PC_HIGH_U16_SHIFT,
+use super::{get_signed_imm, run_jal_lui, JalLuiChip, JalLuiCoreCols, LUI_IMM_LOW_BITS};
+use crate::adapters::{
+    CondRdWriteAdapterCols, CondRdWriteAdapterFiller, PC_IDX_LOW_BITS, U16_BITS,
 };
-use crate::adapters::{CondRdWriteAdapterCols, CondRdWriteAdapterFiller, U16_BITS};
 
 /// Generates the JAL/LUI trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
@@ -38,6 +41,23 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let is_jal = local_opcode == JalLuiOpcode::JAL;
             let signed_imm = get_signed_imm(is_jal, instruction.c)
                 .ok_or_else(|| PostflightError::new("JAL/LUI instruction has invalid immediate"))?;
+            if is_jal {
+                let from_pc = postflight.pc(step);
+                if from_pc >= MAX_ALLOWED_PC {
+                    return Err(PostflightError::new(
+                        "JAL return address exceeds implemented PC address space",
+                    ));
+                }
+                let target = from_pc as i64 + signed_imm as i64;
+                if target < 0
+                    || target > MAX_ALLOWED_PC as i64
+                    || target % DEFAULT_PC_STEP as i64 != 0
+                {
+                    return Err(PostflightError::new(
+                        "JAL target outside implemented PC address space",
+                    ));
+                }
+            }
             let (rd_data, _) = CondRdWriteAdapterFiller::replay(
                 postflight,
                 step,
@@ -52,8 +72,12 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let core_row: &mut JalLuiCoreCols<F> = core_row.borrow_mut();
             let rd_lo = rd_data[0];
             let rd_hi = rd_data[1];
-            let is_sign_extend = (rd_hi >> (U16_BITS - 1)) & 1;
-            let sign_check = 2u32 * (rd_hi as u32) - (is_sign_extend as u32) * (1 << U16_BITS);
+            // JAL return addresses are zero-extended; only LUI sign-extends bit 31.
+            let is_sign_extend = if is_jal {
+                0
+            } else {
+                (rd_hi >> (U16_BITS - 1)) & 1
+            };
             let imm_low_4 = if is_jal {
                 0
             } else {
@@ -66,14 +90,15 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             chip.inner
                 .range_checker_chip
                 .add_count(rd_hi as u32, U16_BITS);
-            chip.inner
-                .range_checker_chip
-                .add_count(sign_check, U16_BITS);
             if is_jal {
                 chip.inner
                     .range_checker_chip
-                    .add_count((rd_hi as u32) << PC_HIGH_U16_SHIFT, U16_BITS);
+                    .add_count((rd_lo as u32) >> PC_STEP_BITS, PC_IDX_LOW_BITS);
             } else {
+                let sign_check = 2u32 * (rd_hi as u32) - (is_sign_extend as u32) * (1 << U16_BITS);
+                chip.inner
+                    .range_checker_chip
+                    .add_count(sign_check, U16_BITS);
                 chip.inner
                     .range_checker_chip
                     .add_count(imm_low_4 as u32, LUI_IMM_LOW_BITS);

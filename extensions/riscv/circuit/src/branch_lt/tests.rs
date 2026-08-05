@@ -15,7 +15,11 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -106,13 +110,22 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         array::from_fn(|_| rng.random_range(0..=u16::MAX))
     });
 
-    let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
+    // Branch offsets are DEFAULT_PC_STEP-aligned byte offsets.
+    let imm = imm.unwrap_or(
+        rng.random_range(
+            (-ABS_MAX_IMM / DEFAULT_PC_STEP as i32)..(ABS_MAX_IMM / DEFAULT_PC_STEP as i32),
+        ) * DEFAULT_PC_STEP as i32,
+    );
     let [rs1, rs2] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
     let a_bytes: [F; REGISTER_NUM_LIMBS] = u16_block_to_bytes(a).map(F::from_u8);
     let b_bytes: [F; REGISTER_NUM_LIMBS] = u16_block_to_bytes(b).map(F::from_u8);
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs1, a_bytes);
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs2, b_bytes);
 
+    // An aligned byte pc over the full 32-bit range, keeping the taken target in bounds.
+    let lo = (-imm).max(0) as u32 / DEFAULT_PC_STEP;
+    let hi = (MAX_ALLOWED_PC - DEFAULT_PC_STEP - imm.max(0) as u32) / DEFAULT_PC_STEP;
+    let initial_pc = rng.random_range(lo..=hi) * DEFAULT_PC_STEP;
     tester.execute_with_pc(
         executor,
         preflight,
@@ -124,14 +137,14 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
             1,
             1,
         ),
-        rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
+        initial_pc,
     );
 
     let (cmp_result, _, _, _) =
         run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(opcode.local_usize() as u8, &a, &b);
-    let from_pc = tester.last_from_pc().as_canonical_u32() as i32;
-    let to_pc = tester.last_to_pc().as_canonical_u32() as i32;
-    let pc_inc = if cmp_result { imm } else { 4 };
+    let from_pc = tester.last_from_pc() as i64;
+    let to_pc = tester.last_to_pc() as i64;
+    let pc_inc = if cmp_result { imm as i64 } else { 4 };
 
     assert_eq!(to_pc, from_pc + pc_inc);
 }

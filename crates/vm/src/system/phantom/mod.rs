@@ -6,7 +6,7 @@ use std::{borrow::Borrow, sync::Arc};
 
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode};
+use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -78,7 +78,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
                 operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
                 AB::Expr::ONE,
-                PcIncOrSet::Inc(AB::Expr::from_u32(DEFAULT_PC_STEP)),
+                PcIncOrSet::Inc(AB::Expr::ONE),
             )
             .eval(builder, is_valid);
     }

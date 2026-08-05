@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::{Program, PC_BITS},
+    program::{Program, DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalrOpcode::{self, *};
@@ -134,15 +134,21 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let a = rd_ptr.unwrap_or_else(|| rng.random_range(0..32) << 3);
     let b = rng.random_range(1..32) << 3;
     let imm_signed = (imm_ext as i32) as i64;
+    // The target (after clearing bit 0) must be a DEFAULT_PC_STEP-aligned slot in the
+    // implemented PC address space, and rs1 = to_pc - imm must fit in a u32.
     let min_to_pc = imm_signed.max(0) as u32;
-    let to_pc = rng.random_range(min_to_pc..(1 << PC_BITS));
+    let max_to_pc = (u32::MAX as i64 + imm_signed.min(0) - 1).min(MAX_ALLOWED_PC as i64) as u32;
+    let to_pc = rng.random_range(min_to_pc.div_ceil(DEFAULT_PC_STEP)..=max_to_pc / DEFAULT_PC_STEP)
+        * DEFAULT_PC_STEP
+        + rng.random_range(0..2);
 
     let rs1 = rs1.unwrap_or(into_limbs((i64::from(to_pc) - imm_signed) as u32));
     let rs1 = rs1.map(F::from_u32);
 
     tester.write_bytes(1, b, rs1);
 
-    let initial_pc = initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS)));
+    let initial_pc = initial_pc
+        .unwrap_or_else(|| (rng.random::<u32>() & !3).min(MAX_ALLOWED_PC - DEFAULT_PC_STEP));
     tester.execute_with_pc(
         executor,
         preflight,
@@ -160,7 +166,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         ),
         initial_pc,
     );
-    let final_pc = tester.last_to_pc().as_canonical_u32();
+    let final_pc = tester.last_to_pc();
 
     let rs1 = limbs_to_u64(rs1) as u32;
 
@@ -208,6 +214,35 @@ fn rand_jalr_test() {
             None,
         );
     }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn jalr_max_pc_test() {
+    // Jump to the last instruction slot of the 32-bit PC address space, from the
+    // second-to-last slot.
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        JALR,
+        Some(0),
+        Some(0),
+        Some(MAX_ALLOWED_PC - DEFAULT_PC_STEP),
+        Some(into_limbs(MAX_ALLOWED_PC)),
+        None,
+    );
 
     let tester = tester
         .build()
@@ -359,10 +394,12 @@ fn invalid_cols_negative_tests() {
         false,
     );
 
+    // rs1 chosen so the raw target is ≡ 1 (mod 4): bit 0 is set (and cleared by JALR), so
+    // pranking the least significant bit to 0 breaks the target arithmetic.
     run_negative_jalr_test(
         JALR,
         None,
-        Some([23, 154, 67, 28, 0, 0, 0, 0]),
+        Some([25, 154, 67, 28, 0, 0, 0, 0]),
         Some(0xfe10),
         Some(1),
         JalrPrankValues {
@@ -513,7 +550,7 @@ fn write_suppression_boundary_negative_tests() {
 fn overflow_negative_tests() {
     run_negative_jalr_test(
         JALR,
-        Some(251),
+        Some(252),
         None,
         None,
         None,
@@ -528,7 +565,7 @@ fn overflow_negative_tests() {
         JALR,
         None,
         Some([0, 0, 0, 0, 0, 0, 0, 0]),
-        Some((1 << 11) - 2),
+        Some((1 << 11) - 4),
         Some(0),
         JalrPrankValues {
             to_pc_limbs: Some([
@@ -551,9 +588,10 @@ fn overflow_negative_tests() {
 fn run_jalr_sanity_test() {
     let initial_pc = 789456120;
     let imm = -1235_i32 as u32;
-    let rs1 = 736482910;
+    // Chosen so the target (after clearing bit 0) is DEFAULT_PC_STEP-aligned.
+    let rs1 = 736482908;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
-    assert_eq!(next_pc & !1, 736481674);
+    assert_eq!(next_pc & !1, 736481672);
     // u32 pc+4 = 789456124 = 0x2f0e24fc => low u16=0x24fc, high u16=0x2f0e.
     assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
 }

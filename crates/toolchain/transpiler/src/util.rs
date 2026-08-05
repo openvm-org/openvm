@@ -4,6 +4,7 @@ use openvm_decoder::instruction_formats::{BType, IType, ITypeShamt, JType, RType
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::{Instruction, InstructionOperand},
+    program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
@@ -102,7 +103,16 @@ pub fn from_s_type(opcode: usize, dec_insn: &SType) -> Instruction {
 }
 
 /// Create a new [`Instruction`] from a B-type instruction.
+///
+/// The branch offset must be `DEFAULT_PC_STEP`-aligned: the circuit represents pc values in
+/// units of `DEFAULT_PC_STEP`, so a misaligned offset has no sound encoding. Without the C
+/// extension, RISC-V branch targets are always 4-byte aligned.
 pub fn from_b_type(opcode: usize, dec_insn: &BType) -> Instruction {
+    assert_eq!(
+        dec_insn.imm % DEFAULT_PC_STEP as i32,
+        0,
+        "branch offset must be a multiple of DEFAULT_PC_STEP"
+    );
     Instruction::new(
         VmOpcode::from_usize(opcode),
         InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
@@ -116,7 +126,14 @@ pub fn from_b_type(opcode: usize, dec_insn: &BType) -> Instruction {
 }
 
 /// Create a new [`Instruction`] from a J-type instruction.
+///
+/// The jump offset must be `DEFAULT_PC_STEP`-aligned; see [`from_b_type`].
 pub fn from_j_type(opcode: usize, dec_insn: &JType) -> Instruction {
+    assert_eq!(
+        dec_insn.imm % DEFAULT_PC_STEP as i32,
+        0,
+        "jump offset must be a multiple of DEFAULT_PC_STEP"
+    );
     Instruction::new(
         VmOpcode::from_usize(opcode),
         InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),

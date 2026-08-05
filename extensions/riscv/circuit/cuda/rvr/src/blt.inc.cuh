@@ -122,9 +122,19 @@ __global__ void blt_replay_tracegen(
     bool cmp_lt =
         run_less_than<BLOCK_FE_WIDTH, U16_BITS>(signed_op, rs1, rs2).cmp_result;
     bool should_branch = ge_op ? !cmp_lt : cmp_lt;
-    Fp expected_next_pc_field(from.pc);
-    expected_next_pc_field += Fp(should_branch ? encoded_imm : 4);
-    if (to.pc != expected_next_pc_field.asUInt32()) {
+    uint32_t expected_next_pc;
+    if (should_branch) {
+        // Taken targets must stay inside the implemented PC address space on an aligned
+        // slot (mirrors the CPU trace filler).
+        if (!replay_branch_target_in_bounds(from.pc, encoded_imm)) {
+            preflight_set_error(error, 18);
+            return;
+        }
+        expected_next_pc = replay_taken_branch_pc(from.pc, encoded_imm);
+    } else {
+        expected_next_pc = from.pc + ::program::DEFAULT_PC_STEP;
+    }
+    if (to.pc != expected_next_pc) {
         preflight_set_error(error, 18);
         return;
     }
