@@ -95,14 +95,6 @@ impl KnownCurve {
             _ => None,
         }
     }
-
-    /// Whether this extension lifts `EC_MUL` for this curve.
-    ///
-    /// BLS12-381 G1 coordinates are 48 bytes wide, which the 256-bit point path the native
-    /// implementation shares with `halo2curves_axiom` cannot represent.
-    fn supports_ec_mul(self) -> bool {
-        !matches!(self, Self::Bls12381)
-    }
 }
 
 /// Resolve the AIR index of the `EC_MUL` chip for the curve registered at `curve_idx`.
@@ -340,8 +332,8 @@ impl EccExtension {
             .enumerate()
             .map(|(curve_idx, curve)| {
                 let mul_chip_idx = match curve {
-                    Some(curve) if curve.supports_ec_mul() => ec_mul_air_idx(ctx, curve_idx)?,
-                    _ => None,
+                    Some(_) => ec_mul_air_idx(ctx, curve_idx)?,
+                    None => None,
                 };
                 Ok(CurveInfo {
                     curve,
@@ -415,10 +407,6 @@ impl RvrExtension for EccExtension {
                 is_setup: local_opcode == SETUP_EC_DOUBLE,
             }),
             EC_MUL | SETUP_EC_MUL => {
-                // Declining to lift surfaces as `UnrecognizedOpcode` rather than a wrong result.
-                if !curve.supports_ec_mul() {
-                    return None;
-                }
                 let rs2_reg = decode_reg(insn.c);
                 Box::new(EcMulInstr {
                     rd_reg,
@@ -705,7 +693,12 @@ mod tests {
 
     #[test]
     fn mul_preflight_matches_schedule_and_minimal_replay_values() {
-        for curve in [KnownCurve::K256, KnownCurve::P256, KnownCurve::Bn254] {
+        for curve in [
+            KnownCurve::K256,
+            KnownCurve::P256,
+            KnownCurve::Bn254,
+            KnownCurve::Bls12381,
+        ] {
             let point_dwords = curve.point_dwords();
             for is_setup in [false, true] {
                 let instruction = EcMulInstr {
@@ -763,21 +756,21 @@ mod tests {
     }
 
     #[test]
-    fn mul_is_not_lifted_for_bls12_381() {
-        // Curve id 3 is BLS12-381, registered here as the configuration's only curve so its
-        // opcodes occupy the first block. Its other operations must still lift.
-        let extension = EccExtension::new(None, vec![3]).unwrap();
-        let curve_base = WeierstrassOpcode::CLASS_OFFSET;
-
-        for local in [EC_MUL, SETUP_EC_MUL] {
-            let opcode = VmOpcode::from_usize(curve_base + local as usize);
-            let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
-            assert!(extension.try_lift(&insn, 0x100).is_none(), "{local:?}");
+    fn mul_lifts_for_every_configured_curve() {
+        // `set_up_once` emits `SETUP_EC_MUL` for every declared curve, including those with a
+        // cofactor whose scalar multiplication no guest library exposes, so all of them must lift.
+        for curve_id in 0..4 {
+            let extension = EccExtension::new(None, vec![curve_id]).unwrap();
+            for local in [EC_MUL, SETUP_EC_MUL] {
+                let opcode =
+                    VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + local as usize);
+                let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
+                assert!(
+                    extension.try_lift(&insn, 0x100).is_some(),
+                    "curve {curve_id}, {local:?}"
+                );
+            }
         }
-
-        let opcode = VmOpcode::from_usize(curve_base + EC_DOUBLE as usize);
-        let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
-        assert!(extension.try_lift(&insn, 0x100).is_some());
     }
 
     #[test]
