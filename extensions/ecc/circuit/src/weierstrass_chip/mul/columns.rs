@@ -14,9 +14,9 @@
 //!
 //! The three regions do not overlap. Several `FieldExpr` constraints are not gated by `is_valid` —
 //! `check_carry_to_zero`'s carry recurrence and its final zero-carry assertion, and `assert_bool`
-//! on each flag — and hold on inactive rows only because an all-zero region satisfies them. The
-//! expression region must therefore be zero wherever `is_valid` is zero, which rules out reusing it
-//! for digest data.
+//! on each flag. An inactive expression region must therefore still hold a consistent witness for
+//! some input, which arbitrary digest data is not, so the region cannot be reused. Trace generation
+//! fills it on digest and padding rows with a witness for zero inputs and clears `is_valid`.
 
 use openvm_circuit::{
     arch::{ExecutionState, BLOCK_FE_WIDTH},

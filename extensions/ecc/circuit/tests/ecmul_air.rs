@@ -34,8 +34,8 @@ type F = BabyBear;
 const LIMB_BITS: usize = 8;
 const RANGE_MAX_BITS: usize = 17;
 
-/// `log_blowup = 2` permits degree 5, `log_blowup = 3` permits 9.
-const DEGREE_BUDGET: usize = 5;
+/// The bound the integration tests' system config enforces.
+const DEGREE_BUDGET: usize = 4;
 
 fn bus() -> VariableRangeCheckerBus {
     VariableRangeCheckerBus::new(1, RANGE_MAX_BITS)
@@ -68,6 +68,24 @@ fn report(name: &str, air: &EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>) -> usize {
     };
     let constraints = get_symbolic_builder::<F, _>(air, &trace_width).constraints();
     let degree = constraints.max_constraint_degree();
+
+    // Separate the step expression's own contribution from the chip's row constraints, so it is
+    // clear which one drives the total.
+    let expr_width = <_ as BaseAir<F>>::width(&air.expr);
+    let expr_degree = get_symbolic_builder::<F, _>(
+        &air.expr,
+        &TraceWidth {
+            preprocessed: None,
+            cached_mains: vec![],
+            common_main: expr_width,
+        },
+    )
+    .constraints()
+    .max_constraint_degree();
+    println!(
+        "{:<12} field expression alone: width={expr_width} max_degree={expr_degree}",
+        ""
+    );
 
     println!(
         "{name:<12} width={width:<6} constraints={:<5} interactions={:<4} max_degree={degree}",

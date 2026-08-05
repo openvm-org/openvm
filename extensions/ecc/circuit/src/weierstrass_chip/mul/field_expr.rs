@@ -65,6 +65,18 @@ pub fn ec_mul_step_expr(
     )
 }
 
+/// Inputs for a setup row: the modulus, the expression's setup values, then zero padding.
+///
+/// `FieldExpr`'s setup constraint compares the leading inputs against these, and the row's output
+/// follows from them, so execution and trace generation must build them identically.
+pub fn setup_row_inputs(program: &FieldExpressionProgram) -> Vec<BigUint> {
+    let mut inputs = Vec::with_capacity(program.num_inputs());
+    inputs.push(program.prime().clone());
+    inputs.extend(program.setup_values().iter().cloned());
+    inputs.resize(program.num_inputs(), BigUint::ZERO);
+    inputs
+}
+
 pub fn ec_mul_step_program(
     config: ExprBuilderConfig,
     range_max_bits: usize,
