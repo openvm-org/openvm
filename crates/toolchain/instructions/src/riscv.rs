@@ -11,3 +11,10 @@ pub const REGISTER_AS: u32 = 1;
 pub const MEMORY_AS: u32 = 2;
 
 pub const NUM_REGISTERS: usize = 32;
+
+/// Whether an OpenVM operand encodes an aligned RV64 register pointer.
+#[inline]
+pub fn is_valid_register_pointer(pointer: u32) -> bool {
+    let pointer = u64::from(pointer);
+    pointer < NUM_REGISTERS as u64 * REGISTER_BYTES && pointer.is_multiple_of(REGISTER_BYTES)
+}

@@ -19,7 +19,7 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
+    riscv::{is_valid_register_pointer, REGISTER_AS, REGISTER_NUM_LIMBS},
     PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
@@ -79,15 +79,13 @@ impl RevealExecutor {
             g,
             ..
         } = inst;
-        let valid_register_ptr =
-            |ptr: u32| ptr <= u8::MAX as u32 && ptr.is_multiple_of(REGISTER_NUM_LIMBS as u32);
         let src_ptr = a.as_canonical_u32();
         let base_ptr = b.as_canonical_u32();
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         if opcode.local_opcode_idx(self.offset) != RevealOpcode::REVEAL as usize
-            || !valid_register_ptr(src_ptr)
-            || !valid_register_ptr(base_ptr)
+            || !is_valid_register_pointer(src_ptr)
+            || !is_valid_register_pointer(base_ptr)
             || imm > u16::MAX as u32
             || d.as_canonical_u32() != REGISTER_AS
             || e.as_canonical_u32() != PUBLIC_VALUES_AS

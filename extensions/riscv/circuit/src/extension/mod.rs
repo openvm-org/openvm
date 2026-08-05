@@ -43,7 +43,10 @@ use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{adapters::*, *};
+use crate::{
+    adapters::*, hintstore::trace::generate_trace_from_postflight as generate_hintstore_trace,
+    reveal::trace::generate_trace_from_postflight as generate_reveal_trace, *,
+};
 
 macro_rules! add_executor_chip_with_tracegen {
     ($inventory:expr, $chip:expr, $generate:path) => {
@@ -1421,22 +1424,14 @@ where
             HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
-        add_executor_chip_with_tracegen!(
-            inventory,
-            hint_store,
-            crate::hintstore::trace::generate_trace_from_postflight
-        );
+        add_executor_chip_with_tracegen!(inventory, hint_store, generate_hintstore_trace);
 
         inventory.next_air::<RevealAir>()?;
         let reveal = RevealChip::new(
             RevealFiller::new(byte_ptr_max_bits, range_checker),
             mem_helper,
         );
-        add_executor_chip_with_tracegen!(
-            inventory,
-            reveal,
-            crate::reveal::trace::generate_trace_from_postflight
-        );
+        add_executor_chip_with_tracegen!(inventory, reveal, generate_reveal_trace);
 
         Ok(())
     }

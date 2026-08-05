@@ -4,7 +4,9 @@ use std::{ffi::c_void, ops::Range};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_BYTES, REGISTER_NUM_LIMBS},
+    riscv::{
+        is_valid_register_pointer, MEMORY_AS, REGISTER_AS, REGISTER_BYTES, REGISTER_NUM_LIMBS,
+    },
     LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_platform::WORD_SIZE;
@@ -240,17 +242,10 @@ impl RvrExtension for Rv64IoExtension {
             }));
         }
 
-        if is_reveal(insn) {
-            let src_reg = decode_reg(insn.a);
-            let ptr_reg = decode_reg(insn.b);
-            let offset = decode_imm_cg(insn);
+        if let Some(reveal) = decode_reveal(insn) {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Box::new(RevealInstr {
-                    src_reg,
-                    ptr_reg,
-                    offset: offset as i32,
-                }),
+                instr: Box::new(reveal),
                 source_loc: None,
             }));
         }
@@ -303,17 +298,33 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
     }
 }
 
-fn is_reveal(insn: &RvrInstruction) -> bool {
-    let valid_register_ptr =
-        |ptr: u32| ptr <= u8::MAX as u32 && ptr.is_multiple_of(REGISTER_NUM_LIMBS as u32);
-    insn.opcode.as_usize() == RevealOpcode::REVEAL.global_opcode_usize()
-        && valid_register_ptr(insn.a)
-        && valid_register_ptr(insn.b)
-        && insn.c <= u16::MAX as u32
-        && insn.d == REGISTER_AS
-        && insn.e == PUBLIC_VALUES_AS
-        && insn.f == 1
-        && insn.g <= 1
+fn decode_reveal(insn: &RvrInstruction) -> Option<RevealInstr> {
+    let opcode = insn.opcode.as_usize();
+    let src_reg_ptr = insn.a;
+    let base_reg_ptr = insn.b;
+    let immediate = insn.c;
+    let src_address_space = insn.d;
+    let dst_address_space = insn.e;
+    let is_enabled = insn.f;
+    let immediate_sign = insn.g;
+
+    if opcode != RevealOpcode::REVEAL.global_opcode_usize()
+        || !is_valid_register_pointer(src_reg_ptr)
+        || !is_valid_register_pointer(base_reg_ptr)
+        || immediate > u16::MAX as u32
+        || src_address_space != REGISTER_AS
+        || dst_address_space != PUBLIC_VALUES_AS
+        || is_enabled != 1
+        || immediate_sign > 1
+    {
+        return None;
+    }
+
+    Some(RevealInstr {
+        src_reg: decode_reg(src_reg_ptr),
+        ptr_reg: decode_reg(base_reg_ptr),
+        offset: decode_imm_cg(insn) as i32,
+    })
 }
 
 type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallbacks);
