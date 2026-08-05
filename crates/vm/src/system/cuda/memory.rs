@@ -196,7 +196,9 @@ impl MemoryInventoryGPU {
         }
         // Only transfer pages that may contain non-zero data; the rest are zero-filled
         // on-device. The merkle kernel reads the full address-space region, so the device
-        // buffer is full-size and the skipped pages must read as zero.
+        // buffer is full-size and the skipped pages must read as zero. Replacing this allocation
+        // requires sparse-aware CUDA execution and Merkle kernels; the CPU sparse-snapshot path
+        // cannot safely be reused here.
         let per_as: Vec<_> = initial_memory
             .get_memory()
             .iter()
@@ -838,11 +840,6 @@ mod tests {
                 0,
                 [9, 10, 11, 12, 0, 0, 0, 0],
             );
-        }
-        // `write_bytes` doesn't mark pages; mark them so `set_initial_memory` transfers them
-        // (see `AddressMap::touched_pages`).
-        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
-            memory.memory.touched_pages[addr_space as usize].mark_byte_range(0, MEMORY_BLOCK_BYTES);
         }
         (mem_config, memory)
     }
