@@ -104,13 +104,6 @@ pub struct EcMulDigestCols<T, const NUM_LIMBS: usize, const BLOCKS: usize> {
     pub scalar_data: [T; SCALAR_LIMBS],
     pub scalar_read_aux: [MemoryReadAuxCols<T>; SCALAR_BLOCKS],
 
-    /// Borrow bits witnessing `scalar <= n - 1` for the curve order `n`.
-    ///
-    /// The bound is a soundness precondition of the ladder's incomplete addition; see the `mul`
-    /// module documentation. Only the borrows are stored, since each limb difference is a linear
-    /// expression the AIR range-checks directly.
-    pub scalar_lt_borrow: [T; SCALAR_LIMBS],
-
     /// Result `k·P`, written to `rd`. Linked to the last compute row's outputs.
     pub result_x: [T; NUM_LIMBS],
     pub result_y: [T; NUM_LIMBS],
