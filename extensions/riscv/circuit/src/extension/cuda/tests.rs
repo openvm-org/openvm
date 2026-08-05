@@ -352,6 +352,16 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
             ],
         ),
         Instruction::from_usize(
+            JalrOpcode::JALR.global_opcode(),
+            [reg(30), 0, 200, REGISTER_AS as usize, 0, 1, 0],
+        ),
+        Instruction::phantom(
+            PhantomDiscriminant(SysPhantom::Nop as u16),
+            F::from_u32(0x1234),
+            F::from_u32(0x5678),
+            0x1234,
+        ),
+        Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
                 reg(2),
@@ -362,16 +372,6 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
                 1,
                 0,
             ],
-        ),
-        Instruction::from_usize(
-            JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 200, REGISTER_AS as usize, 0, 1, 0],
-        ),
-        Instruction::phantom(
-            PhantomDiscriminant(SysPhantom::Nop as u16),
-            F::from_u32(0x1234),
-            F::from_u32(0x5678),
-            0x1234,
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
