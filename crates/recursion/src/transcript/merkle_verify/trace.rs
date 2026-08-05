@@ -192,14 +192,15 @@ pub fn generate_trace(
                 cols.recv_flag = F::ONE;
             }
 
-            let output = poseidon2_compress_with_capacity(cols.left, cols.right).0;
-            cols.compression_output = output;
-            let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
-            input_state[..DIGEST_SIZE].copy_from_slice(&cols.left);
-            input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
-            poseidon2_compress_inputs.push(input_state);
-
-            cur_hash = output;
+            if !is_last {
+                let output = poseidon2_compress_with_capacity(cols.left, cols.right).0;
+                cols.compression_output = output;
+                let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
+                input_state[..DIGEST_SIZE].copy_from_slice(&cols.left);
+                input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
+                poseidon2_compress_inputs.push(input_state);
+                cur_hash = output;
+            }
             cur_idx /= 2;
 
             cols.merkle_idx_bit_src = F::from_usize(merkle_idx);

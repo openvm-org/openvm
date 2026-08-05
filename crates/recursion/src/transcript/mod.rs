@@ -485,7 +485,9 @@ mod cuda_tracegen {
                 preflights,
                 num_prefix_perms + num_compress_inputs,
             );
-            num_compress_inputs += merkle_verify_blob.total_rows;
+            // The final row of each Merkle proof (one per record) only checks the
+            // commitment and no longer performs a compression.
+            num_compress_inputs += merkle_verify_blob.total_rows - merkle_verify_blob.records.len();
 
             let transcript_air_blob =
                 TranscriptAirBlob::new(preflights, (num_prefix_perms + num_compress_inputs) as u32);

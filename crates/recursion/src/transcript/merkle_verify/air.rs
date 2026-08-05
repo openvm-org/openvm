@@ -261,13 +261,15 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 local.right[i - CHUNK].into()
             }
         });
+        // The final row of each Merkle proof only checks left == right == commitment;
+        // its compression output is never consumed, so skip the compress lookup there.
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
                 input: poseidon2_input,
                 output: local.compression_output.map(Into::into),
             },
-            local.is_valid,
+            local.is_valid * (AB::Expr::ONE - local.is_last_merkle),
         );
     }
 }

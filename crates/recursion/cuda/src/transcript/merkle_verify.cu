@@ -116,13 +116,12 @@ __global__ void cukernel_merkle_verify_tracegen(
             break;
         }
         RowSlice row(d_trace + global_row, trace_height);
+        bool is_last_row = local_row + 1 == record.num_rows;
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, proof_idx, Fp(static_cast<uint32_t>(record.proof_idx))
         );
         COL_WRITE_VALUE(row, MerkleVerifyCols, is_valid, Fp::one());
-        COL_WRITE_VALUE(
-            row, MerkleVerifyCols, is_last_merkle, bool_to_fp(local_row + 1 == record.num_rows)
-        );
+        COL_WRITE_VALUE(row, MerkleVerifyCols, is_last_merkle, bool_to_fp(is_last_row));
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, commit_major, Fp(static_cast<uint32_t>(record.commit_major))
         );
@@ -148,9 +147,11 @@ __global__ void cukernel_merkle_verify_tracegen(
             );
             COL_WRITE_ARRAY(row, MerkleVerifyCols, left, poseidon_state);
             COL_WRITE_ARRAY(row, MerkleVerifyCols, right, poseidon_state + DIGEST_SIZE);
+            // Records are laid out in row order, so exactly rec_idx final rows
+            // (which contribute no compression) precede this record's rows.
 #pragma unroll
             for (size_t col = 0; col < WIDTH; ++col) {
-                poseidon_inputs[global_row * WIDTH + col] = poseidon_state[col];
+                poseidon_inputs[(global_row - rec_idx) * WIDTH + col] = poseidon_state[col];
             }
             poseidon2::poseidon2_mix(poseidon_state);
             copy_digest(leaf_layer + indices.result_index * DIGEST_SIZE, poseidon_state);
@@ -197,12 +198,16 @@ __global__ void cukernel_merkle_verify_tracegen(
             }
             COL_WRITE_ARRAY(row, MerkleVerifyCols, left, poseidon_state);
             COL_WRITE_ARRAY(row, MerkleVerifyCols, right, poseidon_state + DIGEST_SIZE);
+            // The final row only checks left == right == commitment; it performs no
+            // compression, so it contributes no poseidon input and leaves `output` zero.
+            if (!is_last_row) {
 #pragma unroll
-            for (size_t col = 0; col < WIDTH; ++col) {
-                poseidon_inputs[global_row * WIDTH + col] = poseidon_state[col];
+                for (size_t col = 0; col < WIDTH; ++col) {
+                    poseidon_inputs[(global_row - rec_idx) * WIDTH + col] = poseidon_state[col];
+                }
+                poseidon2::poseidon2_mix(poseidon_state);
+                copy_digest(current_hash, poseidon_state);
             }
-            poseidon2::poseidon2_mix(poseidon_state);
-            copy_digest(current_hash, poseidon_state);
             COL_WRITE_VALUE(row, MerkleVerifyCols, is_combining_leaves, Fp::zero());
             COL_WRITE_VALUE(row, MerkleVerifyCols, leaf_sub_idx, Fp::zero());
             COL_WRITE_VALUE(
@@ -221,7 +226,9 @@ __global__ void cukernel_merkle_verify_tracegen(
             COL_WRITE_VALUE(row, MerkleVerifyCols, is_last_leaf, Fp::zero());
             COL_WRITE_VALUE(row, MerkleVerifyCols, recv_flag, bool_to_fp(!left_is_cur));
         }
-        COL_WRITE_ARRAY(row, MerkleVerifyCols, output, poseidon_state);
+        if (!is_last_row) {
+            COL_WRITE_ARRAY(row, MerkleVerifyCols, output, poseidon_state);
+        }
     }
 }
 
