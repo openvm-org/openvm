@@ -34,15 +34,15 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, SubAir, U16_BITS};
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_mod_circuit_builder::{FieldExpr, FieldExprCols};
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -370,10 +370,10 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::F::from_u32(RV64_REGISTER_AS),
+                        AB::F::from_u32(REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    expand_to_rv64_block(val),
+                    expand_to_block(val),
                     timestamp_pp(),
                     aux,
                 )
@@ -383,7 +383,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
             self.range_bus
                 .range_check(
                     ptr_bound_from_high_u16_expr::<AB::Expr, _>(
-                        val[RV64_PTR_U16_LIMBS - 1],
+                        val[PTR_U16_LIMBS - 1],
                         self.ptr_max_bits,
                     ),
                     U16_BITS,
@@ -395,7 +395,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
         let point_addr: AB::Expr = u16_limbs_to_ptr(&digest.rs1_val);
         let scalar_addr: AB::Expr = u16_limbs_to_ptr(&digest.rs2_val);
 
-        let heap = AB::F::from_u32(RV64_MEMORY_AS);
+        let heap = AB::F::from_u32(MEMORY_AS);
 
         // A point is stored as `x ‖ y`, so block `blk` spans limbs
         // `[blk * MEMORY_BLOCK_BYTES, (blk+1) * MEMORY_BLOCK_BYTES)` of that concatenation.
@@ -470,10 +470,9 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
 
         // ==== Execution bus =================================================================
         // The opcode is selected by `is_setup`, so one chip instance serves both opcodes.
-        let ec_mul =
-            AB::Expr::from_usize(Rv64WeierstrassOpcode::EC_MUL.local_usize() + self.offset);
+        let ec_mul = AB::Expr::from_usize(WeierstrassOpcode::EC_MUL.local_usize() + self.offset);
         let setup =
-            AB::Expr::from_usize(Rv64WeierstrassOpcode::SETUP_EC_MUL.local_usize() + self.offset);
+            AB::Expr::from_usize(WeierstrassOpcode::SETUP_EC_MUL.local_usize() + self.offset);
         let opcode = (AB::Expr::ONE - header.is_setup) * ec_mul + header.is_setup * setup;
 
         self.execution_bridge
@@ -483,8 +482,8 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
                     digest.rd_ptr.into(),
                     digest.rs1_ptr.into(),
                     digest.rs2_ptr.into(),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_MEMORY_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(MEMORY_AS),
                 ],
                 ExecutionState::new(digest.from_state.pc, digest.from_state.timestamp),
                 AB::F::from_usize(timestamp_delta),

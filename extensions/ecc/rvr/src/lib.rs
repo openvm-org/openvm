@@ -109,9 +109,7 @@ fn ec_mul_air_idx(
         return Ok(None);
     };
     let opcode = VmOpcode::from_usize(
-        WeierstrassOpcode::CLASS_OFFSET
-            + curve_idx * WeierstrassOpcode::COUNT
-            + EC_MUL as usize,
+        WeierstrassOpcode::CLASS_OFFSET + curve_idx * WeierstrassOpcode::COUNT + EC_MUL as usize,
     );
     let executor_idx = ctx
         .resolve_opcode_executor_idx(opcode)
@@ -595,9 +593,8 @@ mod tests {
     #[test]
     fn ignores_opcodes_outside_configured_curves() {
         let extension = EccExtension::new(None, vec![0]).unwrap();
-        let opcode = VmOpcode::from_usize(
-            WeierstrassOpcode::CLASS_OFFSET + WeierstrassOpcode::COUNT,
-        );
+        let opcode =
+            VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + WeierstrassOpcode::COUNT);
         let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
 
         assert!(extension.try_lift(&insn, 0x100).is_none());
@@ -764,8 +761,7 @@ mod tests {
         for curve_id in 0..4 {
             let extension = EccExtension::new(None, vec![curve_id]).unwrap();
             for local in [EC_MUL, SETUP_EC_MUL] {
-                let opcode =
-                    VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + local as usize);
+                let opcode = VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + local as usize);
                 let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
                 assert!(
                     extension.try_lift(&insn, 0x100).is_some(),
