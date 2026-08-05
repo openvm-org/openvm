@@ -98,13 +98,14 @@ __global__ void jalr_replay_tracegen(
     uint32_t imm_extended = imm + imm_sign * 0xffff0000u;
     int64_t unaligned_signed =
         static_cast<int64_t>(rs1_val) + static_cast<int64_t>(static_cast<int32_t>(imm_extended));
-    if (unaligned_signed < 0 ||
-        static_cast<uint64_t>(unaligned_signed) >= (uint64_t(1) << PC_BITS)) {
+    // The target (bit 0 cleared per RISC-V) must be an aligned slot in the implemented PC
+    // address space, and the return address must not overflow it (mirrors `try_run_jalr`).
+    if (unaligned_signed < 0 || unaligned_signed > int64_t(MAX_ALLOWED_PC) ||
+        (static_cast<uint32_t>(unaligned_signed) & ~1u) % DEFAULT_PC_STEP != 0) {
         preflight_set_error(error, 209);
         return;
     }
-    constexpr uint32_t MAX_PC = (1u << PC_BITS) - 1;
-    if (from.pc > MAX_PC - DEFAULT_PC_STEP) {
+    if (from.pc >= MAX_ALLOWED_PC) {
         preflight_set_error(error, 209);
         return;
     }

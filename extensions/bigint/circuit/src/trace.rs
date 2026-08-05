@@ -14,7 +14,7 @@ use openvm_circuit::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::DEFAULT_PC_STEP,
+    program::{pc_to_idx, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, VmOpcode,
 };
@@ -24,7 +24,7 @@ use openvm_riscv_adapters::{
 use openvm_riscv_circuit::{
     adapters::{
         add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
-        ptr_to_u16_limbs, u32_to_ptr_limbs, U16_BITS,
+        checked_branch_target, ptr_to_u16_limbs, taken_branch_pc, u32_to_ptr_limbs, U16_BITS,
     },
     AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
     LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
@@ -280,7 +280,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
     adapter_row.rd_ptr = F::from_u32(rd_ptr);
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
     Ok(AluReplay {
         inputs,
@@ -388,7 +388,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     adapter_row.rd_ptr = F::from_u32(rd_ptr);
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
     Ok(AluReplay {
         inputs,
@@ -437,7 +437,8 @@ fn replay_branch<F: PrimeField32, M>(
     let decision = branch(inputs);
     let taken = decision.taken;
     let next_pc = if taken {
-        (F::from_u32(from_pc) + instruction.c).as_canonical_u32()
+        checked_branch_target::<F>(from_pc, instruction.c.as_canonical_u32())?;
+        taken_branch_pc::<F>(from_pc, instruction.c.as_canonical_u32())
     } else {
         from_pc.wrapping_add(DEFAULT_PC_STEP)
     };
@@ -464,7 +465,7 @@ fn replay_branch<F: PrimeField32, M>(
     adapter_row.rs_val = rs_vals.map(|pointer| ptr_to_u16_limbs(pointer).map(F::from_u16));
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
     Ok(BranchReplay {
         inputs,
         taken,

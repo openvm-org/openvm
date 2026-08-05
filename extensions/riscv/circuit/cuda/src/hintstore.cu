@@ -96,7 +96,7 @@ struct HintStore {
         COL_WRITE_VALUE(row, HintStoreCols, is_single, is_single);
         COL_WRITE_VALUE(row, HintStoreCols, is_buffer, !is_single);
         COL_WRITE_VALUE(row, HintStoreCols, rem_words, rem_words);
-        COL_WRITE_VALUE(row, HintStoreCols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, HintStoreCols, from_state.pc, ::program::pc_to_idx(record.from_pc));
         COL_WRITE_VALUE(row, HintStoreCols, from_state.timestamp, timestamp);
         COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
         COL_WRITE_ARRAY(row, HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
