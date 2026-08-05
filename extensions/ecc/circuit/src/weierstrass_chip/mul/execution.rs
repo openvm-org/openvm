@@ -21,12 +21,15 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
+use openvm_mod_circuit_builder::FieldExpressionProgram;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{EcMulExecutor, EC_MUL_SCALAR_BITS, EC_MUL_TOTAL_ROWS, SCALAR_BLOCKS, SCALAR_LIMBS};
+use super::{
+    setup_row_inputs, EcMulExecutor, EC_MUL_SCALAR_BITS, EC_MUL_TOTAL_ROWS, FLAG_DBL, FLAG_DBL_ADD,
+    FLAG_INF_STAY, FLAG_INF_TAKE, NUM_STEP_FLAGS, SCALAR_BLOCKS, SCALAR_LIMBS,
+};
 use crate::weierstrass_chip::curves::{ec_mul, get_curve_type, CurveType};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -204,7 +207,7 @@ unsafe fn execute_e12_impl<
 
     let output_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = if CURVE_TYPE == u8::MAX {
         // Run the ladder through the field expression so the bytes match trace generation.
-        run_ladder_via_expr::<BLOCKS>(pre_compute.program, &point_data, scalar)
+        run_ladder_via_expr::<BLOCKS>(pre_compute.program, &point_data, scalar, IS_SETUP)
     } else {
         ec_mul::<CURVE_TYPE, BLOCKS>(point_data, scalar)
     };
@@ -225,40 +228,53 @@ unsafe fn execute_e12_impl<
 /// Interprets the ladder through the field expression, one step per scalar bit, selecting the
 /// one-hot case flags as the AIR and trace filler do.
 ///
-/// Also used for `SETUP_EC_MUL`, whose point operand carries the modulus rather than a curve point.
-/// The expression's setup arm ignores the accumulator, so the output is well defined without being
-/// a meaningful point.
+/// Used for unrecognised curves and for `SETUP_EC_MUL`, whose rows carry the modulus and setup
+/// values instead of a point and set no case flag.
 fn run_ladder_via_expr<const BLOCKS: usize>(
     program: &FieldExpressionProgram,
     point_data: &[[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
     scalar: &[u8; SCALAR_LIMBS],
+    is_setup: bool,
 ) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     let coord_bytes = BLOCKS / 2 * MEMORY_BLOCK_BYTES;
     let flat = point_data.as_flattened();
-    let px = flat[..coord_bytes].to_vec();
-    let py = flat[coord_bytes..].to_vec();
+    let px = BigUint::from_bytes_le(&flat[..coord_bytes]);
+    let py = BigUint::from_bytes_le(&flat[coord_bytes..]);
+    let outs = program.output_indices();
 
-    let mut acc = vec![0u8; coord_bytes * 2];
+    let mut rx = BigUint::ZERO;
+    let mut ry = BigUint::ZERO;
     let mut is_inf = true;
 
     for i in (0..EC_MUL_SCALAR_BITS).rev() {
         let bit = (scalar[i / 8] >> (i % 8)) & 1 == 1;
-        let flag_idx = match (is_inf, bit) {
-            (false, false) => super::FLAG_DBL,
-            (false, true) => super::FLAG_DBL_ADD,
-            (true, false) => super::FLAG_INF_STAY,
-            (true, true) => super::FLAG_INF_TAKE,
+        let (inputs, flags) = if is_setup {
+            (setup_row_inputs(program), vec![false; NUM_STEP_FLAGS])
+        } else {
+            let mut flags = vec![false; NUM_STEP_FLAGS];
+            flags[match (is_inf, bit) {
+                (false, false) => FLAG_DBL,
+                (false, true) => FLAG_DBL_ADD,
+                (true, false) => FLAG_INF_STAY,
+                (true, true) => FLAG_INF_TAKE,
+            }] = true;
+            (vec![rx.clone(), ry.clone(), px.clone(), py.clone()], flags)
         };
 
-        let mut inputs = acc.clone();
-        inputs.extend_from_slice(&px);
-        inputs.extend_from_slice(&py);
-        acc = run_field_expression_precomputed::<false>(program, flag_idx, &inputs).0;
+        let vars = program.execute(&inputs, &flags);
+        rx = vars[outs[0]].clone();
+        ry = vars[outs[1]].clone();
         is_inf = is_inf && !bit;
     }
 
     let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
-    output.as_flattened_mut()[..acc.len()].copy_from_slice(&acc);
+    let flat = output.as_flattened_mut();
+    for (dst, byte) in flat[..coord_bytes].iter_mut().zip(rx.to_bytes_le()) {
+        *dst = byte;
+    }
+    for (dst, byte) in flat[coord_bytes..].iter_mut().zip(ry.to_bytes_le()) {
+        *dst = byte;
+    }
     output
 }
 

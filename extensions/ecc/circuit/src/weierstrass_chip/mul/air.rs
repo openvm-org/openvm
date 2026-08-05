@@ -142,8 +142,9 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         // `is_first_compute` implies `is_compute`.
         builder.assert_zero(local.is_first_compute * (AB::Expr::ONE - local.is_compute));
 
-        // The expression is active exactly on compute rows, leaving its region all-zero elsewhere,
-        // which is what satisfies its ungated constraints on digest and padding rows.
+        // The expression is active exactly on compute rows. Elsewhere its region still has to hold
+        // a consistent witness, since several of its constraints are ungated; trace generation
+        // supplies one for zero inputs.
         builder.assert_eq(local_expr[0], local.is_compute);
 
         // Evaluate the ladder step. `FieldExpr` reads `is_valid` from `local_expr[0]`.
@@ -232,11 +233,20 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             .assert_zero(local.scalar_carry[SCALAR_LIMBS - 1]);
 
         // ==== Transitions ===================================================================
-        // Both selectors are degree 2, so the constraints they gate stay at degree 3.
-        let both_compute = local.is_compute * next.is_compute;
-        let to_digest = local.is_compute * next.is_digest;
-        // "next row belongs to the same instruction"
-        let in_instruction = both_compute.clone() + to_digest.clone();
+        // A digest row always follows a ladder row. Without this the digest row's data would be
+        // unconstrained whenever it was not preceded by one, while its memory writes still fired.
+        builder
+            .when_transition()
+            .when(next.is_digest)
+            .assert_one(local.is_compute);
+
+        // Both selectors are degree 1, which leaves room to further gate them on `!is_setup` below.
+        // `continuation` is 1 exactly when `next` continues `local`'s ladder: when `next` is a
+        // compute row the sequencing constraint forces `next.is_first_compute + local.is_compute`
+        // to be 1, so subtracting the first-row flag leaves `local.is_compute`.
+        let continuation: AB::Expr = next.is_compute - next.is_first_compute;
+        let to_digest: AB::Expr = next.is_digest.into();
+        let in_instruction = continuation.clone() + to_digest.clone();
 
         let mut when_in_instruction = builder.when_transition();
         let mut when_in_instruction = when_in_instruction.when(in_instruction);
@@ -260,8 +270,15 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             carry_in = local.scalar_carry[i].into();
         }
 
+        // Setup rows are excluded from the data links below: every setup row must carry the prime
+        // and the setup values in the accumulator inputs, so those inputs are re-supplied each row
+        // rather than threaded from the previous one.
+        // Setup rows are excluded from the data links below: every setup row must carry the prime
+        // and the setup values in the accumulator inputs, so those inputs are re-supplied each row
+        // rather than threaded from the previous one.
+        let not_setup = AB::Expr::ONE - local.is_setup;
         let mut when_both_compute = builder.when_transition();
-        let mut when_both_compute = when_both_compute.when(both_compute);
+        let mut when_both_compute = when_both_compute.when(continuation * not_setup.clone());
 
         // The accumulator is carried through the trace rather than memory: the next row's
         // accumulator inputs are this row's outputs.
@@ -281,7 +298,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 
         // ==== Compute → digest handoff ======================================================
         let mut when_to_digest = builder.when_transition();
-        let mut when_to_digest = when_to_digest.when(to_digest);
+        let mut when_to_digest = when_to_digest.when(to_digest * not_setup);
 
         for i in 0..NUM_LIMBS {
             // The result written to memory is the last step's output.
@@ -328,11 +345,13 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
             start_timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // ==== Register reads: rd, rs1 (point pointer), rs2 (scalar pointer) ==================
+        // ==== Register reads =================================================================
+        // rs1 (point pointer), rs2 (scalar pointer), then rd, matching the order the executor
+        // reads them and the convention the vec-heap adapter uses.
         for ((ptr, val), aux) in [
-            (digest.rd_ptr, &digest.rd_val),
             (digest.rs1_ptr, &digest.rs1_val),
             (digest.rs2_ptr, &digest.rs2_val),
+            (digest.rd_ptr, &digest.rd_val),
         ]
         .into_iter()
         .zip(digest.rs_read_aux.iter())
