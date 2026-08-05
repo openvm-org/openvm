@@ -23,10 +23,10 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     VmOpcode,
 };
 use openvm_mod_circuit_builder::FieldExpr;
@@ -139,8 +139,8 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     ptr_max_bits: usize,
 ) -> Result<EcMulTraceInput<BLOCKS>, PostflightError> {
     let instruction = postflight.instruction(step);
-    if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-        || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+    if instruction.d.as_canonical_u32() != REGISTER_AS
+        || instruction.e.as_canonical_u32() != MEMORY_AS
     {
         return Err(PostflightError::new(
             "EC_MUL instruction uses invalid address spaces",
@@ -158,7 +158,7 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     let mut reg_prev_timestamps = [0u32; EC_MUL_REGISTER_READS];
     for i in 0..EC_MUL_REGISTER_READS {
         let access = replay.read_u16(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             checked_u16_pointer(reg_ptrs[i], "EC_MUL register")?,
         )?;
         reg_vals[i] = pointer_from_register(access.value, ptr_max_bits)?;
@@ -171,7 +171,7 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     for block in 0..BLOCKS {
         let byte_pointer = add_byte_offset(point_val, block, ptr_max_bits)?;
         let access = replay.read_u16(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             checked_u16_pointer(byte_pointer, "EC_MUL point read")?,
         )?;
         point_blocks[block] = access.value;
@@ -183,7 +183,7 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     for block in 0..SCALAR_BLOCKS {
         let byte_pointer = add_byte_offset(scalar_val, block, ptr_max_bits)?;
         let access = replay.read_u16(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             checked_u16_pointer(byte_pointer, "EC_MUL scalar read")?,
         )?;
         scalar_blocks[block] = access.value;
@@ -196,7 +196,7 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     for block in 0..BLOCKS {
         let byte_pointer = add_byte_offset(rd_val, block, ptr_max_bits)?;
         let access = replay.write_observed_u16(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             checked_u16_pointer(byte_pointer, "EC_MUL result write")?,
         )?;
         write_blocks[block] = access.value;
@@ -457,8 +457,8 @@ pub fn generate_ec_mul_trace_from_postflight<
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let mut selected: Vec<(PostflightStep, bool)> = Vec::new();
     for (local, is_setup) in [
-        (Rv64WeierstrassOpcode::EC_MUL, false),
-        (Rv64WeierstrassOpcode::SETUP_EC_MUL, true),
+        (WeierstrassOpcode::EC_MUL, false),
+        (WeierstrassOpcode::SETUP_EC_MUL, true),
     ] {
         let global = opcode_base
             .checked_add(local as usize)

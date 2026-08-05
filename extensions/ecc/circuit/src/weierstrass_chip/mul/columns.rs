@@ -23,7 +23,7 @@ use openvm_circuit::{
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use openvm_circuit_primitives::AlignedBorrow;
-use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
+use openvm_riscv_circuit::adapters::PTR_U16_LIMBS;
 
 use super::{EC_MUL_COMPUTE_ROWS, SCALAR_BLOCKS, SCALAR_LIMBS};
 
@@ -98,9 +98,9 @@ pub struct EcMulDigestCols<T, const NUM_LIMBS: usize, const BLOCKS: usize> {
     pub rs2_ptr: T,
 
     /// Heap pointers materialised from those registers, as u16 cells.
-    pub rd_val: [T; RV64_PTR_U16_LIMBS],
-    pub rs1_val: [T; RV64_PTR_U16_LIMBS],
-    pub rs2_val: [T; RV64_PTR_U16_LIMBS],
+    pub rd_val: [T; PTR_U16_LIMBS],
+    pub rs1_val: [T; PTR_U16_LIMBS],
+    pub rs2_val: [T; PTR_U16_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; EC_MUL_REGISTER_READS],
 

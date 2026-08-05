@@ -200,8 +200,8 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> HybridEcMulChip<F, NUM_LIMBS, 
 
     fn local_opcodes() -> [usize; 2] {
         [
-            Rv64WeierstrassOpcode::EC_MUL as usize,
-            Rv64WeierstrassOpcode::SETUP_EC_MUL as usize,
+            WeierstrassOpcode::EC_MUL as usize,
+            WeierstrassOpcode::SETUP_EC_MUL as usize,
         ]
     }
 }
@@ -340,17 +340,17 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             // read on setup rows too, so both schedules share the read spans.
             let mul_spans = [
                 PostflightAccessSpan::read_fixed(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     0,
                     blocks as u32,
                 ),
                 PostflightAccessSpan::read_fixed(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     1,
                     SCALAR_BLOCKS as u32,
                 ),
                 PostflightAccessSpan::write_fixed_from_replay_values(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     2,
                     blocks as u32,
                 ),
@@ -362,7 +362,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 memory_as_operand: 5,
                 spans: &mul_spans,
             };
-            registry.register(opcode(Rv64WeierstrassOpcode::EC_MUL)?, mul_schedule)?;
+            registry.register(opcode(WeierstrassOpcode::EC_MUL)?, mul_schedule)?;
 
             // A setup row sets no case flag, so the output selects fall through to the base point,
             // which the setup inputs leave zero. `ec_mul_setup_postimage_is_zero` in the rvr FFI
@@ -372,13 +372,13 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 mul_spans[0],
                 mul_spans[1],
                 registry.write_fixed_from_static(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     2,
                     &setup_mul_words,
                 )?,
             ];
             registry.register(
-                opcode(Rv64WeierstrassOpcode::SETUP_EC_MUL)?,
+                opcode(WeierstrassOpcode::SETUP_EC_MUL)?,
                 PostflightAccessSchedule {
                     spans: &setup_mul_spans,
                     ..mul_schedule

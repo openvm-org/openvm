@@ -44,9 +44,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
 
         let instruction = {
             // short weierstrass ec
-            assert!(
-                WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize
-            );
+            assert!(WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize);
             let dec_insn = RType::new(instruction_u32);
             let base_funct7 = (dec_insn.funct7 as u8) % SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS;
             let curve_idx =
@@ -76,13 +74,11 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
-                        WeierstrassOpcode::EC_ADD_NE as usize
-                            + WeierstrassOpcode::CLASS_OFFSET
+                        WeierstrassOpcode::EC_ADD_NE as usize + WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        WeierstrassOpcode::EC_DOUBLE as usize
-                            + WeierstrassOpcode::CLASS_OFFSET
+                        WeierstrassOpcode::EC_DOUBLE as usize + WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwMul) => {
                         WeierstrassOpcode::EC_MUL as usize + WeierstrassOpcode::CLASS_OFFSET
