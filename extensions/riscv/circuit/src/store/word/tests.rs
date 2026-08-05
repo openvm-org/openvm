@@ -14,10 +14,10 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREW};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREW};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -32,52 +32,49 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterCols,
-        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterCols,
+        StoreMultiByteAdapterFiller, BYTE_BITS,
     },
     store::{
-        common::store_write_data, core::fill_padding_row, Rv64StoreWordAir, Rv64StoreWordChip,
-        Rv64StoreWordExecutor, StoreWordCoreAir, StoreWordFiller,
+        common::store_write_data, core::fill_padding_row, StoreWordAir, StoreWordChip,
+        StoreWordCoreAir, StoreWordExecutor, StoreWordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
-    store::Rv64StoreWordChipGpu,
+    store::StoreWordChipGpu,
     test_utils::memory::{dummy_range_checker, store_gpu_memory_config},
 };
 
-type StoreWordHarness =
-    TestChipHarness<F, Rv64StoreWordExecutor, Rv64StoreWordAir, Rv64StoreWordChip<F>>;
+type StoreWordHarness = TestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChip<F>>;
 
 fn create_store_word_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     StoreWordHarness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-    let air = Rv64StoreWordAir::new(
-        Rv64StoreMultiByteAdapterAir::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let air = StoreWordAir::new(
+        StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
+        StoreWordCoreAir::new(LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let chip = Rv64StoreWordChip::<F>::new(
+    let executor = StoreWordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let chip = StoreWordChip::<F>::new(
         StoreWordFiller::new(
-            Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
         ),
         tester.memory_helper(),
@@ -172,7 +169,7 @@ fn negative_store_address_underflow_test() {
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
     let (mut harness, _) = create_store_word_harness(&mut tester);
     let rs1_ptr = 8;
-    tester.write_bytes(RV64_REGISTER_AS as usize, rs1_ptr, [F::ZERO; 8]);
+    tester.write_bytes(REGISTER_AS as usize, rs1_ptr, [F::ZERO; 8]);
 
     tester.execute(
         &mut harness.executor,
@@ -183,8 +180,8 @@ fn negative_store_address_underflow_test() {
                 0,
                 rs1_ptr,
                 u16::MAX as usize,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
                 1,
                 1,
             ],
@@ -194,22 +191,22 @@ fn negative_store_address_underflow_test() {
 
 #[test]
 fn run_storew_sanity_test() {
-    let read_data = rv64_bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]);
+    let read_data = bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]);
     let prev_data = [
-        rv64_bytes_to_u16_block([159, 213, 89, 34, 142, 67, 210, 88]),
-        rv64_bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
+        bytes_to_u16_block([159, 213, 89, 34, 142, 67, 210, 88]),
+        bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
     ];
     assert_eq!(
         store_write_data(STOREW, read_data, prev_data, 0),
         [
-            rv64_bytes_to_u16_block([138, 45, 202, 76, 142, 67, 210, 88]),
+            bytes_to_u16_block([138, 45, 202, 76, 142, 67, 210, 88]),
             prev_data[1]
         ]
     );
     assert_eq!(
         store_write_data(STOREW, read_data, prev_data, 4),
         [
-            rv64_bytes_to_u16_block([159, 213, 89, 34, 138, 45, 202, 76]),
+            bytes_to_u16_block([159, 213, 89, 34, 138, 45, 202, 76]),
             prev_data[1]
         ]
     );
@@ -217,7 +214,7 @@ fn run_storew_sanity_test() {
     assert_eq!(
         store_write_data(STOREW, read_data, prev_data, 3),
         [
-            rv64_bytes_to_u16_block([159, 213, 89, 138, 45, 202, 76, 88]),
+            bytes_to_u16_block([159, 213, 89, 138, 45, 202, 76, 88]),
             prev_data[1]
         ]
     );
@@ -225,8 +222,8 @@ fn run_storew_sanity_test() {
     assert_eq!(
         store_write_data(STOREW, read_data, prev_data, 6),
         [
-            rv64_bytes_to_u16_block([159, 213, 89, 34, 142, 67, 138, 45]),
-            rv64_bytes_to_u16_block([202, 76, 17, 203, 44, 118, 240, 5]),
+            bytes_to_u16_block([159, 213, 89, 34, 142, 67, 138, 45]),
+            bytes_to_u16_block([202, 76, 17, 203, 44, 118, 240, 5]),
         ]
     );
 }
@@ -251,7 +248,7 @@ fn negative_split_store_deferral_as_test() {
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter: &mut Rv64StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter: &mut StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
         adapter.mem_as = F::from_u32(DEFERRAL_AS);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -266,39 +263,34 @@ fn negative_split_store_deferral_as_test() {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuStoreWordHarness = GpuTestChipHarness<
-    F,
-    Rv64StoreWordExecutor,
-    Rv64StoreWordAir,
-    Rv64StoreWordChipGpu,
-    Rv64StoreWordChip<F>,
->;
+type GpuStoreWordHarness =
+    GpuTestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChipGpu, StoreWordChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHarness {
     let range_checker = dummy_range_checker();
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
         default_bitwise_lookup_bus(),
     ));
-    let air = Rv64StoreWordAir::new(
-        Rv64StoreMultiByteAdapterAir::new(
+    let air = StoreWordAir::new(
+        StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
+        StoreWordCoreAir::new(LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64StoreWordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let cpu_chip = Rv64StoreWordChip::<F>::new(
+    let executor = StoreWordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let cpu_chip = StoreWordChip::<F>::new(
         StoreWordFiller::new(
-            Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
         ),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64StoreWordChipGpu::new(
+    let gpu_chip = StoreWordChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),
@@ -316,7 +308,7 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-#[test_case::test_case(RV64_MEMORY_AS as usize)]
+#[test_case::test_case(MEMORY_AS as usize)]
 #[test_case::test_case(PUBLIC_VALUES_AS as usize)]
 fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
     let mut rng = create_seeded_rng();

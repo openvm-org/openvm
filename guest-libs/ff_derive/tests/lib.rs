@@ -4,12 +4,12 @@ mod tests {
 
     use eyre::Result;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::{Rv64ModularBuilder, Rv64ModularConfig};
+    use openvm_algebra_circuit::{ModularBuilder, ModularConfig};
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_instructions::exe::VmExe;
     use openvm_riscv_transpiler::{
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
     };
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
@@ -18,8 +18,8 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv64modular_config(moduli: Vec<BigUint>) -> Rv64ModularConfig {
-        let mut config = Rv64ModularConfig::new(moduli);
+    fn test_modular_config(moduli: Vec<BigUint>) -> ModularConfig {
+        let mut config = ModularConfig::new(moduli);
         config.system = test_system_config();
         config
     }
@@ -28,7 +28,7 @@ mod tests {
     fn test_full_limbs() -> Result<()> {
         let moduli = ["39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
         .map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "full_limbs",
@@ -37,51 +37,51 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_fermat() -> Result<()> {
         let moduli = ["65537"].map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "fermat", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_sqrt() -> Result<()> {
         let moduli = ["357686312646216567629137"].map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "sqrt", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -90,7 +90,7 @@ mod tests {
         let moduli =
             ["52435875175126190479447740508185965837690552500527637822603658699938581184513"]
                 .map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "constants",
@@ -99,13 +99,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -114,7 +114,7 @@ mod tests {
         let moduli =
             ["52435875175126190479447740508185965837690552500527637822603658699938581184513"]
                 .map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "from_u128",
@@ -123,13 +123,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -138,7 +138,7 @@ mod tests {
         let moduli =
             ["52435875175126190479447740508185965837690552500527637822603658699938581184513"]
                 .map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "batch_inversion",
@@ -147,13 +147,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -162,7 +162,7 @@ mod tests {
         let moduli =
             ["52435875175126190479447740508185965837690552500527637822603658699938581184513"]
                 .map(|s| BigUint::from_str(s).unwrap());
-        let config = test_rv64modular_config(moduli.to_vec());
+        let config = test_modular_config(moduli.to_vec());
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "operations",
@@ -171,13 +171,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv64ModularBuilder, config, openvm_exe);
+        air_test(ModularBuilder, config, openvm_exe);
         Ok(())
     }
 }

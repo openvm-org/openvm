@@ -27,7 +27,7 @@ __global__ void jal_lui_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64JalLuiCols<uint8_t>));
+    row.fill_zero(0, sizeof(JalLuiCols<uint8_t>));
 
     size_t total_steps = num_jal_steps + num_lui_steps;
     if (idx >= total_steps) return;
@@ -136,7 +136,7 @@ __global__ void jal_lui_replay_tracegen(
         return;
     }
 
-    Rv64CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
+    CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -146,9 +146,9 @@ __global__ void jal_lui_replay_tracegen(
         previous.timestamp,
         previous.value
     );
-    Rv64JalLuiCore core(VariableRangeChecker(rc_ptr, rc_bins));
+    JalLuiCore core(VariableRangeChecker(rc_ptr, rc_bins));
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64JalLuiCols, core)),
+        row.slice_from(COL_INDEX(JalLuiCols, core)),
         encoded_imm,
         expected_data,
         is_jal
@@ -181,7 +181,7 @@ extern "C" int _jal_lui_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64JalLuiCols<uint8_t>));
+    assert(width == sizeof(JalLuiCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(jal_step_start <= d_steps.len());
     assert(num_jal_steps <= d_steps.len() - jal_step_start);
@@ -190,7 +190,7 @@ extern "C" int _jal_lui_replay_tracegen(
     assert(num_jal_steps <= SIZE_MAX - num_lui_steps);
     assert(height >= num_jal_steps + num_lui_steps);
 
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     jal_lui_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

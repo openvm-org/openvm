@@ -10,7 +10,7 @@ mod io;
 mod m;
 mod phantom;
 
-pub use i::Rv64IExtension;
-pub use io::{Rv64IoExtension, Rv64IoRuntimeHooks};
-pub use m::Rv64MExtension;
-pub use phantom::{Rv64PhantomExtension, Rv64PhantomRuntimeHooks};
+pub use i::RiscvIExtension;
+pub use io::{RiscvIoExtension, RiscvIoRuntimeHooks};
+pub use m::RiscvMExtension;
+pub use phantom::{RiscvPhantomExtension, RiscvPhantomRuntimeHooks};

@@ -9,23 +9,23 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::BaseAluWOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BaseAluWRegU16AdapterCols, RV64_WORD_U16_LIMBS, U16_BITS},
+    adapters::{BaseAluWRegU16AdapterCols, U16_BITS, WORD_U16_LIMBS},
     cuda_abi::add_sub_w_cuda,
     AddSubCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64AddSubWChipGpu {
+pub struct AddSubWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64AddSubWChipGpu {
+impl AddSubWChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -48,8 +48,8 @@ impl Rv64AddSubWChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
-            + AddSubCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        let trace_width = BaseAluWRegU16AdapterCols::<F>::width()
+            + AddSubCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
@@ -70,7 +70,7 @@ impl Rv64AddSubWChipGpu {
                 transcript.error_ptr(),
                 BaseAluWOpcode::ADDW.global_opcode().as_usize() as u32,
                 BaseAluWOpcode::SUBW.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

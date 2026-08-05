@@ -13,22 +13,21 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
+use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{ReplayComputation, ReplayResult, RV64_REGISTER_NUM_LIMBS};
+use super::{ReplayComputation, ReplayResult, REGISTER_NUM_LIMBS};
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, checked_register_u16_pointer, rv64_bytes_to_u16_block,
-    rv64_u16_block_to_bytes,
+    byte_ptr_to_u16_ptr, bytes_to_u16_block, checked_register_u16_pointer, u16_block_to_bytes,
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
-pub struct Rv64MultAdapterCols<T> {
+pub struct MultAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
@@ -40,26 +39,26 @@ pub struct Rv64MultAdapterCols<T> {
 /// Reads instructions of the form OP a, b, c, d where \[a:8\]_d = \[b:8\]_d op \[c:8\]_d.
 /// Operand d can only be 1, and there is no immediate support.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64MultAdapterCols<u8>)]
-pub struct Rv64MultAdapterAir {
+#[columns_via(MultAdapterCols<u8>)]
+pub struct MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv64MultAdapterAir {
+impl<F: Field> BaseAir<F> for MultAdapterAir {
     fn width(&self) -> usize {
-        Rv64MultAdapterCols::<F>::width()
+        MultAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for MultAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         MinimalInstruction<AB::Expr>,
         2,
         1,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_REGISTER_NUM_LIMBS,
+        REGISTER_NUM_LIMBS,
+        REGISTER_NUM_LIMBS,
     >;
 
     fn eval(
@@ -68,7 +67,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv64MultAdapterCols<_> = local.borrow();
+        let local: &MultAdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -79,7 +78,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[0].clone()),
@@ -91,7 +90,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[1].clone()),
@@ -103,7 +102,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
@@ -119,7 +118,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     AB::Expr::ZERO,
                 ],
                 local.from_state,
@@ -130,27 +129,24 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64MultAdapterCols<_> = local.borrow();
+        let cols: &MultAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64MultAdapterFiller;
+pub struct MultAdapterFiller;
 
-impl Rv64MultAdapterFiller {
+impl MultAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, M>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64MultAdapterCols<F>,
-        compute: impl FnOnce(
-            [[u8; RV64_REGISTER_NUM_LIMBS]; 2],
-        ) -> ReplayComputation<RV64_REGISTER_NUM_LIMBS, M>,
-    ) -> Result<ReplayResult<RV64_REGISTER_NUM_LIMBS, M>, PostflightError> {
+        adapter_row: &mut MultAdapterCols<F>,
+        compute: impl FnOnce([[u8; REGISTER_NUM_LIMBS]; 2]) -> ReplayComputation<REGISTER_NUM_LIMBS, M>,
+    ) -> Result<ReplayResult<REGISTER_NUM_LIMBS, M>, PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || instruction.e.as_canonical_u32() != 0
+        if instruction.d.as_canonical_u32() != REGISTER_AS || instruction.e.as_canonical_u32() != 0
         {
             return Err(PostflightError::new(
                 "multiplication instruction has invalid address spaces",
@@ -165,19 +161,12 @@ impl Rv64MultAdapterFiller {
         let rs2_u16_ptr = checked_register_u16_pointer(rs2_ptr)?;
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
-        let rs2 = replay.read_u16(RV64_REGISTER_AS, rs2_u16_ptr)?;
-        let inputs = [
-            rv64_u16_block_to_bytes(rs1.value),
-            rv64_u16_block_to_bytes(rs2.value),
-        ];
+        let rs1 = replay.read_u16(REGISTER_AS, rs1_u16_ptr)?;
+        let rs2 = replay.read_u16(REGISTER_AS, rs2_u16_ptr)?;
+        let inputs = [u16_block_to_bytes(rs1.value), u16_block_to_bytes(rs2.value)];
         let computation = compute(inputs);
         let output = computation.output;
-        let write = replay.write_u16(
-            RV64_REGISTER_AS,
-            rd_u16_ptr,
-            rv64_bytes_to_u16_block(output),
-        )?;
+        let write = replay.write_u16(REGISTER_AS, rd_u16_ptr, bytes_to_u16_block(output))?;
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         adapter_row

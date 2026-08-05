@@ -2,8 +2,8 @@
 
 using StoreWordCore = StoreWidthCore<WORD_ACCESS_WIDTH>;
 
-template <typename T> struct Rv64StoreWordCols {
-    Rv64StoreMultiByteAdapterCols<T> adapter;
+template <typename T> struct StoreWordCols {
+    StoreMultiByteAdapterCols<T> adapter;
     StoreWidthCoreCols<T, WORD_ACCESS_WIDTH> core;
 };
 

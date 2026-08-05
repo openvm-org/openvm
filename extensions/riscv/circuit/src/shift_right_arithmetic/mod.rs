@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use super::adapters::{Rv64BaseAluRegU16AdapterAir, U16_BITS};
+use super::adapters::{BaseAluRegU16AdapterAir, U16_BITS};
 
 mod core;
 mod execution;
@@ -16,9 +16,7 @@ pub use cuda::*;
 mod tests;
 
 // u16 core (4 limbs of 16 bits), shared with shift_w (SRAW) and bigint ShiftRightArithmetic256.
-pub type Rv64ShiftRightArithmeticAir = VmAirWrapper<
-    Rv64BaseAluRegU16AdapterAir,
-    ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>,
->;
-pub type Rv64ShiftRightArithmeticExecutor = ShiftRightArithmeticExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftRightArithmeticChip<F> = VmChipWrapper<F, ShiftRightArithmeticFiller>;
+pub type ShiftRightArithmeticAir =
+    VmAirWrapper<BaseAluRegU16AdapterAir, ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type ShiftRightArithmeticExecutor = ShiftRightArithmeticCoreExecutor<BLOCK_FE_WIDTH, U16_BITS>;
+pub type ShiftRightArithmeticChip<F> = VmChipWrapper<F, ShiftRightArithmeticFiller>;

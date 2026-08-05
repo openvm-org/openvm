@@ -37,7 +37,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64MulHChipGpu,
+    crate::MulHChipGpu,
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -45,33 +45,30 @@ use {
 
 use super::{core::run_mulh, trace::generate_trace_from_postflight};
 use crate::{
-    adapters::{Rv64MultAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
-    mulh::{MulHCoreCols, Rv64MulHChip},
-    MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
+    adapters::{MultAdapterAir, BYTE_BITS, REGISTER_NUM_LIMBS},
+    mulh::{MulHChip, MulHCoreCols},
+    MulHAir, MulHCoreAir, MulHExecutor, MulHFiller,
 };
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
-const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1u32 << RV64_BYTE_BITS),
-    (MAX_NUM_LIMBS * (1u32 << RV64_BYTE_BITS)),
-];
+const TUPLE_CHECKER_SIZES: [u32; 2] = [(1u32 << BYTE_BITS), (MAX_NUM_LIMBS * (1u32 << BYTE_BITS))];
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChip<F>>;
+type Harness = TestChipHarness<F, MulHExecutor, MulHAir, MulHChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64MulHAir, Rv64MulHExecutor, Rv64MulHChip<F>) {
-    let air = Rv64MulHAir::new(
-        Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
+) -> (MulHAir, MulHExecutor, MulHChip<F>) {
+    let air = MulHAir::new(
+        MultAdapterAir::new(execution_bridge, memory_bridge),
         MulHCoreAir::new(bitwise_chip.bus(), *range_tuple_chip.bus()),
     );
-    let executor = Rv64MulHExecutor::new(MulHOpcode::CLASS_OFFSET);
-    let chip = Rv64MulHChip::<F>::new(
+    let executor = MulHExecutor::new(MulHOpcode::CLASS_OFFSET);
+    let chip = MulHChip::<F>::new(
         MulHFiller::new(bitwise_chip, range_tuple_chip),
         memory_helper,
     );
@@ -83,17 +80,15 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
@@ -126,27 +121,21 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: MulHOpcode,
-    b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    b: Option<[u32; REGISTER_NUM_LIMBS]>,
+    c: Option<[u32; REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(generate_long_number::<
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_BYTE_BITS,
-    >(rng));
-    let c = c.unwrap_or(generate_long_number::<
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_BYTE_BITS,
-    >(rng));
+    let b = b.unwrap_or(generate_long_number::<REGISTER_NUM_LIMBS, BYTE_BITS>(rng));
+    let c = c.unwrap_or(generate_long_number::<REGISTER_NUM_LIMBS, BYTE_BITS>(rng));
 
     let rs1 = gen_register_pointer(rng, 8);
     let mut rs2 = gen_register_pointer(rng, 8);
     while rs2 == rs1 {
         rs2 = gen_register_pointer(rng, 8);
     }
-    let rd = rng.random_range(1..32) * RV64_REGISTER_NUM_LIMBS;
+    let rd = rng.random_range(1..32) * REGISTER_NUM_LIMBS;
 
-    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
-    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));
+    tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
+    tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));
 
     tester.execute(
         executor,
@@ -154,10 +143,10 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
-    let (a, _, _, _, _) = run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c);
+    let (a, _, _, _, _) = run_mulh::<REGISTER_NUM_LIMBS, BYTE_BITS>(opcode, &b, &c);
     assert_eq!(
         a.map(F::from_u32),
-        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd)
     );
 }
 
@@ -171,7 +160,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 #[test_case(MULH, 100)]
 #[test_case(MULHSU, 100)]
 #[test_case(MULHU, 100)]
-fn run_rv64_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
+fn run_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise, range_tuple) = create_harness(&mut tester);
@@ -207,10 +196,10 @@ fn run_rv64_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_mulh_test(
     opcode: MulHOpcode,
-    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
-    b: [u32; RV64_REGISTER_NUM_LIMBS],
-    c: [u32; RV64_REGISTER_NUM_LIMBS],
-    prank_a_mul: [u32; RV64_REGISTER_NUM_LIMBS],
+    prank_a: [u32; REGISTER_NUM_LIMBS],
+    b: [u32; REGISTER_NUM_LIMBS],
+    c: [u32; REGISTER_NUM_LIMBS],
+    prank_a_mul: [u32; REGISTER_NUM_LIMBS],
     prank_b_ext: u32,
     prank_c_ext: u32,
     _interaction_error: bool,
@@ -232,7 +221,7 @@ fn run_negative_mulh_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut MulHCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut MulHCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
         cols.a_mul = prank_a_mul.map(F::from_u32);
@@ -254,7 +243,7 @@ fn run_negative_mulh_test(
 }
 
 #[test]
-fn rv64_mulh_wrong_a_mul_negative_test() {
+fn mulh_wrong_a_mul_negative_test() {
     run_negative_mulh_test(
         MULH,
         [227, 221, 103, 215, 175, 23, 236, 9],
@@ -268,7 +257,7 @@ fn rv64_mulh_wrong_a_mul_negative_test() {
 }
 
 #[test]
-fn rv64_mulh_wrong_a_negative_test() {
+fn mulh_wrong_a_negative_test() {
     run_negative_mulh_test(
         MULH,
         [227, 221, 103, 215, 175, 23, 236, 10],
@@ -282,7 +271,7 @@ fn rv64_mulh_wrong_a_negative_test() {
 }
 
 #[test]
-fn rv64_mulh_wrong_ext_negative_test() {
+fn mulh_wrong_ext_negative_test() {
     run_negative_mulh_test(
         MULH,
         [1, 0, 0, 0, 0, 0, 0, 0],
@@ -296,7 +285,7 @@ fn rv64_mulh_wrong_ext_negative_test() {
 }
 
 #[test]
-fn rv64_mulh_invalid_ext_negative_test() {
+fn mulh_invalid_ext_negative_test() {
     run_negative_mulh_test(
         MULH,
         [3, 2, 2, 2, 2, 2, 2, 2],
@@ -310,7 +299,7 @@ fn rv64_mulh_invalid_ext_negative_test() {
 }
 
 #[test]
-fn rv64_mulhsu_wrong_a_mul_negative_test() {
+fn mulhsu_wrong_a_mul_negative_test() {
     run_negative_mulh_test(
         MULHSU,
         [171, 1, 123, 29, 90, 68, 133, 207],
@@ -324,7 +313,7 @@ fn rv64_mulhsu_wrong_a_mul_negative_test() {
 }
 
 #[test]
-fn rv64_mulhsu_wrong_a_negative_test() {
+fn mulhsu_wrong_a_negative_test() {
     run_negative_mulh_test(
         MULHSU,
         [171, 1, 123, 29, 90, 68, 133, 206],
@@ -338,7 +327,7 @@ fn rv64_mulhsu_wrong_a_negative_test() {
 }
 
 #[test]
-fn rv64_mulhsu_wrong_b_ext_negative_test() {
+fn mulhsu_wrong_b_ext_negative_test() {
     run_negative_mulh_test(
         MULHSU,
         [1, 0, 0, 0, 0, 0, 0, 0],
@@ -352,7 +341,7 @@ fn rv64_mulhsu_wrong_b_ext_negative_test() {
 }
 
 #[test]
-fn rv64_mulhsu_wrong_c_ext_negative_test() {
+fn mulhsu_wrong_c_ext_negative_test() {
     run_negative_mulh_test(
         MULHSU,
         [0, 0, 0, 0, 0, 0, 0, 64],
@@ -366,7 +355,7 @@ fn rv64_mulhsu_wrong_c_ext_negative_test() {
 }
 
 #[test]
-fn rv64_mulhu_wrong_a_mul_negative_test() {
+fn mulhu_wrong_a_mul_negative_test() {
     run_negative_mulh_test(
         MULHU,
         [219, 160, 76, 134, 138, 93, 30, 165],
@@ -380,7 +369,7 @@ fn rv64_mulhu_wrong_a_mul_negative_test() {
 }
 
 #[test]
-fn rv64_mulhu_wrong_a_negative_test() {
+fn mulhu_wrong_a_negative_test() {
     run_negative_mulh_test(
         MULHU,
         [219, 160, 76, 134, 138, 93, 30, 164],
@@ -394,7 +383,7 @@ fn rv64_mulhu_wrong_a_negative_test() {
 }
 
 #[test]
-fn rv64_mulhu_wrong_ext_negative_test() {
+fn mulhu_wrong_ext_negative_test() {
     run_negative_mulh_test(
         MULHU,
         [255, 255, 255, 255, 255, 255, 255, 255],
@@ -415,18 +404,18 @@ fn rv64_mulhu_wrong_ext_negative_test() {
 
 #[test]
 fn run_mulh_sanity_test() {
-    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 205];
-    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
-    let z: [u32; RV64_REGISTER_NUM_LIMBS] = [227, 221, 103, 215, 175, 23, 236, 9];
-    let z_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 86];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [490, 671, 835, 1025, 1119, 1171, 1345, 1591];
-    let c_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 339];
+    let x: [u32; REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 205];
+    let y: [u32; REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let z: [u32; REGISTER_NUM_LIMBS] = [227, 221, 103, 215, 175, 23, 236, 9];
+    let z_mul: [u32; REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 86];
+    let c: [u32; REGISTER_NUM_LIMBS] = [490, 671, 835, 1025, 1119, 1171, 1345, 1591];
+    let c_mul: [u32; REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 339];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(MULH, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+        run_mulh::<REGISTER_NUM_LIMBS, BYTE_BITS>(MULH, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
-        assert_eq!(c[i], carry[i + RV64_REGISTER_NUM_LIMBS]);
+        assert_eq!(c[i], carry[i + REGISTER_NUM_LIMBS]);
         assert_eq!(c_mul[i], carry[i]);
     }
     assert_eq!(x_ext, 255);
@@ -435,18 +424,18 @@ fn run_mulh_sanity_test() {
 
 #[test]
 fn run_mulhu_sanity_test() {
-    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 205];
-    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
-    let z: [u32; RV64_REGISTER_NUM_LIMBS] = [219, 160, 76, 134, 138, 93, 30, 165];
-    let z_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 86];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [243, 230, 166, 182, 58, 40, 165, 0];
-    let c_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 339];
+    let x: [u32; REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 205];
+    let y: [u32; REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let z: [u32; REGISTER_NUM_LIMBS] = [219, 160, 76, 134, 138, 93, 30, 165];
+    let z_mul: [u32; REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 86];
+    let c: [u32; REGISTER_NUM_LIMBS] = [243, 230, 166, 182, 58, 40, 165, 0];
+    let c_mul: [u32; REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 339];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(MULHU, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+        run_mulh::<REGISTER_NUM_LIMBS, BYTE_BITS>(MULHU, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
-        assert_eq!(c[i], carry[i + RV64_REGISTER_NUM_LIMBS]);
+        assert_eq!(c[i], carry[i + REGISTER_NUM_LIMBS]);
         assert_eq!(c_mul[i], carry[i]);
     }
     assert_eq!(x_ext, 0);
@@ -455,18 +444,18 @@ fn run_mulhu_sanity_test() {
 
 #[test]
 fn run_mulhsu_pos_sanity_test() {
-    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 5];
-    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
-    let z: [u32; RV64_REGISTER_NUM_LIMBS] = [139, 91, 31, 15, 249, 185, 26, 4];
-    let z_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 126];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [158, 169, 55, 125, 30, 20, 4, 0];
-    let c_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 299];
+    let x: [u32; REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 5];
+    let y: [u32; REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let z: [u32; REGISTER_NUM_LIMBS] = [139, 91, 31, 15, 249, 185, 26, 4];
+    let z_mul: [u32; REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 126];
+    let c: [u32; REGISTER_NUM_LIMBS] = [158, 169, 55, 125, 30, 20, 4, 0];
+    let c_mul: [u32; REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 299];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(MULHSU, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+        run_mulh::<REGISTER_NUM_LIMBS, BYTE_BITS>(MULHSU, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
-        assert_eq!(c[i], carry[i + RV64_REGISTER_NUM_LIMBS]);
+        assert_eq!(c[i], carry[i + REGISTER_NUM_LIMBS]);
         assert_eq!(c_mul[i], carry[i]);
     }
     assert_eq!(x_ext, 0);
@@ -475,18 +464,18 @@ fn run_mulhsu_pos_sanity_test() {
 
 #[test]
 fn run_mulhsu_neg_sanity_test() {
-    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 205];
-    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
-    let z: [u32; RV64_REGISTER_NUM_LIMBS] = [168, 51, 254, 247, 64, 58, 5, 215];
-    let z_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 86];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [294, 390, 403, 561, 511, 528, 678, 718];
-    let c_mul: [u32; RV64_REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 339];
+    let x: [u32; REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 145, 34, 25, 205];
+    let y: [u32; REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let z: [u32; REGISTER_NUM_LIMBS] = [168, 51, 254, 247, 64, 58, 5, 215];
+    let z_mul: [u32; REGISTER_NUM_LIMBS] = [63, 247, 125, 232, 87, 99, 218, 86];
+    let c: [u32; REGISTER_NUM_LIMBS] = [294, 390, 403, 561, 511, 528, 678, 718];
+    let c_mul: [u32; REGISTER_NUM_LIMBS] = [39, 100, 126, 205, 192, 213, 155, 339];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(MULHSU, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+        run_mulh::<REGISTER_NUM_LIMBS, BYTE_BITS>(MULHSU, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
-        assert_eq!(c[i], carry[i + RV64_REGISTER_NUM_LIMBS]);
+        assert_eq!(c[i], carry[i + REGISTER_NUM_LIMBS]);
         assert_eq!(c_mul[i], carry[i]);
     }
     assert_eq!(x_ext, 255);
@@ -500,17 +489,14 @@ fn run_mulhsu_neg_sanity_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuHarness =
-    GpuTestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulHChip<F>>;
+type GpuHarness = GpuTestChipHarness<F, MulHExecutor, MulHAir, MulHChipGpu, MulHChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let dummy_range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
@@ -521,7 +507,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64MulHChipGpu::new(
+    let gpu_chip = MulHChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),

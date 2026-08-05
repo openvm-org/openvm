@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::STOREB;
+use openvm_riscv_transpiler::LoadStoreOpcode::STOREB;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -22,8 +22,8 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols, Rv64StoreByteAdapterFiller,
-        StoreByteInstruction, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
+        shift_encoder, u16_cell_byte, StoreByteAdapterCols, StoreByteAdapterFiller,
+        StoreByteInstruction, BYTE_BITS, BYTE_SHIFT_SELECTOR_WIDTH,
     },
     store::common::store_write_data,
 };
@@ -89,7 +89,7 @@ where
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
         // read_data[0] = read_lo_byte + 2^8 * read_hi_byte.
-        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let inv_2_pow_8 = AB::F::from_u32(1 << BYTE_BITS).inverse();
         let read_hi_byte = (cols.read_data[0] - cols.read_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.read_lo_byte, read_hi_byte)
@@ -111,8 +111,7 @@ where
             is_valid.clone() * cols.prev_data[i]
                 + flags[2 * i].clone() * (cols.read_lo_byte - cols.prev_cell_lo_byte)
                 + flags[2 * i + 1].clone()
-                    * (cols.read_lo_byte * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
-                        - cols.prev_data[i]
+                    * (cols.read_lo_byte * AB::Expr::from_u32(1 << BYTE_BITS) - cols.prev_data[i]
                         + cols.prev_cell_lo_byte)
         });
         // shift_amount = Σₛ s * flag[s].
@@ -150,18 +149,18 @@ where
 }
 
 #[derive(Clone)]
-pub struct StoreByteFiller<A = Rv64StoreByteAdapterFiller> {
+pub struct StoreByteFiller<A = StoreByteAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
 }
 
 impl<A> StoreByteFiller<A> {
     pub fn new(
         adapter: A,
         offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ) -> Self {
         Self {
             adapter,
@@ -172,13 +171,13 @@ impl<A> StoreByteFiller<A> {
     }
 }
 
-impl StoreByteFiller<Rv64StoreByteAdapterFiller> {
+impl StoreByteFiller<StoreByteAdapterFiller> {
     pub(super) fn replay<F: PrimeField32>(
         &self,
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64StoreByteAdapterCols<F>,
+        adapter_row: &mut StoreByteAdapterCols<F>,
         core_row: &mut StoreByteCoreCols<F>,
     ) -> Result<(), PostflightError> {
         let (read_data, prev_data, shift) = self.adapter.replay(

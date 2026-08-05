@@ -2,7 +2,7 @@
 #include "fp.h"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
-#include "rv64_checkpoint_replay_opcodes.cuh"
+#include "checkpoint_replay_opcodes.cuh"
 
 namespace {
 
@@ -10,7 +10,6 @@ static constexpr uint32_t BABY_BEAR_ORDER = 2013265921u;
 static constexpr uint32_t REGISTER_BYTES = 8;
 static constexpr uint32_t NUM_REGISTERS = 32;
 static constexpr uint32_t MAX_HINT_WORDS = 1023;
-static constexpr uint32_t REPLAY_THREADS = 256;
 
 static constexpr uint32_t ERROR_BAD_CHUNK = 301;
 static constexpr uint32_t ERROR_BAD_PC = 302;
@@ -203,7 +202,7 @@ __device__ __forceinline__ uint64_t execute_rr_result(
 ) {
     uint32_t local;
     matched = true;
-    if (opcode_in_family(opcode, RV64_BASE_ALU_OPCODE_BASE, RV64_BASE_ALU_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, BASE_ALU_OPCODE_BASE, BASE_ALU_OPCODE_COUNT, local)) {
         switch (local) {
         case 0: return lhs + rhs;
         case 1: return lhs - rhs;
@@ -212,34 +211,34 @@ __device__ __forceinline__ uint64_t execute_rr_result(
         default: return lhs & rhs;
         }
     }
-    if (opcode_in_family(opcode, RV64_SHIFT_OPCODE_BASE, RV64_SHIFT_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, SHIFT_OPCODE_BASE, SHIFT_OPCODE_COUNT, local)) {
         uint32_t shift = uint32_t(rhs) & 63;
         if (local == 0) return lhs << shift;
         if (local == 1) return lhs >> shift;
         return arithmetic_shift_right(lhs, shift);
     }
-    if (opcode_in_family(opcode, RV64_LESS_THAN_OPCODE_BASE, RV64_LESS_THAN_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, LESS_THAN_OPCODE_BASE, LESS_THAN_OPCODE_COUNT, local)) {
         return local == 0 ? uint64_t(int64_t(lhs) < int64_t(rhs)) : uint64_t(lhs < rhs);
     }
-    if (opcode_in_family(opcode, RV64_BASE_ALU_W_OPCODE_BASE, RV64_BASE_ALU_W_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, BASE_ALU_W_OPCODE_BASE, BASE_ALU_W_OPCODE_COUNT, local)) {
         uint32_t result = local == 0 ? uint32_t(lhs) + uint32_t(rhs)
                                      : uint32_t(lhs) - uint32_t(rhs);
         return sign_extend_word(result);
     }
-    if (opcode_in_family(opcode, RV64_SHIFT_W_OPCODE_BASE, RV64_SHIFT_W_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, SHIFT_W_OPCODE_BASE, SHIFT_W_OPCODE_COUNT, local)) {
         uint32_t shift = uint32_t(rhs) & 31;
         uint32_t value = uint32_t(lhs);
         if (local == 0) return sign_extend_word(value << shift);
         if (local == 1) return sign_extend_word(value >> shift);
         return sign_extend_word(uint32_t(int32_t(value) >> shift));
     }
-    if (opcode == RV64_MUL_OPCODE_BASE) return lhs * rhs;
-    if (opcode_in_family(opcode, RV64_MULH_OPCODE_BASE, RV64_MULH_OPCODE_COUNT, local)) {
+    if (opcode == MUL_OPCODE_BASE) return lhs * rhs;
+    if (opcode_in_family(opcode, MULH_OPCODE_BASE, MULH_OPCODE_COUNT, local)) {
         if (local == 0) return uint64_t(__mul64hi(int64_t(lhs), int64_t(rhs)));
         if (local == 1) return __umul64hi(lhs, rhs) - ((lhs >> 63) ? rhs : 0);
         return __umul64hi(lhs, rhs);
     }
-    if (opcode_in_family(opcode, RV64_DIVREM_OPCODE_BASE, RV64_DIVREM_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, DIVREM_OPCODE_BASE, DIVREM_OPCODE_COUNT, local)) {
         if (local == 0) {
             if (rhs == 0) return UINT64_MAX;
             if (lhs == (uint64_t(1) << 63) && rhs == UINT64_MAX) return lhs;
@@ -253,8 +252,8 @@ __device__ __forceinline__ uint64_t execute_rr_result(
         }
         return rhs == 0 ? lhs : lhs % rhs;
     }
-    if (opcode == RV64_MUL_W_OPCODE_BASE) return sign_extend_word(uint32_t(lhs) * uint32_t(rhs));
-    if (opcode_in_family(opcode, RV64_DIVREM_W_OPCODE_BASE, RV64_DIVREM_W_OPCODE_COUNT, local)) {
+    if (opcode == MUL_W_OPCODE_BASE) return sign_extend_word(uint32_t(lhs) * uint32_t(rhs));
+    if (opcode_in_family(opcode, DIVREM_W_OPCODE_BASE, DIVREM_W_OPCODE_COUNT, local)) {
         uint32_t lhs_w = uint32_t(lhs);
         uint32_t rhs_w = uint32_t(rhs);
         if (local == 0) {
@@ -280,9 +279,9 @@ __device__ __forceinline__ uint64_t execute_rr_result(
 
 __device__ __forceinline__ bool rr_uses_immediate_as(uint32_t opcode) {
     uint32_t local;
-    return opcode == RV64_MUL_OPCODE_BASE || opcode_in_family(opcode, RV64_MULH_OPCODE_BASE, RV64_MULH_OPCODE_COUNT, local) ||
-           opcode_in_family(opcode, RV64_DIVREM_OPCODE_BASE, RV64_DIVREM_OPCODE_COUNT, local) || opcode == RV64_MUL_W_OPCODE_BASE ||
-           opcode_in_family(opcode, RV64_DIVREM_W_OPCODE_BASE, RV64_DIVREM_W_OPCODE_COUNT, local);
+    return opcode == MUL_OPCODE_BASE || opcode_in_family(opcode, MULH_OPCODE_BASE, MULH_OPCODE_COUNT, local) ||
+           opcode_in_family(opcode, DIVREM_OPCODE_BASE, DIVREM_OPCODE_COUNT, local) || opcode == MUL_W_OPCODE_BASE ||
+           opcode_in_family(opcode, DIVREM_W_OPCODE_BASE, DIVREM_W_OPCODE_COUNT, local);
 }
 
 __device__ __forceinline__ bool is_rr_opcode(uint32_t opcode) {
@@ -302,7 +301,7 @@ __device__ __forceinline__ uint64_t execute_ri_result(
     int64_t immediate;
     matched = true;
     valid = true;
-    if (opcode_in_family(opcode, RV64_BASE_ALU_IMM_OPCODE_BASE, RV64_BASE_ALU_IMM_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, BASE_ALU_IMM_OPCODE_BASE, BASE_ALU_IMM_OPCODE_COUNT, local)) {
         valid = decode_signed_12(encoded, immediate);
         if (!valid) return 0;
         uint64_t imm = uint64_t(immediate);
@@ -311,25 +310,25 @@ __device__ __forceinline__ uint64_t execute_ri_result(
         if (local == 2) return lhs | imm;
         return lhs & imm;
     }
-    if (opcode_in_family(opcode, RV64_SHIFT_IMM_OPCODE_BASE, RV64_SHIFT_IMM_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, SHIFT_IMM_OPCODE_BASE, SHIFT_IMM_OPCODE_COUNT, local)) {
         valid = encoded < 64;
         if (!valid) return 0;
         if (local == 0) return lhs << encoded;
         if (local == 1) return lhs >> encoded;
         return arithmetic_shift_right(lhs, encoded);
     }
-    if (opcode_in_family(opcode, RV64_LESS_THAN_IMM_OPCODE_BASE, RV64_LESS_THAN_IMM_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, LESS_THAN_IMM_OPCODE_BASE, LESS_THAN_IMM_OPCODE_COUNT, local)) {
         valid = decode_signed_12(encoded, immediate);
         if (!valid) return 0;
         return local == 0 ? uint64_t(int64_t(lhs) < immediate)
                           : uint64_t(lhs < uint64_t(immediate));
     }
-    if (opcode == RV64_BASE_ALU_W_IMM_OPCODE_BASE) {
+    if (opcode == BASE_ALU_W_IMM_OPCODE_BASE) {
         valid = decode_signed_12(encoded, immediate);
         if (!valid) return 0;
         return sign_extend_word(uint32_t(lhs) + uint32_t(immediate));
     }
-    if (opcode_in_family(opcode, RV64_SHIFT_W_IMM_OPCODE_BASE, RV64_SHIFT_W_IMM_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, SHIFT_W_IMM_OPCODE_BASE, SHIFT_W_IMM_OPCODE_COUNT, local)) {
         valid = encoded < 32;
         if (!valid) return 0;
         uint32_t value = uint32_t(lhs);
@@ -380,7 +379,7 @@ __device__ __forceinline__ bool validate_hint_store(
     HintStoreInstruction &decoded
 ) {
     uint32_t local;
-    if (!opcode_in_family(instruction.words[0], RV64_HINT_STORE_OPCODE_BASE, RV64_HINT_STORE_OPCODE_COUNT, local) ||
+    if (!opcode_in_family(instruction.words[0], HINT_STORE_OPCODE_BASE, HINT_STORE_OPCODE_COUNT, local) ||
         instruction.words[3] != 0 || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || instruction.words[6] != 0 ||
         instruction.words[7] != 0 || !decode_register(instruction.words[2], decoded.mem_ptr_reg)) {
@@ -430,7 +429,7 @@ __device__ __forceinline__ bool validate_load_store(
     LoadStoreInstruction &decoded
 ) {
     uint32_t local;
-    if (!opcode_in_family(instruction.words[0], RV64_LOAD_STORE_OPCODE_BASE, RV64_LOAD_STORE_OPCODE_COUNT, local)) return false;
+    if (!opcode_in_family(instruction.words[0], LOAD_STORE_OPCODE_BASE, LOAD_STORE_OPCODE_COUNT, local)) return false;
     decoded.is_load = local <= 3 || local >= 8;
     decoded.sign_extend = local >= 8;
     switch (local) {
@@ -502,10 +501,10 @@ __device__ __forceinline__ bool execute_branch_condition(
 ) {
     uint32_t local;
     matched = true;
-    if (opcode_in_family(opcode, RV64_BRANCH_EQUAL_OPCODE_BASE, RV64_BRANCH_EQUAL_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, BRANCH_EQUAL_OPCODE_BASE, BRANCH_EQUAL_OPCODE_COUNT, local)) {
         return local == 0 ? lhs == rhs : lhs != rhs;
     }
-    if (opcode_in_family(opcode, RV64_BRANCH_LESS_THAN_OPCODE_BASE, RV64_BRANCH_LESS_THAN_OPCODE_COUNT, local)) {
+    if (opcode_in_family(opcode, BRANCH_LESS_THAN_OPCODE_BASE, BRANCH_LESS_THAN_OPCODE_COUNT, local)) {
         if (local == 0) return int64_t(lhs) < int64_t(rhs);
         if (local == 1) return lhs < rhs;
         if (local == 2) return int64_t(lhs) >= int64_t(rhs);
@@ -1101,8 +1100,8 @@ __device__ bool replay_chunk(
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
         } else if (
-            opcode >= RV64_HINT_STORE_OPCODE_BASE &&
-            opcode < RV64_HINT_STORE_OPCODE_BASE + RV64_HINT_STORE_OPCODE_COUNT
+            opcode >= HINT_STORE_OPCODE_BASE &&
+            opcode < HINT_STORE_OPCODE_BASE + HINT_STORE_OPCODE_COUNT
         ) {
             HintStoreInstruction decoded{};
             if (!validate_hint_store(*instruction, register_as, memory_as,
@@ -1152,8 +1151,8 @@ __device__ bool replay_chunk(
             state.pc += 4;
             state.timestamp += 3 * decoded.num_words;
         } else if (
-            opcode >= RV64_LOAD_STORE_OPCODE_BASE &&
-            opcode < RV64_LOAD_STORE_OPCODE_BASE + RV64_LOAD_STORE_OPCODE_COUNT
+            opcode >= LOAD_STORE_OPCODE_BASE &&
+            opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT
         ) {
             LoadStoreInstruction decoded{};
             if (!validate_load_store(*instruction, register_as, memory_as,
@@ -1270,7 +1269,7 @@ __device__ bool replay_chunk(
                 emitted += 2;
                 state.pc = take ? branch_target(state.pc, instruction->words[3]) : state.pc + 4;
                 state.timestamp += 2;
-            } else if (opcode == RV64_JAL_LUI_OPCODE_BASE) {
+            } else if (opcode == JAL_LUI_OPCODE_BASE) {
                 uint32_t needs_write = instruction->words[6];
                 if (!decode_register(instruction->words[1], rd) || instruction->words[2] != 0 ||
                     instruction->words[4] != register_as || instruction->words[5] != 0 ||
@@ -1297,7 +1296,7 @@ __device__ bool replay_chunk(
                 state.pc = branch_target(state.pc, instruction->words[3]);
                 state.timestamp++;
             } else if (
-                opcode == RV64_JAL_LUI_OPCODE_BASE + RV64_JAL_LUI_OPCODE_COUNT - 1
+                opcode == JAL_LUI_OPCODE_BASE + JAL_LUI_OPCODE_COUNT - 1
             ) {
                 if (!decode_register(instruction->words[1], rd) || rd == 0 ||
                     instruction->words[2] != 0 || instruction->words[3] >= (1u << 20) ||
@@ -1320,7 +1319,7 @@ __device__ bool replay_chunk(
                 state.regs[rd] = result;
                 state.pc += 4;
                 state.timestamp++;
-            } else if (opcode == RV64_JALR_OPCODE_BASE) {
+            } else if (opcode == JALR_OPCODE_BASE) {
                 uint32_t needs_write = instruction->words[6];
                 uint32_t imm_sign = instruction->words[7];
                 if (!decode_register(instruction->words[1], rd) ||
@@ -1361,7 +1360,7 @@ __device__ bool replay_chunk(
                 state.pc = uint32_t(target);
                 if (needs_write) state.regs[rd] = result;
                 state.timestamp += 2;
-            } else if (opcode == RV64_AUIPC_OPCODE_BASE) {
+            } else if (opcode == AUIPC_OPCODE_BASE) {
                 if (!decode_register(instruction->words[1], rd) || rd == 0 ||
                     instruction->words[2] != 0 || instruction->words[3] >= (1u << 24) ||
                     !validate_tail(*instruction, register_as, 0)) {
@@ -1383,7 +1382,7 @@ __device__ bool replay_chunk(
                 state.regs[rd] = result;
                 state.pc += 4;
                 state.timestamp++;
-            } else if (opcode == RV64_PHANTOM_OPCODE_BASE) {
+            } else if (opcode == PHANTOM_OPCODE_BASE) {
                 if (instruction->words[4] != 0 || instruction->words[5] != 0 ||
                     instruction->words[6] != 0 || instruction->words[7] != 0) {
                     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
@@ -1391,7 +1390,7 @@ __device__ bool replay_chunk(
                 }
                 state.pc += 4;
                 state.timestamp++;
-            } else if (opcode == RV64_TERMINATE_OPCODE_BASE) {
+            } else if (opcode == TERMINATE_OPCODE_BASE) {
                 if (endpoint_kind != 0 || local_step + 1 != expected_steps ||
                     chunk + 1 != anchors.len()) {
                     preflight_set_error(error, ERROR_BAD_TERMINATION);

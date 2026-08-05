@@ -1,6 +1,6 @@
 use openvm_bigint_transpiler::{
-    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+    BaseAlu256Opcode, BranchEqual256Opcode, BranchLessThan256Opcode, LessThan256Opcode,
+    Mul256Opcode, Shift256Opcode,
 };
 use openvm_circuit::{
     arch::{
@@ -13,7 +13,7 @@ use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
+    riscv::{IMM_AS, MEMORY_AS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -23,8 +23,8 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{Int256PreflightGpuTracegen, Int256Rv64GpuBuilder};
-use crate::Int256Rv64Config;
+use super::{Int256GpuBuilder, Int256PreflightGpuTracegen};
+use crate::Int256Config;
 
 type F = BabyBear;
 
@@ -33,40 +33,28 @@ const LHS_PTR: u32 = 0x200;
 const RHS_PTR: u32 = 0x300;
 
 fn reg(index: usize) -> usize {
-    index * RV64_REGISTER_BYTES as usize
+    index * REGISTER_BYTES as usize
 }
 
 fn fixture(equal: bool) -> (Program<F>, VmExe<F>) {
     let instructions = [
         Instruction::<F>::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
-            [
-                reg(4),
-                reg(0),
-                7,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-            ],
+            [reg(4), reg(0), 7, REGISTER_AS as usize, IMM_AS as usize],
         ),
         Instruction::<F>::from_usize(
-            Rv64BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
+            BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
             [
                 reg(1),
                 reg(2),
                 reg(3),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(
-            Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
-            [
-                reg(2),
-                reg(3),
-                8,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
+            BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+            [reg(2), reg(3), 8, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -89,18 +77,18 @@ fn fixture(equal: bool) -> (Program<F>, VmExe<F>) {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)),
+                .map(|(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte)),
         );
     }
     init_memory.extend(
         lhs.into_iter()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, LHS_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, LHS_PTR + offset as u32), byte)),
     );
     init_memory.extend(
         rhs.into_iter()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, RHS_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, RHS_PTR + offset as u32), byte)),
     );
     (
         program.clone(),
@@ -117,71 +105,71 @@ struct OpcodeCase {
 fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
     let cases = vec![
         OpcodeCase {
-            opcode: Rv64BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
+            opcode: BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64BaseAlu256Opcode(BaseAluOpcode::SUB).global_opcode(),
+            opcode: BaseAlu256Opcode(BaseAluOpcode::SUB).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64BaseAlu256Opcode(BaseAluOpcode::XOR).global_opcode(),
+            opcode: BaseAlu256Opcode(BaseAluOpcode::XOR).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64BaseAlu256Opcode(BaseAluOpcode::OR).global_opcode(),
+            opcode: BaseAlu256Opcode(BaseAluOpcode::OR).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64BaseAlu256Opcode(BaseAluOpcode::AND).global_opcode(),
+            opcode: BaseAlu256Opcode(BaseAluOpcode::AND).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64Shift256Opcode(ShiftOpcode::SLL).global_opcode(),
+            opcode: Shift256Opcode(ShiftOpcode::SLL).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64Shift256Opcode(ShiftOpcode::SRL).global_opcode(),
+            opcode: Shift256Opcode(ShiftOpcode::SRL).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64Shift256Opcode(ShiftOpcode::SRA).global_opcode(),
+            opcode: Shift256Opcode(ShiftOpcode::SRA).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
+            opcode: LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64LessThan256Opcode(LessThanOpcode::SLTU).global_opcode(),
+            opcode: LessThan256Opcode(LessThanOpcode::SLTU).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64Mul256Opcode(MulOpcode::MUL).global_opcode(),
+            opcode: Mul256Opcode(MulOpcode::MUL).global_opcode(),
             expected_branch: None,
         },
         OpcodeCase {
-            opcode: Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+            opcode: BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
             expected_branch: Some(false),
         },
         OpcodeCase {
-            opcode: Rv64BranchEqual256Opcode(BranchEqualOpcode::BNE).global_opcode(),
+            opcode: BranchEqual256Opcode(BranchEqualOpcode::BNE).global_opcode(),
             expected_branch: Some(true),
         },
         OpcodeCase {
-            opcode: Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
+            opcode: BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
             expected_branch: Some(true),
         },
         OpcodeCase {
-            opcode: Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLTU).global_opcode(),
+            opcode: BranchLessThan256Opcode(BranchLessThanOpcode::BLTU).global_opcode(),
             expected_branch: Some(false),
         },
         OpcodeCase {
-            opcode: Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BGE).global_opcode(),
+            opcode: BranchLessThan256Opcode(BranchLessThanOpcode::BGE).global_opcode(),
             expected_branch: Some(false),
         },
         OpcodeCase {
-            opcode: Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BGEU).global_opcode(),
+            opcode: BranchLessThan256Opcode(BranchLessThanOpcode::BGEU).global_opcode(),
             expected_branch: Some(true),
         },
     ];
@@ -205,8 +193,8 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
                         reg(2),
                         reg(3),
                         if expected_branch { 4 } else { negative_offset },
-                        RV64_REGISTER_AS as usize,
-                        RV64_MEMORY_AS as usize,
+                        REGISTER_AS as usize,
+                        MEMORY_AS as usize,
                     ],
                 )
             } else {
@@ -216,8 +204,8 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
                         reg(1),
                         reg(2),
                         reg(3),
-                        RV64_REGISTER_AS as usize,
-                        RV64_MEMORY_AS as usize,
+                        REGISTER_AS as usize,
+                        MEMORY_AS as usize,
                     ],
                 )
             }
@@ -236,18 +224,18 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)),
+                .map(|(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte)),
         );
     }
     init_memory.extend(
         lhs.into_iter()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, LHS_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, LHS_PTR + offset as u32), byte)),
     );
     init_memory.extend(
         rhs.into_iter()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, RHS_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, RHS_PTR + offset as u32), byte)),
     );
     (
         cases,
@@ -259,7 +247,7 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
 #[test]
 fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let (cases, program, exe) = all_opcode_fixture();
-    let config = Int256Rv64Config {
+    let config = Int256Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -267,7 +255,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -317,7 +305,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
 
     let invalid_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut invalid_vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
             .unwrap();
     let cached_program = invalid_vm.commit_program_on_device(&program);
     invalid_vm.load_program(cached_program);
@@ -332,9 +320,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
     let pointer_block = reg(1) as u32 / 2;
     let mut mutated_reads = 0;
     for pointer_event in invalid_history.memory.accesses.iter_mut().filter(|event| {
-        event.address_space() == RV64_REGISTER_AS
-            && !event.is_write()
-            && event.pointer == pointer_block
+        event.address_space() == REGISTER_AS && !event.is_write() && event.pointer == pointer_block
     }) {
         assert_eq!(pointer_event.value, [DST_PTR as u16, 0, 0, 0]);
         pointer_event.value[0] += 2;
@@ -363,14 +349,8 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
 fn int256_checkpoint_replay_rejects_wrapping_transitions() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
-            [
-                reg(2),
-                reg(3),
-                8,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
+            BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+            [reg(2), reg(3), 8, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
@@ -382,23 +362,23 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)),
+                .map(|(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte)),
         );
     }
     init_memory.extend(
         [0u8; 32]
             .into_iter()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, LHS_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, LHS_PTR + offset as u32), byte)),
     );
     init_memory.extend(
         std::iter::once(1u8)
             .chain([0u8; 31])
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, RHS_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, RHS_PTR + offset as u32), byte)),
     );
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = Int256Rv64Config {
+    let config = Int256Config {
         system: test_system_config(),
         ..Default::default()
     };
@@ -406,7 +386,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut source_vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
             .unwrap();
     let cached_program = source_vm.commit_program_on_device(&program);
     source_vm.load_program(cached_program);
@@ -442,12 +422,9 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
 
     for corrupt_timestamp in [true, false] {
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-        let (mut vm, _) = VirtualMachine::new_with_keygen(
-            test_gpu_engine(),
-            Int256Rv64GpuBuilder,
-            config.clone(),
-        )
-        .unwrap();
+        let (mut vm, _) =
+            VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
+                .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
@@ -489,23 +466,20 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
 }
 
 #[test]
-fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
+fn mixed_riscv_int256_checkpoint_expansion_proves_both_branch_outcomes() {
     for (equal, expected_pc, expected_branch_replay_value) in [(false, 12, 0u64), (true, 16, 1u64)]
     {
         let (program, exe) = fixture(equal);
-        let config = Int256Rv64Config {
+        let config = Int256Config {
             system: test_system_config(),
             ..Default::default()
         };
         let executor = VmExecutor::new(config.clone()).unwrap();
         let checkpoint = executor.preflight_instance(&exe).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-        let (mut vm, pk) = VirtualMachine::new_with_keygen(
-            test_gpu_engine(),
-            Int256Rv64GpuBuilder,
-            config.clone(),
-        )
-        .unwrap();
+        let (mut vm, pk) =
+            VirtualMachine::new_with_keygen(test_gpu_engine(), Int256GpuBuilder, config.clone())
+                .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);

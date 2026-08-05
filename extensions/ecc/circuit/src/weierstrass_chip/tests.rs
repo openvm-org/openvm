@@ -13,10 +13,10 @@ use openvm_circuit::arch::{
     MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -155,7 +155,7 @@ fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
     for (&register, &pointer) in rs_ptrs.iter().zip(&rs_vals) {
         memory_log.push(PreflightMemoryEvent {
             timestamp,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: register / 2,
             value: register_block(pointer),
         });
@@ -163,7 +163,7 @@ fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
     }
     memory_log.push(PreflightMemoryEvent {
         timestamp,
-        address_space_and_kind: RV64_REGISTER_AS,
+        address_space_and_kind: REGISTER_AS,
         pointer: rd_ptr / 2,
         value: register_block(rd_val),
     });
@@ -173,7 +173,7 @@ fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
             let start = read * bytes_per_value + block * MEMORY_BLOCK_BYTES;
             memory_log.push(PreflightMemoryEvent {
                 timestamp,
-                address_space_and_kind: RV64_MEMORY_AS,
+                address_space_and_kind: MEMORY_AS,
                 pointer: pointer / 2 + (block * 4) as u32,
                 value: packed_u16_block(&input_bytes[start..start + MEMORY_BLOCK_BYTES]),
             });
@@ -186,12 +186,12 @@ fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
         let pointer = rd_val / 2 + (block * 4) as u32;
         memory_log.push(PreflightMemoryEvent {
             timestamp,
-            address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
+            address_space_and_kind: MEMORY_AS | PREFLIGHT_WRITE_BIT,
             pointer,
             value: packed_u16_block(&output_bytes[start..start + MEMORY_BLOCK_BYTES]),
         });
         initial_write_log.push(PreflightInitialWrite {
-            address_space: RV64_MEMORY_AS,
+            address_space: MEMORY_AS,
             pointer,
             initial_value: [0; 4],
         });
@@ -314,7 +314,7 @@ fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
     for (&register, &pointer) in rs_ptrs.iter().zip(&rs_vals) {
         unsafe {
             tester.memory.memory.data.write::<u16, 4>(
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 register / 2,
                 [pointer as u16, (pointer >> 16) as u16, 0, 0],
             );
@@ -322,7 +322,7 @@ fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
     }
     unsafe {
         tester.memory.memory.data.write::<u16, 4>(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             rd_ptr / 2,
             [rd_val as u16, (rd_val >> 16) as u16, 0, 0],
         );
@@ -332,7 +332,7 @@ fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
             let start = read * bytes_per_value + block * MEMORY_BLOCK_BYTES;
             unsafe {
                 tester.memory.memory.data.write::<u16, 4>(
-                    RV64_MEMORY_AS,
+                    MEMORY_AS,
                     pointer / 2 + (block * 4) as u32,
                     packed_u16_block(&input_bytes[start..start + MEMORY_BLOCK_BYTES]),
                 );
@@ -342,7 +342,7 @@ fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
     for block in 0..BLOCKS {
         unsafe {
             tester.memory.memory.data.write::<u16, 4>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 rd_val / 2 + (block * 4) as u32,
                 [0; 4],
             );
@@ -544,7 +544,7 @@ mod ec_addne_tests {
                 BigUint::one(),
                 BigUint::one(),
                 BigUint::one(),
-                Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
             )
         } else if let Some((x1, y1)) = p1 {
             let (x2, y2) = p2.unwrap();
@@ -553,35 +553,34 @@ mod ec_addne_tests {
             let x2 = x2 % modulus;
             let y2 = y2 % modulus;
             if rng.random_bool(0.5) {
-                (x1, y1, x2, y2, Rv64WeierstrassOpcode::EC_ADD_NE as usize)
+                (x1, y1, x2, y2, WeierstrassOpcode::EC_ADD_NE as usize)
             } else {
-                (x2, y2, x1, y1, Rv64WeierstrassOpcode::EC_ADD_NE as usize)
+                (x2, y2, x1, y1, WeierstrassOpcode::EC_ADD_NE as usize)
             }
         } else {
             panic!("Generating random inputs generically is harder because the input points need to be on the curve.");
         };
 
-        let ptr_as = RV64_REGISTER_AS as usize;
-        let data_as = RV64_MEMORY_AS as usize;
+        let ptr_as = REGISTER_AS as usize;
+        let data_as = MEMORY_AS as usize;
 
-        let [rs1_ptr, rs2_ptr, rd_ptr] =
-            gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rs2_ptr, rd_ptr] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let p2_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
 
-        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
             p1_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
             ptr_as,
             rs2_ptr,
             p2_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
             result_base_addr.to_le_bytes().map(F::from_u8),
@@ -701,7 +700,7 @@ mod ec_addne_tests {
     #[test]
     fn test_ec_addne_32limb() {
         run_ec_addne_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
     }
@@ -709,7 +708,7 @@ mod ec_addne_tests {
     #[test]
     fn test_ec_addne_48limb() {
         run_ec_addne_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
     }
@@ -723,7 +722,7 @@ mod ec_addne_tests {
             num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
-        let opcode_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let opcode_base = WeierstrassOpcode::CLASS_OFFSET;
         let mut harness = create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base);
 
         let rd_register = 24usize;
@@ -739,7 +738,7 @@ mod ec_addne_tests {
         ] {
             unsafe {
                 tester.memory.memory.data.write_bytes(
-                    RV64_REGISTER_AS,
+                    REGISTER_AS,
                     register as u32,
                     u64::from(pointer).to_le_bytes(),
                 );
@@ -756,7 +755,7 @@ mod ec_addne_tests {
             for byte_offset in (0..2 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
                 unsafe {
                     tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
-                        RV64_MEMORY_AS,
+                        MEMORY_AS,
                         pointer + byte_offset as u32,
                         bytes[byte_offset..byte_offset + MEMORY_BLOCK_BYTES]
                             .try_into()
@@ -766,13 +765,13 @@ mod ec_addne_tests {
             }
         }
         let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + Rv64WeierstrassOpcode::EC_ADD_NE as usize),
+            VmOpcode::from_usize(opcode_base + WeierstrassOpcode::EC_ADD_NE as usize),
             [
                 rd_register,
                 lhs_register,
                 rhs_register,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         tester.execute_with_pc(
@@ -903,7 +902,7 @@ mod ec_addne_tests {
     #[test]
     fn test_weierstrass_addne_cuda_2x32() {
         run_cuda_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
     }
@@ -912,7 +911,7 @@ mod ec_addne_tests {
     #[test]
     fn test_weierstrass_addne_cuda_6x16() {
         run_cuda_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
     }
@@ -922,7 +921,7 @@ mod ec_addne_tests {
         modulus: BigUint,
         is_setup: bool,
     ) {
-        let offset = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let offset = WeierstrassOpcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -961,9 +960,9 @@ mod ec_addne_tests {
             &input_bytes,
         );
         let local_opcode = if is_setup {
-            Rv64WeierstrassOpcode::SETUP_EC_ADD_NE
+            WeierstrassOpcode::SETUP_EC_ADD_NE
         } else {
-            Rv64WeierstrassOpcode::EC_ADD_NE
+            WeierstrassOpcode::EC_ADD_NE
         };
         let instruction = Instruction::from_usize(
             VmOpcode::from_usize(offset + local_opcode as usize),
@@ -971,8 +970,8 @@ mod ec_addne_tests {
                 rd_ptr as usize,
                 rs_ptrs[0] as usize,
                 rs_ptrs[1] as usize,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         let device_ctx = tester.range_checker().device_ctx.clone();
@@ -1040,8 +1039,8 @@ mod ec_addne_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn weierstrass_coordinator_distinguishes_repeated_curve_instances() {
-        let first_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
-        let second_base = first_base + Rv64WeierstrassOpcode::COUNT;
+        let first_base = WeierstrassOpcode::CLASS_OFFSET;
+        let second_base = first_base + WeierstrassOpcode::COUNT;
         let config = ExprBuilderConfig {
             modulus: secp256k1_coord_prime(),
             num_limbs: NUM_LIMBS_32,
@@ -1073,24 +1072,12 @@ mod ec_addne_tests {
         let second_output =
             field_expression_output(second.executor.program(), &second_input, false);
         let first_instruction = Instruction::from_usize(
-            VmOpcode::from_usize(first_base + Rv64WeierstrassOpcode::EC_ADD_NE as usize),
-            [
-                8,
-                16,
-                24,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
+            VmOpcode::from_usize(first_base + WeierstrassOpcode::EC_ADD_NE as usize),
+            [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
         );
         let second_instruction = Instruction::from_usize(
-            VmOpcode::from_usize(second_base + Rv64WeierstrassOpcode::EC_ADD_NE as usize),
-            [
-                32,
-                40,
-                48,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
+            VmOpcode::from_usize(second_base + WeierstrassOpcode::EC_ADD_NE as usize),
+            [32, 40, 48, REGISTER_AS as usize, MEMORY_AS as usize],
         );
         let (_, first_history) = make_vec_heap_history::<2, ECC_BLOCKS_32>(
             first_instruction.clone(),
@@ -1187,7 +1174,7 @@ mod ec_addne_tests {
                     .to_le_bytes()
                     .into_iter()
                     .enumerate()
-                    .map(|(offset, byte)| ((RV64_REGISTER_AS, register + offset as u32), byte)),
+                    .map(|(offset, byte)| ((REGISTER_AS, register + offset as u32), byte)),
             );
         }
         let bytes_per_value = ECC_BLOCKS_32 * MEMORY_BLOCK_BYTES;
@@ -1202,11 +1189,11 @@ mod ec_addne_tests {
                     .iter()
                     .copied()
                     .enumerate()
-                    .map(|(offset, byte)| ((RV64_MEMORY_AS, pointer + offset as u32), byte)),
+                    .map(|(offset, byte)| ((MEMORY_AS, pointer + offset as u32), byte)),
             );
         }
         let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-        let mut vm_config = crate::Rv64WeierstrassConfig::new(vec![
+        let mut vm_config = crate::WeierstrassConfig::new(vec![
             crate::SECP256K1_CONFIG.clone(),
             crate::SECP256K1_CONFIG.clone(),
         ]);
@@ -1218,11 +1205,11 @@ mod ec_addne_tests {
             .create_initial_vm_state(Vec::<Vec<u8>>::new());
 
         let mut incomplete_config =
-            crate::Rv64WeierstrassConfig::new(vec![crate::SECP256K1_CONFIG.clone()]);
+            crate::WeierstrassConfig::new(vec![crate::SECP256K1_CONFIG.clone()]);
         *incomplete_config.as_mut() = test_system_config();
         let (mut poisoned_vm, _) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
-            crate::Rv64WeierstrassHybridBuilder,
+            crate::WeierstrassHybridBuilder,
             incomplete_config.clone(),
         )
         .unwrap();
@@ -1263,7 +1250,7 @@ mod ec_addne_tests {
 
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
-            crate::Rv64WeierstrassHybridBuilder,
+            crate::WeierstrassHybridBuilder,
             vm_config.clone(),
         )
         .unwrap();
@@ -1326,7 +1313,7 @@ mod ec_addne_tests {
         let executor = get_ec_addne_executor::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus().range_max_bits,
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
         );
 
         let (p1_x, p1_y) = SampleEcPoints[0].clone();
@@ -1497,34 +1484,34 @@ mod ec_double_tests {
             (
                 modulus.clone(),
                 a_biguint.clone(),
-                Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+                WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
             )
         } else if let Some(x) = x {
             let y = y.unwrap();
             let x = x % modulus;
             let y = y % modulus;
-            (x, y, Rv64WeierstrassOpcode::EC_DOUBLE as usize)
+            (x, y, WeierstrassOpcode::EC_DOUBLE as usize)
         } else {
             let x = generate_random_biguint(modulus);
             let y = generate_random_biguint(modulus);
 
-            (x, y, Rv64WeierstrassOpcode::EC_DOUBLE as usize)
+            (x, y, WeierstrassOpcode::EC_DOUBLE as usize)
         };
 
-        let ptr_as = RV64_REGISTER_AS as usize;
-        let data_as = RV64_MEMORY_AS as usize;
+        let ptr_as = REGISTER_AS as usize;
+        let data_as = MEMORY_AS as usize;
 
-        let [rs1_ptr, rd_ptr] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rd_ptr] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
 
-        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
             p1_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
             result_base_addr.to_le_bytes().map(F::from_u8),
@@ -1656,7 +1643,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_32limb() {
         run_ec_double_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
             BigUint::zero(),
@@ -1669,7 +1656,7 @@ mod ec_double_tests {
         let a = BigUint::from_bytes_le(&coeff_a);
 
         run_ec_double_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
             a,
@@ -1679,7 +1666,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_48limb() {
         run_ec_double_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
             BigUint::zero(),
@@ -1696,7 +1683,7 @@ mod ec_double_tests {
             num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
-        let opcode_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let opcode_base = WeierstrassOpcode::CLASS_OFFSET;
         let mut harness = create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base, a.clone());
 
         let rd_register = 16usize;
@@ -1706,7 +1693,7 @@ mod ec_double_tests {
         for (register, pointer) in [(rd_register, rd_pointer), (input_register, input_pointer)] {
             unsafe {
                 tester.memory.memory.data.write_bytes(
-                    RV64_REGISTER_AS,
+                    REGISTER_AS,
                     register as u32,
                     u64::from(pointer).to_le_bytes(),
                 );
@@ -1719,7 +1706,7 @@ mod ec_double_tests {
         for byte_offset in (0..2 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
             unsafe {
                 tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
-                    RV64_MEMORY_AS,
+                    MEMORY_AS,
                     input_pointer + byte_offset as u32,
                     bytes[byte_offset..byte_offset + MEMORY_BLOCK_BYTES]
                         .try_into()
@@ -1728,13 +1715,13 @@ mod ec_double_tests {
             }
         }
         let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + Rv64WeierstrassOpcode::EC_DOUBLE as usize),
+            VmOpcode::from_usize(opcode_base + WeierstrassOpcode::EC_DOUBLE as usize),
             [
                 rd_register,
                 input_register,
                 0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         tester.execute_with_pc(
@@ -1849,7 +1836,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_cuda_2x32() {
         run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
             BigUint::zero(),
@@ -1863,7 +1850,7 @@ mod ec_double_tests {
         let a = BigUint::from_bytes_le(&coeff_a);
 
         run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
             a,
@@ -1874,7 +1861,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_cuda_6x16() {
         run_ec_double_cuda_test::<ECC_BLOCKS_48, NUM_LIMBS_48>(
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
             BigUint::zero(),
@@ -1888,7 +1875,7 @@ mod ec_double_tests {
         is_setup: bool,
         rows: usize,
     ) {
-        let offset = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let offset = WeierstrassOpcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -1922,9 +1909,9 @@ mod ec_double_tests {
             &input_bytes,
         );
         let local_opcode = if is_setup {
-            Rv64WeierstrassOpcode::SETUP_EC_DOUBLE
+            WeierstrassOpcode::SETUP_EC_DOUBLE
         } else {
-            Rv64WeierstrassOpcode::EC_DOUBLE
+            WeierstrassOpcode::EC_DOUBLE
         };
         let instruction = Instruction::from_usize(
             VmOpcode::from_usize(offset + local_opcode as usize),
@@ -1932,8 +1919,8 @@ mod ec_double_tests {
                 rd_ptr as usize,
                 rs_ptrs[0] as usize,
                 0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         let device_ctx = tester.range_checker().device_ctx.clone();
@@ -2031,7 +2018,7 @@ mod ec_double_tests {
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus().range_max_bits,
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             BigUint::zero(),
         );
 
@@ -2062,7 +2049,7 @@ mod ec_double_tests {
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config.clone(),
             tester.range_checker().bus().range_max_bits,
-            Rv64WeierstrassOpcode::CLASS_OFFSET,
+            WeierstrassOpcode::CLASS_OFFSET,
             a.clone(),
         );
 

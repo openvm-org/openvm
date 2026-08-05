@@ -35,55 +35,47 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64MultiplicationChipGpu,
+    crate::MultiplicationChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
 use super::{core::run_mul, trace::generate_trace_from_postflight};
 use crate::{
-    adapters::{Rv64MultAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
-    mul::{MultiplicationCoreCols, Rv64MultiplicationChip},
-    test_utils::rv64_rand_write_register_or_imm,
-    MultiplicationCoreAir, MultiplicationFiller, Rv64MultiplicationAir, Rv64MultiplicationExecutor,
+    adapters::{MultAdapterAir, BYTE_BITS, REGISTER_NUM_LIMBS},
+    mul::{MultiplicationChip, MultiplicationCoreCols},
+    test_utils::rand_write_register_or_imm,
+    MultiplicationAir, MultiplicationCoreAir, MultiplicationExecutor, MultiplicationFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
-const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1u32 << RV64_BYTE_BITS),
-    (MAX_NUM_LIMBS * (1u32 << RV64_BYTE_BITS)),
-];
+const TUPLE_CHECKER_SIZES: [u32; 2] = [(1u32 << BYTE_BITS), (MAX_NUM_LIMBS * (1u32 << BYTE_BITS))];
 
 type F = BabyBear;
-type Harness = TestChipHarness<
-    F,
-    Rv64MultiplicationExecutor,
-    Rv64MultiplicationAir,
-    Rv64MultiplicationChip<F>,
->;
+type Harness = TestChipHarness<F, MultiplicationExecutor, MultiplicationAir, MultiplicationChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
-    Rv64MultiplicationAir,
-    Rv64MultiplicationExecutor,
-    Rv64MultiplicationChip<F>,
+    MultiplicationAir,
+    MultiplicationExecutor,
+    MultiplicationChip<F>,
 ) {
-    let air = Rv64MultiplicationAir::new(
-        Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
+    let air = MultiplicationAir::new(
+        MultAdapterAir::new(execution_bridge, memory_bridge),
         MultiplicationCoreAir::new(
             *range_tuple_chip.bus(),
             bitwise_chip.bus(),
             MulOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64MultiplicationExecutor::new(MulOpcode::CLASS_OFFSET);
-    let chip = Rv64MultiplicationChip::<F>::new(
+    let executor = MultiplicationExecutor::new(MulOpcode::CLASS_OFFSET);
+    let chip = MultiplicationChip::<F>::new(
         MultiplicationFiller::new(range_tuple_chip, bitwise_chip),
         memory_helper,
     );
@@ -96,8 +88,8 @@ fn create_harness(
     Harness,
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
@@ -105,9 +97,7 @@ fn create_harness(
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -138,22 +128,22 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: MulOpcode,
-    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    b: Option<[u8; REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
-        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
+        rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
     instruction.e = F::ZERO;
     tester.execute(executor, preflight, &instruction);
 
-    let (a, _) = run_mul::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&b, &c);
+    let (a, _) = run_mul::<REGISTER_NUM_LIMBS, BYTE_BITS>(&b, &c);
     assert_eq!(
         a.map(F::from_u8),
-        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd)
     )
 }
 
@@ -165,7 +155,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_rv64_mul_rand_test() {
+fn run_mul_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
@@ -202,9 +192,9 @@ fn run_rv64_mul_rand_test() {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_mul_test(
     opcode: MulOpcode,
-    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
-    c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_a: [u32; REGISTER_NUM_LIMBS],
+    b: [u8; REGISTER_NUM_LIMBS],
+    c: [u8; REGISTER_NUM_LIMBS],
     prank_is_valid: bool,
     _interaction_error: bool,
 ) {
@@ -225,7 +215,7 @@ fn run_negative_mul_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut MultiplicationCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut MultiplicationCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
         cols.is_valid = F::from_bool(prank_is_valid);
@@ -245,7 +235,7 @@ fn run_negative_mul_test(
 }
 
 #[test]
-fn rv64_mul_wrong_negative_test() {
+fn mul_wrong_negative_test() {
     run_negative_mul_test(
         MUL,
         [63, 247, 125, 232, 252, 163, 203, 218],
@@ -257,7 +247,7 @@ fn rv64_mul_wrong_negative_test() {
 }
 
 #[test]
-fn rv64_mul_is_valid_false_negative_test() {
+fn mul_is_valid_false_negative_test() {
     run_negative_mul_test(
         MUL,
         [63, 247, 125, 232, 252, 163, 203, 218],
@@ -276,12 +266,12 @@ fn rv64_mul_is_valid_false_negative_test() {
 
 #[test]
 fn run_mul_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [159, 65, 2, 228, 66, 204, 249, 3];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [45, 104, 90, 171, 169, 159, 160, 366];
-    let (result, carry) = run_mul::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [159, 65, 2, 228, 66, 204, 249, 3];
+    let c: [u32; REGISTER_NUM_LIMBS] = [45, 104, 90, 171, 169, 159, 160, 366];
+    let (result, carry) = run_mul::<REGISTER_NUM_LIMBS, BYTE_BITS>(&x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
     }
@@ -296,10 +286,10 @@ fn run_mul_sanity_test() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64MultiplicationExecutor,
-    Rv64MultiplicationAir,
-    Rv64MultiplicationChipGpu,
-    Rv64MultiplicationChip<F>,
+    MultiplicationExecutor,
+    MultiplicationAir,
+    MultiplicationChipGpu,
+    MultiplicationChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -308,9 +298,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -319,7 +307,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64MultiplicationChipGpu::new(
+    let gpu_chip = MultiplicationChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),

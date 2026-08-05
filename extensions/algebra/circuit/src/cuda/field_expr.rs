@@ -13,7 +13,7 @@ use openvm_cuda_common::{
     common::set_device_by_id, copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx,
 };
 use openvm_mod_circuit_builder::{device_program::serialize_field_expr, FieldExpressionFiller};
-use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterFiller};
+use openvm_riscv_adapters::{VecHeapAdapterCols, VecHeapAdapterFiller};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use super::{
@@ -226,7 +226,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
     pub fn new(
         chip: &VmChipWrapper<
             F,
-            FieldExpressionFiller<Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
+            FieldExpressionFiller<VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
         >,
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -307,7 +307,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChip<NUM_READS,
         &self,
         chip: &VmChipWrapper<
             F,
-            FieldExpressionFiller<Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
+            FieldExpressionFiller<VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
         >,
         program: &GpuPostflightProgram,
         transcript: &GpuPostflightTranscript,
@@ -361,7 +361,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
     fn from_serialized(
         chip: &VmChipWrapper<
             F,
-            FieldExpressionFiller<Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
+            FieldExpressionFiller<VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
         >,
         serialized: openvm_mod_circuit_builder::device_program::SerializedFieldExpr,
         opcode_base: usize,
@@ -413,7 +413,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
                 "field-expression output width {num_output_bytes} does not match VecHeap width {expected_output_bytes}"
             )));
         }
-        let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
+        let adapter_width = VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
         let core_width = BaseAir::<F>::width(&chip.inner.expr);
         if serialized.core_width != core_width {
             return Err(GpuPostflightError::InvalidConfiguration(format!(

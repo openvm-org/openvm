@@ -6,7 +6,7 @@ use halo2curves_axiom::{
     bn256::{Fq as BnFq, Fq2 as BnFq2, Fr as BnFr, G1Affine as BnG1, G2Affine as BnG2},
 };
 use openvm_algebra_transpiler::{
-    Fp2Opcode, Fp2TranspilerExtension, ModularTranspilerExtension, Rv64ModularArithmeticOpcode,
+    Fp2Opcode, Fp2TranspilerExtension, ModularArithmeticOpcode, ModularTranspilerExtension,
 };
 use openvm_circuit::{
     arch::{
@@ -17,18 +17,18 @@ use openvm_circuit::{
 };
 use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use openvm_ecc_transpiler::{EccTranspilerExtension, Rv64WeierstrassOpcode};
+use openvm_ecc_transpiler::{EccTranspilerExtension, WeierstrassOpcode};
 use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode,
 };
-use openvm_pairing_circuit::{PairingCurve, Rv64PairingConfig, Rv64PairingGpuBuilder};
+use openvm_pairing_circuit::{PairingConfig, PairingCurve, PairingGpuBuilder};
 use openvm_pairing_guest::{
     bls12_381::BLS12_381_COMPLEX_STRUCT_NAME, bn254::BN254_COMPLEX_STRUCT_NAME,
 };
 use openvm_pairing_transpiler::{PairingPhantom, PairingTranspilerExtension};
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
-    Rv64MTranspilerExtension,
+    HintStoreOpcode, RiscvITranspilerExtension, RiscvIoTranspilerExtension,
+    RiscvMTranspilerExtension,
 };
 use openvm_stark_sdk::{
     openvm_stark_backend::{p3_field::PrimeField32, StarkEngine},
@@ -116,7 +116,7 @@ fn discover_pairing_split(
 }
 
 fn prove_pairing_checkpoint(
-    mut config: Rv64PairingConfig,
+    mut config: PairingConfig,
     exe: VmExe<BabyBear>,
     input: Vec<Vec<u8>>,
 ) -> Result<()> {
@@ -149,7 +149,7 @@ fn prove_pairing_checkpoint(
     );
 
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64PairingGpuBuilder, config.clone())?;
+        VirtualMachine::new_with_keygen(test_gpu_engine(), PairingGpuBuilder, config.clone())?;
     let cached_program = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program);
     let replay_program = WeierstrassPreflightGpuTracegen::upload_postflight_program(
@@ -210,16 +210,14 @@ fn prove_pairing_checkpoint(
             if is_pairing_phantom {
                 saw_pairing_phantom = true;
             } else if saw_pairing_phantom
-                && (opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode_usize()
-                    || opcode == Rv64HintStoreOpcode::HINT_BUFFER.global_opcode_usize())
+                && (opcode == HintStoreOpcode::HINT_STORED.global_opcode_usize()
+                    || opcode == HintStoreOpcode::HINT_BUFFER.global_opcode_usize())
             {
                 saw_pairing_hint_store = true;
             }
-            saw_modular |= (Rv64ModularArithmeticOpcode::CLASS_OFFSET
-                ..Rv64WeierstrassOpcode::CLASS_OFFSET)
+            saw_modular |= (ModularArithmeticOpcode::CLASS_OFFSET..WeierstrassOpcode::CLASS_OFFSET)
                 .contains(&opcode);
-            saw_ecc |=
-                (Rv64WeierstrassOpcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET).contains(&opcode);
+            saw_ecc |= (WeierstrassOpcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET).contains(&opcode);
             saw_fp2 |= (Fp2Opcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET + 0x100).contains(&opcode);
         }
         if segment_index == 0 {
@@ -245,7 +243,7 @@ fn prove_pairing_checkpoint(
             );
         }
 
-        let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
+        let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             replay_program.program(),
@@ -282,7 +280,7 @@ fn prove_pairing_checkpoint(
 
 fn transpile_pairing_fixture(
     curve_feature: &str,
-    config: &Rv64PairingConfig,
+    config: &PairingConfig,
 ) -> Result<VmExe<BabyBear>> {
     let elf = build_example_program_at_path_with_features(
         get_programs_dir!("tests/programs"),
@@ -293,9 +291,9 @@ fn transpile_pairing_fixture(
     Ok(VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_extension(Rv64ITranspilerExtension)
-            .with_extension(Rv64MTranspilerExtension)
-            .with_extension(Rv64IoTranspilerExtension)
+            .with_extension(RiscvITranspilerExtension)
+            .with_extension(RiscvMTranspilerExtension)
+            .with_extension(RiscvIoTranspilerExtension)
             .with_extension(PairingTranspilerExtension)
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension)
@@ -305,7 +303,7 @@ fn transpile_pairing_fixture(
 
 #[cfg(feature = "bn254")]
 fn prove_bn254_pairing_checkpoint() -> Result<()> {
-    let config = Rv64PairingConfig::new(
+    let config = PairingConfig::new(
         vec![PairingCurve::Bn254],
         vec![BN254_COMPLEX_STRUCT_NAME.to_string()],
     );
@@ -343,7 +341,7 @@ fn prove_bn254_pairing_checkpoint() -> Result<()> {
 
 #[cfg(feature = "bls12_381")]
 fn prove_bls12_381_pairing_checkpoint() -> Result<()> {
-    let config = Rv64PairingConfig::new(
+    let config = PairingConfig::new(
         vec![PairingCurve::Bls12_381],
         vec![BLS12_381_COMPLEX_STRUCT_NAME.to_string()],
     );

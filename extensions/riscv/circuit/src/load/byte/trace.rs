@@ -5,22 +5,22 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADBU;
+use openvm_riscv_transpiler::LoadStoreOpcode::LOADBU;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{LoadByteCoreCols, Rv64LoadByteChip};
+use super::{LoadByteChip, LoadByteCoreCols};
 use crate::{
-    adapters::{u16_cell_byte, Rv64LoadByteAdapterCols, BYTE_SHIFT_SELECTOR_WIDTH},
+    adapters::{u16_cell_byte, LoadByteAdapterCols, BYTE_SHIFT_SELECTOR_WIDTH},
     load::common::load_byte_write_data,
 };
 
 /// Generates the unsigned byte-load trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64LoadByteChip<F>,
+    chip: &LoadByteChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(LOADBU.global_opcode());
-    let adapter_width = Rv64LoadByteAdapterCols::<F>::width();
+    let adapter_width = LoadByteAdapterCols::<F>::width();
     let width = adapter_width + LoadByteCoreCols::<F>::width();
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);

@@ -26,9 +26,9 @@ template <typename T> struct Sha2MainInstructionCols {
     T state_reg_ptr;
     T input_reg_ptr;
     /// Low 32 bits of each register pointer, packed as 2 u16 cells.
-    T dst_ptr_limbs[RV64_PTR_U16_LIMBS];
-    T state_ptr_limbs[RV64_PTR_U16_LIMBS];
-    T input_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T dst_ptr_limbs[PTR_U16_LIMBS];
+    T state_ptr_limbs[PTR_U16_LIMBS];
+    T input_ptr_limbs[PTR_U16_LIMBS];
 };
 
 template <typename V, typename T> struct Sha2MainMemoryCols {

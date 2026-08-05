@@ -11,13 +11,10 @@ using namespace riscv;
 using namespace program;
 
 // SRA uses u16 limbs (4 limbs of 16 bits) and the u16 ALU adapter.
-using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftRightArithmeticCols {
-    Rv64BaseAluRegU16AdapterCols<T> adapter;
-    Rv64ShiftRightArithmeticCoreCols<T> core;
+    BaseAluRegU16AdapterCols<T> adapter;
+    ShiftRightArithmeticCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/shift_right_arithmetic.inc.cuh"

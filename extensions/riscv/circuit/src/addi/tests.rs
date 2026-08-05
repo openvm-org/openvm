@@ -23,7 +23,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64AddIWChipGpu,
+    crate::AddIWChipGpu,
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -33,16 +33,13 @@ use {
 
 use super::{
     trace::{generate_trace_from_postflight, generate_w_trace_from_postflight},
-    AddICoreAir, Rv64AddIChip, Rv64AddIExecutor, Rv64AddIWChip, Rv64AddIWExecutor,
+    AddIChip, AddICoreAir, AddIExecutor, AddIWChip, AddIWExecutor,
 };
 use crate::{
-    adapters::{
-        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluWImmU16AdapterAir, RV64_REGISTER_NUM_LIMBS,
-        U16_BITS,
-    },
+    adapters::{BaseAluImmU16AdapterAir, BaseAluWImmU16AdapterAir, REGISTER_NUM_LIMBS, U16_BITS},
     addi::AddICoreCols,
-    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    AddIFiller, Rv64AddIAir, Rv64AddIWAir,
+    test_utils::{generate_is_type_immediate, rand_write_register_or_imm},
+    AddIAir, AddIFiller, AddIWAir,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
@@ -53,28 +50,27 @@ const NONCANONICAL_ZERO: [u32; BLOCK_FE_WIDTH] = [
     (1 << U16_BITS) - 1,
 ];
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64AddIExecutor, Rv64AddIAir, Rv64AddIChip<F>>;
-type WHarness = TestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChip<F>>;
+type Harness = TestChipHarness<F, AddIExecutor, AddIAir, AddIChip<F>>;
+type WHarness = TestChipHarness<F, AddIWExecutor, AddIWAir, AddIWChip<F>>;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuWHarness =
-    GpuTestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddIWChip<F>>;
+type GpuWHarness = GpuTestChipHarness<F, AddIWExecutor, AddIWAir, AddIWChipGpu, AddIWChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64AddIAir, Rv64AddIExecutor, Rv64AddIChip<F>) {
-    let air = Rv64AddIAir::new(
-        Rv64BaseAluImmU16AdapterAir::new(execution_bridge, memory_bridge),
+) -> (AddIAir, AddIExecutor, AddIChip<F>) {
+    let air = AddIAir::new(
+        BaseAluImmU16AdapterAir::new(execution_bridge, memory_bridge),
         AddICoreAir::new(
             range_checker_chip.bus(),
             BaseAluImmOpcode::CLASS_OFFSET,
             BaseAluImmOpcode::ADDI as usize,
         ),
     );
-    let executor = Rv64AddIExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
-    let chip = Rv64AddIChip::new(AddIFiller::new(range_checker_chip), memory_helper);
+    let executor = AddIExecutor::new(BaseAluImmOpcode::CLASS_OFFSET);
+    let chip = AddIChip::new(AddIFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -100,17 +96,17 @@ fn create_w_harness_fields(
     execution_bridge: ExecutionBridge,
     range_checker: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64AddIWAir, Rv64AddIWExecutor, Rv64AddIWChip<F>) {
-    let air = Rv64AddIWAir::new(
-        Rv64BaseAluWImmU16AdapterAir::new(execution_bridge, memory_bridge, range_checker.bus()),
+) -> (AddIWAir, AddIWExecutor, AddIWChip<F>) {
+    let air = AddIWAir::new(
+        BaseAluWImmU16AdapterAir::new(execution_bridge, memory_bridge, range_checker.bus()),
         AddICoreAir::new(
             range_checker.bus(),
             BaseAluWImmOpcode::CLASS_OFFSET,
             BaseAluWImmOpcode::ADDIW as usize,
         ),
     );
-    let executor = Rv64AddIWExecutor::new(BaseAluWImmOpcode::CLASS_OFFSET);
-    let chip = Rv64AddIWChip::new(AddIFiller::new(range_checker), memory_helper);
+    let executor = AddIWExecutor::new(BaseAluWImmOpcode::CLASS_OFFSET);
+    let chip = AddIWChip::new(AddIFiller::new(range_checker), memory_helper);
     (air, executor, chip)
 }
 
@@ -141,7 +137,7 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64AddIWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = AddIWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8).with_trace_generators(
         generate_w_trace_from_postflight,
         |chip, program, transcript, plan| {
@@ -155,17 +151,17 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    b: Option<[u8; REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let (imm, c) = if let Some(c) = c {
         ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
     } else {
-        generate_rv64_is_type_immediate(rng)
+        generate_is_type_immediate(rng)
     };
 
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
+    let (instruction, rd) = rand_write_register_or_imm(
         tester,
         b,
         c,
@@ -180,7 +176,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let expected = rs1.wrapping_add(signed_imm as i64 as u64);
     assert_eq!(
         expected.to_le_bytes().map(F::from_u8),
-        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd)
     )
 }
 
@@ -192,7 +188,7 @@ fn set_and_execute_w<E: openvm_circuit::arch::Executor<F> + Clone>(
     rs1: u64,
     imm: usize,
 ) {
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
+    let (instruction, rd) = rand_write_register_or_imm(
         tester,
         rs1.to_le_bytes(),
         (imm as u64).to_le_bytes(),
@@ -206,7 +202,7 @@ fn set_and_execute_w<E: openvm_circuit::arch::Executor<F> + Clone>(
     let expected = (rs1 as u32).wrapping_add(signed_imm as u32) as i32 as i64 as u64;
     assert_eq!(
         expected.to_le_bytes().map(F::from_u8),
-        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd)
     );
 }
 
@@ -215,7 +211,7 @@ fn set_and_execute_w<E: openvm_circuit::arch::Executor<F> + Clone>(
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn rand_rv64_addi_test() {
+fn rand_addi_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
@@ -236,7 +232,7 @@ fn rand_rv64_addi_test() {
 }
 
 #[test]
-fn rv64_addiw_boundaries_and_sign_extension() {
+fn addiw_boundaries_and_sign_extension() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_w_harness(&tester);
@@ -303,7 +299,7 @@ fn test_cuda_addiw_tracegen() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn rv64_addi_rs1_memory_binding_negative_test() {
+fn addi_rs1_memory_binding_negative_test() {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
@@ -313,8 +309,8 @@ fn rv64_addi_rs1_memory_binding_negative_test() {
         &mut harness.executor,
         &mut harness.preflight,
         &mut rng,
-        Some([0; RV64_REGISTER_NUM_LIMBS]),
-        Some([0; RV64_REGISTER_NUM_LIMBS]),
+        Some([0; REGISTER_NUM_LIMBS]),
+        Some([0; REGISTER_NUM_LIMBS]),
     );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);

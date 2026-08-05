@@ -4,19 +4,19 @@ use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
-use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{BitwiseLogicImmCoreCols, Rv64BitwiseLogicImmChip, RV64_BYTE_BITS};
+use super::{BitwiseLogicImmChip, BitwiseLogicImmCoreCols, BYTE_BITS};
 use crate::{
-    adapters::{imm_to_rv64_bytes, Rv64BaseAluImmAdapterCols, Rv64BaseAluImmAdapterFiller},
+    adapters::{imm_to_bytes, BaseAluImmAdapterCols, BaseAluImmAdapterFiller},
     bitwise_logic::run_bitwise_logic,
 };
 
 /// Generates the RV64 immediate bitwise trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64BitwiseLogicImmChip<F>,
+    chip: &BitwiseLogicImmChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
@@ -28,9 +28,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64BaseAluImmAdapterCols::<F>::width();
-    let width = adapter_width
-        + BitwiseLogicImmCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
+    let adapter_width = BaseAluImmAdapterCols::<F>::width();
+    let width =
+        adapter_width + BitwiseLogicImmCoreCols::<F, REGISTER_NUM_LIMBS, BYTE_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
@@ -46,21 +46,15 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let immediate = postflight.instruction(step).c.as_canonical_u32();
-            let c = imm_to_rv64_bytes(immediate);
-            let (b, a) = Rv64BaseAluImmAdapterFiller::replay(
+            let c = imm_to_bytes(immediate);
+            let (b, a) = BaseAluImmAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
                 adapter_row.borrow_mut(),
-                |b, _| {
-                    run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
-                        bitwise_opcode,
-                        &b,
-                        &c,
-                    )
-                },
+                |b, _| run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(bitwise_opcode, &b, &c),
             )?;
-            let core_row: &mut BitwiseLogicImmCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+            let core_row: &mut BitwiseLogicImmCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
                 core_row.borrow_mut();
             let c_low = [c[0], c[1] & 0x07];
             let imm_sign = c[2] != 0;

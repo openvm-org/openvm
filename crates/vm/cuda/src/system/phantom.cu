@@ -92,7 +92,7 @@ extern "C" int _phantom_replay_tracegen(
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
 
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     phantom_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

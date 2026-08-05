@@ -8,16 +8,15 @@ use openvm_circuit::{
     system::memory::SharedMemoryHelper,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     VmOpcode,
 };
 use openvm_mod_circuit_builder::FieldExpressionFiller;
 use openvm_riscv_adapters::{
-    vec_heap_u16_blocks_to_bytes, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterFiller,
-    VecHeapTraceInput,
+    vec_heap_u16_blocks_to_bytes, VecHeapAdapterCols, VecHeapAdapterFiller, VecHeapTraceInput,
 };
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
@@ -85,8 +84,8 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
             "unsupported vector-heap read count {NUM_READS}"
         )));
     }
-    if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-        || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+    if instruction.d.as_canonical_u32() != REGISTER_AS
+        || instruction.e.as_canonical_u32() != MEMORY_AS
     {
         return Err(PostflightError::new(
             "vector-heap instruction uses invalid address spaces",
@@ -115,14 +114,14 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
     let mut rs_prev_timestamps = [0u32; NUM_READS];
     for index in 0..NUM_READS {
         let access = replay.read_u16(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             checked_u16_pointer(rs_ptrs[index], "source register")?,
         )?;
         rs_vals[index] = pointer_from_register(access.value, pointer_max_bits)?;
         rs_prev_timestamps[index] = access.previous_timestamp;
     }
     let rd_access = replay.read_u16(
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         checked_u16_pointer(rd_ptr, "destination register")?,
     )?;
     let rd_val = pointer_from_register(rd_access.value, pointer_max_bits)?;
@@ -132,10 +131,8 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
     for read in 0..NUM_READS {
         for block in 0..BLOCKS {
             let byte_pointer = add_byte_offset(rs_vals[read], block, pointer_max_bits)?;
-            let access = replay.read_u16(
-                RV64_MEMORY_AS,
-                checked_u16_pointer(byte_pointer, "heap read")?,
-            )?;
+            let access =
+                replay.read_u16(MEMORY_AS, checked_u16_pointer(byte_pointer, "heap read")?)?;
             heap_reads[read][block] = access.value;
             heap_prev_timestamps[read][block] = access.previous_timestamp;
         }
@@ -146,10 +143,8 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
     let mut write_prev_timestamps = [0u32; BLOCKS];
     for block in 0..BLOCKS {
         let byte_pointer = add_byte_offset(rd_val, block, pointer_max_bits)?;
-        let access = replay.write_observed_u16(
-            RV64_MEMORY_AS,
-            checked_u16_pointer(byte_pointer, "heap write")?,
-        )?;
+        let access = replay
+            .write_observed_u16(MEMORY_AS, checked_u16_pointer(byte_pointer, "heap write")?)?;
         writes[block] = access.value;
         write_predecessors[block] = access.previous_value;
         write_prev_timestamps[block] = access.previous_timestamp;
@@ -185,13 +180,10 @@ fn generate_trace_from_postflights<
     const NUM_READS: usize,
     const BLOCKS: usize,
 >(
-    chip: &VmChipWrapper<
-        F,
-        FieldExpressionFiller<Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>,
-    >,
+    chip: &VmChipWrapper<F, FieldExpressionFiller<VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>>,
     postflights: &[Postflight<'_, F>],
     opcode_base: usize,
-    local_opcodes: &[Rv64WeierstrassOpcode],
+    local_opcodes: &[WeierstrassOpcode],
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let pointer_max_bits = chip.inner.adapter().pointer_max_bits();
     let mut selected_steps = Vec::new();
@@ -214,7 +206,7 @@ fn generate_trace_from_postflights<
         selected_steps.extend(selected);
     }
 
-    let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
+    let adapter_width = VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
     let width = adapter_width
         .checked_add(BaseAir::<F>::width(&chip.inner.expr))
         .ok_or_else(|| PostflightError::new("Weierstrass trace width overflow"))?;
@@ -313,8 +305,8 @@ pub(crate) fn generate_add_ne_trace_from_postflight<
         std::slice::from_ref(postflight),
         opcode_base,
         &[
-            Rv64WeierstrassOpcode::EC_ADD_NE,
-            Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
+            WeierstrassOpcode::EC_ADD_NE,
+            WeierstrassOpcode::SETUP_EC_ADD_NE,
         ],
     )
 }
@@ -333,8 +325,8 @@ pub(crate) fn generate_add_ne_trace_from_postflights<
         postflights,
         opcode_base,
         &[
-            Rv64WeierstrassOpcode::EC_ADD_NE,
-            Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
+            WeierstrassOpcode::EC_ADD_NE,
+            WeierstrassOpcode::SETUP_EC_ADD_NE,
         ],
     )
 }
@@ -352,8 +344,8 @@ pub(crate) fn generate_double_trace_from_postflight<
         std::slice::from_ref(postflight),
         opcode_base,
         &[
-            Rv64WeierstrassOpcode::EC_DOUBLE,
-            Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
+            WeierstrassOpcode::EC_DOUBLE,
+            WeierstrassOpcode::SETUP_EC_DOUBLE,
         ],
     )
 }
@@ -372,8 +364,8 @@ pub(crate) fn generate_double_trace_from_postflights<
         postflights,
         opcode_base,
         &[
-            Rv64WeierstrassOpcode::EC_DOUBLE,
-            Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
+            WeierstrassOpcode::EC_DOUBLE,
+            WeierstrassOpcode::SETUP_EC_DOUBLE,
         ],
     )
 }

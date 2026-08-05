@@ -161,7 +161,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct ShiftRightArithmeticImmExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticImmCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 

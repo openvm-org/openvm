@@ -26,7 +26,7 @@ __global__ void mul_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64MultiplicationCols<uint8_t>));
+    row.fill_zero(0, sizeof(MultiplicationCols<uint8_t>));
     if (idx >= num_steps) return;
 
     auto const &step = steps[step_start + idx];
@@ -44,7 +44,7 @@ __global__ void mul_replay_tracegen(
         )) {
         return;
     }
-    Rv64RegRegWriteReplay replay;
+    RegRegWriteReplay replay;
     if (!replay_reg_reg_write(
             transition,
             opcode,
@@ -59,34 +59,34 @@ __global__ void mul_replay_tracegen(
         )) {
         return;
     }
-    uint8_t expected[RV64_REGISTER_NUM_LIMBS];
-    uint32_t carry[RV64_REGISTER_NUM_LIMBS];
-    run_mul<RV64_REGISTER_NUM_LIMBS>(replay.rs1, replay.rs2, expected, carry);
+    uint8_t expected[REGISTER_NUM_LIMBS];
+    uint32_t carry[REGISTER_NUM_LIMBS];
+    run_mul<REGISTER_NUM_LIMBS>(replay.rs1, replay.rs2, expected, carry);
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         if (replay.result[i] != expected[i]) {
             preflight_set_error(error, 609);
             return;
         }
     }
 
-    Rv64MultiplicationCoreRecord core_record{};
+    MultiplicationCoreRecord<REGISTER_NUM_LIMBS> core_record{};
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         core_record.b[i] = replay.rs1[i];
         core_record.c[i] = replay.rs2[i];
     }
-    Rv64MultAdapter adapter(
+    MultAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(row, replay_mult_adapter_record(replay));
-    Rv64MultiplicationCore core(
+    MultiplicationCore<REGISTER_NUM_LIMBS> core(
         RangeTupleChecker<2>(
             range_tuple, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         ),
         BitwiseOperationLookup(bitwise_lookup)
     );
-    core.fill_trace_row(row.slice_from(COL_INDEX(Rv64MultiplicationCols, core)), core_record);
+    core.fill_trace_row(row.slice_from(COL_INDEX(MultiplicationCols, core)), core_record);
 }
 
 
@@ -115,12 +115,12 @@ extern "C" int _mul_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64MultiplicationCols<uint8_t>));
+    assert(width == sizeof(MultiplicationCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(step_start <= steps.len());
     assert(num_steps <= steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     mul_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

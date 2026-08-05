@@ -12,10 +12,10 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
@@ -46,7 +46,7 @@ impl XorinVmExecutor {
         } = inst;
 
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -156,24 +156,21 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &XorinPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let buffer_u32 =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
-    let input_u32 =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32));
-    let length_u32 =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32));
+    let buffer_u32 = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32));
+    let input_u32 = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32));
+    let length_u32 = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.c as u32));
     debug_assert!(
         (length_u32 as usize).is_multiple_of(MEMORY_BLOCK_BYTES),
         "xorin length must be {}-byte aligned",
         MEMORY_BLOCK_BYTES
     );
 
-    // SAFETY: RV64_MEMORY_AS supports byte-view reads.
+    // SAFETY: MEMORY_AS supports byte-view reads.
     let num_reads = (length_u32 as usize).div_ceil(MEMORY_BLOCK_BYTES);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
             exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
@@ -182,7 +179,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
             exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 input_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
@@ -199,7 +196,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     for (i, chunk) in output_bytes.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
         let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
         exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             &chunk,
         );

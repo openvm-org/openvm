@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use crate::adapters::{
-    Rv64BaseAluImmU16AdapterAir, Rv64BaseAluWImmU16AdapterAir, RV64_WORD_U16_LIMBS, U16_BITS,
+    BaseAluImmU16AdapterAir, BaseAluWImmU16AdapterAir, U16_BITS, WORD_U16_LIMBS,
 };
 
 mod core;
@@ -20,18 +20,16 @@ pub use cuda::*;
 
 // Immediate-only variant of the shift_right_arithmetic chip (SRAI): single-read immediate
 // adapter plus a core which reconstructs the immediate from its shift markers.
-pub type Rv64ShiftRightArithmeticImmAir = VmAirWrapper<
-    Rv64BaseAluImmU16AdapterAir,
-    ShiftRightArithmeticImmCoreAir<BLOCK_FE_WIDTH, U16_BITS>,
->;
-pub type Rv64ShiftRightArithmeticImmExecutor =
-    ShiftRightArithmeticImmExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64ShiftRightArithmeticImmChip<F> = VmChipWrapper<F, ShiftRightArithmeticImmFiller>;
+pub type ShiftRightArithmeticImmAir =
+    VmAirWrapper<BaseAluImmU16AdapterAir, ShiftRightArithmeticImmCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type ShiftRightArithmeticImmExecutor =
+    ShiftRightArithmeticImmCoreExecutor<BLOCK_FE_WIDTH, U16_BITS>;
+pub type ShiftRightArithmeticImmChip<F> = VmChipWrapper<F, ShiftRightArithmeticImmFiller>;
 
-pub type Rv64ShiftWRightArithmeticImmAir = VmAirWrapper<
-    Rv64BaseAluWImmU16AdapterAir,
-    ShiftRightArithmeticImmCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>,
+pub type ShiftWRightArithmeticImmAir = VmAirWrapper<
+    BaseAluWImmU16AdapterAir,
+    ShiftRightArithmeticImmCoreAir<WORD_U16_LIMBS, U16_BITS>,
 >;
-pub type Rv64ShiftWRightArithmeticImmExecutor =
-    ShiftRightArithmeticImmExecutor<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type Rv64ShiftWRightArithmeticImmChip<F> = VmChipWrapper<F, ShiftRightArithmeticImmFiller>;
+pub type ShiftWRightArithmeticImmExecutor =
+    ShiftRightArithmeticImmCoreExecutor<WORD_U16_LIMBS, U16_BITS>;
+pub type ShiftWRightArithmeticImmChip<F> = VmChipWrapper<F, ShiftRightArithmeticImmFiller>;

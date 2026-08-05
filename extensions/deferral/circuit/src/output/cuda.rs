@@ -14,7 +14,7 @@ use openvm_cuda_common::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_stark_backend::prover::AirProvingContext;
@@ -29,7 +29,7 @@ use crate::{
 #[derive(new)]
 pub struct DeferralOutputChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
@@ -106,8 +106,8 @@ impl DeferralOutputChipGpu {
                 step_range.start,
                 step_range.len(),
                 DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 u32::try_from(self.num_deferral_circuits).map_err(|_| {
                     GpuPostflightError::InvalidTranscript(
                         "deferral circuit count exceeds u32".to_string(),
@@ -174,8 +174,8 @@ impl DeferralOutputChipGpu {
                 &d_calls,
                 rows_used,
                 DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 self.address_bits as u32,
                 &self.count,
                 self.num_deferral_circuits,
@@ -212,7 +212,7 @@ mod tests {
     };
     use openvm_deferral_transpiler::DeferralOpcode;
     use openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        riscv::{MEMORY_AS, REGISTER_AS},
         LocalOpcode,
     };
     use openvm_stark_backend::StarkEngine;
@@ -227,11 +227,11 @@ mod tests {
         program_index: u32,
     ) -> u32 {
         let opcode = DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32;
-        let instruction = [opcode, 8, 16, 0, RV64_REGISTER_AS, RV64_MEMORY_AS, 0, 0];
+        let instruction = [opcode, 8, 16, 0, REGISTER_AS, MEMORY_AS, 0, 0];
         let mut memory = [PreflightMemoryEvent::default(); 11];
         memory[6] = PreflightMemoryEvent {
             timestamp: 7,
-            address_space_and_kind: RV64_MEMORY_AS,
+            address_space_and_kind: MEMORY_AS,
             pointer: 0,
             value: [DIGEST_SIZE as u16, 0, 0, 0],
         };
@@ -254,8 +254,8 @@ mod tests {
                 0,
                 1,
                 opcode,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 1,
                 error.as_mut_ptr(),
                 device_ctx.stream.as_raw(),

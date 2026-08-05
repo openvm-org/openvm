@@ -27,7 +27,7 @@ use openvm_riscv_circuit::preflight::PreflightReplayProgram;
 use openvm_riscv_circuit::preflight::{
     PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
 };
-use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
+use openvm_riscv_circuit::{RiscvImGpuProverExt, RiscvImPreflightGpuTracegen};
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
@@ -84,7 +84,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
                 register_as_operand: 4,
                 memory_as_operand: 5,
                 spans: &[PostflightAccessSpan::write_fixed_from_replay_values(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     0,
                     25,
                 )],
@@ -101,21 +101,21 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
                 memory_as_operand: 5,
                 spans: &[
                     PostflightAccessSpan::read_count_from_register(
-                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        openvm_instructions::riscv::MEMORY_AS,
                         0,
                         2,
                         count_shift,
                         max_words,
                     ),
                     PostflightAccessSpan::read_count_from_register(
-                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        openvm_instructions::riscv::MEMORY_AS,
                         1,
                         2,
                         count_shift,
                         max_words,
                     ),
                     PostflightAccessSpan::write_register_count_from_replay_values(
-                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        openvm_instructions::riscv::MEMORY_AS,
                         0,
                         2,
                         count_shift,
@@ -156,7 +156,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
+        RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(
@@ -247,7 +247,7 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -258,23 +258,25 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
             self.program,
             self.transcript,
             self.replay_plan,
-            (self, rv64),
-            |(tracegen, rv64), chip| {
+            (self, riscv),
+            |(tracegen, riscv), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(chip)
+                    riscv
+                        .generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-            |(tracegen, rv64)| {
+            |(tracegen, riscv)| {
                 tracegen
                     .finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-                rv64.finish()
+                riscv
+                    .finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
             },
         )
@@ -332,9 +334,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Keccak256> for Keccak256GpuPr
 }
 
 #[derive(Clone)]
-pub struct Keccak256Rv64GpuBuilder;
+pub struct Keccak256GpuBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Keccak256Rv64GpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Keccak256GpuBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -360,13 +362,13 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Keccak256Rv64GpuBuilder 
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Keccak256Rv64GpuBuilder {
-    type VmConfig = Keccak256Rv64Config;
+impl VmBuilder<E> for Keccak256GpuBuilder {
+    type VmConfig = Keccak256Config;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &Keccak256Rv64Config,
+        config: &Keccak256Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -380,9 +382,9 @@ impl VmBuilder<E> for Keccak256Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.riscv_i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.riscv_m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(
             &Keccak256GpuProverExt,
             &config.keccak,

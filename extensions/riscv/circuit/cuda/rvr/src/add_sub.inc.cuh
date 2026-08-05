@@ -27,7 +27,7 @@ __global__ void add_sub_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64AddSubCols<uint8_t>));
+    row.fill_zero(0, sizeof(AddSubCols<uint8_t>));
     size_t total_steps = num_add_steps + num_sub_steps;
     if (idx >= total_steps) return;
 
@@ -124,7 +124,7 @@ __global__ void add_sub_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluRegU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluRegU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -137,9 +137,9 @@ __global__ void add_sub_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64AddSubCore(checker);
+    auto core = AddSubCore<BLOCK_FE_WIDTH, U16_BITS, true>(checker);
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64AddSubCols, core)), b, c, local_opcode
+        row.slice_from(COL_INDEX(AddSubCols, core)), b, c, local_opcode
     );
 }
 
@@ -169,7 +169,7 @@ extern "C" int _add_sub_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64AddSubCols<uint8_t>));
+    assert(width == sizeof(AddSubCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(add_step_start <= steps.len());
     assert(num_add_steps <= steps.len() - add_step_start);
@@ -177,7 +177,7 @@ extern "C" int _add_sub_replay_tracegen(
     assert(num_sub_steps <= steps.len() - sub_step_start);
     assert(num_add_steps <= SIZE_MAX - num_sub_steps);
     assert(height >= num_add_steps + num_sub_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     add_sub_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

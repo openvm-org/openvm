@@ -1,7 +1,7 @@
-//! GPU builder where the [Rv64ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
+//! GPU builder where the [ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
 //! either cuda tracegen or hybrid CPU tracegen depending on what [openvm_algebra_circuit] and
 //! [openvm_ecc_circuit] crates export.
-use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
+use openvm_algebra_circuit::{AlgebraProverExt, ModularBuilder};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
@@ -19,12 +19,12 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
 };
 
-use crate::{PairingProverExt, Rv64PairingConfig};
+use crate::{PairingConfig, PairingProverExt};
 
 #[derive(Clone)]
-pub struct Rv64PairingGpuBuilder;
+pub struct PairingGpuBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for PairingGpuBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -50,12 +50,12 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl Rv64PairingGpuBuilder {
+impl PairingGpuBuilder {
     /// Runs the concrete system/RV64 + modular/Fp2 + Weierstrass inventory walk.
     /// Pairing hints use the existing system PHANTOM producer and add no AIR.
     pub fn generate_proving_ctx_from_postflight(
         vm: &mut VirtualMachine<E, Self>,
-        config: &Rv64PairingConfig,
+        config: &PairingConfig,
         program: &GpuPostflightProgram,
         transcript: &GpuPostflightTranscript,
         replay_plan: &GpuPostflightPlan,
@@ -65,13 +65,13 @@ impl Rv64PairingGpuBuilder {
     }
 }
 
-impl VmBuilder<E> for Rv64PairingGpuBuilder {
-    type VmConfig = Rv64PairingConfig;
+impl VmBuilder<E> for PairingGpuBuilder {
+    type VmConfig = PairingConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &Rv64PairingConfig,
+        config: &PairingConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -79,7 +79,7 @@ impl VmBuilder<E> for Rv64PairingGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv64ModularBuilder,
+            &ModularBuilder,
             &config.modular,
             circuit,
             device_ctx,
@@ -110,7 +110,7 @@ mod tests {
         exe::{SparseMemoryImage, VmExe},
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, PhantomDiscriminant, SystemOpcode,
     };
     use openvm_pairing_guest::{
@@ -119,9 +119,9 @@ mod tests {
     use openvm_pairing_transpiler::PairingPhantom;
     use openvm_riscv_circuit::{
         preflight::{PostflightAccessRegistry, PreflightReplayProgram},
-        Rv64ImPreflightGpuTracegen,
+        RiscvImPreflightGpuTracegen,
     };
-    use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64JalLuiOpcode};
+    use openvm_riscv_transpiler::{HintStoreOpcode, JalLuiOpcode};
     use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, StarkEngine};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rvr_state::PreflightProgramEvent;
@@ -130,7 +130,7 @@ mod tests {
     use crate::PairingCurve;
 
     fn reg(index: usize) -> usize {
-        index * RV64_REGISTER_NUM_LIMBS
+        index * REGISTER_NUM_LIMBS
     }
 
     fn insert_bytes(
@@ -200,18 +200,12 @@ mod tests {
                 curve as u16,
             ),
             Instruction::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0, 0],
             ),
             Instruction::from_usize(
-                Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
-                [
-                    0,
-                    reg(3),
-                    0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
-                ],
+                HintStoreOpcode::HINT_STORED.global_opcode(),
+                [0, reg(3), 0, REGISTER_AS as usize, MEMORY_AS as usize],
             ),
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 7]),
         ];
@@ -221,14 +215,14 @@ mod tests {
         for (register, value) in [(1, P_HEADER), (2, Q_HEADER), (3, HINT_DESTINATION)] {
             insert_bytes(
                 &mut initial_memory,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 reg(register) as u32,
                 u64::from(value).to_le_bytes(),
             );
         }
         insert_bytes(
             &mut initial_memory,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             P_HEADER,
             u64::from(P_DATA)
                 .to_le_bytes()
@@ -237,29 +231,26 @@ mod tests {
         );
         insert_bytes(
             &mut initial_memory,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             Q_HEADER,
             u64::from(Q_DATA)
                 .to_le_bytes()
                 .into_iter()
                 .chain(1u64.to_le_bytes()),
         );
-        insert_bytes(&mut initial_memory, RV64_MEMORY_AS, P_DATA, p);
-        insert_bytes(&mut initial_memory, RV64_MEMORY_AS, Q_DATA, q);
+        insert_bytes(&mut initial_memory, MEMORY_AS, P_DATA, p);
+        insert_bytes(&mut initial_memory, MEMORY_AS, Q_DATA, q);
 
         let exe = VmExe::new(program.clone()).with_init_memory(initial_memory);
         let mut config =
-            Rv64PairingConfig::new(vec![curve], vec![pairing_complex_name(curve).to_string()]);
+            PairingConfig::new(vec![curve], vec![pairing_complex_name(curve).to_string()]);
         *config.as_mut() = test_system_config();
         let executor = VmExecutor::new(config.clone()).unwrap();
         let checkpoint = executor.preflight_instance(&exe).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-        let (mut vm, pk) = VirtualMachine::new_with_keygen(
-            test_gpu_engine(),
-            Rv64PairingGpuBuilder,
-            config.clone(),
-        )
-        .unwrap();
+        let (mut vm, pk) =
+            VirtualMachine::new_with_keygen(test_gpu_engine(), PairingGpuBuilder, config.clone())
+                .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
@@ -278,9 +269,9 @@ mod tests {
         assert!(first.state.streams.hint_stream.remaining() > 8);
         let hint_bytes = first.state.streams.hint_stream.remaining();
         let (transcript, replay_plan) =
-            Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
+            RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
                 .unwrap();
-        let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
+        let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             gpu_program.program(),
@@ -304,9 +295,9 @@ mod tests {
             hint_bytes - u64::BITS as usize / 8
         );
         let (transcript, replay_plan) =
-            Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
+            RiscvImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
                 .unwrap();
-        let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
+        let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             gpu_program.program(),
@@ -349,7 +340,7 @@ mod tests {
             ],
             memory: PreflightMemoryLog::default(),
         };
-        let mut config = Rv64PairingConfig::new(
+        let mut config = PairingConfig::new(
             vec![PairingCurve::Bn254],
             vec![BN254_COMPLEX_STRUCT_NAME.to_string()],
         );
@@ -360,12 +351,9 @@ mod tests {
             .interpreter_instance(&exe)
             .unwrap()
             .create_initial_vm_state(Vec::<Vec<u8>>::new());
-        let (mut vm, pk) = VirtualMachine::new_with_keygen(
-            test_gpu_engine(),
-            Rv64PairingGpuBuilder,
-            config.clone(),
-        )
-        .unwrap();
+        let (mut vm, pk) =
+            VirtualMachine::new_with_keygen(test_gpu_engine(), PairingGpuBuilder, config.clone())
+                .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
@@ -378,7 +366,7 @@ mod tests {
         let (gpu_transcript, replay_plan) = gpu_program
             .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
-        let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
+        let proving_ctx = PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             &gpu_program,

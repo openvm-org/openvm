@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -12,7 +12,7 @@ use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldExpressionProgram, FieldVariable, SymbolicExpr,
 };
-use openvm_riscv_adapters::{Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller};
+use openvm_riscv_adapters::{VecHeapAdapterAir, VecHeapAdapterFiller};
 
 use super::{ModularAir, ModularChip, ModularExecutor};
 use crate::FieldExprVecHeapExecutor;
@@ -75,9 +75,9 @@ fn gen_base_program(
     let (program, is_mul_flag, is_div_flag) = muldiv_program(config, range_max_bits);
 
     let local_opcode_idx = vec![
-        Rv64ModularArithmeticOpcode::MUL as usize,
-        Rv64ModularArithmeticOpcode::DIV as usize,
-        Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize,
+        ModularArithmeticOpcode::MUL as usize,
+        ModularArithmeticOpcode::DIV as usize,
+        ModularArithmeticOpcode::SETUP_MULDIV as usize,
     ];
     let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
 
@@ -96,7 +96,7 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize>(
         gen_base_program(config, range_checker_bus.range_max_bits);
     let expr = FieldExpr::new(program, range_checker_bus);
     ModularAir::new(
-        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
+        VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
     )
 }
@@ -129,7 +129,7 @@ pub fn get_modular_muldiv_chip<F, const BLOCKS: usize>(
     let expr = FieldExpr::new(program, range_bus);
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits),
+            VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

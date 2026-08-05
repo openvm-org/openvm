@@ -3,11 +3,11 @@ use std::mem::size_of;
 use openvm_instructions::{
     exe::SparseMemoryImage,
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{NUM_REGISTERS, REGISTER_AS, REGISTER_NUM_LIMBS},
     DEFERRAL_AS, VM_DIGEST_WIDTH,
 };
 #[cfg(test)]
-use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::{riscv::MEMORY_AS, PUBLIC_VALUES_AS};
 
 pub use super::memory_tracker::PageTouch;
 use super::memory_tracker::{
@@ -92,9 +92,9 @@ impl MemoryCtx {
     #[inline(always)]
     pub(crate) fn add_register_merkle_heights(&mut self) {
         self.update_boundary_merkle_heights(
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             0,
-            (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32,
+            (NUM_REGISTERS * REGISTER_NUM_LIMBS) as u32,
         );
     }
 
@@ -440,8 +440,8 @@ mod tests {
                 };
 
                 assert_eq!(
-                    ctx.leaf_id_range(RV64_MEMORY_AS, ptr, width),
-                    ctx.leaf_id_range(RV64_MEMORY_AS, block_ptr, block_span),
+                    ctx.leaf_id_range(MEMORY_AS, ptr, width),
+                    ctx.leaf_id_range(MEMORY_AS, block_ptr, block_span),
                     "ptr={ptr}, width={width}"
                 );
             }
@@ -466,7 +466,7 @@ mod tests {
     fn test_address_spaces_map_to_distinct_pages() {
         let system_config = test_system_config();
         let ctx = MemoryCtx::new(&system_config);
-        let memory_page = ctx.leaf_id_range(RV64_MEMORY_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
+        let memory_page = ctx.leaf_id_range(MEMORY_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
         let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
         let deferral_page = ctx.leaf_id_range(DEFERRAL_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
 
@@ -500,7 +500,7 @@ mod tests {
         let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
-        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 1);
+        ctx.update_boundary_merkle_heights(MEMORY_AS, 0, 1);
         ctx.apply_height_updates(&mut trace_heights);
         ctx.update_checkpoint();
 
@@ -510,7 +510,7 @@ mod tests {
         let poseidon_before = trace_heights[poseidon2_idx];
         let next_page_ptr = ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
-        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
+        ctx.update_boundary_merkle_heights(MEMORY_AS, next_page_ptr, 1);
         ctx.apply_height_updates(&mut trace_heights);
 
         assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 1);

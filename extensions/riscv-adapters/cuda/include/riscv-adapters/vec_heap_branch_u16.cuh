@@ -10,19 +10,19 @@
 using namespace riscv;
 
 template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv64VecHeapBranchU16AdapterCols {
+struct VecHeapBranchU16AdapterCols {
     ExecutionState<T> from_state;
 
     T rs_ptr[NUM_READS];
     // Low 32 bits of each source pointer register as u16 limbs.
-    T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
+    T rs_val[NUM_READS][PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
 
     MemoryReadAuxCols<T> reads_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv64VecHeapBranchU16AdapterRecord {
+struct VecHeapBranchU16AdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
@@ -33,12 +33,12 @@ struct Rv64VecHeapBranchU16AdapterRecord {
     MemoryReadAuxRecord reads_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
-template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct Rv64VecHeapBranchU16Adapter {
+template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct VecHeapBranchU16Adapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64VecHeapBranchU16Adapter(
+    __device__ VecHeapBranchU16Adapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
@@ -47,14 +47,14 @@ template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct Rv64VecHeapBranchU16A
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
-    using Cols = Rv64VecHeapBranchU16AdapterCols<T, NUM_READS, BLOCKS_PER_READ>;
+    using Cols = VecHeapBranchU16AdapterCols<T, NUM_READS, BLOCKS_PER_READ>;
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv64VecHeapBranchU16AdapterRecord<NUM_READS, BLOCKS_PER_READ> record
+        VecHeapBranchU16AdapterRecord<NUM_READS, BLOCKS_PER_READ> record
     ) {
         // Bound each source pointer to pointer_max_bits by narrowing the high u16 limb.
-        const size_t limb_shift_bits = RV64_PTR_BITS - pointer_max_bits;
+        const size_t limb_shift_bits = PTR_BITS - pointer_max_bits;
         for (size_t i = 0; i < NUM_READS; i++) {
             range_checker.add_count(
                 (record.rs_vals[i] >> U16_BITS) << limb_shift_bits, U16_BITS
@@ -84,7 +84,7 @@ template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct Rv64VecHeapBranchU16A
         }
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
-            Fp rs_val_packed[RV64_PTR_U16_LIMBS];
+            Fp rs_val_packed[PTR_U16_LIMBS];
             ptr_to_u16_limbs(rs_val_packed, record.rs_vals[i]);
             COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val_packed);
         }

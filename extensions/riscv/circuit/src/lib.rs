@@ -82,13 +82,13 @@ cfg_if::cfg_if! {
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         pub(crate) mod cuda_abi;
         pub use self::{
-            Rv64IGpuBuilder as Rv64IBuilder,
-            Rv64ImGpuBuilder as Rv64ImBuilder,
+            RiscvIGpuBuilder as RiscvIBuilder,
+            RiscvImGpuBuilder as RiscvImBuilder,
         };
     } else {
         pub use self::{
-            Rv64ICpuBuilder as Rv64IBuilder,
-            Rv64ImCpuBuilder as Rv64ImBuilder,
+            RiscvICpuBuilder as RiscvIBuilder,
+            RiscvImCpuBuilder as RiscvImBuilder,
         };
     }
 }
@@ -98,31 +98,31 @@ mod test_utils;
 
 // Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
-pub struct Rv64IConfig {
+pub struct RiscvIConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub base: Rv64I,
+    pub base: RiscvI,
     #[extension]
-    pub io: Rv64Io,
+    pub io: RiscvIo,
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Rv64IConfig {}
+impl InitFileGenerator for RiscvIConfig {}
 
 /// Config for a VM with base extension, IO extension, and multiplication extension
 #[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Rv64ImConfig {
+pub struct RiscvImConfig {
     #[config]
-    pub rv64i: Rv64IConfig,
+    pub riscv_i: RiscvIConfig,
     #[extension]
-    pub mul: Rv64M,
+    pub mul: RiscvM,
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Rv64ImConfig {}
+impl InitFileGenerator for RiscvImConfig {}
 
-impl Default for Rv64IConfig {
+impl Default for RiscvIConfig {
     fn default() -> Self {
         let system = SystemConfig::default();
         Self {
@@ -133,7 +133,7 @@ impl Default for Rv64IConfig {
     }
 }
 
-impl Rv64IConfig {
+impl RiscvIConfig {
     pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
         let system = SystemConfig::default().with_public_values_bytes(num_public_values_bytes);
         Self {
@@ -144,31 +144,31 @@ impl Rv64IConfig {
     }
 }
 
-impl Rv64ImConfig {
+impl RiscvImConfig {
     pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
         Self {
-            rv64i: Rv64IConfig::with_public_values_bytes(num_public_values_bytes),
+            riscv_i: RiscvIConfig::with_public_values_bytes(num_public_values_bytes),
             mul: Default::default(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct Rv64ICpuBuilder;
+pub struct RiscvICpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv64ICpuBuilder
+impl<SC, E> VmBuilder<E> for RiscvICpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Rv64IConfig;
+    type VmConfig = RiscvIConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
-        config: &Rv64IConfig,
+        config: &RiscvIConfig,
         circuit: AirInventory<E::SC>,
         device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
@@ -179,23 +179,23 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
         Ok(chip_complex)
     }
 }
 
 #[derive(Clone)]
-pub struct Rv64ImCpuBuilder;
+pub struct RiscvImCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv64ImCpuBuilder
+impl<SC, E> VmBuilder<E> for RiscvImCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Rv64ImConfig;
+    type VmConfig = RiscvImConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
@@ -205,29 +205,29 @@ where
         device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<VmChipComplex<E::SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv64ICpuBuilder,
-            &config.rv64i,
+            &RiscvICpuBuilder,
+            &config.riscv_i,
             circuit,
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
     }
 }
 
 #[cfg(feature = "cuda")]
 #[derive(Clone)]
-pub struct Rv64IGpuBuilder;
+pub struct RiscvIGpuBuilder;
 
 #[cfg(feature = "cuda")]
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
-    type VmConfig = Rv64IConfig;
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for RiscvIGpuBuilder {
+    type VmConfig = RiscvIConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &Rv64IConfig,
+        config: &RiscvIConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
@@ -242,12 +242,12 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &RiscvImGpuProverExt,
             &config.base,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &RiscvImGpuProverExt,
             &config.io,
             inventory,
         )?;
@@ -257,11 +257,11 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
 
 #[cfg(feature = "cuda")]
 #[derive(Clone)]
-pub struct Rv64ImGpuBuilder;
+pub struct RiscvImGpuBuilder;
 
 #[cfg(feature = "cuda")]
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
-    type VmConfig = Rv64ImConfig;
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for RiscvImGpuBuilder {
+    type VmConfig = RiscvImConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
@@ -274,14 +274,14 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
-            &Rv64IGpuBuilder,
-            &config.rv64i,
+            &RiscvIGpuBuilder,
+            &config.riscv_i,
             circuit,
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &RiscvImGpuProverExt,
             &config.mul,
             inventory,
         )?;

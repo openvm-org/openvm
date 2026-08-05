@@ -12,7 +12,7 @@ use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldExpressionProgram,
 };
-use openvm_riscv_adapters::{Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller};
+use openvm_riscv_adapters::{VecHeapAdapterAir, VecHeapAdapterFiller};
 
 use super::{Fp2Air, Fp2Chip, Fp2Executor};
 use crate::{FieldExprVecHeapExecutor, Fp2};
@@ -82,7 +82,7 @@ pub fn get_fp2_addsub_air<const BLOCKS: usize>(
         gen_base_program(config, range_checker_bus.range_max_bits);
     let expr = FieldExpr::new(program, range_checker_bus);
     Fp2Air::new(
-        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
+        VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
     )
 }
@@ -115,7 +115,7 @@ pub fn get_fp2_addsub_chip<F, const BLOCKS: usize>(
     let expr = FieldExpr::new(program, range_bus);
     Fp2Chip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits),
+            VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

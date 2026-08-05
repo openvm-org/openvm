@@ -8,12 +8,12 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{fast_run_eq, run_eq, BranchEqualCoreCols, Rv64BranchEqualChip};
-use crate::adapters::{Rv64BranchAdapterCols, Rv64BranchAdapterFiller};
+use super::{fast_run_eq, run_eq, BranchEqualChip, BranchEqualCoreCols};
+use crate::adapters::{BranchAdapterCols, BranchAdapterFiller};
 
 /// Generates the RV64 equality-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64BranchEqualChip<F>,
+    chip: &BranchEqualChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE];
@@ -21,7 +21,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64BranchAdapterCols::<F>::width();
+    let adapter_width = BranchAdapterCols::<F>::width();
     let width = adapter_width + BranchEqualCoreCols::<F, BLOCK_FE_WIDTH>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -31,7 +31,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(local_opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let (inputs, _) = Rv64BranchAdapterFiller::replay(
+            let (inputs, _) = BranchAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),

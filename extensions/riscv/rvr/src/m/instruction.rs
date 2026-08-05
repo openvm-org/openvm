@@ -53,7 +53,7 @@ impl MulDivOp {
 
 /// An RV64M instruction implemented by this extension.
 #[derive(Debug, Clone)]
-pub(crate) struct Rv64MInstr {
+pub(crate) struct RiscvMInstr {
     pub op: MulDivOp,
     pub word: bool,
     pub rd: Reg,
@@ -61,7 +61,7 @@ pub(crate) struct Rv64MInstr {
     pub rhs: Reg,
 }
 
-impl ExtInstr for Rv64MInstr {
+impl ExtInstr for RiscvMInstr {
     fn opname(&self) -> &str {
         self.op.name(self.word)
     }

@@ -2,8 +2,8 @@
 
 using LoadSignExtendWordCore = LoadSignExtendWidthCore<WORD_ACCESS_WIDTH>;
 
-template <typename T> struct Rv64LoadSignExtendWordCols {
-    Rv64LoadMultiByteAdapterCols<T> adapter;
+template <typename T> struct LoadSignExtendWordCols {
+    LoadMultiByteAdapterCols<T> adapter;
     LoadSignExtendWidthCoreCols<T, WORD_ACCESS_WIDTH> core;
 };
 

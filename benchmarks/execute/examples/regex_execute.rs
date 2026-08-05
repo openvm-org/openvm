@@ -1,8 +1,8 @@
 // use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-// use openvm_keccak256_circuit::Keccak256Rv64Config;
+// use openvm_keccak256_circuit::Keccak256Config;
 // use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 // use openvm_riscv_transpiler::{
-//     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+//     RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
 // };
 // use openvm_sdk::StdIn;
 // use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -15,15 +15,15 @@ fn main() {
     // let exe = VmExe::from_elf(
     //     elf,
     //     Transpiler::<BabyBear>::default()
-    //         .with_extension(Rv64ITranspilerExtension)
-    //         .with_extension(Rv64MTranspilerExtension)
-    //         .with_extension(Rv64IoTranspilerExtension)
+    //         .with_extension(RiscvITranspilerExtension)
+    //         .with_extension(RiscvMTranspilerExtension)
+    //         .with_extension(RiscvIoTranspilerExtension)
     //         .with_extension(Keccak256TranspilerExtension),
     // )
     // .unwrap();
 
-    // let config = Keccak256Rv64Config::default();
-    // let executor = VmExecutor::<BabyBear, Keccak256Rv64Config>::new(config);
+    // let config = Keccak256Config::default();
+    // let executor = VmExecutor::<BabyBear, Keccak256Config>::new(config);
 
     // let data = include_str!("../../guest/regex/regex_email.txt");
 

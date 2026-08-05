@@ -10,8 +10,8 @@ template <typename T> struct StoreByteCoreCols {
     T prev_data[BLOCK_FE_WIDTH];
 };
 
-template <typename T> struct Rv64StoreByteCols {
-    Rv64StoreByteAdapterCols<T> adapter;
+template <typename T> struct StoreByteCols {
+    StoreByteAdapterCols<T> adapter;
     StoreByteCoreCols<T> core;
 };
 

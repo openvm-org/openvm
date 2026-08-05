@@ -1,10 +1,10 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
-    adapters::{Rv64BaseAluWRegU16AdapterAir, RV64_WORD_U16_LIMBS, U16_BITS},
+    adapters::{BaseAluWRegU16AdapterAir, U16_BITS, WORD_U16_LIMBS},
     shift_logical::{ShiftLogicalCoreAir, ShiftLogicalFiller},
     shift_right_arithmetic::{
-        ShiftRightArithmeticCoreAir, ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
+        ShiftRightArithmeticCoreAir, ShiftRightArithmeticCoreExecutor, ShiftRightArithmeticFiller,
     },
 };
 
@@ -13,12 +13,12 @@ pub(crate) mod trace;
 
 // SLLW/SRLW/SRAW all use the u16 shift cores over the W adapter (low 32-bit word in,
 // sign-extended 64-bit write).
-pub type ShiftWLogicalCoreAir = ShiftLogicalCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type ShiftWRightArithmeticCoreAir = ShiftRightArithmeticCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type ShiftWRightArithmeticExecutor =
-    ShiftRightArithmeticExecutor<RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type ShiftWLogicalCoreAir = ShiftLogicalCoreAir<WORD_U16_LIMBS, U16_BITS>;
+pub type ShiftWRightArithmeticCoreAir = ShiftRightArithmeticCoreAir<WORD_U16_LIMBS, U16_BITS>;
+pub type ShiftWRightArithmeticCoreExecutor =
+    ShiftRightArithmeticCoreExecutor<WORD_U16_LIMBS, U16_BITS>;
 #[derive(Clone, Copy, derive_new::new)]
-pub struct ShiftWLogicalExecutor {
+pub struct ShiftWLogicalCoreExecutor {
     pub offset: usize,
 }
 pub type ShiftWLogicalFiller = ShiftLogicalFiller;
@@ -32,10 +32,10 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64ShiftWLogicalAir = VmAirWrapper<Rv64BaseAluWRegU16AdapterAir, ShiftWLogicalCoreAir>;
-pub type Rv64ShiftWRightArithmeticAir =
-    VmAirWrapper<Rv64BaseAluWRegU16AdapterAir, ShiftWRightArithmeticCoreAir>;
-pub type Rv64ShiftWLogicalExecutor = ShiftWLogicalExecutor;
-pub type Rv64ShiftWRightArithmeticExecutor = ShiftWRightArithmeticExecutor;
-pub type Rv64ShiftWLogicalChip<F> = VmChipWrapper<F, ShiftWLogicalFiller>;
-pub type Rv64ShiftWRightArithmeticChip<F> = VmChipWrapper<F, ShiftWRightArithmeticFiller>;
+pub type ShiftWLogicalAir = VmAirWrapper<BaseAluWRegU16AdapterAir, ShiftWLogicalCoreAir>;
+pub type ShiftWRightArithmeticAir =
+    VmAirWrapper<BaseAluWRegU16AdapterAir, ShiftWRightArithmeticCoreAir>;
+pub type ShiftWLogicalExecutor = ShiftWLogicalCoreExecutor;
+pub type ShiftWRightArithmeticExecutor = ShiftWRightArithmeticCoreExecutor;
+pub type ShiftWLogicalChip<F> = VmChipWrapper<F, ShiftWLogicalFiller>;
+pub type ShiftWRightArithmeticChip<F> = VmChipWrapper<F, ShiftWRightArithmeticFiller>;

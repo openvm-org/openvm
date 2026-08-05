@@ -7,43 +7,42 @@ use std::collections::{BTreeMap, HashSet};
 use openvm_instructions::{
     exe::SparseMemoryImage,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
+    riscv::{IMM_AS, MEMORY_AS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-    ShiftWOpcode,
+    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, JalLuiOpcode, JalrOpcode, LessThanImmOpcode,
+    LessThanOpcode, LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 use rvr_openvm_ir::{
     CfgBranchCond, CfgOperand, ExtInstr, InstrAt, LiftedInstr, MemWidth, Terminator,
 };
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 
-use self::instruction::{AluOp, Rv64IInstr};
+use self::instruction::{AluOp, RiscvIInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
-const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
-    max_main_memory_pages_for_contiguous_range(RV64_REGISTER_BYTES as usize);
+const MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    max_main_memory_pages_for_contiguous_range(REGISTER_BYTES as usize);
 
 /// RVR extension for RV64I base integer instructions.
-pub struct Rv64IExtension;
+pub struct RiscvIExtension;
 
-impl Rv64IExtension {
+impl RiscvIExtension {
     pub const fn new() -> Self {
         Self
     }
 }
 
-impl Default for Rv64IExtension {
+impl Default for RiscvIExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RvrExtension for Rv64IExtension {
+impl RvrExtension for RiscvIExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         try_lift(insn, pc)
     }
@@ -53,7 +52,7 @@ impl RvrExtension for Rv64IExtension {
     }
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
-        RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+        MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 
     /// Find initialized values that match valid RV64 instruction PCs.
@@ -70,7 +69,7 @@ impl RvrExtension for Rv64IExtension {
         let bytes = init_memory
             .iter()
             .filter_map(|(&(address_space, address), &byte)| {
-                (address_space == RV64_MEMORY_AS).then_some((address, byte))
+                (address_space == MEMORY_AS).then_some((address, byte))
             })
             .collect::<BTreeMap<_, _>>();
         bytes
@@ -216,37 +215,37 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
 
     let loads = [
         (
-            Rv64LoadStoreOpcode::LOADD.global_opcode_usize(),
+            LoadStoreOpcode::LOADD.global_opcode_usize(),
             MemWidth::Double,
             false,
         ),
         (
-            Rv64LoadStoreOpcode::LOADBU.global_opcode_usize(),
+            LoadStoreOpcode::LOADBU.global_opcode_usize(),
             MemWidth::Byte,
             false,
         ),
         (
-            Rv64LoadStoreOpcode::LOADHU.global_opcode_usize(),
+            LoadStoreOpcode::LOADHU.global_opcode_usize(),
             MemWidth::Half,
             false,
         ),
         (
-            Rv64LoadStoreOpcode::LOADWU.global_opcode_usize(),
+            LoadStoreOpcode::LOADWU.global_opcode_usize(),
             MemWidth::Word,
             false,
         ),
         (
-            Rv64LoadStoreOpcode::LOADB.global_opcode_usize(),
+            LoadStoreOpcode::LOADB.global_opcode_usize(),
             MemWidth::Byte,
             true,
         ),
         (
-            Rv64LoadStoreOpcode::LOADH.global_opcode_usize(),
+            LoadStoreOpcode::LOADH.global_opcode_usize(),
             MemWidth::Half,
             true,
         ),
         (
-            Rv64LoadStoreOpcode::LOADW.global_opcode_usize(),
+            LoadStoreOpcode::LOADW.global_opcode_usize(),
             MemWidth::Word,
             true,
         ),
@@ -260,19 +259,19 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
 
     let stores = [
         (
-            Rv64LoadStoreOpcode::STORED.global_opcode_usize(),
+            LoadStoreOpcode::STORED.global_opcode_usize(),
             MemWidth::Double,
         ),
         (
-            Rv64LoadStoreOpcode::STOREW.global_opcode_usize(),
+            LoadStoreOpcode::STOREW.global_opcode_usize(),
             MemWidth::Word,
         ),
         (
-            Rv64LoadStoreOpcode::STOREH.global_opcode_usize(),
+            LoadStoreOpcode::STOREH.global_opcode_usize(),
             MemWidth::Half,
         ),
         (
-            Rv64LoadStoreOpcode::STOREB.global_opcode_usize(),
+            LoadStoreOpcode::STOREB.global_opcode_usize(),
             MemWidth::Byte,
         ),
     ];
@@ -316,16 +315,16 @@ pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         return Some(lift_branch(insn, pc, cond));
     }
 
-    if opcode == Rv64JalLuiOpcode::JAL.global_opcode_usize() {
+    if opcode == JalLuiOpcode::JAL.global_opcode_usize() {
         return Some(lift_jal(insn, pc));
     }
-    if opcode == Rv64JalLuiOpcode::LUI.global_opcode_usize() {
+    if opcode == JalLuiOpcode::LUI.global_opcode_usize() {
         return Some(lift_lui(insn, pc));
     }
-    if opcode == Rv64JalrOpcode::JALR.global_opcode_usize() {
+    if opcode == JalrOpcode::JALR.global_opcode_usize() {
         return Some(lift_jalr(insn, pc));
     }
-    if opcode == Rv64AuipcOpcode::AUIPC.global_opcode_usize() {
+    if opcode == AuipcOpcode::AUIPC.global_opcode_usize() {
         return Some(lift_auipc(insn, pc));
     }
 
@@ -340,11 +339,11 @@ fn lift_alu(
     immediate: Option<CfgOperand>,
 ) -> Option<LiftedInstr> {
     let expected_e = if immediate.is_some() {
-        RV64_IMM_AS
+        IMM_AS
     } else {
-        RV64_REGISTER_AS
+        REGISTER_AS
     };
-    if insn.d != RV64_REGISTER_AS || insn.e != expected_e {
+    if insn.d != REGISTER_AS || insn.e != expected_e {
         return None;
     }
 
@@ -354,7 +353,7 @@ fn lift_alu(
     let rhs = immediate.unwrap_or_else(|| reg_operand(rhs_reg.unwrap()));
     Some(body(
         pc,
-        Rv64IInstr::Alu {
+        RiscvIInstr::Alu {
             op,
             word,
             immediate: immediate.is_some(),
@@ -369,13 +368,13 @@ fn lift_alu(
 /// Lift a load encoded as `rd=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
 fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> Option<LiftedInstr> {
-    if insn.d != RV64_REGISTER_AS || insn.e != RV64_MEMORY_AS {
+    if insn.d != REGISTER_AS || insn.e != MEMORY_AS {
         return None;
     }
     let rd = decode_reg(insn.a);
     Some(body(
         pc,
-        Rv64IInstr::Load {
+        RiscvIInstr::Load {
             width,
             signed,
             rd,
@@ -388,12 +387,12 @@ fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> O
 /// Lift a store encoded as `rs2=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
 fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedInstr> {
-    if insn.d != RV64_REGISTER_AS || insn.e != RV64_MEMORY_AS {
+    if insn.d != REGISTER_AS || insn.e != MEMORY_AS {
         return None;
     }
     Some(body(
         pc,
-        Rv64IInstr::Store {
+        RiscvIInstr::Store {
             width,
             base: decode_reg(insn.b),
             src: decode_reg(insn.a),
@@ -407,7 +406,7 @@ fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedI
 fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
     term(
         pc,
-        Rv64IInstr::Branch {
+        RiscvIInstr::Branch {
             cond,
             lhs: decode_reg(insn.a),
             rhs: decode_reg(insn.b),
@@ -422,7 +421,7 @@ fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(
         pc,
-        Rv64IInstr::Jump {
+        RiscvIInstr::Jump {
             link_dst: (rd != ZERO).then_some(rd),
             target: pc.wrapping_add_signed(i64::from(insn.signed_c())),
         },
@@ -435,7 +434,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(
         pc,
-        Rv64IInstr::JumpIndirect {
+        RiscvIInstr::JumpIndirect {
             link_dst: (rd != ZERO).then_some(rd),
             base: decode_reg(insn.b),
             offset: decode_imm_cg(insn) as i32,
@@ -447,7 +446,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     body(
         pc,
-        Rv64IInstr::Const {
+        RiscvIInstr::Const {
             name: "lui",
             rd: decode_reg(insn.a),
             value: sign_extend_32(insn.c << 12),
@@ -463,7 +462,7 @@ fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let upper = insn.c << 8;
     body(
         pc,
-        Rv64IInstr::Const {
+        RiscvIInstr::Const {
             name: "auipc",
             rd: decode_reg(insn.a),
             value: pc.wrapping_add(sign_extend_32(upper)),
@@ -479,7 +478,7 @@ fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
     })
 }
 
-fn term(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
+fn term(pc: u64, instr: RiscvIInstr) -> LiftedInstr {
     LiftedInstr::Term {
         pc,
         terminator: Terminator::instruction(instr),
@@ -505,7 +504,7 @@ fn sign_extend_32(value: u32) -> u64 {
 #[cfg(test)]
 mod tests {
     use openvm_instructions::{
-        instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, VmOpcode, DEFERRAL_AS,
+        instruction::Instruction, riscv::REGISTER_NUM_LIMBS, VmOpcode, DEFERRAL_AS,
     };
     use p3_baby_bear::BabyBear;
 
@@ -522,8 +521,8 @@ mod tests {
 
     fn alu_operands(c: usize, d: u32, e: u32) -> [usize; 7] {
         [
-            RV64_REGISTER_NUM_LIMBS,
-            2 * RV64_REGISTER_NUM_LIMBS,
+            REGISTER_NUM_LIMBS,
+            2 * REGISTER_NUM_LIMBS,
             c,
             d as usize,
             e as usize,
@@ -547,11 +546,11 @@ mod tests {
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_MEMORY_AS, 4 + offset as u32), byte)),
+                .map(|(offset, byte)| ((MEMORY_AS, 4 + offset as u32), byte)),
         );
 
         assert_eq!(
-            Rv64IExtension.extra_cfg_targets(&init_memory, &HashSet::from([u64::from(target)])),
+            RiscvIExtension.extra_cfg_targets(&init_memory, &HashSet::from([u64::from(target)])),
             vec![u64::from(target)]
         );
     }
@@ -578,16 +577,11 @@ mod tests {
         for (opcode, name) in register_opcodes {
             let valid = instruction_for_opcode(
                 opcode,
-                alu_operands(
-                    3 * RV64_REGISTER_NUM_LIMBS,
-                    RV64_REGISTER_AS,
-                    RV64_REGISTER_AS,
-                ),
+                alu_operands(3 * REGISTER_NUM_LIMBS, REGISTER_AS, REGISTER_AS),
             );
             assert_eq!(lifted_name(&valid).as_deref(), Some(name));
 
-            let wrong_domain =
-                instruction_for_opcode(opcode, alu_operands(0, RV64_REGISTER_AS, RV64_IMM_AS));
+            let wrong_domain = instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, IMM_AS));
             assert!(try_lift(&wrong_domain, 0x100).is_none());
         }
     }
@@ -605,21 +599,17 @@ mod tests {
         ];
         for (opcode, name) in opcodes {
             for immediate in [0, 0x7ff, 0xff_f800, 0xff_ffff] {
-                let valid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(immediate, RV64_REGISTER_AS, RV64_IMM_AS),
-                );
+                let valid =
+                    instruction_for_opcode(opcode, alu_operands(immediate, REGISTER_AS, IMM_AS));
                 assert_eq!(lifted_name(&valid).as_deref(), Some(name));
             }
             for invalid in [0x800, 0xffff] {
-                let invalid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(invalid, RV64_REGISTER_AS, RV64_IMM_AS),
-                );
+                let invalid =
+                    instruction_for_opcode(opcode, alu_operands(invalid, REGISTER_AS, IMM_AS));
                 assert!(try_lift(&invalid, 0x100).is_none());
             }
             let wrong_domain =
-                instruction_for_opcode(opcode, alu_operands(0, RV64_REGISTER_AS, RV64_REGISTER_AS));
+                instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, REGISTER_AS));
             assert!(try_lift(&wrong_domain, 0x100).is_none());
         }
     }
@@ -632,14 +622,11 @@ mod tests {
             (ShiftImmOpcode::SRAI.global_opcode(), "srai"),
         ] {
             for shamt in [0, 63] {
-                let valid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(shamt, RV64_REGISTER_AS, RV64_IMM_AS),
-                );
+                let valid =
+                    instruction_for_opcode(opcode, alu_operands(shamt, REGISTER_AS, IMM_AS));
                 assert_eq!(lifted_name(&valid).as_deref(), Some(name));
             }
-            let invalid =
-                instruction_for_opcode(opcode, alu_operands(64, RV64_REGISTER_AS, RV64_IMM_AS));
+            let invalid = instruction_for_opcode(opcode, alu_operands(64, REGISTER_AS, IMM_AS));
             assert!(try_lift(&invalid, 0x100).is_none());
         }
 
@@ -649,14 +636,11 @@ mod tests {
             (ShiftWImmOpcode::SRAIW.global_opcode(), "sraiw"),
         ] {
             for shamt in [0, 31] {
-                let valid = instruction_for_opcode(
-                    opcode,
-                    alu_operands(shamt, RV64_REGISTER_AS, RV64_IMM_AS),
-                );
+                let valid =
+                    instruction_for_opcode(opcode, alu_operands(shamt, REGISTER_AS, IMM_AS));
                 assert_eq!(lifted_name(&valid).as_deref(), Some(name));
             }
-            let invalid =
-                instruction_for_opcode(opcode, alu_operands(32, RV64_REGISTER_AS, RV64_IMM_AS));
+            let invalid = instruction_for_opcode(opcode, alu_operands(32, REGISTER_AS, IMM_AS));
             assert!(try_lift(&invalid, 0x100).is_none());
         }
     }
@@ -664,28 +648,27 @@ mod tests {
     #[test]
     fn load_store_families_require_main_memory_domain() {
         let opcodes = [
-            (Rv64LoadStoreOpcode::LOADD.global_opcode(), "ld"),
-            (Rv64LoadStoreOpcode::LOADBU.global_opcode(), "lbu"),
-            (Rv64LoadStoreOpcode::LOADHU.global_opcode(), "lhu"),
-            (Rv64LoadStoreOpcode::LOADWU.global_opcode(), "lwu"),
-            (Rv64LoadStoreOpcode::LOADB.global_opcode(), "lb"),
-            (Rv64LoadStoreOpcode::LOADH.global_opcode(), "lh"),
-            (Rv64LoadStoreOpcode::LOADW.global_opcode(), "lw"),
-            (Rv64LoadStoreOpcode::STORED.global_opcode(), "sd"),
-            (Rv64LoadStoreOpcode::STOREW.global_opcode(), "sw"),
-            (Rv64LoadStoreOpcode::STOREH.global_opcode(), "sh"),
-            (Rv64LoadStoreOpcode::STOREB.global_opcode(), "sb"),
+            (LoadStoreOpcode::LOADD.global_opcode(), "ld"),
+            (LoadStoreOpcode::LOADBU.global_opcode(), "lbu"),
+            (LoadStoreOpcode::LOADHU.global_opcode(), "lhu"),
+            (LoadStoreOpcode::LOADWU.global_opcode(), "lwu"),
+            (LoadStoreOpcode::LOADB.global_opcode(), "lb"),
+            (LoadStoreOpcode::LOADH.global_opcode(), "lh"),
+            (LoadStoreOpcode::LOADW.global_opcode(), "lw"),
+            (LoadStoreOpcode::STORED.global_opcode(), "sd"),
+            (LoadStoreOpcode::STOREW.global_opcode(), "sw"),
+            (LoadStoreOpcode::STOREH.global_opcode(), "sh"),
+            (LoadStoreOpcode::STOREB.global_opcode(), "sb"),
         ];
         for (opcode, name) in opcodes {
-            let valid =
-                instruction_for_opcode(opcode, alu_operands(0, RV64_REGISTER_AS, RV64_MEMORY_AS));
+            let valid = instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, MEMORY_AS));
             assert_eq!(lifted_name(&valid).as_deref(), Some(name));
 
             let wrong_memory =
-                instruction_for_opcode(opcode, alu_operands(0, RV64_REGISTER_AS, DEFERRAL_AS));
+                instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, DEFERRAL_AS));
             assert!(try_lift(&wrong_memory, 0x100).is_none());
             let wrong_destination =
-                instruction_for_opcode(opcode, alu_operands(0, RV64_MEMORY_AS, RV64_MEMORY_AS));
+                instruction_for_opcode(opcode, alu_operands(0, MEMORY_AS, MEMORY_AS));
             assert!(try_lift(&wrong_destination, 0x100).is_none());
         }
     }
@@ -695,7 +678,7 @@ mod tests {
         let pc = 0x1000;
         for opcode in [
             BranchEqualOpcode::BEQ.global_opcode(),
-            Rv64JalLuiOpcode::JAL.global_opcode(),
+            JalLuiOpcode::JAL.global_opcode(),
         ] {
             let insn = RvrInstruction::from_field(&Instruction::<BabyBear>::from_isize(
                 opcode, 8, 16, -12, 0, 0,
@@ -714,13 +697,13 @@ mod tests {
     #[test]
     fn load_to_x0_keeps_the_memory_access() {
         let insn = instruction(
-            Rv64LoadStoreOpcode::LOADD,
+            LoadStoreOpcode::LOADD,
             [
                 0,
-                RV64_REGISTER_NUM_LIMBS,
+                REGISTER_NUM_LIMBS,
                 0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
                 1,
                 0,
             ],
@@ -737,16 +720,8 @@ mod tests {
     fn preserves_high_auipc_values() {
         let pc = 0x1_0000_0000;
         let insn = instruction(
-            Rv64AuipcOpcode::AUIPC,
-            [
-                RV64_REGISTER_NUM_LIMBS,
-                0,
-                1,
-                RV64_REGISTER_AS as usize,
-                0,
-                0,
-                0,
-            ],
+            AuipcOpcode::AUIPC,
+            [REGISTER_NUM_LIMBS, 0, 1, REGISTER_AS as usize, 0, 0, 0],
         );
         let LiftedInstr::Body(InstrAt { instr, .. }) = try_lift(&insn, pc).unwrap() else {
             panic!("expected body instruction");

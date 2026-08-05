@@ -9,18 +9,16 @@ use openvm_circuit::{
 };
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED};
+use openvm_riscv_transpiler::HintStoreOpcode::{HINT_BUFFER, HINT_STORED};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{
-    validate_hint_buffer_num_words, Rv64HintStoreChip, Rv64HintStoreCols, REM_WORDS_SHIFT,
-};
+use super::{validate_hint_buffer_num_words, HintStoreChip, HintStoreCols, REM_WORDS_SHIFT};
 use crate::adapters::{
     byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, RV64_PTR_BITS, U16_BITS,
+    ptr_to_field_u16_limbs, PTR_BITS, U16_BITS,
 };
 
 struct HintStoreReplayInput {
@@ -36,7 +34,7 @@ struct HintStoreReplayInput {
 
 /// Generates the RV64 hint-store trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64HintStoreChip<F>,
+    chip: &HintStoreChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [HINT_STORED, HINT_BUFFER];
@@ -57,7 +55,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         }
     }
 
-    let width = Rv64HintStoreCols::<F>::width();
+    let width = HintStoreCols::<F>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
     let mem_helper = chip.mem_helper.as_borrowed();
@@ -78,13 +76,13 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             }
             let byte_ptr = input
                 .mem_ptr
-                .checked_add(local_index * RV64_REGISTER_NUM_LIMBS as u32)
+                .checked_add(local_index * REGISTER_NUM_LIMBS as u32)
                 .ok_or_else(|| PostflightError::new("hint-store memory pointer overflow"))?;
             let write =
-                replay.write_observed_u16(RV64_MEMORY_AS, byte_ptr_to_u16_ptr_value(byte_ptr))?;
+                replay.write_observed_u16(MEMORY_AS, byte_ptr_to_u16_ptr_value(byte_ptr))?;
 
             let row = &mut trace.values[row_index * width..(row_index + 1) * width];
-            let cols: &mut Rv64HintStoreCols<F> = row.borrow_mut();
+            let cols: &mut HintStoreCols<F> = row.borrow_mut();
             fill_row(&mem_helper, cols, &input, local_index, byte_ptr, write);
             row_index += 1;
         }
@@ -114,8 +112,8 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
         ));
     }
     if instruction.c.as_canonical_u32() != 0
-        || instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-        || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+        || instruction.d.as_canonical_u32() != REGISTER_AS
+        || instruction.e.as_canonical_u32() != MEMORY_AS
         || instruction.f.as_canonical_u32() != 0
         || instruction.g.as_canonical_u32() != 0
     {
@@ -141,11 +139,11 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
     let from_pc = postflight.pc(step);
     let from_timestamp = postflight.timestamp(step);
     let mut replay = postflight.replay(step);
-    let mem_ptr_read = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(mem_ptr_ptr))?;
+    let mem_ptr_read = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(mem_ptr_ptr))?;
     let mem_ptr_u64 = u16_block_to_u64(mem_ptr_read.value);
     let mem_ptr = u32::try_from(mem_ptr_u64)
         .ok()
-        .filter(|pointer| pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32))
+        .filter(|pointer| pointer.is_multiple_of(REGISTER_NUM_LIMBS as u32))
         .ok_or_else(|| {
             PostflightError::new(
                 "hint-store destination is not an aligned low-32-bit memory pointer",
@@ -153,7 +151,7 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
         })?;
 
     let (num_words, num_words_prev_timestamp) = if let Some(num_words_ptr) = num_words_ptr {
-        let access = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(num_words_ptr))?;
+        let access = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(num_words_ptr))?;
         let count = u16_block_to_u64(access.value);
         let count = validate_hint_buffer_num_words(from_pc, count)
             .map(u32::from)
@@ -164,12 +162,12 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
         (1, None)
     };
 
-    let pointer_limit = if pointer_max_bits < RV64_PTR_BITS {
+    let pointer_limit = if pointer_max_bits < PTR_BITS {
         1u64 << pointer_max_bits
     } else {
-        1u64 << RV64_PTR_BITS
+        1u64 << PTR_BITS
     };
-    let access_end = u64::from(mem_ptr) + u64::from(num_words) * RV64_REGISTER_NUM_LIMBS as u64;
+    let access_end = u64::from(mem_ptr) + u64::from(num_words) * REGISTER_NUM_LIMBS as u64;
     if access_end > pointer_limit {
         return Err(PostflightError::new(
             "hint-store output exceeds the implemented memory address space",
@@ -193,7 +191,7 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
 
 fn fill_row<F: PrimeField32>(
     mem_helper: &MemoryAuxColsFactory<F>,
-    cols: &mut Rv64HintStoreCols<F>,
+    cols: &mut HintStoreCols<F>,
     input: &HintStoreReplayInput,
     local_index: u32,
     byte_ptr: u32,

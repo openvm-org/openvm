@@ -27,7 +27,7 @@ static __device__ __forceinline__ uint8_t
 replay_store_source_byte(uint16_t const (&value)[BLOCK_FE_WIDTH], size_t byte) {
     uint16_t cell = value[byte / U16_CELL_SIZE];
     return static_cast<uint8_t>(
-        (cell >> ((byte % U16_CELL_SIZE) * RV64_BYTE_BITS)) & UINT8_MAX
+        (cell >> ((byte % U16_CELL_SIZE) * BYTE_BITS)) & UINT8_MAX
     );
 }
 
@@ -206,11 +206,11 @@ static __device__ bool replay_store_multibyte(
         size_t within_block = destination % MEMORY_BLOCK_BYTES;
         size_t cell = within_block / U16_CELL_SIZE;
         size_t byte_in_cell = within_block % U16_CELL_SIZE;
-        uint16_t mask = static_cast<uint16_t>(UINT8_MAX << (byte_in_cell * RV64_BYTE_BITS));
+        uint16_t mask = static_cast<uint16_t>(UINT8_MAX << (byte_in_cell * BYTE_BITS));
         expected_post[block][cell] = static_cast<uint16_t>(
             (expected_post[block][cell] & ~mask) |
             (static_cast<uint16_t>(replay_store_source_byte(rs2, byte))
-             << (byte_in_cell * RV64_BYTE_BITS))
+             << (byte_in_cell * BYTE_BITS))
         );
     }
 #pragma unroll

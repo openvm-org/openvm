@@ -5,13 +5,13 @@ use std::{
 
 use eyre::Result;
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{IMM_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode,
 };
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluWImmOpcode, LessThanImmOpcode, Rv64HintStoreOpcode,
-    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension, Rv64Phantom,
+    BaseAluImmOpcode, BaseAluWImmOpcode, HintStoreOpcode, LessThanImmOpcode,
+    RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension, RiscvPhantom,
     ShiftImmOpcode, ShiftWImmOpcode,
 };
 use openvm_stark_sdk::{openvm_stark_backend::p3_field::PrimeField32, p3_baby_bear::BabyBear};
@@ -27,11 +27,11 @@ fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     Ok(elf)
 }
 
-fn rv64_transpiler() -> Transpiler<F> {
+fn transpiler() -> Transpiler<F> {
     Transpiler::<F>::default()
-        .with_extension(Rv64ITranspilerExtension)
-        .with_extension(Rv64MTranspilerExtension)
-        .with_extension(Rv64IoTranspilerExtension)
+        .with_extension(RiscvITranspilerExtension)
+        .with_extension(RiscvMTranspilerExtension)
+        .with_extension(RiscvIoTranspilerExtension)
 }
 
 fn encode_op_imm(funct3: u32, immediate: u32) -> u32 {
@@ -61,32 +61,32 @@ fn test_transpile_addi_immediate_boundaries(imm: i32, expected_c: u32) -> Result
 
     let encoded =
         (((imm as u32) & 0xfff) << 20) | ((RS1 as u32) << 15) | ((RD as u32) << 7) | OPCODE_OP_IMM;
-    let program = rv64_transpiler().transpile(&[encoded])?;
+    let program = transpiler().transpile(&[encoded])?;
     let instruction = program[0].as_ref().expect("ADDI should be emitted");
 
     assert_eq!(instruction.opcode, BaseAluImmOpcode::ADDI.global_opcode());
     assert_eq!(
         instruction.a.as_canonical_u32(),
-        (RD * RV64_REGISTER_NUM_LIMBS) as u32
+        (RD * REGISTER_NUM_LIMBS) as u32
     );
     assert_eq!(
         instruction.b.as_canonical_u32(),
-        (RS1 * RV64_REGISTER_NUM_LIMBS) as u32
+        (RS1 * REGISTER_NUM_LIMBS) as u32
     );
     assert_eq!(instruction.c.as_canonical_u32(), expected_c);
-    assert_eq!(instruction.d.as_canonical_u32(), RV64_REGISTER_AS);
-    assert_eq!(instruction.e.as_canonical_u32(), RV64_IMM_AS);
+    assert_eq!(instruction.d.as_canonical_u32(), REGISTER_AS);
+    assert_eq!(instruction.e.as_canonical_u32(), IMM_AS);
 
     Ok(())
 }
 
 #[test]
-fn test_transpile_rv64_undecodable_word_as_unimp() -> Result<()> {
+fn test_transpile_undecodable_word_as_unimp() -> Result<()> {
     const ADDI_X3_X0_1: u32 = 0x0010_0193;
     const UNDECODABLE_WORD: u32 = 0x1000_0200;
 
     let words = [ADDI_X3_X0_1, UNDECODABLE_WORD, ADDI_X3_X0_1];
-    let program = rv64_transpiler().transpile(&words)?;
+    let program = transpiler().transpile(&words)?;
 
     assert_eq!(program.len(), words.len());
     assert_eq!(
@@ -118,15 +118,15 @@ fn test_transpile_split_immediate_opcodes(
     expected_opcode: usize,
     expected_c: u32,
 ) -> Result<()> {
-    let program = rv64_transpiler().transpile(&[encode_op_imm(funct3, immediate)])?;
+    let program = transpiler().transpile(&[encode_op_imm(funct3, immediate)])?;
     let instruction = program[0]
         .as_ref()
         .expect("immediate instruction should be emitted");
 
     assert_eq!(instruction.opcode.as_usize(), expected_opcode);
     assert_eq!(instruction.c.as_canonical_u32(), expected_c);
-    assert_eq!(instruction.d.as_canonical_u32(), RV64_REGISTER_AS);
-    assert_eq!(instruction.e.as_canonical_u32(), RV64_IMM_AS);
+    assert_eq!(instruction.d.as_canonical_u32(), REGISTER_AS);
+    assert_eq!(instruction.e.as_canonical_u32(), IMM_AS);
 
     Ok(())
 }
@@ -141,15 +141,15 @@ fn test_transpile_split_word_immediate_opcodes(
     expected_opcode: usize,
     expected_c: u32,
 ) -> Result<()> {
-    let program = rv64_transpiler().transpile(&[encode_op_imm_32(funct3, immediate)])?;
+    let program = transpiler().transpile(&[encode_op_imm_32(funct3, immediate)])?;
     let instruction = program[0]
         .as_ref()
         .expect("word-immediate instruction should be emitted");
 
     assert_eq!(instruction.opcode.as_usize(), expected_opcode);
     assert_eq!(instruction.c.as_canonical_u32(), expected_c);
-    assert_eq!(instruction.d.as_canonical_u32(), RV64_REGISTER_AS);
-    assert_eq!(instruction.e.as_canonical_u32(), RV64_IMM_AS);
+    assert_eq!(instruction.d.as_canonical_u32(), REGISTER_AS);
+    assert_eq!(instruction.e.as_canonical_u32(), IMM_AS);
 
     Ok(())
 }
@@ -159,7 +159,7 @@ fn test_transpile_split_word_immediate_opcodes(
 // -Wl,-N <name>.S -o <name>-from-as`
 #[test_case("tests/data/rv64im-stress")]
 #[test_case("tests/data/rv64im-intrin")]
-fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
+fn test_decode_elf(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     assert!(
         !elf.instructions.is_empty(),
@@ -170,9 +170,9 @@ fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
 
 #[test_case("tests/data/rv64im-stress")]
 #[test_case("tests/data/rv64im-intrin")]
-fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
+fn test_transpile_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
-    let program = rv64_transpiler().transpile(&elf.instructions)?;
+    let program = transpiler().transpile(&elf.instructions)?;
     let non_none_count = program.iter().filter(|i| i.is_some()).count();
     assert!(
         non_none_count > 0,
@@ -185,9 +185,9 @@ fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
 /// UNIMP is transpiled as TERMINATE with exit code 2 (c = F::TWO).
 /// Legitimate TERMINATE instructions (exit code 0 or 1) are expected and allowed.
 #[test_case("tests/data/rv64im-stress")]
-fn test_transpile_rv64_no_unimp(elf_path: &str) -> Result<()> {
+fn test_transpile_no_unimp(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
-    let program = rv64_transpiler().transpile(&elf.instructions)?;
+    let program = transpiler().transpile(&elf.instructions)?;
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
     for (i, inst) in program.iter().enumerate() {
         if let Some(inst) = inst {
@@ -207,14 +207,14 @@ fn test_transpile_rv64_no_unimp(elf_path: &str) -> Result<()> {
 /// (TERMINATE, PHANTOM, HINT_STORED, HINT_BUFFER) transpiles correctly
 /// and that the expected opcodes appear in the output.
 #[test]
-fn test_transpile_rv64_custom_opcodes() -> Result<()> {
+fn test_transpile_custom_opcodes() -> Result<()> {
     let elf = get_elf("tests/data/rv64im-intrin")?;
-    let program = rv64_transpiler().transpile(&elf.instructions)?;
+    let program = transpiler().transpile(&elf.instructions)?;
 
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-    let hint_stored_opcode = Rv64HintStoreOpcode::HINT_STORED.global_opcode();
-    let hint_buffer_opcode = Rv64HintStoreOpcode::HINT_BUFFER.global_opcode();
+    let hint_stored_opcode = HintStoreOpcode::HINT_STORED.global_opcode();
+    let hint_buffer_opcode = HintStoreOpcode::HINT_BUFFER.global_opcode();
 
     let mut found_terminate = false;
     let mut found_phantom = false;
@@ -256,13 +256,13 @@ fn test_transpile_rv64_custom_opcodes() -> Result<()> {
 /// Verify that PHANTOM instructions carry the correct discriminant values
 /// for PrintStr and HintInput.
 #[test]
-fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
+fn test_transpile_riscv_phantom_discriminants() -> Result<()> {
     let elf = get_elf("tests/data/rv64im-intrin")?;
-    let program = rv64_transpiler().transpile(&elf.instructions)?;
+    let program = transpiler().transpile(&elf.instructions)?;
 
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-    let hint_input_disc = Rv64Phantom::HintInput as u16;
-    let print_str_disc = Rv64Phantom::PrintStr as u16;
+    let hint_input_disc = RiscvPhantom::HintInput as u16;
+    let print_str_disc = RiscvPhantom::PrintStr as u16;
 
     let mut found_hint_input = false;
     let mut found_print_str = false;

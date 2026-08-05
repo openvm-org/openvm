@@ -1,7 +1,7 @@
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, SystemOpcode, VmOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
@@ -178,18 +178,12 @@ fn interpreter_history_uses_the_standard_gpu_indexes() {
         ],
         memory: openvm_circuit::arch::PreflightMemoryLog {
             accesses: vec![
-                event_value(1, RV64_REGISTER_AS, 0, false, first),
-                event_value(2, RV64_MEMORY_AS, 0, false, memory_read),
-                event_value(
-                    3,
-                    RV64_REGISTER_AS,
-                    BLOCK_FE_WIDTH as u32,
-                    true,
-                    written_second,
-                ),
+                event_value(1, REGISTER_AS, 0, false, first),
+                event_value(2, MEMORY_AS, 0, false, memory_read),
+                event_value(3, REGISTER_AS, BLOCK_FE_WIDTH as u32, true, written_second),
             ],
             initial_writes: vec![PreflightInitialWrite {
-                address_space: RV64_REGISTER_AS,
+                address_space: REGISTER_AS,
                 pointer: BLOCK_FE_WIDTH as u32,
                 initial_value: initial_second,
             }],
@@ -207,9 +201,9 @@ fn interpreter_history_uses_the_standard_gpu_indexes() {
         .collect::<Vec<_>>();
     let initial_memory = (0..MemoryConfig::default().addr_spaces.len())
         .map(|address_space| {
-            let image = if address_space == RV64_REGISTER_AS as usize {
+            let image = if address_space == REGISTER_AS as usize {
                 initial_registers.as_slice()
-            } else if address_space == RV64_MEMORY_AS as usize {
+            } else if address_space == MEMORY_AS as usize {
                 initial_memory_values.as_slice()
             } else {
                 &[]
@@ -259,7 +253,7 @@ fn mixed_chronology_fixture() -> (MemoryConfig, Vec<Vec<u8>>) {
     for address_space in &mut config.addr_spaces {
         address_space.num_cells = 0;
     }
-    config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 8;
+    config.addr_spaces[MEMORY_AS as usize].num_cells = 8;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 8;
     let mut images = config
         .addr_spaces
@@ -275,8 +269,7 @@ fn mixed_chronology_fixture() -> (MemoryConfig, Vec<Vec<u8>>) {
         })
         .collect::<Vec<_>>();
     for (index, value) in [1u16, 2, 3, 4].into_iter().enumerate() {
-        images[RV64_MEMORY_AS as usize][2 * index..2 * index + 2]
-            .copy_from_slice(&value.to_le_bytes());
+        images[MEMORY_AS as usize][2 * index..2 * index + 2].copy_from_slice(&value.to_le_bytes());
     }
     for (index, value) in [11u32, 12, 13, 14, 21, 22, 23, 24].into_iter().enumerate() {
         images[DEFERRAL_AS as usize][4 * index..4 * index + 4]
@@ -290,10 +283,10 @@ fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order
     let (config, initial_memory) = mixed_chronology_fixture();
     let memory = [
         field_event(1, 0, false, 0),
-        event_value(2, RV64_MEMORY_AS, 0, true, [0x00aa, 0, 0, 0]),
+        event_value(2, MEMORY_AS, 0, true, [0x00aa, 0, 0, 0]),
         field_event(3, 0, true, 1),
         field_event(4, 0, false, 2),
-        event_value(5, RV64_MEMORY_AS, 0, false, [0; 4]),
+        event_value(5, MEMORY_AS, 0, false, [0; 4]),
         field_event(6, 4, true, 3),
         field_event(7, 4, false, 4),
     ];
@@ -341,7 +334,7 @@ fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order
     assert_eq!(resolved_fields[4], second_write);
 
     assert_eq!(seeds.len(), 2);
-    assert_eq!(seeds[0].address_space, RV64_MEMORY_AS);
+    assert_eq!(seeds[0].address_space, MEMORY_AS);
     assert_eq!(seeds[0].initial_value, [1, 2, 3, 4]);
     assert_eq!(seeds[1].address_space, DEFERRAL_AS);
     assert_eq!(seeds[1].initial_value, [0, 0, 0, 0]);
@@ -357,11 +350,7 @@ fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order
             .iter()
             .map(|block| (block.address_space, block.ptr, block.timestamp))
             .collect::<Vec<_>>(),
-        [
-            (RV64_MEMORY_AS, 0, 5),
-            (DEFERRAL_AS, 0, 4),
-            (DEFERRAL_AS, 4, 7),
-        ]
+        [(MEMORY_AS, 0, 5), (DEFERRAL_AS, 0, 4), (DEFERRAL_AS, 4, 7),]
     );
     assert_eq!(
         touched[0].values.map(|value| value.as_canonical_u32()),
@@ -391,13 +380,13 @@ fn gpu_chronology_keeps_narrow_u16_only_path() {
         ..Default::default()
     };
     config.addr_spaces.truncate(3);
-    config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 4;
+    config.addr_spaces[MEMORY_AS as usize].num_cells = 4;
     let mut initial_memory = vec![Vec::new(), Vec::new(), vec![0u8; 8]];
     for (index, value) in [1u16, 2, 3, 4].into_iter().enumerate() {
-        initial_memory[RV64_MEMORY_AS as usize][2 * index..2 * index + 2]
+        initial_memory[MEMORY_AS as usize][2 * index..2 * index + 2]
             .copy_from_slice(&value.to_le_bytes());
     }
-    let read = event_value(1, RV64_MEMORY_AS, 0, false, [0; 4]);
+    let read = event_value(1, MEMORY_AS, 0, false, [0; 4]);
     let (resolved, seeds, field_values, field_seeds, predecessors, touched) =
         gpu_chronology_with_fields(&[read], &[0], &[], &initial_memory, &config).unwrap();
 
@@ -409,19 +398,19 @@ fn gpu_chronology_keeps_narrow_u16_only_path() {
     assert_eq!(touched.len(), 1);
     assert_eq!(touched[0].is_dirty, 0);
 
-    let observed_read = event_value(1, RV64_MEMORY_AS, 0, false, [1, 2, 3, 4]);
+    let observed_read = event_value(1, MEMORY_AS, 0, false, [1, 2, 3, 4]);
     assert!(
         gpu_chronology_with_fields(&[observed_read], &[0], &[], &initial_memory, &config).is_ok()
     );
-    let incorrect_read = event_value(1, RV64_MEMORY_AS, 0, false, [9, 2, 3, 4]);
+    let incorrect_read = event_value(1, MEMORY_AS, 0, false, [9, 2, 3, 4]);
     assert!(
         gpu_chronology_with_fields(&[incorrect_read], &[0], &[], &initial_memory, &config).is_err()
     );
 
     // Dirtiness records the write itself, even when the value is unchanged
     // and a later read is the block's final event.
-    let write = event_value(1, RV64_MEMORY_AS, 0, true, [1, 2, 3, 4]);
-    let read = event_value(2, RV64_MEMORY_AS, 0, false, [0; 4]);
+    let write = event_value(1, MEMORY_AS, 0, true, [1, 2, 3, 4]);
+    let read = event_value(2, MEMORY_AS, 0, false, [0; 4]);
     let (_, _, _, _, _, touched) =
         gpu_chronology_with_fields(&[write, read], &[0xff, 0], &[], &initial_memory, &config)
             .unwrap();

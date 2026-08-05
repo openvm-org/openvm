@@ -58,7 +58,7 @@ cfg_if::cfg_if! {
         };
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
-        use openvm_riscv_circuit::Rv64ImGpuProverExt;
+        use openvm_riscv_circuit::RiscvImGpuProverExt;
         use openvm_sha2_circuit::Sha2GpuProverExt;
         pub use SdkVmGpuBuilder as SdkVmBuilder;
     } else {
@@ -81,16 +81,16 @@ struct SdkVmConfigWrapper {
 #[serde(from = "SdkVmConfigWithDefaultDeser")]
 pub struct SdkVmConfig {
     pub system: SdkSystemConfig,
-    pub rv64i: Option<UnitStruct>,
+    pub riscv_i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
 
-    /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv64m`
+    /// NOTE: if enabling this together with the [Int256] extension, you should set the `riscv_m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
     /// performance.
-    pub rv64m: Option<Rv64M>,
-    /// NOTE: if enabling this together with the [Rv64M] extension, you should set the `rv64m`
+    pub riscv_m: Option<RiscvM>,
+    /// NOTE: if enabling this together with the [RiscvM] extension, you should set the `riscv_m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
     /// performance.
     pub bigint: Option<Int256>,
@@ -120,8 +120,8 @@ impl SdkVmConfig {
         let bls_config = PairingCurve::Bls12_381.curve_config();
         SdkVmConfig::builder()
             .system(Default::default())
-            .rv64i(Default::default())
-            .rv64m(Default::default())
+            .riscv_i(Default::default())
+            .riscv_m(Default::default())
             .io(Default::default())
             .keccak(Default::default())
             .sha2(Default::default())
@@ -170,8 +170,8 @@ impl SdkVmConfig {
     pub fn riscv64() -> Self {
         SdkVmConfig::builder()
             .system(Default::default())
-            .rv64i(Default::default())
-            .rv64m(Default::default())
+            .riscv_i(Default::default())
+            .riscv_m(Default::default())
             .io(Default::default())
             .build()
             .optimize()
@@ -197,11 +197,11 @@ pub trait TranspilerConfig<F> {
 impl TranspilerConfig<F> for SdkVmConfig {
     fn transpiler(&self) -> Transpiler<F> {
         let mut transpiler = Transpiler::default();
-        if self.rv64i.is_some() {
-            transpiler = transpiler.with_extension(Rv64ITranspilerExtension);
+        if self.riscv_i.is_some() {
+            transpiler = transpiler.with_extension(RiscvITranspilerExtension);
         }
         if self.io.is_some() {
-            transpiler = transpiler.with_extension(Rv64IoTranspilerExtension);
+            transpiler = transpiler.with_extension(RiscvIoTranspilerExtension);
         }
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
@@ -209,8 +209,8 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.sha2.is_some() {
             transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
-        if self.rv64m.is_some() {
-            transpiler = transpiler.with_extension(Rv64MTranspilerExtension);
+        if self.riscv_m.is_some() {
+            transpiler = transpiler.with_extension(RiscvMTranspilerExtension);
         }
         if self.bigint.is_some() {
             transpiler = transpiler.with_extension(Int256TranspilerExtension);
@@ -256,14 +256,14 @@ impl SdkVmConfig {
 
     /// Apply small optimizations to the configuration.
     pub fn apply_optimizations(&mut self) {
-        let rv64m = self.rv64m.as_mut();
+        let riscv_m = self.riscv_m.as_mut();
         let bigint = self.bigint.as_mut();
-        if let (Some(bigint), Some(rv64m)) = (bigint, rv64m) {
-            rv64m.range_tuple_checker_sizes[0] =
-                rv64m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
-            rv64m.range_tuple_checker_sizes[1] =
-                rv64m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
-            bigint.range_tuple_checker_sizes = rv64m.range_tuple_checker_sizes;
+        if let (Some(bigint), Some(riscv_m)) = (bigint, riscv_m) {
+            riscv_m.range_tuple_checker_sizes[0] =
+                riscv_m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+            riscv_m.range_tuple_checker_sizes[1] =
+                riscv_m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+            bigint.range_tuple_checker_sizes = riscv_m.range_tuple_checker_sizes;
         }
 
         const DEFERRAL_AS_USIZE: usize = DEFERRAL_AS as usize;
@@ -283,11 +283,11 @@ impl SdkVmConfig {
     pub fn to_inner(&self) -> SdkVmConfigInner {
         let config = self.clone().optimize();
         let system = config.system.config.clone();
-        let rv64i = config.rv64i.map(|_| Rv64I);
-        let io = config.io.map(|_| Rv64Io);
+        let riscv_i = config.riscv_i.map(|_| RiscvI);
+        let io = config.io.map(|_| RiscvIo);
         let keccak = config.keccak.map(|_| Keccak256);
         let sha2 = config.sha2.map(|_| Sha2);
-        let rv64m = config.rv64m;
+        let riscv_m = config.riscv_m;
         let bigint = config.bigint;
         let modular = config.modular.clone();
         let fp2 = config.fp2.clone();
@@ -297,11 +297,11 @@ impl SdkVmConfig {
 
         SdkVmConfigInner {
             system,
-            rv64i,
+            riscv_i,
             io,
             keccak,
             sha2,
-            rv64m,
+            riscv_m,
             bigint,
             modular,
             fp2,
@@ -324,17 +324,17 @@ pub struct SdkVmCpuBuilder;
 pub struct SdkVmConfigInner {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
-    #[extension(executor = "Rv64IExecutor")]
-    pub rv64i: Option<Rv64I>,
-    #[extension(executor = "Rv64IoExecutor")]
-    pub io: Option<Rv64Io>,
+    #[extension(executor = "RiscvIExecutor")]
+    pub riscv_i: Option<RiscvI>,
+    #[extension(executor = "RiscvIoExecutor")]
+    pub io: Option<RiscvIo>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha2Executor")]
     pub sha2: Option<Sha2>,
 
-    #[extension(executor = "Rv64MExecutor")]
-    pub rv64m: Option<Rv64M>,
+    #[extension(executor = "RiscvMExecutor")]
+    pub riscv_m: Option<RiscvM>,
     #[extension(executor = "Int256Executor")]
     pub bigint: Option<Int256>,
     #[extension(executor = "ModularExtensionExecutor")]
@@ -406,11 +406,11 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        if let Some(rv64i) = &config.rv64i {
-            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, rv64i, inventory)?;
+        if let Some(riscv_i) = &config.riscv_i {
+            VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, riscv_i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
@@ -418,8 +418,8 @@ where
         if let Some(sha2) = &config.sha2 {
             VmProverExtension::<E, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
         }
-        if let Some(rv64m) = &config.rv64m {
-            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, rv64m, inventory)?;
+        if let Some(riscv_m) = &config.riscv_m {
+            VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, riscv_m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
             VmProverExtension::<E, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
@@ -468,11 +468,11 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        if let Some(rv64i) = &config.rv64i {
-            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, rv64i, inventory)?;
+        if let Some(riscv_i) = &config.riscv_i {
+            VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, riscv_i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
@@ -480,8 +480,8 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         if let Some(sha2) = &config.sha2 {
             VmProverExtension::<E, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
         }
-        if let Some(rv64m) = &config.rv64m {
-            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, rv64m, inventory)?;
+        if let Some(riscv_m) = &config.riscv_m {
+            VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, riscv_m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
             VmProverExtension::<E, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
@@ -585,14 +585,14 @@ impl From<SystemConfig> for SdkSystemConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct UnitStruct {}
 
-impl From<Rv64I> for UnitStruct {
-    fn from(_: Rv64I) -> Self {
+impl From<RiscvI> for UnitStruct {
+    fn from(_: RiscvI) -> Self {
         UnitStruct {}
     }
 }
 
-impl From<Rv64Io> for UnitStruct {
-    fn from(_: Rv64Io) -> Self {
+impl From<RiscvIo> for UnitStruct {
+    fn from(_: RiscvIo) -> Self {
         UnitStruct {}
     }
 }
@@ -614,12 +614,12 @@ struct SdkVmConfigWithDefaultDeser {
     #[serde(default)]
     pub system: SdkSystemConfig,
 
-    pub rv64i: Option<UnitStruct>,
+    pub riscv_i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
 
-    pub rv64m: Option<Rv64M>,
+    pub riscv_m: Option<RiscvM>,
     pub bigint: Option<Int256>,
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
@@ -633,11 +633,11 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
     fn from(config: SdkVmConfigWithDefaultDeser) -> Self {
         let ret = Self {
             system: config.system,
-            rv64i: config.rv64i,
+            riscv_i: config.riscv_i,
             io: config.io,
             keccak: config.keccak,
             sha2: config.sha2,
-            rv64m: config.rv64m,
+            riscv_m: config.riscv_m,
             bigint: config.bigint,
             modular: config.modular,
             fp2: config.fp2,

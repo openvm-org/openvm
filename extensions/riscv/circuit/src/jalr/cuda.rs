@@ -9,18 +9,18 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
-use openvm_riscv_transpiler::Rv64JalrOpcode;
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
+use openvm_riscv_transpiler::JalrOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use crate::{adapters::Rv64JalrAdapterCols, cuda_abi::jalr_cuda, Rv64JalrCoreCols};
+use crate::{adapters::JalrAdapterCols, cuda_abi::jalr_cuda, JalrCoreCols};
 #[derive(new)]
-pub struct Rv64JalrChipGpu {
+pub struct JalrChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64JalrChipGpu {
+impl JalrChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -29,12 +29,12 @@ impl Rv64JalrChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let step_range = replay_plan.opcode_range(Rv64JalrOpcode::JALR.global_opcode());
+        let step_range = replay_plan.opcode_range(JalrOpcode::JALR.global_opcode());
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64JalrCoreCols::<F>::width() + Rv64JalrAdapterCols::<F>::width();
+        let trace_width = JalrCoreCols::<F>::width() + JalrAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
@@ -51,8 +51,8 @@ impl Rv64JalrChipGpu {
                 step_range.start,
                 step_range.len(),
                 transcript.error_ptr(),
-                Rv64JalrOpcode::JALR.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                JalrOpcode::JALR.global_opcode().as_usize() as u32,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

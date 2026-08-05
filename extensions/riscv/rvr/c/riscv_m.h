@@ -1,5 +1,5 @@
-#ifndef OPENVM_RVR_RV64M_H
-#define OPENVM_RVR_RV64M_H
+#ifndef OPENVM_RVR_RISCV_M_H
+#define OPENVM_RVR_RISCV_M_H
 
 #include <stdint.h>
 
@@ -104,4 +104,4 @@ static __attribute__((always_inline)) inline uint64_t rv_remuw(uint32_t a,
   return (uint64_t)(int64_t)(int32_t)(a % b);
 }
 
-#endif /* OPENVM_RVR_RV64M_H */
+#endif /* OPENVM_RVR_RISCV_M_H */

@@ -8,17 +8,17 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode,
-    Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
+    HintStoreOpcode,
+    HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{validate_hint_buffer_num_words, Rv64HintStoreExecutor};
-use crate::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
+use super::{validate_hint_buffer_num_words, HintStoreExecutor};
+use crate::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -28,14 +28,14 @@ struct HintStorePreCompute {
     b: u8,
 }
 
-impl Rv64HintStoreExecutor {
+impl HintStoreExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut HintStorePreCompute,
-    ) -> Result<Rv64HintStoreOpcode, StaticProgramError> {
+    ) -> Result<HintStoreOpcode, StaticProgramError> {
         let &Instruction {
             opcode,
             a,
@@ -45,7 +45,7 @@ impl Rv64HintStoreExecutor {
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = {
@@ -55,7 +55,7 @@ impl Rv64HintStoreExecutor {
                 b: b.as_canonical_u32() as u8,
             }
         };
-        Ok(Rv64HintStoreOpcode::from_usize(
+        Ok(HintStoreOpcode::from_usize(
             opcode.local_opcode_idx(self.offset),
         ))
     }
@@ -70,7 +70,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for Rv64HintStoreExecutor
+impl<F> InterpreterExecutor<F> for HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -117,7 +117,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for Rv64HintStoreExecutor
+impl<F> InterpreterMeteredExecutor<F> for HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -168,20 +168,20 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
 ) -> Result<u32, ExecutionError> {
     let pc = exec_state.pc();
     let mem_ptr_limbs =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = validate_memory_block_byte_ptr(pc, rv64_bytes_to_u32(mem_ptr_limbs))?;
+        exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let mem_ptr = validate_memory_block_byte_ptr(pc, bytes_to_u32(mem_ptr_limbs))?;
 
     let num_words = if IS_HINT_STORED {
         exec_state.ctx.advance_timestamp(1);
         1u64
     } else {
-        let num_words_limbs = exec_state
-            .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+        let num_words_limbs =
+            exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32);
         u64::from_le_bytes(num_words_limbs)
     };
     let num_words = u32::from(validate_hint_buffer_num_words(pc, num_words)?);
 
-    let num_bytes = RV64_REGISTER_NUM_LIMBS * num_words as usize;
+    let num_bytes = REGISTER_NUM_LIMBS * num_words as usize;
     if exec_state.streams.hint_stream.remaining() < num_bytes {
         let err = ExecutionError::HintOutOfBounds { pc };
         return Err(err);
@@ -191,11 +191,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
         if word_index != 0 {
             exec_state.ctx.advance_timestamp(2);
         }
-        let mut data = [0; RV64_REGISTER_NUM_LIMBS];
+        let mut data = [0; REGISTER_NUM_LIMBS];
         exec_state.streams.hint_stream.copy_to_slice(&mut data);
         exec_state.vm_write_bytes(
-            RV64_MEMORY_AS,
-            mem_ptr + (RV64_REGISTER_NUM_LIMBS as u32 * word_index),
+            MEMORY_AS,
+            mem_ptr + (REGISTER_NUM_LIMBS as u32 * word_index),
             &data,
         );
     }

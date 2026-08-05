@@ -136,21 +136,21 @@ Developers are typically not expected to implement `VmConfig`, `VmExecutionConfi
 
 ```rust
 #[derive(VmConfig)]
-pub struct Rv64IConfig {
+pub struct RiscvIConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub base: Rv64I,
+    pub base: RiscvI,
     #[extension]
-    pub io: Rv64Io,
+    pub io: RiscvIo,
 }
 
 #[derive(VmConfig)]
-pub struct Rv64ImConfig {
+pub struct RiscvImConfig {
     #[config]
-    pub rv64i: Rv64IConfig,
+    pub riscv_i: RiscvIConfig,
     #[extension]
-    pub mul: Rv64M,
+    pub mul: RiscvM,
 }
 ```
 
@@ -200,6 +200,6 @@ Currently there is no macro to derive the `VmBuilder` trait implementation, and 
 
 ## Examples
 
-The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv64I`, `Rv64M`, and `Rv64Io` extensions implement `VmExecutionExtension` and `VmCircuitExtension<SC>` in [`openvm-riscv-circuit`](../../extensions/riscv/circuit/src/extension/mod.rs) and correspond to the RISC-V 64-bit base and multiplication instruction sets and an extension for IO, respectively. The ZST `Rv64ImCpuProverExt` [implements](../../extensions/riscv/circuit/src/extension/mod.rs) `VmProverExtension<E, EXT>` for `EXT = Rv64I, Rv64M, Rv64Io`. When the `"cuda"` feature is enabled, `Rv64ImGpuProverExt` registers GPU postflight trace generators for the same extensions.
+The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `RiscvI`, `RiscvM`, and `RiscvIo` extensions implement `VmExecutionExtension` and `VmCircuitExtension<SC>` in [`openvm-riscv-circuit`](../../extensions/riscv/circuit/src/extension/mod.rs) and correspond to the RISC-V 64-bit base and multiplication instruction sets and an extension for IO, respectively. The ZST `RiscvImCpuProverExt` [implements](../../extensions/riscv/circuit/src/extension/mod.rs) `VmProverExtension<E, EXT>` for `EXT = RiscvI, RiscvM, RiscvIo`. When the `"cuda"` feature is enabled, `RiscvImGpuProverExt` registers GPU postflight trace generators for the same extensions.
 
-The `openvm-riscv-circuit` [crate](../../extensions/riscv/circuit/src/lib.rs) also provides definitions for `Rv64ImConfig`, `Rv64ImCpuBuilder`, and `Rv64ImGpuBuilder`.
+The `openvm-riscv-circuit` [crate](../../extensions/riscv/circuit/src/lib.rs) also provides definitions for `RiscvImConfig`, `RiscvImCpuBuilder`, and `RiscvImGpuBuilder`.

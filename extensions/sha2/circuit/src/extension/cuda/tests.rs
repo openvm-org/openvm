@@ -9,11 +9,11 @@ use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
+    riscv::{IMM_AS, MEMORY_AS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
-use openvm_sha2_transpiler::Rv64Sha2Opcode;
+use openvm_sha2_transpiler::Sha2Opcode;
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::{
@@ -21,8 +21,8 @@ use rvr_state::{
 };
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
-use super::{Sha2PreflightGpuTracegen, Sha2Rv64GpuBuilder};
-use crate::Sha2Rv64Config;
+use super::{Sha2GpuBuilder, Sha2PreflightGpuTracegen};
+use crate::Sha2VmConfig;
 
 type F = BabyBear;
 
@@ -31,7 +31,7 @@ const STATE_PTR: u32 = 0x2000;
 const INPUT_PTR: u32 = 0x3000;
 
 fn reg(index: usize) -> u32 {
-    (index * RV64_REGISTER_BYTES as usize) as u32
+    (index * REGISTER_BYTES as usize) as u32
 }
 
 fn limbs(bytes: &[u8]) -> [u16; 4] {
@@ -72,7 +72,7 @@ fn append_sha_events(
     for (register, pointer) in [(1, DST_PTR), (2, STATE_PTR), (3, INPUT_PTR)] {
         memory.push(event(
             timestamp,
-            RV64_REGISTER_AS,
+            REGISTER_AS,
             reg(register),
             false,
             &u64::from(pointer).to_le_bytes(),
@@ -82,7 +82,7 @@ fn append_sha_events(
     for (index, bytes) in block_bytes.chunks_exact(8).enumerate() {
         memory.push(event(
             timestamp,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             INPUT_PTR + (index * 8) as u32,
             false,
             bytes,
@@ -92,7 +92,7 @@ fn append_sha_events(
     for (index, bytes) in state_bytes.chunks_exact(8).enumerate() {
         memory.push(event(
             timestamp,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             STATE_PTR + (index * 8) as u32,
             false,
             bytes,
@@ -102,7 +102,7 @@ fn append_sha_events(
     for (index, bytes) in result_bytes.chunks_exact(8).enumerate() {
         memory.push(event(
             timestamp,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             DST_PTR + (index * 8) as u32,
             true,
             bytes,
@@ -142,28 +142,28 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
                 reg(4) as usize,
                 reg(0) as usize,
                 7,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
+                REGISTER_AS as usize,
+                IMM_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(
-            Rv64Sha2Opcode::SHA256.global_opcode(),
+            Sha2Opcode::SHA256.global_opcode(),
             [
                 reg(1) as usize,
                 reg(2) as usize,
                 reg(3) as usize,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(
-            Rv64Sha2Opcode::SHA512.global_opcode(),
+            Sha2Opcode::SHA512.global_opcode(),
             [
                 reg(1) as usize,
                 reg(2) as usize,
                 reg(3) as usize,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -180,7 +180,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(|(offset, byte)| ((RV64_REGISTER_AS, reg(register) + offset as u32), byte)),
+                .map(|(offset, byte)| ((REGISTER_AS, reg(register) + offset as u32), byte)),
         );
     }
     init_memory.extend(
@@ -188,20 +188,20 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
             .iter()
             .copied()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, STATE_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, STATE_PTR + offset as u32), byte)),
     );
     init_memory.extend(
         input
             .iter()
             .copied()
             .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, INPUT_PTR + offset as u32), byte)),
+            .map(|(offset, byte)| ((MEMORY_AS, INPUT_PTR + offset as u32), byte)),
     );
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
 
     let mut memory_log = vec![
-        event(1, RV64_REGISTER_AS, reg(0), false, &[0; 8]),
-        event(2, RV64_REGISTER_AS, reg(4), true, &7u64.to_le_bytes()),
+        event(1, REGISTER_AS, reg(0), false, &[0; 8]),
+        event(2, REGISTER_AS, reg(4), true, &7u64.to_le_bytes()),
     ];
     append_sha_events(&mut memory_log, 3, &input[..64], &state[..32], &result256);
     append_sha_events(&mut memory_log, 22, &input, &state, &result512);
@@ -211,9 +211,9 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
 
     // Initial-write seeds exist only for blocks whose first timed event is a write.
     // First reads resolve directly against the segment's initial memory.
-    let mut initial_write_log = vec![seed(RV64_REGISTER_AS, reg(4), &[0; 8])];
+    let mut initial_write_log = vec![seed(REGISTER_AS, reg(4), &[0; 8])];
     for index in 0..8 {
-        initial_write_log.push(seed(RV64_MEMORY_AS, DST_PTR + index * 8, &[0; 8]));
+        initial_write_log.push(seed(MEMORY_AS, DST_PTR + index * 8, &[0; 8]));
     }
 
     let history = PreflightHistory {
@@ -249,9 +249,9 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
 }
 
 #[test]
-fn mixed_rv64_sha_checkpoint_expansion_proves() {
+fn mixed_riscv_sha_checkpoint_expansion_proves() {
     let (program, exe, _) = fixture(false);
-    let config = Sha2Rv64Config {
+    let config = Sha2VmConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -259,8 +259,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
-            .unwrap();
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2GpuBuilder, config.clone()).unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
@@ -288,9 +287,9 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
 }
 
 #[test]
-fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
+fn mixed_riscv_sha_manual_transcript_rejects_corruption() {
     let (program, exe, corrupt) = fixture(true);
-    let config = Sha2Rv64Config {
+    let config = Sha2VmConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -300,8 +299,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
         .unwrap()
         .create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
-            .unwrap();
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2GpuBuilder, config.clone()).unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
@@ -328,9 +326,9 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
 }
 
 #[test]
-fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
+fn mixed_riscv_sha_manual_transcript_rejects_corrupt_outputs() {
     let (program, exe, _) = fixture(false);
-    let config = Sha2Rv64Config {
+    let config = Sha2VmConfig {
         system: test_system_config(),
         ..Default::default()
     };
@@ -348,14 +346,14 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
             .iter_mut()
             .find(|event| {
                 event.timestamp == first_write_timestamp
-                    && event.address_space_and_kind == (RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT)
+                    && event.address_space_and_kind == (MEMORY_AS | PREFLIGHT_WRITE_BIT)
                     && event.pointer == DST_PTR / 2
             })
             .expect("fixture must contain the first deterministic output write");
         output.value[0] ^= 1;
 
         let (mut vm, _) =
-            VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2Rv64GpuBuilder, config.clone())
+            VirtualMachine::new_with_keygen(test_gpu_engine(), Sha2GpuBuilder, config.clone())
                 .unwrap();
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
@@ -380,7 +378,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
 #[test]
 fn sha_coordinator_requires_both_producers_per_executed_opcode() {
     let (program, _, transcript) = fixture(false);
-    let config = Sha2Rv64Config {
+    let config = Sha2VmConfig {
         system: test_system_config(),
         ..Default::default()
     };

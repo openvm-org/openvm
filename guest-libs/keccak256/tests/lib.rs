@@ -8,14 +8,14 @@ mod tests {
     use openvm_circuit::arch::testing::assert_vm_states_equivalent;
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
-    use openvm_keccak256_circuit::Keccak256Rv64Config;
+    use openvm_keccak256_circuit::Keccak256Config;
     #[cfg(not(feature = "cuda"))]
-    use openvm_keccak256_circuit::Keccak256Rv64CpuBuilder as TestBuilder;
+    use openvm_keccak256_circuit::Keccak256CpuBuilder as TestBuilder;
     #[cfg(feature = "cuda")]
-    use openvm_keccak256_circuit::Keccak256Rv64GpuBuilder as TestBuilder;
+    use openvm_keccak256_circuit::Keccak256GpuBuilder as TestBuilder;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_riscv_transpiler::{
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
     };
     use openvm_sdk::StdIn;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -69,16 +69,16 @@ mod tests {
     }
 
     fn test_keccak256_base(test_vector_file_name: &str, prove: bool) -> Result<()> {
-        let config = Keccak256Rv64Config::default();
+        let config = Keccak256Config::default();
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Keccak256TranspilerExtension)
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
 
         let test_vectors = parse_test_vectors(test_vector_file_name);

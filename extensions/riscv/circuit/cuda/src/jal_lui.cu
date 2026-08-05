@@ -10,19 +10,19 @@ using namespace program;
 constexpr uint32_t LUI_IMM_LOW_BITS = U16_BITS - RV_IS_TYPE_IMM_BITS;
 constexpr uint32_t PC_HIGH_U16_SHIFT = 2 * U16_BITS - PC_BITS;
 
-template <typename T> struct Rv64JalLuiCoreCols {
+template <typename T> struct JalLuiCoreCols {
     T imm;                             // core_row.imm
-    T rd_data[RV64_PTR_U16_LIMBS];     // low-32 bits of rd_data as u16 cells
+    T rd_data[PTR_U16_LIMBS];     // low-32 bits of rd_data as u16 cells
     T imm_low_4;                       // low 4 bits of imm for LUI
     T is_jal;                          // core_row.is_jal
     T is_lui;                          // core_row.is_lui
     T is_sign_extend;                  // 1 if upper cells are 0xFFFF, 0 if 0x0000
 };
 
-struct Rv64JalLuiCore {
+struct JalLuiCore {
     VariableRangeChecker range_checker;
 
-    __device__ Rv64JalLuiCore(VariableRangeChecker rc) : range_checker(rc) {}
+    __device__ JalLuiCore(VariableRangeChecker rc) : range_checker(rc) {}
 
     __device__ void fill_trace_row(
         RowSlice row, uint32_t imm, const uint16_t rd_data[BLOCK_FE_WIDTH], bool is_jal
@@ -46,18 +46,18 @@ struct Rv64JalLuiCore {
         }
 
         uint32_t rd_u16[2] = {rd_lo, rd_hi};
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_sign_extend, is_sign_extend);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_lui, !is_jal);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_jal, is_jal);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, imm_low_4, imm_low_4);
-        COL_WRITE_ARRAY(row, Rv64JalLuiCoreCols, rd_data, rd_u16);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, imm, imm);
+        COL_WRITE_VALUE(row, JalLuiCoreCols, is_sign_extend, is_sign_extend);
+        COL_WRITE_VALUE(row, JalLuiCoreCols, is_lui, !is_jal);
+        COL_WRITE_VALUE(row, JalLuiCoreCols, is_jal, is_jal);
+        COL_WRITE_VALUE(row, JalLuiCoreCols, imm_low_4, imm_low_4);
+        COL_WRITE_ARRAY(row, JalLuiCoreCols, rd_data, rd_u16);
+        COL_WRITE_VALUE(row, JalLuiCoreCols, imm, imm);
     }
 };
 
-template <typename T> struct Rv64JalLuiCols {
-    Rv64CondRdWriteAdapterCols<T> adapter;
-    Rv64JalLuiCoreCols<T> core;
+template <typename T> struct JalLuiCols {
+    CondRdWriteAdapterCols<T> adapter;
+    JalLuiCoreCols<T> core;
 };
 
 #include "../rvr/src/jal_lui.inc.cuh"

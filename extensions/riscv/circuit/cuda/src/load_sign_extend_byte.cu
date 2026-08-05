@@ -7,8 +7,8 @@ template <typename T> struct LoadSignExtendByteCoreCols {
     T read_data[BLOCK_FE_WIDTH];
 };
 
-template <typename T> struct Rv64LoadSignExtendByteCols {
-    Rv64LoadByteAdapterCols<T> adapter;
+template <typename T> struct LoadSignExtendByteCols {
+    LoadByteAdapterCols<T> adapter;
     LoadSignExtendByteCoreCols<T> core;
 };
 
@@ -34,7 +34,7 @@ struct LoadSignExtendByteCore {
         uint16_t sign_bit = selected_byte & SIGN_BYTE;
 
         bitwise_lookup.add_range(read_cell_bytes[0], read_cell_bytes[1]);
-        range_checker.add_count(selected_byte - sign_bit, RV64_BYTE_BITS - 1);
+        range_checker.add_count(selected_byte - sign_bit, BYTE_BITS - 1);
 
         Encoder encoder = shift_encoder();
         encoder.write_flag_pt(

@@ -17,7 +17,7 @@ use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
 use openvm_keccak256_circuit::Keccak256PreflightGpuTracegen;
 #[cfg(feature = "rvr")]
 use openvm_riscv_circuit::preflight::{PostflightAccessRegistry, PreflightReplayProgram};
-use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
+use openvm_riscv_circuit::RiscvImPreflightGpuTracegen;
 use openvm_sha2_circuit::Sha2PreflightGpuTracegen;
 use openvm_stark_backend::{
     p3_field::PrimeField32,
@@ -39,7 +39,7 @@ struct SdkPreflightGpuTracegen<'a> {
     program: &'a GpuPostflightProgram,
     transcript: &'a GpuPostflightTranscript,
     replay_plan: &'a GpuPostflightPlan,
-    rv64: Rv64ImPreflightGpuTracegen<'a>,
+    riscv: RiscvImPreflightGpuTracegen<'a>,
     keccak: Option<Keccak256PreflightGpuTracegen<'a>>,
     sha2: Option<Sha2PreflightGpuTracegen<'a>>,
     bigint: Option<Int256PreflightGpuTracegen<'a>>,
@@ -123,7 +123,7 @@ impl SdkVmGpuBuilder {
         execution: &PreflightExecution,
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let result = Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns);
+        let result = RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns);
         #[cfg(feature = "metrics")]
         if let Ok((_, replay_plan)) = &result {
             vm.emit_preflight_opcode_counts(replay_plan);
@@ -250,7 +250,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         }
         ownership.validate_executed(replay_plan.executed_opcodes())?;
         let extension_opcodes = ownership.extension_opcodes();
-        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             program,
             transcript,
             replay_plan,
@@ -261,7 +261,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
             program,
             transcript,
             replay_plan,
-            rv64,
+            riscv,
             keccak,
             sha2,
             bigint,
@@ -320,7 +320,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
                 return Ok(ctx);
             }
         }
-        self.rv64.generate_for_chip(chip).map_err(extension_error)
+        self.riscv.generate_for_chip(chip).map_err(extension_error)
     }
 
     fn finish(self) -> Result<(), GenerationError> {
@@ -342,7 +342,7 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         if let Some(tracegen) = self.algebra {
             tracegen.finish().map_err(extension_error)?;
         }
-        self.rv64.finish().map_err(extension_error)
+        self.riscv.finish().map_err(extension_error)
     }
 }
 
@@ -381,7 +381,7 @@ impl OpcodeOwnership {
         opcodes: impl IntoIterator<Item = u32>,
     ) -> Result<(), GpuPostflightError> {
         for opcode in opcodes {
-            if Rv64ImPreflightGpuTracegen::owns_opcode(opcode) {
+            if RiscvImPreflightGpuTracegen::owns_opcode(opcode) {
                 return Err(GpuPostflightError::InvalidTranscript(format!(
                     "{owner} opcode {opcode:#x} collides with RV64/system"
                 )));
@@ -401,7 +401,7 @@ impl OpcodeOwnership {
         executed: impl IntoIterator<Item = u32>,
     ) -> Result<(), GpuPostflightError> {
         if let Some(opcode) = executed.into_iter().find(|opcode| {
-            !Rv64ImPreflightGpuTracegen::owns_opcode(*opcode)
+            !RiscvImPreflightGpuTracegen::owns_opcode(*opcode)
                 && !self.extensions.contains_key(opcode)
         }) {
             return Err(GpuPostflightError::InvalidTranscript(format!(
@@ -428,7 +428,7 @@ mod tests {
         exe::VmExe,
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        riscv::{MEMORY_AS, REGISTER_AS},
         PUBLIC_VALUES_AS,
     };
     use openvm_instructions::{LocalOpcode, SystemOpcode};
@@ -442,8 +442,8 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn small_system_config() -> SystemConfig {
         let mut address_spaces = MemoryConfig::empty_address_space_configs(5);
-        address_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 12;
-        address_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 22;
+        address_spaces[REGISTER_AS as usize].num_cells = 1 << 12;
+        address_spaces[MEMORY_AS as usize].num_cells = 1 << 22;
         address_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 12;
         SystemConfig::new(3, MemoryConfig::new(2, address_spaces, 29, 29, 17), 32)
     }
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn opcode_ownership_rejects_duplicates_and_missing_producers() {
         let mut free_opcodes = (0..=u16::MAX as u32)
-            .filter(|opcode| !Rv64ImPreflightGpuTracegen::owns_opcode(*opcode));
+            .filter(|opcode| !RiscvImPreflightGpuTracegen::owns_opcode(*opcode));
         let claimed_opcode = free_opcodes.next().unwrap();
         let missing_opcode = free_opcodes.next().unwrap();
         let mut ownership = OpcodeOwnership::new();

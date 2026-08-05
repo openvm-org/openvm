@@ -9,9 +9,9 @@ use openvm_circuit::{
     system::memory::merkle::public_values::UserPublicValuesProof,
     utils::test_utils::test_system_config,
 };
-use openvm_riscv_circuit::{Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
+use openvm_riscv_circuit::{RiscvIConfig, RiscvImBuilder, RiscvImConfig};
 use openvm_riscv_transpiler::{
-    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+    RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
 };
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, proof::Proof, AirRef, StarkEngine, SystemParams,
@@ -111,9 +111,9 @@ pub(in crate::tests) fn hook_system_params() -> SystemParams {
     hook_params_with_100_bits_security()
 }
 
-pub(in crate::tests) fn test_rv64im_config() -> Rv64ImConfig {
-    Rv64ImConfig {
-        rv64i: Rv64IConfig {
+pub(in crate::tests) fn test_riscv_im_config() -> RiscvImConfig {
+    RiscvImConfig {
+        riscv_i: RiscvIConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -129,7 +129,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
     Proof<SC>,
     UserPublicValuesProof<DIGEST_SIZE, F>,
 )> {
-    let config = test_rv64im_config();
+    let config = test_riscv_im_config();
     let elf = Elf::decode(
         include_bytes!("../../programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
@@ -137,14 +137,14 @@ pub(in crate::tests) fn run_leaf_aggregation(
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv64ITranspilerExtension)
-            .with_extension(Rv64MTranspilerExtension)
-            .with_extension(Rv64IoTranspilerExtension),
+            .with_extension(RiscvITranspilerExtension)
+            .with_extension(RiscvMTranspilerExtension)
+            .with_extension(RiscvIoTranspilerExtension),
     )?;
     let input = (1u64 << log_fib_input).to_le_bytes().to_vec();
 
     let engine = Engine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, RiscvImBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
@@ -228,7 +228,7 @@ fn test_two_segments_leaf_aggregation() -> Result<()> {
 #[test_case(true ; "def_hook_cached_commit set")]
 fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
-    let config = test_rv64im_config();
+    let config = test_riscv_im_config();
 
     let engine = Engine::new(app_system_params());
     let (_, app_vk) = engine.keygen(
@@ -297,7 +297,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         user_pvs_proof,
     ) = run_full_aggregation(10, extra_recursive_layers)?;
 
-    let system_config = test_rv64im_config().rv64i.system;
+    let system_config = test_riscv_im_config().riscv_i.system;
 
     let root_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk,
@@ -332,7 +332,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         user_pvs_proof,
     ) = run_full_aggregation(10, 1)?;
 
-    let system_config = test_rv64im_config().rv64i.system;
+    let system_config = test_riscv_im_config().riscv_i.system;
 
     let root_base_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk.clone(),

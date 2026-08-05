@@ -125,7 +125,7 @@ Extensions are composed into a `VmConfig` using the `#[derive(VmConfig)]` macro:
 #[derive(VmConfig)]
 pub struct MyConfig {
     #[config]
-    pub rv64im: Rv64ImConfig,  // existing config (implements VmConfig)
+    pub riscv_im: RiscvImConfig,  // existing config (implements VmConfig)
     #[extension]
     pub my_ext: MyExtension,   // new extension
 }
@@ -195,11 +195,11 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(
 ```rust
 let elf = build_example_program_at_path(get_programs_dir!(), "program_name")?;
 let exe = VmExe::from_elf(elf, Transpiler::<F>::default()
-    .with_extension(Rv64ITranspilerExtension)
-    .with_extension(Rv64MTranspilerExtension)
-    .with_extension(Rv64IoTranspilerExtension))?;
-let config = Rv64ImConfig::default();
-air_test(Rv64ImCpuBuilder, config, exe);
+    .with_extension(RiscvITranspilerExtension)
+    .with_extension(RiscvMTranspilerExtension)
+    .with_extension(RiscvIoTranspilerExtension))?;
+let config = RiscvImConfig::default();
+air_test(RiscvImCpuBuilder, config, exe);
 ```
 
 ### Proof Field
@@ -212,7 +212,7 @@ OpenVM uses semver naming but with ZK-specific semantics: patch versions preserv
 
 ## CUDA/GPU Support
 
-CUDA is behind the `cuda` feature flag, disabled by default. Feature-gate non-CUDA-compatible code with `#[cfg(not(feature = "cuda"))]`. GPU prover extensions implement `VmProverExtension` separately (e.g., `Rv64ImGpuProverExt`).
+CUDA is behind the `cuda` feature flag, disabled by default. Feature-gate non-CUDA-compatible code with `#[cfg(not(feature = "cuda"))]`. GPU prover extensions implement `VmProverExtension` separately (e.g., `RiscvImGpuProverExt`).
 
 ## File Structure
 

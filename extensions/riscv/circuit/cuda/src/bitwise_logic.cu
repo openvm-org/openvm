@@ -8,12 +8,10 @@
 using namespace riscv;
 
 // Concrete type aliases for RV64
-using Rv64BitwiseLogicCore = BitwiseLogicCore<RV64_REGISTER_NUM_LIMBS>;
-template <typename T> using Rv64BitwiseLogicCoreCols = BitwiseLogicCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
 
-template <typename T> struct Rv64BitwiseLogicCols {
-    Rv64BaseAluRegAdapterCols<T> adapter;
-    Rv64BitwiseLogicCoreCols<T> core;
+template <typename T> struct BitwiseLogicCols {
+    BaseAluRegAdapterCols<T> adapter;
+    BitwiseLogicCoreCols<T, REGISTER_NUM_LIMBS> core;
 };
 
 #include "../rvr/src/bitwise_logic.inc.cuh"

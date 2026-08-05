@@ -12,7 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
+use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -23,7 +23,7 @@ use crate::adapters::{byte_ptr_to_u16_ptr, checked_register_u16_pointer};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64RdWriteAdapterCols<T> {
+pub struct RdWriteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
@@ -31,39 +31,39 @@ pub struct Rv64RdWriteAdapterCols<T> {
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64CondRdWriteAdapterCols<T> {
-    pub inner: Rv64RdWriteAdapterCols<T>,
+pub struct CondRdWriteAdapterCols<T> {
+    pub inner: RdWriteAdapterCols<T>,
     pub needs_write: T,
 }
 
 /// This adapter doesn't read anything, and writes to \[a:8\]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64RdWriteAdapterCols<u8>)]
-pub struct Rv64RdWriteAdapterAir {
+#[columns_via(RdWriteAdapterCols<u8>)]
+pub struct RdWriteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:8\]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64CondRdWriteAdapterCols<u8>)]
-pub struct Rv64CondRdWriteAdapterAir {
-    inner: Rv64RdWriteAdapterAir,
+#[columns_via(CondRdWriteAdapterCols<u8>)]
+pub struct CondRdWriteAdapterAir {
+    inner: RdWriteAdapterAir,
 }
 
-impl<F: Field> BaseAir<F> for Rv64RdWriteAdapterAir {
+impl<F: Field> BaseAir<F> for RdWriteAdapterAir {
     fn width(&self) -> usize {
-        Rv64RdWriteAdapterCols::<F>::width()
+        RdWriteAdapterCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAir<F> for Rv64CondRdWriteAdapterAir {
+impl<F: Field> BaseAir<F> for CondRdWriteAdapterAir {
     fn width(&self) -> usize {
-        Rv64CondRdWriteAdapterCols::<F>::width()
+        CondRdWriteAdapterCols::<F>::width()
     }
 }
 
-impl Rv64RdWriteAdapterAir {
+impl RdWriteAdapterAir {
     /// If `needs_write` is provided:
     /// - Only writes if `needs_write`.
     /// - Sets operand `f = needs_write` in the instruction.
@@ -76,7 +76,7 @@ impl Rv64RdWriteAdapterAir {
     fn conditional_eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local_cols: &Rv64RdWriteAdapterCols<AB::Var>,
+        local_cols: &RdWriteAdapterCols<AB::Var>,
         ctx: AdapterAirContext<
             AB::Expr,
             BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>,
@@ -93,7 +93,7 @@ impl Rv64RdWriteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
                 ),
                 ctx.writes[0].clone(),
@@ -113,7 +113,7 @@ impl Rv64RdWriteAdapterAir {
                     local_cols.rd_ptr.into(),
                     AB::Expr::ZERO,
                     ctx.instruction.immediate,
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     AB::Expr::ZERO,
                     f,
                 ],
@@ -127,7 +127,7 @@ impl Rv64RdWriteAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64RdWriteAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for RdWriteAdapterAir {
     type Interface =
         BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>;
 
@@ -137,17 +137,17 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64RdWriteAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64RdWriteAdapterCols<AB::Var> = (*local).borrow();
+        let local_cols: &RdWriteAdapterCols<AB::Var> = (*local).borrow();
         self.conditional_eval(builder, local_cols, ctx, None);
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64RdWriteAdapterCols<_> = local.borrow();
+        let cols: &RdWriteAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for CondRdWriteAdapterAir {
     type Interface =
         BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>;
 
@@ -157,7 +157,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64CondRdWriteAdapterCols<AB::Var> = (*local).borrow();
+        let local_cols: &CondRdWriteAdapterCols<AB::Var> = (*local).borrow();
 
         builder.assert_bool(local_cols.needs_write);
         builder
@@ -173,23 +173,23 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64CondRdWriteAdapterCols<_> = local.borrow();
+        let cols: &CondRdWriteAdapterCols<_> = local.borrow();
         cols.inner.from_state.pc
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64RdWriteAdapterFiller;
+pub struct RdWriteAdapterFiller;
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64CondRdWriteAdapterFiller;
+pub struct CondRdWriteAdapterFiller;
 
-impl Rv64RdWriteAdapterFiller {
+impl RdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64RdWriteAdapterCols<F>,
+        adapter_row: &mut RdWriteAdapterCols<F>,
         compute: impl FnOnce(u32, u32) -> ([u16; BLOCK_FE_WIDTH], u32),
     ) -> Result<([u16; BLOCK_FE_WIDTH], u32), PostflightError> {
         if !postflight.instruction(step).f.is_zero() {
@@ -201,12 +201,12 @@ impl Rv64RdWriteAdapterFiller {
     }
 }
 
-impl Rv64CondRdWriteAdapterFiller {
+impl CondRdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64CondRdWriteAdapterCols<F>,
+        adapter_row: &mut CondRdWriteAdapterCols<F>,
         compute: impl FnOnce(u32, u32) -> ([u16; BLOCK_FE_WIDTH], u32),
     ) -> Result<([u16; BLOCK_FE_WIDTH], u32), PostflightError> {
         let needs_write = match postflight.instruction(step).f.as_canonical_u32() {
@@ -234,12 +234,12 @@ fn replay_rd_write<F: PrimeField32>(
     postflight: &Postflight<'_, F>,
     step: PostflightStep,
     mem_helper: &MemoryAuxColsFactory<F>,
-    adapter_row: &mut Rv64RdWriteAdapterCols<F>,
+    adapter_row: &mut RdWriteAdapterCols<F>,
     needs_write: bool,
     compute: impl FnOnce(u32, u32) -> ([u16; BLOCK_FE_WIDTH], u32),
 ) -> Result<([u16; BLOCK_FE_WIDTH], u32), PostflightError> {
     let instruction = postflight.instruction(step);
-    if instruction.d.as_canonical_u32() != RV64_REGISTER_AS || !instruction.e.is_zero() {
+    if instruction.d.as_canonical_u32() != REGISTER_AS || !instruction.e.is_zero() {
         return Err(PostflightError::new(
             "destination-write instruction has invalid address spaces",
         ));
@@ -252,7 +252,7 @@ fn replay_rd_write<F: PrimeField32>(
     let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
     let mut replay = postflight.replay(step);
     if needs_write {
-        let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, output)?;
+        let write = replay.write_u16(REGISTER_AS, rd_u16_ptr, output)?;
         adapter_row
             .rd_aux_cols
             .set_prev_data(write.previous_value.map(F::from_u16));

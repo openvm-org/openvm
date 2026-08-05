@@ -23,7 +23,7 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::{
-    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
+    RiscvI, RiscvIExecutor, RiscvImCpuProverExt, RiscvIo, RiscvIoExecutor, RiscvM, RiscvMExecutor,
 };
 use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
@@ -53,11 +53,11 @@ cfg_if::cfg_if! {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
         pub use self::cuda::DeferralPreflightGpuTracegen;
-        pub use self::cuda::Rv64DeferralGpuBuilder as Rv64DeferralBuilder;
+        pub use self::cuda::DeferralGpuBuilder as DeferralBuilder;
 
     } else {
         pub use self::DeferralCpuProverExt as DeferralProverExt;
-        pub use self::Rv64DeferralCpuBuilder as Rv64DeferralBuilder;
+        pub use self::DeferralCpuBuilder as DeferralBuilder;
     }
 }
 
@@ -255,36 +255,36 @@ where
     }
 }
 
-// =================================== VM Rv64 Config and Builder =================================
+// ====================================== VM Config and Builder ==================================
 
 #[derive(Clone, VmConfig, Serialize, Deserialize)]
-pub struct Rv64DeferralConfig {
+pub struct DeferralVmConfig {
     #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub rv64i: Rv64I,
+    pub riscv_i: RiscvI,
     #[extension]
-    pub rv64m: Rv64M,
+    pub riscv_m: RiscvM,
     #[extension]
-    pub io: Rv64Io,
+    pub io: RiscvIo,
     #[serde(skip)]
     #[extension(executor = "DeferralExecutor")]
     pub deferral: DeferralExtension,
 }
 
-impl InitFileGenerator for Rv64DeferralConfig {}
+impl InitFileGenerator for DeferralVmConfig {}
 
 #[derive(Clone)]
-pub struct Rv64DeferralCpuBuilder;
+pub struct DeferralCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv64DeferralCpuBuilder
+impl<SC, E> VmBuilder<E> for DeferralCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Rv64DeferralConfig;
+    type VmConfig = DeferralVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
@@ -300,9 +300,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.riscv_m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(
             &DeferralCpuProverExt,
             &config.deferral,

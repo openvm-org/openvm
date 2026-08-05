@@ -6,12 +6,12 @@ use std::{
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS, LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode,
 };
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::BranchLessThanExecutor;
+use super::core::BranchLessThanCoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -32,7 +32,9 @@ macro_rules! dispatch {
     };
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanExecutor<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
+{
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -50,7 +52,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanExecutor<NUM_
         } else {
             c as isize
         };
-        if d.as_canonical_u32() != RV64_REGISTER_AS {
+        if d.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchLePreCompute {
@@ -63,7 +65,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchLessThanExecutor<NUM_
 }
 
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for BranchLessThanExecutor<NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -109,7 +111,7 @@ where
 }
 
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for BranchLessThanExecutor<NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -158,8 +160,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs2 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.a as u32);
+    let rs2 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.b as u32);
     let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
     if jmp {
         pc = (pc as isize + pre_compute.imm) as u32;

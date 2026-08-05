@@ -13,7 +13,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
@@ -21,19 +21,17 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::ShiftLogicalImmCoreCols;
 use crate::{
-    adapters::{
-        Rv64BaseAluImmU16AdapterCols, Rv64BaseAluWImmU16AdapterCols, RV64_WORD_U16_LIMBS, U16_BITS,
-    },
+    adapters::{BaseAluImmU16AdapterCols, BaseAluWImmU16AdapterCols, U16_BITS, WORD_U16_LIMBS},
     cuda_abi::{shift_logical_imm_cuda, shift_w_logical_imm_cuda},
 };
 
 #[derive(new)]
-pub struct Rv64ShiftLogicalImmChipGpu {
+pub struct ShiftLogicalImmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64ShiftLogicalImmChipGpu {
+impl ShiftLogicalImmChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -56,7 +54,7 @@ impl Rv64ShiftLogicalImmChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BaseAluImmU16AdapterCols::<F>::width()
+        let trace_width = BaseAluImmU16AdapterCols::<F>::width()
             + ShiftLogicalImmCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
@@ -78,8 +76,8 @@ impl Rv64ShiftLogicalImmChipGpu {
                 transcript.error_ptr(),
                 ShiftImmOpcode::SLLI.global_opcode().as_usize() as u32,
                 ShiftImmOpcode::SRLI.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_IMM_AS,
+                REGISTER_AS,
+                IMM_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
@@ -90,12 +88,12 @@ impl Rv64ShiftLogicalImmChipGpu {
 }
 
 #[derive(new)]
-pub struct Rv64ShiftWLogicalImmChipGpu {
+pub struct ShiftWLogicalImmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64ShiftWLogicalImmChipGpu {
+impl ShiftWLogicalImmChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -118,8 +116,8 @@ impl Rv64ShiftWLogicalImmChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BaseAluWImmU16AdapterCols::<F>::width()
-            + ShiftLogicalImmCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        let trace_width = BaseAluWImmU16AdapterCols::<F>::width()
+            + ShiftLogicalImmCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
@@ -140,8 +138,8 @@ impl Rv64ShiftWLogicalImmChipGpu {
                 transcript.error_ptr(),
                 ShiftWImmOpcode::SLLIW.global_opcode().as_usize() as u32,
                 ShiftWImmOpcode::SRLIW.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_IMM_AS,
+                REGISTER_AS,
+                IMM_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

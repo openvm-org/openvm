@@ -18,9 +18,9 @@ mod tests {
         utils::test_cpu_engine,
     };
     #[cfg(feature = "rvr")]
-    use openvm_deferral_circuit::Rv64DeferralCpuBuilder;
+    use openvm_deferral_circuit::DeferralCpuBuilder;
     use openvm_deferral_circuit::{
-        DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
+        DeferralBuilder, DeferralExtension, DeferralFn, DeferralVmConfig,
     };
     #[cfg(feature = "rvr")]
     use openvm_deferral_transpiler::DeferralOpcode;
@@ -30,14 +30,14 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, SystemOpcode,
     };
-    use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+    use openvm_riscv_circuit::{RiscvI, RiscvIo, RiscvM};
     #[cfg(feature = "rvr")]
-    use openvm_riscv_transpiler::Rv64JalLuiOpcode;
+    use openvm_riscv_transpiler::JalLuiOpcode;
     use openvm_riscv_transpiler::{
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::DIGEST_SIZE,
@@ -57,14 +57,14 @@ mod tests {
     const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
     const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
-    fn make_config(num_deferrals: usize) -> Rv64DeferralConfig {
+    fn make_config(num_deferrals: usize) -> DeferralVmConfig {
         let mut system = test_system_config();
         system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-        Rv64DeferralConfig {
+        DeferralVmConfig {
             system,
-            rv64i: Rv64I,
-            rv64m: Rv64M::default(),
-            io: Rv64Io,
+            riscv_i: RiscvI,
+            riscv_m: RiscvM::default(),
+            io: RiscvIo,
             deferral: make_deferral_extension(num_deferrals),
         }
     }
@@ -102,19 +102,19 @@ mod tests {
         DeferralExtension::new(fns, commits)
     }
 
-    fn run_test(config: Rv64DeferralConfig, example_name: &str, streams: Streams) -> Result<()> {
+    fn run_test(config: DeferralVmConfig, example_name: &str, streams: Streams) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(DeferralTranspilerExtension::new(
                     config.deferral.def_circuit_commits.clone(),
                 )),
         )?;
-        air_test_with_min_segments(Rv64DeferralBuilder, config, exe, streams, 1).unwrap();
+        air_test_with_min_segments(DeferralBuilder, config, exe, streams, 1).unwrap();
         Ok(())
     }
 
@@ -159,25 +159,25 @@ mod tests {
             Instruction::<F>::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -187,25 +187,19 @@ mod tests {
         let mut exe = VmExe::from(Program::from_instructions(&instructions));
         for (offset, byte) in output_ptr.to_le_bytes().into_iter().enumerate() {
             exe.init_memory.insert(
-                (
-                    RV64_REGISTER_AS,
-                    RV64_REGISTER_NUM_LIMBS as u32 + offset as u32,
-                ),
+                (REGISTER_AS, REGISTER_NUM_LIMBS as u32 + offset as u32),
                 byte,
             );
         }
         for (offset, byte) in input_ptr.to_le_bytes().into_iter().enumerate() {
             exe.init_memory.insert(
-                (
-                    RV64_REGISTER_AS,
-                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
-                ),
+                (REGISTER_AS, (2 * REGISTER_NUM_LIMBS) as u32 + offset as u32),
                 byte,
             );
         }
         for (offset, byte) in INPUT_COMMIT_0.into_iter().enumerate() {
             exe.init_memory
-                .insert((RV64_MEMORY_AS, input_ptr as u32 + offset as u32), byte);
+                .insert((MEMORY_AS, input_ptr as u32 + offset as u32), byte);
         }
         for (offset, byte) in config.deferral.def_circuit_commits[0]
             .into_iter()
@@ -258,11 +252,11 @@ mod tests {
             Instruction::<F>::from_usize(
                 DeferralOpcode::OUTPUT.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -270,10 +264,7 @@ mod tests {
         let mut exe = VmExe::from(Program::from_instructions(&instructions));
         for (offset, byte) in u64::MAX.to_le_bytes().into_iter().enumerate() {
             exe.init_memory.insert(
-                (
-                    RV64_REGISTER_AS,
-                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
-                ),
+                (REGISTER_AS, (2 * REGISTER_NUM_LIMBS) as u32 + offset as u32),
                 byte,
             );
         }
@@ -297,7 +288,7 @@ mod tests {
         assert_rvr_trap(checkpoint_error);
 
         let (vm, _) =
-            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64DeferralCpuBuilder, config)?;
+            VirtualMachine::new_with_keygen(test_cpu_engine(), DeferralCpuBuilder, config)?;
         let metered_error = vm
             .metered_instance(&exe)?
             .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))

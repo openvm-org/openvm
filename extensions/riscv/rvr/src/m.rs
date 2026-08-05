@@ -3,32 +3,32 @@
 mod instruction;
 
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode, MulWOpcode};
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 
-use self::instruction::{MulDivOp, Rv64MInstr};
+use self::instruction::{MulDivOp, RiscvMInstr};
 use crate::instruction::decode_reg;
 
 /// RVR extension for RV64M instructions.
-pub struct Rv64MExtension;
+pub struct RiscvMExtension;
 
-impl Rv64MExtension {
+impl RiscvMExtension {
     pub const fn new() -> Self {
         Self
     }
 }
 
-impl Default for Rv64MExtension {
+impl Default for RiscvMExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RvrExtension for Rv64MExtension {
+impl RvrExtension for RiscvMExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         let operations = [
@@ -93,11 +93,11 @@ impl RvrExtension for Rv64MExtension {
         let (_, op, word) = operations
             .into_iter()
             .find(|(candidate, _, _)| *candidate == opcode)?;
-        if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
+        if insn.d != REGISTER_AS || insn.e != IMM_AS {
             return None;
         }
 
-        let instruction: Box<dyn ExtInstr> = Box::new(Rv64MInstr {
+        let instruction: Box<dyn ExtInstr> = Box::new(RiscvMInstr {
             op,
             word,
             rd: decode_reg(insn.a),
@@ -112,7 +112,7 @@ impl RvrExtension for Rv64MExtension {
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
-        vec![("rv64m.h", include_str!("../c/rv64m.h"))]
+        vec![("riscv_m.h", include_str!("../c/riscv_m.h"))]
     }
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
@@ -122,7 +122,7 @@ impl RvrExtension for Rv64MExtension {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, VmOpcode};
+    use openvm_instructions::{instruction::Instruction, riscv::REGISTER_NUM_LIMBS, VmOpcode};
     use p3_baby_bear::BabyBear;
     use rvr_openvm_ir::{InstrAt, LiftedInstr};
 
@@ -132,9 +132,9 @@ mod tests {
         RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             opcode,
             [
-                RV64_REGISTER_NUM_LIMBS,
-                2 * RV64_REGISTER_NUM_LIMBS,
-                3 * RV64_REGISTER_NUM_LIMBS,
+                REGISTER_NUM_LIMBS,
+                2 * REGISTER_NUM_LIMBS,
+                3 * REGISTER_NUM_LIMBS,
                 d as usize,
                 e as usize,
                 1,
@@ -144,8 +144,8 @@ mod tests {
     }
 
     #[test]
-    fn all_rv64m_families_lift_with_register_domains() {
-        let extension = Rv64MExtension;
+    fn all_riscv_m_families_lift_with_register_domains() {
+        let extension = RiscvMExtension;
         for (opcode, name) in [
             (MulOpcode::MUL.global_opcode(), "mul"),
             (MulHOpcode::MULH.global_opcode(), "mulh"),
@@ -161,7 +161,7 @@ mod tests {
             (DivRemWOpcode::REMW.global_opcode(), "remw"),
             (DivRemWOpcode::REMUW.global_opcode(), "remuw"),
         ] {
-            let insn = instruction(opcode, RV64_REGISTER_AS, RV64_IMM_AS);
+            let insn = instruction(opcode, REGISTER_AS, IMM_AS);
             let LiftedInstr::Body(InstrAt { instr, .. }) =
                 extension.try_lift(&insn, 0x100).unwrap()
             else {
@@ -169,7 +169,7 @@ mod tests {
             };
             assert_eq!(instr.opname(), name);
 
-            let wrong_source = instruction(opcode, RV64_REGISTER_AS, RV64_REGISTER_AS);
+            let wrong_source = instruction(opcode, REGISTER_AS, REGISTER_AS);
             assert!(extension.try_lift(&wrong_source, 0x100).is_none());
         }
     }
@@ -180,16 +180,16 @@ mod tests {
             MulOpcode::MUL.global_opcode(),
             [
                 0,
-                2 * RV64_REGISTER_NUM_LIMBS,
-                3 * RV64_REGISTER_NUM_LIMBS,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
+                2 * REGISTER_NUM_LIMBS,
+                3 * REGISTER_NUM_LIMBS,
+                REGISTER_AS as usize,
+                IMM_AS as usize,
                 1,
                 0,
             ],
         ));
         let LiftedInstr::Body(InstrAt { instr, .. }) =
-            Rv64MExtension.try_lift(&insn, 0x100).unwrap()
+            RiscvMExtension.try_lift(&insn, 0x100).unwrap()
         else {
             panic!("expected body instruction");
         };

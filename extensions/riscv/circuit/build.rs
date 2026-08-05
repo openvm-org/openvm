@@ -7,11 +7,10 @@ use openvm_cuda_builder::{cuda_available, CudaBuilder};
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 #[cfg(feature = "cuda")]
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-    ShiftWOpcode,
+    AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
+    JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
+    MulOpcode, MulWOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 #[cfg(feature = "cuda")]
 fn opcode_family<T: Copy + LocalOpcode>(
@@ -58,17 +57,17 @@ fn write_replay_opcode_registry(out_dir: &Path) {
         opcode_family(
             "LOAD_STORE",
             &[
-                Rv64LoadStoreOpcode::LOADD,
-                Rv64LoadStoreOpcode::LOADBU,
-                Rv64LoadStoreOpcode::LOADHU,
-                Rv64LoadStoreOpcode::LOADWU,
-                Rv64LoadStoreOpcode::STORED,
-                Rv64LoadStoreOpcode::STOREW,
-                Rv64LoadStoreOpcode::STOREH,
-                Rv64LoadStoreOpcode::STOREB,
-                Rv64LoadStoreOpcode::LOADB,
-                Rv64LoadStoreOpcode::LOADH,
-                Rv64LoadStoreOpcode::LOADW,
+                LoadStoreOpcode::LOADD,
+                LoadStoreOpcode::LOADBU,
+                LoadStoreOpcode::LOADHU,
+                LoadStoreOpcode::LOADWU,
+                LoadStoreOpcode::STORED,
+                LoadStoreOpcode::STOREW,
+                LoadStoreOpcode::STOREH,
+                LoadStoreOpcode::STOREB,
+                LoadStoreOpcode::LOADB,
+                LoadStoreOpcode::LOADH,
+                LoadStoreOpcode::LOADW,
             ],
         ),
         opcode_family(
@@ -84,9 +83,9 @@ fn write_replay_opcode_registry(out_dir: &Path) {
                 BranchLessThanOpcode::BGEU,
             ],
         ),
-        opcode_family("JAL_LUI", &[Rv64JalLuiOpcode::JAL, Rv64JalLuiOpcode::LUI]),
-        opcode("JALR", Rv64JalrOpcode::JALR),
-        opcode("AUIPC", Rv64AuipcOpcode::AUIPC),
+        opcode_family("JAL_LUI", &[JalLuiOpcode::JAL, JalLuiOpcode::LUI]),
+        opcode("JALR", JalrOpcode::JALR),
+        opcode("AUIPC", AuipcOpcode::AUIPC),
         opcode("MUL", MulOpcode::MUL),
         opcode_family(
             "MULH",
@@ -148,10 +147,7 @@ fn write_replay_opcode_registry(out_dir: &Path) {
         ),
         opcode_family(
             "HINT_STORE",
-            &[
-                Rv64HintStoreOpcode::HINT_STORED,
-                Rv64HintStoreOpcode::HINT_BUFFER,
-            ],
+            &[HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER],
         ),
         opcode("PHANTOM", SystemOpcode::PHANTOM),
         opcode("TERMINATE", SystemOpcode::TERMINATE),
@@ -160,21 +156,21 @@ fn write_replay_opcode_registry(out_dir: &Path) {
     for &(name, base, count) in &families {
         writeln!(
             header,
-            "static constexpr uint32_t RV64_{name}_OPCODE_BASE = {base}u;\nstatic constexpr uint32_t RV64_{name}_OPCODE_COUNT = {count}u;"
+            "static constexpr uint32_t {name}_OPCODE_BASE = {base}u;\nstatic constexpr uint32_t {name}_OPCODE_COUNT = {count}u;"
         )
         .unwrap();
     }
-    fs::write(out_dir.join("rv64_checkpoint_replay_opcodes.cuh"), header)
+    fs::write(out_dir.join("checkpoint_replay_opcodes.cuh"), header)
         .expect("write RV64 checkpoint replay opcodes");
 
-    let mut rust = String::from("const RV64_REPLAY_OPCODES: &[u32] = &[\n");
+    let mut rust = String::from("const REPLAY_OPCODES: &[u32] = &[\n");
     for (_, base, count) in families {
         for opcode in base..base + count {
             writeln!(rust, "    {opcode},").unwrap();
         }
     }
     rust.push_str("];\n");
-    fs::write(out_dir.join("rv64_checkpoint_replay_opcodes.rs"), rust)
+    fs::write(out_dir.join("checkpoint_replay_opcodes.rs"), rust)
         .expect("write RV64 checkpoint replay opcode registry");
 }
 
@@ -199,7 +195,7 @@ fn main() {
             .watch("cuda/include")
             .watch("cuda/rvr")
             .watch("cuda/src")
-            .library_name("tracegen_gpu_rv64im")
+            .library_name("tracegen_gpu_riscv_im")
             .files_from_glob("cuda/src/**/*.cu");
 
         let out_dir = env::var_os("OUT_DIR").expect("OUT_DIR");

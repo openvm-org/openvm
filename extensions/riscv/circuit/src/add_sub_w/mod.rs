@@ -1,18 +1,18 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
-    adapters::{Rv64BaseAluWRegU16AdapterAir, RV64_WORD_U16_LIMBS, U16_BITS},
+    adapters::{BaseAluWRegU16AdapterAir, U16_BITS, WORD_U16_LIMBS},
     add_sub::{AddSubCoreAir, AddSubFiller},
 };
 
 mod execution;
 pub(crate) mod trace;
 
-pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;
+pub type AddSubWCoreAir = AddSubCoreAir<WORD_U16_LIMBS, U16_BITS, false>;
 pub type AddSubWFiller = AddSubFiller;
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct AddSubWExecutor {
+pub struct AddSubWCoreExecutor {
     pub offset: usize,
 }
 
@@ -24,6 +24,6 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64AddSubWAir = VmAirWrapper<Rv64BaseAluWRegU16AdapterAir, AddSubWCoreAir>;
-pub type Rv64AddSubWExecutor = AddSubWExecutor;
-pub type Rv64AddSubWChip<F> = VmChipWrapper<F, AddSubWFiller>;
+pub type AddSubWAir = VmAirWrapper<BaseAluWRegU16AdapterAir, AddSubWCoreAir>;
+pub type AddSubWExecutor = AddSubWCoreExecutor;
+pub type AddSubWChip<F> = VmChipWrapper<F, AddSubWFiller>;

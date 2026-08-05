@@ -11,10 +11,10 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 
 use super::{accumulator_ptrs, DeferralCallExecutor};
 use crate::{
@@ -58,8 +58,8 @@ impl DeferralCallExecutor {
         } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::CALL as usize
-            || d.as_canonical_u32() != RV64_REGISTER_AS
-            || e.as_canonical_u32() != RV64_MEMORY_AS
+            || d.as_canonical_u32() != REGISTER_AS
+            || e.as_canonical_u32() != MEMORY_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -170,10 +170,8 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
-    let output_ptr =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
+    let output_ptr = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rd_ptr));
+    let input_ptr = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rs_ptr));
     if !output_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32)
         || !input_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32)
     {
@@ -184,7 +182,7 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     }
 
     let input_commit_chunks: [[u8; MEMORY_BLOCK_BYTES]; COMMIT_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
+        exec_state.vm_read_bytes(MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
     let input_commit_bytes: [_; COMMIT_NUM_BYTES] = join_byte_memory_ops(input_commit_chunks);
     let input_commit: [F; _] = byte_commit_to_f(&input_commit_bytes.map(F::from_u8));
@@ -229,7 +227,7 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
 
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
         exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
             &byte_memory_op_chunk(&output_key, chunk_idx),
         );

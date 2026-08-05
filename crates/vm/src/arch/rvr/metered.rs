@@ -9,7 +9,7 @@ use std::{
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
-    riscv::RV64_MEMORY_AS,
+    riscv::MEMORY_AS,
     DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
@@ -239,7 +239,7 @@ impl SegmentationState {
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             &self.mem_page_buf[..mem_len as usize],
         );
         Self::apply_addr_space_buffer(
@@ -276,7 +276,7 @@ impl SegmentationState {
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             &self.mem_page_buf[..len],
         );
     }
@@ -292,7 +292,7 @@ impl SegmentationState {
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             &self.drained_mem_page_touches,
         );
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
@@ -813,7 +813,7 @@ mod tests {
         explicit
             .ctx
             .memory_ctx
-            .update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 17);
+            .update_boundary_merkle_heights(MEMORY_AS, 0, 17);
         explicit
             .ctx
             .memory_ctx

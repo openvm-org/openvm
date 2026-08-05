@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
-    adapters::{Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH},
+    adapters::{LoadMultiByteAdapterAir, LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH},
     load::{
         common::LoadExecutor,
         core::{LoadCoreAir, LoadFiller},
@@ -13,11 +13,11 @@ pub const LOAD_WORD_OVERLAP_CELLS: usize = WORD_ACCESS_WIDTH / U16_CELL_SIZE + 1
 
 pub type LoadWordCoreAir = LoadCoreAir<WORD_ACCESS_WIDTH, LOAD_WORD_OVERLAP_CELLS>;
 pub type LoadWordFiller =
-    LoadFiller<Rv64LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH, LOAD_WORD_OVERLAP_CELLS>;
+    LoadFiller<LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH, LOAD_WORD_OVERLAP_CELLS>;
 
-pub type Rv64LoadWordAir = VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadWordCoreAir>;
-pub type Rv64LoadWordExecutor = LoadExecutor<WORD_ACCESS_WIDTH>;
-pub type Rv64LoadWordChip<F> = VmChipWrapper<F, LoadWordFiller>;
+pub type LoadWordAir = VmAirWrapper<LoadMultiByteAdapterAir, LoadWordCoreAir>;
+pub type LoadWordExecutor = LoadExecutor<WORD_ACCESS_WIDTH>;
+pub type LoadWordChip<F> = VmChipWrapper<F, LoadWordFiller>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

@@ -154,7 +154,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct AddSubExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddSubCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
@@ -173,7 +173,7 @@ pub(crate) fn run_add_sub<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     match opcode {
         BaseAluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
         BaseAluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        _ => unreachable!("AddSubExecutor received non-ADD/SUB opcode"),
+        _ => unreachable!("AddSubCoreExecutor received non-ADD/SUB opcode"),
     }
 }
 

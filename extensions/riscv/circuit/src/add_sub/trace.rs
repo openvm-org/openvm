@@ -8,18 +8,18 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{run_add_sub, AddSubCoreCols, Rv64AddSubChip};
-use crate::adapters::{Rv64BaseAluRegU16AdapterCols, Rv64BaseAluRegU16AdapterFiller, U16_BITS};
+use super::{run_add_sub, AddSubChip, AddSubCoreCols};
+use crate::adapters::{BaseAluRegU16AdapterCols, BaseAluRegU16AdapterFiller, U16_BITS};
 
 /// Generates the RV64 ADD/SUB trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64AddSubChip<F>,
+    chip: &AddSubChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let add = BaseAluOpcode::ADD.global_opcode();
     let sub = BaseAluOpcode::SUB.global_opcode();
     let rows_used = postflight.steps(add).len() + postflight.steps(sub).len();
-    let adapter_width = Rv64BaseAluRegU16AdapterCols::<F>::width();
+    let adapter_width = BaseAluRegU16AdapterCols::<F>::width();
     let width = adapter_width + AddSubCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -30,7 +30,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(opcode);
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let ([rs1, rs2], output) = Rv64BaseAluRegU16AdapterFiller::replay(
+            let ([rs1, rs2], output) = BaseAluRegU16AdapterFiller::replay(
                 postflight,
                 step,
                 &mem_helper,

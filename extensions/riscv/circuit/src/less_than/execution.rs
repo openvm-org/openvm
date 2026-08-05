@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::LessThanExecutor;
+use super::core::LessThanCoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -24,7 +24,7 @@ struct LessThanPreCompute {
     b: u8,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -41,7 +41,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<NUM_LIMBS,
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
@@ -64,7 +64,7 @@ macro_rules! dispatch {
 }
 
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for LessThanExecutor<NUM_LIMBS, LIMB_BITS>
+    for LessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -107,7 +107,7 @@ where
 }
 
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for LessThanExecutor<NUM_LIMBS, LIMB_BITS>
+    for LessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -154,18 +154,17 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_UNSIGNED: bool>(
     pre_compute: &LessThanPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1 =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = exec_state
-        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
+    let rs1 = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2 =
+        exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.rs2_ptr as u32);
     let cmp_result = if IS_UNSIGNED {
         u64::from_le_bytes(rs1) < u64::from_le_bytes(rs2)
     } else {
         i64::from_le_bytes(rs1) < i64::from_le_bytes(rs2)
     };
-    let mut rd = [0u8; RV64_REGISTER_NUM_LIMBS];
+    let mut rd = [0u8; REGISTER_NUM_LIMBS];
     rd[0] = cmp_result as u8;
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes(REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

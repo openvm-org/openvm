@@ -145,10 +145,10 @@ static __device__ bool replay_store_byte(
     }
     uint32_t cell = shift >> 1;
     uint32_t byte = shift & 1;
-    uint16_t mask = static_cast<uint16_t>(UINT8_MAX << (byte * RV64_BYTE_BITS));
+    uint16_t mask = static_cast<uint16_t>(UINT8_MAX << (byte * BYTE_BITS));
     expected_post[cell] = static_cast<uint16_t>(
         (expected_post[cell] & ~mask) |
-        ((rs2[0] & UINT8_MAX) << (byte * RV64_BYTE_BITS))
+        ((rs2[0] & UINT8_MAX) << (byte * BYTE_BITS))
     );
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {

@@ -1,8 +1,8 @@
 use std::any::Any;
 
 use openvm_bigint_transpiler::{
-    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+    BaseAlu256Opcode, BranchEqual256Opcode, BranchLessThan256Opcode, LessThan256Opcode,
+    Mul256Opcode, Shift256Opcode,
 };
 use openvm_circuit::{
     arch::{
@@ -22,7 +22,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerChipGPU;
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 #[cfg(feature = "rvr")]
-use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_instructions::riscv::MEMORY_AS;
 use openvm_instructions::{program::Program, LocalOpcode};
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use openvm_riscv_circuit::preflight::PreflightReplayProgram;
@@ -30,7 +30,7 @@ use openvm_riscv_circuit::preflight::PreflightReplayProgram;
 use openvm_riscv_circuit::preflight::{
     PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
 };
-use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
+use openvm_riscv_circuit::{RiscvImGpuProverExt, RiscvImPreflightGpuTracegen};
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
@@ -70,13 +70,13 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
 
     #[doc(hidden)]
     pub fn extension_opcodes() -> Vec<u32> {
-        Self::opcodes(Rv64BaseAlu256Opcode::iter())
+        Self::opcodes(BaseAlu256Opcode::iter())
             .into_iter()
-            .chain(Self::opcodes(Rv64Shift256Opcode::iter()))
-            .chain(Self::opcodes(Rv64LessThan256Opcode::iter()))
-            .chain(Self::opcodes(Rv64BranchEqual256Opcode::iter()))
-            .chain(Self::opcodes(Rv64BranchLessThan256Opcode::iter()))
-            .chain(Self::opcodes(Rv64Mul256Opcode::iter()))
+            .chain(Self::opcodes(Shift256Opcode::iter()))
+            .chain(Self::opcodes(LessThan256Opcode::iter()))
+            .chain(Self::opcodes(BranchEqual256Opcode::iter()))
+            .chain(Self::opcodes(BranchLessThan256Opcode::iter()))
+            .chain(Self::opcodes(Mul256Opcode::iter()))
             .collect()
     }
 
@@ -86,9 +86,9 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         registry: &mut PostflightAccessRegistry,
     ) -> Result<(), GpuPostflightError> {
         let alu_spans = [
-            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
-            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
-            PostflightAccessSpan::write_fixed_from_replay_values(RV64_MEMORY_AS, 2, 4),
+            PostflightAccessSpan::read_fixed(MEMORY_AS, 0, 4),
+            PostflightAccessSpan::read_fixed(MEMORY_AS, 1, 4),
+            PostflightAccessSpan::write_fixed_from_replay_values(MEMORY_AS, 2, 4),
         ];
         let alu_schedule = PostflightAccessSchedule {
             register_operands: &[2, 3, 1],
@@ -97,21 +97,21 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
             memory_as_operand: 5,
             spans: &alu_spans,
         };
-        for opcode in Self::opcodes(Rv64BaseAlu256Opcode::iter())
+        for opcode in Self::opcodes(BaseAlu256Opcode::iter())
             .into_iter()
-            .chain(Self::opcodes(Rv64Shift256Opcode::iter()))
-            .chain(Self::opcodes(Rv64LessThan256Opcode::iter()))
-            .chain(Self::opcodes(Rv64Mul256Opcode::iter()))
+            .chain(Self::opcodes(Shift256Opcode::iter()))
+            .chain(Self::opcodes(LessThan256Opcode::iter()))
+            .chain(Self::opcodes(Mul256Opcode::iter()))
         {
             registry.register(opcode, alu_schedule)?;
         }
         let branch_spans = [
-            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
-            PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+            PostflightAccessSpan::read_fixed(MEMORY_AS, 0, 4),
+            PostflightAccessSpan::read_fixed(MEMORY_AS, 1, 4),
         ];
-        for opcode in Self::opcodes(Rv64BranchEqual256Opcode::iter())
+        for opcode in Self::opcodes(BranchEqual256Opcode::iter())
             .into_iter()
-            .chain(Self::opcodes(Rv64BranchLessThan256Opcode::iter()))
+            .chain(Self::opcodes(BranchLessThan256Opcode::iter()))
         {
             registry.register_branch_from_replay_value(
                 opcode,
@@ -154,7 +154,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
     where
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
-        Rv64ImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
+        RiscvImPreflightGpuTracegen::postflight(vm, program, execution, num_insns)
     }
 
     pub fn new(
@@ -174,29 +174,29 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
             transcript,
             replay_plan,
             pending_add_sub: has_any(
-                Self::opcodes(Rv64BaseAlu256Opcode::iter())
+                Self::opcodes(BaseAlu256Opcode::iter())
                     .into_iter()
                     .take(2)
                     .collect(),
             ),
             pending_bitwise: has_any(
-                Self::opcodes(Rv64BaseAlu256Opcode::iter())
+                Self::opcodes(BaseAlu256Opcode::iter())
                     .into_iter()
                     .skip(2)
                     .collect(),
             ),
-            pending_less_than: has_any(Self::opcodes(Rv64LessThan256Opcode::iter())),
-            pending_branch_equal: has_any(Self::opcodes(Rv64BranchEqual256Opcode::iter())),
-            pending_branch_less_than: has_any(Self::opcodes(Rv64BranchLessThan256Opcode::iter())),
-            pending_mul: has_any(Self::opcodes(Rv64Mul256Opcode::iter())),
+            pending_less_than: has_any(Self::opcodes(LessThan256Opcode::iter())),
+            pending_branch_equal: has_any(Self::opcodes(BranchEqual256Opcode::iter())),
+            pending_branch_less_than: has_any(Self::opcodes(BranchLessThan256Opcode::iter())),
+            pending_mul: has_any(Self::opcodes(Mul256Opcode::iter())),
             pending_shift_logical: has_any(
-                Self::opcodes(Rv64Shift256Opcode::iter())
+                Self::opcodes(Shift256Opcode::iter())
                     .into_iter()
                     .take(2)
                     .collect(),
             ),
             pending_shift_arithmetic: has_any(
-                Self::opcodes(Rv64Shift256Opcode::iter())
+                Self::opcodes(Shift256Opcode::iter())
                     .into_iter()
                     .skip(2)
                     .collect(),
@@ -264,7 +264,7 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
         VB: VmBuilder<GpuBabyBearPoseidon2Engine, SystemChipInventory = SystemChipInventoryGPU>,
     {
         let extension_opcodes = Self::extension_opcodes();
-        let rv64 = Rv64ImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
+        let riscv = RiscvImPreflightGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -275,23 +275,25 @@ impl<'a> Int256PreflightGpuTracegen<'a> {
             self.program,
             self.transcript,
             self.replay_plan,
-            (self, rv64),
-            |(tracegen, rv64), chip| {
+            (self, riscv),
+            |(tracegen, riscv), chip| {
                 if let Some(ctx) = tracegen
                     .generate_for_chip(chip)
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
                 {
                     Ok(ctx)
                 } else {
-                    rv64.generate_for_chip(chip)
+                    riscv
+                        .generate_for_chip(chip)
                         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
                 }
             },
-            |(tracegen, rv64)| {
+            |(tracegen, riscv)| {
                 tracegen
                     .finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-                rv64.finish()
+                riscv
+                    .finish()
                     .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
             },
         )
@@ -332,12 +334,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
             }
         };
 
-        inventory.next_air::<Rv64AddSub256Air>()?;
+        inventory.next_air::<AddSub256Air>()?;
         let add_sub =
             AddSub256ChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(add_sub);
 
-        inventory.next_air::<Rv64BitwiseLogic256Air>()?;
+        inventory.next_air::<BitwiseLogic256Air>()?;
         let bitwise = BitwiseLogic256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -346,12 +348,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
         );
         inventory.add_executor_chip(bitwise);
 
-        inventory.next_air::<Rv64LessThan256Air>()?;
+        inventory.next_air::<LessThan256Air>()?;
         let lt =
             LessThan256ChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64BranchEqual256Air>()?;
+        inventory.next_air::<BranchEqual256Air>()?;
         let beq = BranchEqual256ChipGpu::new(
             range_checker.clone(),
             byte_ptr_max_bits,
@@ -359,7 +361,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
         );
         inventory.add_executor_chip(beq);
 
-        inventory.next_air::<Rv64BranchLessThan256Air>()?;
+        inventory.next_air::<BranchLessThan256Air>()?;
         let blt = BranchLessThan256ChipGpu::new(
             range_checker.clone(),
             byte_ptr_max_bits,
@@ -367,7 +369,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
         );
         inventory.add_executor_chip(blt);
 
-        inventory.next_air::<Rv64Multiplication256Air>()?;
+        inventory.next_air::<Multiplication256Air>()?;
         let mult = Multiplication256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -377,7 +379,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
         );
         inventory.add_executor_chip(mult);
 
-        inventory.next_air::<Rv64ShiftLogical256Air>()?;
+        inventory.next_air::<ShiftLogical256Air>()?;
         let shift_logical = ShiftLogical256ChipGpu::new(
             range_checker.clone(),
             byte_ptr_max_bits,
@@ -385,7 +387,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
         );
         inventory.add_executor_chip(shift_logical);
 
-        inventory.next_air::<Rv64ShiftRightArithmetic256Air>()?;
+        inventory.next_air::<ShiftRightArithmetic256Air>()?;
         let shift_right_arithmetic = ShiftRightArithmetic256ChipGpu::new(
             range_checker.clone(),
             byte_ptr_max_bits,
@@ -398,9 +400,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Int256> for Int256GpuProverEx
 }
 
 #[derive(Clone)]
-pub struct Int256Rv64GpuBuilder;
+pub struct Int256GpuBuilder;
 
-impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256Rv64GpuBuilder {
+impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256GpuBuilder {
     type Prepared = GpuPostflightProgram;
 
     fn prepare_postflight(
@@ -425,13 +427,13 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Int256Rv64GpuBuilder {
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Int256Rv64GpuBuilder {
-    type VmConfig = Int256Rv64Config;
+impl VmBuilder<E> for Int256GpuBuilder {
+    type VmConfig = Int256Config;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
         &self,
-        config: &Int256Rv64Config,
+        config: &Int256Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -445,9 +447,9 @@ impl VmBuilder<E> for Int256Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.riscv_i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.riscv_m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&RiscvImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _>::extend_prover(&Int256GpuProverExt, &config.bigint, inventory)?;
         Ok(chip_complex)
     }

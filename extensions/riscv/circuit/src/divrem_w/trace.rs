@@ -4,19 +4,19 @@ use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
-use openvm_instructions::{riscv::RV64_WORD_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{riscv::WORD_NUM_LIMBS, LocalOpcode};
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::Rv64DivRemWChip;
+use super::DivRemWChip;
 use crate::{
-    adapters::{ReplayComputation, Rv64MultWAdapterCols, RV64_BYTE_BITS},
+    adapters::{MultWAdapterCols, ReplayComputation, BYTE_BITS},
     divrem::{run_divrem, DivRemCoreCols},
 };
 
 /// Generates the RV64 DIVW/DIVUW/REMW/REMUW trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64DivRemWChip<F>,
+    chip: &DivRemWChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
@@ -29,8 +29,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64MultWAdapterCols::<F>::width();
-    let width = adapter_width + DivRemCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
+    let adapter_width = MultWAdapterCols::<F>::width();
+    let width = adapter_width + DivRemCoreCols::<F, WORD_NUM_LIMBS, BYTE_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
@@ -39,8 +39,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let core_row: &mut DivRemCoreCols<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS> =
-                core_row.borrow_mut();
+            let core_row: &mut DivRemCoreCols<F, WORD_NUM_LIMBS, BYTE_BITS> = core_row.borrow_mut();
             let is_signed = opcode == DivRemWOpcode::DIVW || opcode == DivRemWOpcode::REMW;
             let is_div = opcode == DivRemWOpcode::DIVW || opcode == DivRemWOpcode::DIVUW;
             let core_opcode = match opcode {
@@ -55,7 +54,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 &chip.mem_helper.as_borrowed(),
                 adapter_row.borrow_mut(),
                 |[b, c]| {
-                    let computed = run_divrem::<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>(
+                    let computed = run_divrem::<WORD_NUM_LIMBS, BYTE_BITS>(
                         is_signed,
                         &b.map(u32::from),
                         &c.map(u32::from),

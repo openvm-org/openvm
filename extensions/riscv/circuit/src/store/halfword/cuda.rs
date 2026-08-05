@@ -12,28 +12,28 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
+use openvm_riscv_transpiler::LoadStoreOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use super::STORE_HALFWORD_VALUE_CELLS;
 use crate::{
-    adapters::{Rv64StoreMultiByteAdapterCols, RV64_BYTE_BITS},
+    adapters::{StoreMultiByteAdapterCols, BYTE_BITS},
     cuda_abi::store_halfword_cuda,
     store::core::StoreCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64StoreHalfwordChipGpu {
+pub struct StoreHalfwordChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64StoreHalfwordChipGpu {
+impl StoreHalfwordChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -42,12 +42,12 @@ impl Rv64StoreHalfwordChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let step_range = replay_plan.opcode_range(Rv64LoadStoreOpcode::STOREH.global_opcode());
+        let step_range = replay_plan.opcode_range(LoadStoreOpcode::STOREH.global_opcode());
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64StoreMultiByteAdapterCols::<F>::width()
+        let trace_width = StoreMultiByteAdapterCols::<F>::width()
             + StoreCoreCols::<F, STORE_HALFWORD_VALUE_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
@@ -65,9 +65,9 @@ impl Rv64StoreHalfwordChipGpu {
                 step_range.start,
                 step_range.len(),
                 transcript.error_ptr(),
-                Rv64LoadStoreOpcode::STOREH.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                LoadStoreOpcode::STOREH.global_opcode().as_usize() as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 PUBLIC_VALUES_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,

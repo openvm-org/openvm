@@ -13,19 +13,19 @@ use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, SystemOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+use openvm_riscv_circuit::{RiscvI, RiscvIo, RiscvM};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear};
 
-use super::{DeferralPreflightCoverage, DeferralPreflightGpuTracegen, Rv64DeferralGpuBuilder};
+use super::{DeferralGpuBuilder, DeferralPreflightCoverage, DeferralPreflightGpuTracegen};
 use crate::{
     generate_deferral_results,
     poseidon2::deferral_poseidon2_chip,
     utils::{combine_output, COMMIT_NUM_BYTES},
-    DeferralExtension, DeferralFn, RawDeferralResult, Rv64DeferralConfig,
+    DeferralExtension, DeferralFn, DeferralVmConfig, RawDeferralResult,
 };
 
 type F = BabyBear;
@@ -88,8 +88,8 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
             rd as usize,
             rs as usize,
             0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
         ],
     );
     let program = Program::from_instructions(&[
@@ -100,23 +100,23 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
     let mut init_memory = SparseMemoryImage::default();
     insert_bytes(
         &mut init_memory,
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         rd,
         &(output_ptr as u64).to_le_bytes(),
     );
     insert_bytes(
         &mut init_memory,
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         rs,
         &(input_ptr as u64).to_le_bytes(),
     );
-    insert_bytes(&mut init_memory, RV64_MEMORY_AS, input_ptr, &output_key);
+    insert_bytes(&mut init_memory, MEMORY_AS, input_ptr, &output_key);
 
-    let config = Rv64DeferralConfig {
+    let config = DeferralVmConfig {
         system: test_system_config(),
-        rv64i: Rv64I,
-        rv64m: Rv64M::default(),
-        io: Rv64Io,
+        riscv_i: RiscvI,
+        riscv_m: RiscvM::default(),
+        io: RiscvIo,
         deferral: DeferralExtension::new(
             vec![Arc::new(DeferralFn::new(|_| Vec::new()))],
             vec![[0; COMMIT_NUM_BYTES]],
@@ -130,7 +130,7 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
         ..Default::default()
     });
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), DeferralGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -149,7 +149,7 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
         ]
     );
     assert_eq!(
-        &execution.state.memory.memory.mem[RV64_MEMORY_AS as usize].as_slice()
+        &execution.state.memory.memory.mem[MEMORY_AS as usize].as_slice()
             [output_ptr as usize..output_ptr as usize + output_raw.len()],
         output_raw
     );
@@ -181,15 +181,15 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
     let memory = gpu_transcript.memory_log_host().unwrap();
     assert_eq!(memory.len(), 9);
     let expected = [
-        (1, RV64_REGISTER_AS, rd / 2, false),
-        (2, RV64_REGISTER_AS, rs / 2, false),
-        (3, RV64_MEMORY_AS, input_ptr / 2, false),
-        (4, RV64_MEMORY_AS, input_ptr / 2 + 4, false),
-        (5, RV64_MEMORY_AS, input_ptr / 2 + 8, false),
-        (6, RV64_MEMORY_AS, input_ptr / 2 + 12, false),
-        (7, RV64_MEMORY_AS, input_ptr / 2 + 16, false),
-        (8, RV64_MEMORY_AS, output_ptr / 2, true),
-        (9, RV64_MEMORY_AS, output_ptr / 2 + 4, true),
+        (1, REGISTER_AS, rd / 2, false),
+        (2, REGISTER_AS, rs / 2, false),
+        (3, MEMORY_AS, input_ptr / 2, false),
+        (4, MEMORY_AS, input_ptr / 2 + 4, false),
+        (5, MEMORY_AS, input_ptr / 2 + 8, false),
+        (6, MEMORY_AS, input_ptr / 2 + 12, false),
+        (7, MEMORY_AS, input_ptr / 2 + 16, false),
+        (8, MEMORY_AS, output_ptr / 2, true),
+        (9, MEMORY_AS, output_ptr / 2 + 4, true),
     ];
     for (event, &(timestamp, address_space, pointer, is_write)) in memory.iter().zip(&expected) {
         assert_eq!(event.timestamp, timestamp);
@@ -225,8 +225,8 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
             rd as usize,
             rs as usize,
             0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
         ],
     );
     let program = Program::from_instructions(&[
@@ -236,25 +236,25 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     let mut init_memory = SparseMemoryImage::default();
     insert_bytes(
         &mut init_memory,
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         rd,
         &(output_ptr as u64).to_le_bytes(),
     );
     insert_bytes(
         &mut init_memory,
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         rs,
         &(input_ptr as u64).to_le_bytes(),
     );
-    insert_bytes(&mut init_memory, RV64_MEMORY_AS, input_ptr, &input_commit);
+    insert_bytes(&mut init_memory, MEMORY_AS, input_ptr, &input_commit);
 
     let mut system = test_system_config();
     system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
-    let config = Rv64DeferralConfig {
+    let config = DeferralVmConfig {
         system,
-        rv64i: Rv64I,
-        rv64m: Rv64M::default(),
-        io: Rv64Io,
+        riscv_i: RiscvI,
+        riscv_m: RiscvM::default(),
+        io: RiscvIo,
         deferral: DeferralExtension::new(
             vec![Arc::new(DeferralFn::new({
                 let output_raw = output_raw.clone();
@@ -274,7 +274,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(streams);
     let (mut vm, pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), DeferralGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
@@ -321,21 +321,21 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     let memory = transcript.memory_log_host().unwrap();
     assert_eq!(memory.len(), 19);
     let expected = [
-        (1, RV64_REGISTER_AS, rd / 2, false),
-        (2, RV64_REGISTER_AS, rs / 2, false),
-        (3, RV64_MEMORY_AS, input_ptr / 2, false),
-        (4, RV64_MEMORY_AS, input_ptr / 2 + 4, false),
-        (5, RV64_MEMORY_AS, input_ptr / 2 + 8, false),
-        (6, RV64_MEMORY_AS, input_ptr / 2 + 12, false),
+        (1, REGISTER_AS, rd / 2, false),
+        (2, REGISTER_AS, rs / 2, false),
+        (3, MEMORY_AS, input_ptr / 2, false),
+        (4, MEMORY_AS, input_ptr / 2 + 4, false),
+        (5, MEMORY_AS, input_ptr / 2 + 8, false),
+        (6, MEMORY_AS, input_ptr / 2 + 12, false),
         (7, DEFERRAL_AS, 0, false),
         (8, DEFERRAL_AS, 4, false),
         (9, DEFERRAL_AS, 8, false),
         (10, DEFERRAL_AS, 12, false),
-        (11, RV64_MEMORY_AS, output_ptr / 2, true),
-        (12, RV64_MEMORY_AS, output_ptr / 2 + 4, true),
-        (13, RV64_MEMORY_AS, output_ptr / 2 + 8, true),
-        (14, RV64_MEMORY_AS, output_ptr / 2 + 12, true),
-        (15, RV64_MEMORY_AS, output_ptr / 2 + 16, true),
+        (11, MEMORY_AS, output_ptr / 2, true),
+        (12, MEMORY_AS, output_ptr / 2 + 4, true),
+        (13, MEMORY_AS, output_ptr / 2 + 8, true),
+        (14, MEMORY_AS, output_ptr / 2 + 12, true),
+        (15, MEMORY_AS, output_ptr / 2 + 16, true),
         (16, DEFERRAL_AS, 0, true),
         (17, DEFERRAL_AS, 4, true),
         (18, DEFERRAL_AS, 8, true),

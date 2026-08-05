@@ -12,7 +12,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADH};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADH};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -26,15 +26,15 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 
 use super::trace::generate_trace_from_postflight;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::load_sign_extend::{test_utils::dummy_range_checker, Rv64LoadSignExtendHalfwordChipGpu};
+use crate::load_sign_extend::{test_utils::dummy_range_checker, LoadSignExtendHalfwordChipGpu};
 use crate::{
-    adapters::{Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS},
+    adapters::{LoadMultiByteAdapterAir, LoadMultiByteAdapterFiller, BYTE_BITS},
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
         halfword::{
-            LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller,
-            Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChip,
-            Rv64LoadSignExtendHalfwordExecutor, LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
+            LoadSignExtendHalfwordAir, LoadSignExtendHalfwordChip, LoadSignExtendHalfwordCoreAir,
+            LoadSignExtendHalfwordExecutor, LoadSignExtendHalfwordFiller,
+            LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
         },
         test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
     },
@@ -42,9 +42,9 @@ use crate::{
 
 type HalfwordHarness = TestChipHarness<
     F,
-    Rv64LoadSignExtendHalfwordExecutor,
-    Rv64LoadSignExtendHalfwordAir,
-    Rv64LoadSignExtendHalfwordChip<F>,
+    LoadSignExtendHalfwordExecutor,
+    LoadSignExtendHalfwordAir,
+    LoadSignExtendHalfwordChip<F>,
 >;
 
 fn create_halfword_harness(
@@ -52,33 +52,31 @@ fn create_halfword_harness(
 ) -> (
     HalfwordHarness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-    let air = Rv64LoadSignExtendHalfwordAir::new(
-        Rv64LoadMultiByteAdapterAir::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let air = LoadSignExtendHalfwordAir::new(
+        LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
         LoadSignExtendHalfwordCoreAir::new(
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.bus(),
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
+    let executor = LoadSignExtendHalfwordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let chip = LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
-            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,
         ),
@@ -189,42 +187,42 @@ fn negative_split_signed_load_test() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHalfwordHarness = GpuTestChipHarness<
     F,
-    Rv64LoadSignExtendHalfwordExecutor,
-    Rv64LoadSignExtendHalfwordAir,
-    Rv64LoadSignExtendHalfwordChipGpu,
-    Rv64LoadSignExtendHalfwordChip<F>,
+    LoadSignExtendHalfwordExecutor,
+    LoadSignExtendHalfwordAir,
+    LoadSignExtendHalfwordChipGpu,
+    LoadSignExtendHalfwordChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarness {
     let range_checker = dummy_range_checker();
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
         default_bitwise_lookup_bus(),
     ));
-    let air = Rv64LoadSignExtendHalfwordAir::new(
-        Rv64LoadMultiByteAdapterAir::new(
+    let air = LoadSignExtendHalfwordAir::new(
+        LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
         LoadSignExtendHalfwordCoreAir::new(
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.bus(),
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendHalfwordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let cpu_chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
+    let executor = LoadSignExtendHalfwordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let cpu_chip = LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
-            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
             range_checker,
         ),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LoadSignExtendHalfwordChipGpu::new(
+    let gpu_chip = LoadSignExtendHalfwordChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),

@@ -4,9 +4,9 @@ use eyre::Result;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::testing::assert_vm_states_equivalent;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use openvm_riscv_circuit::Rv64ImConfig;
+use openvm_riscv_circuit::RiscvImConfig;
 use openvm_riscv_transpiler::{
-    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+    RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_toolchain_tests::decode_elf;
@@ -16,9 +16,9 @@ type F = BabyBear;
 
 #[test]
 #[ignore = "must run makefile"]
-fn test_rv64im_riscv_vector_runtime() -> Result<()> {
+fn test_riscv_vector_runtime() -> Result<()> {
     let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
-    let config = Rv64ImConfig::default();
+    let config = RiscvImConfig::default();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
     let mut failures = Vec::new();
     for entry in read_dir(dir)? {
@@ -35,9 +35,9 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                 let exe = VmExe::from_elf(
                     elf,
                     Transpiler::<F>::default()
-                        .with_extension(Rv64ITranspilerExtension)
-                        .with_extension(Rv64MTranspilerExtension)
-                        .with_extension(Rv64IoTranspilerExtension),
+                        .with_extension(RiscvITranspilerExtension)
+                        .with_extension(RiscvMTranspilerExtension)
+                        .with_extension(RiscvIoTranspilerExtension),
                 )?;
                 let executor = VmExecutor::new(config.clone())?;
                 let instance = executor.instance(&exe)?;
@@ -77,11 +77,11 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
 // Running Prove tests only when CUDA is enabled because it is slow on CPU
 #[test]
 #[ignore = "long prover tests"]
-fn test_rv64im_riscv_vector_prove() -> Result<()> {
+fn test_riscv_vector_prove() -> Result<()> {
     use openvm_circuit::utils::air_test;
-    use openvm_riscv_circuit::Rv64ImBuilder;
+    use openvm_riscv_circuit::RiscvImBuilder;
 
-    let config = Rv64ImConfig::default();
+    let config = RiscvImConfig::default();
     let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
     let mut failures = Vec::new();
@@ -98,13 +98,13 @@ fn test_rv64im_riscv_vector_prove() -> Result<()> {
             let exe = VmExe::from_elf(
                 elf,
                 Transpiler::<F>::default()
-                    .with_extension(Rv64ITranspilerExtension)
-                    .with_extension(Rv64MTranspilerExtension)
-                    .with_extension(Rv64IoTranspilerExtension),
+                    .with_extension(RiscvITranspilerExtension)
+                    .with_extension(RiscvMTranspilerExtension)
+                    .with_extension(RiscvIoTranspilerExtension),
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(Rv64ImBuilder, config.clone(), exe);
+                air_test(RiscvImBuilder, config.clone(), exe);
             });
 
             match result {

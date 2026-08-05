@@ -13,7 +13,7 @@ using namespace riscv;
 using namespace program;
 
 static __device__ __forceinline__ uint16_t load_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
-    return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
+    return (cell >> (BYTE_BITS * byte_idx)) & BYTE_MASK;
 }
 
 static __device__ __forceinline__ uint16_t load_read_full_cell(

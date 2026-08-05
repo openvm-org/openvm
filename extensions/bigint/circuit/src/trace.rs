@@ -1,8 +1,8 @@
 use std::{array, borrow::BorrowMut, iter::once};
 
 use openvm_bigint_transpiler::{
-    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+    BaseAlu256Opcode, BranchEqual256Opcode, BranchLessThan256Opcode, LessThan256Opcode,
+    Mul256Opcode, Shift256Opcode,
 };
 use openvm_circuit::{
     arch::{
@@ -15,11 +15,11 @@ use openvm_circuit::{
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, VmOpcode,
 };
 use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterCols, Rv64VecHeapBranchU16AdapterCols, Rv64VecHeapU16AdapterCols,
+    VecHeapAdapterCols, VecHeapBranchU16AdapterCols, VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
     adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs, U16_BITS},
@@ -32,17 +32,16 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{
-    Rv64AddSub256Chip, Rv64BitwiseLogic256Chip, Rv64BranchEqual256Chip, Rv64BranchLessThan256Chip,
-    Rv64LessThan256Chip, Rv64Multiplication256Chip, Rv64ShiftLogical256Chip,
-    Rv64ShiftRightArithmetic256Chip, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U16_LIMBS,
-    INT256_NUM_U8_LIMBS, NUM_READS, RV64_BYTE_BITS,
+    AddSub256Chip, BitwiseLogic256Chip, BranchEqual256Chip, BranchLessThan256Chip, LessThan256Chip,
+    Multiplication256Chip, ShiftLogical256Chip, ShiftRightArithmetic256Chip, BYTE_BITS,
+    INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U16_LIMBS, INT256_NUM_U8_LIMBS, NUM_READS,
 };
 
 type AluU16Cols<F> =
-    Rv64VecHeapU16AdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+    VecHeapU16AdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
 type AluByteCols<F> =
-    Rv64VecHeapAdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
-type BranchCols<F> = Rv64VecHeapBranchU16AdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
+    VecHeapAdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+type BranchCols<F> = VecHeapBranchU16AdapterCols<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
 
 struct AluComputation<T, const NUM_LIMBS: usize, M> {
     output: [T; NUM_LIMBS],
@@ -107,8 +106,8 @@ fn validate_heap_span(pointer: u32, pointer_max_bits: usize) -> Result<(), Postf
 fn validate_alu_instruction<F: PrimeField32>(
     instruction: &Instruction<F>,
 ) -> Result<(), PostflightError> {
-    if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-        || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+    if instruction.d.as_canonical_u32() != REGISTER_AS
+        || instruction.e.as_canonical_u32() != MEMORY_AS
     {
         return Err(invalid("int256 ALU instruction has invalid address spaces"));
     }
@@ -120,7 +119,7 @@ fn read_pointer_register<F: PrimeField32>(
     byte_pointer: u32,
     pointer_max_bits: usize,
 ) -> Result<(openvm_circuit::arch::U16Access, u32), PostflightError> {
-    let access = replay.read_u16(RV64_REGISTER_AS, checked_register_pointer(byte_pointer)?)?;
+    let access = replay.read_u16(REGISTER_AS, checked_register_pointer(byte_pointer)?)?;
     let pointer = decode_heap_pointer(access.value, pointer_max_bits)?;
     validate_heap_span(pointer, pointer_max_bits)?;
     Ok((access, pointer))
@@ -194,7 +193,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
     for i in 0..NUM_READS {
         for (j, block) in reads[i].iter_mut().enumerate() {
             let byte_pointer = rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32;
-            let access = replay.read_u16(RV64_MEMORY_AS, byte_pointer / 2)?;
+            let access = replay.read_u16(MEMORY_AS, byte_pointer / 2)?;
             *block = access.value;
             read_accesses.push(access);
         }
@@ -206,7 +205,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
     let mut write_accesses = Vec::with_capacity(INT256_NUM_MEMORY_BLOCKS);
     for (j, block) in output_blocks.into_iter().enumerate() {
         let byte_pointer = rd_val + (j * MEMORY_BLOCK_BYTES) as u32;
-        write_accesses.push(replay.write_u16(RV64_MEMORY_AS, byte_pointer / 2, block)?);
+        write_accesses.push(replay.write_u16(MEMORY_AS, byte_pointer / 2, block)?);
     }
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
@@ -283,7 +282,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     for i in 0..NUM_READS {
         for (j, block) in reads[i].iter_mut().enumerate() {
             let byte_pointer = rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32;
-            let access = replay.read_u16(RV64_MEMORY_AS, byte_pointer / 2)?;
+            let access = replay.read_u16(MEMORY_AS, byte_pointer / 2)?;
             *block = u16_block_to_bytes(access.value);
             read_accesses.push(access);
         }
@@ -296,7 +295,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     for (j, block) in output_blocks.into_iter().enumerate() {
         let byte_pointer = rd_val + (j * MEMORY_BLOCK_BYTES) as u32;
         write_accesses.push(replay.write_u16(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             byte_pointer / 2,
             bytes_to_u16_block(block),
         )?);
@@ -371,7 +370,7 @@ fn replay_branch<F: PrimeField32, M>(
     for i in 0..NUM_READS {
         for (j, block) in reads[i].iter_mut().enumerate() {
             let byte_pointer = rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32;
-            let access = replay.read_u16(RV64_MEMORY_AS, byte_pointer / 2)?;
+            let access = replay.read_u16(MEMORY_AS, byte_pointer / 2)?;
             *block = access.value;
             read_accesses.push(access);
         }
@@ -452,12 +451,12 @@ fn add_sub(
 }
 
 pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
-    chip: &Rv64AddSub256Chip<F>,
+    chip: &AddSub256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BaseAluOpcode::ADD, BaseAluOpcode::SUB];
-    let global = opcodes.map(|opcode| Rv64BaseAlu256Opcode(opcode).global_opcode());
+    let global = opcodes.map(|opcode| BaseAlu256Opcode(opcode).global_opcode());
     let adapter_width = AluU16Cols::<F>::width();
     let width = adapter_width + AddSubCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width();
     let mut trace = trace(opcodes_rows(postflight, &global), width);
@@ -498,16 +497,15 @@ pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
 }
 
 pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
-    chip: &Rv64BitwiseLogic256Chip<F>,
+    chip: &BitwiseLogic256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
     range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND];
-    let global = opcodes.map(|opcode| Rv64BaseAlu256Opcode(opcode).global_opcode());
+    let global = opcodes.map(|opcode| BaseAlu256Opcode(opcode).global_opcode());
     let adapter_width = AluByteCols::<F>::width();
-    let width =
-        adapter_width + BitwiseLogicCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width();
+    let width = adapter_width + BitwiseLogicCoreCols::<F, INT256_NUM_U8_LIMBS, BYTE_BITS>::width();
     let mut trace = trace(opcodes_rows(postflight, &global), width);
     let mut row_index = 0;
     for (opcode, global_opcode) in opcodes.into_iter().zip(global) {
@@ -531,7 +529,7 @@ pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
                     metadata: (),
                 },
             )?;
-            let core: &mut BitwiseLogicCoreCols<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS> =
+            let core: &mut BitwiseLogicCoreCols<F, INT256_NUM_U8_LIMBS, BYTE_BITS> =
                 core_row.borrow_mut();
             core.opcode_xor_flag = F::from_bool(opcode == BaseAluOpcode::XOR);
             core.opcode_or_flag = F::from_bool(opcode == BaseAluOpcode::OR);
@@ -585,7 +583,7 @@ fn less_than(
 }
 
 fn fill_less_than<F: PrimeField32>(
-    chip: &Rv64LessThan256Chip<F>,
+    chip: &LessThan256Chip<F>,
     core: &mut LessThanCoreCols<F, INT256_NUM_U16_LIMBS, U16_BITS>,
     opcode: LessThanOpcode,
     [b, c]: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
@@ -656,14 +654,14 @@ fn fill_less_than<F: PrimeField32>(
 }
 
 pub(crate) fn generate_less_than_trace<F: PrimeField32>(
-    chip: &Rv64LessThan256Chip<F>,
+    chip: &LessThan256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [LessThanOpcode::SLT, LessThanOpcode::SLTU];
     let global = opcodes
         .iter()
-        .map(|&opcode| Rv64LessThan256Opcode(opcode).global_opcode())
+        .map(|&opcode| LessThan256Opcode(opcode).global_opcode())
         .collect::<Vec<_>>();
     let adapter_width = AluU16Cols::<F>::width();
     let width = adapter_width + LessThanCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width();
@@ -721,7 +719,7 @@ fn branch_eq(
 }
 
 pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
-    chip: &Rv64BranchEqual256Chip<F>,
+    chip: &BranchEqual256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
     range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
@@ -729,7 +727,7 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
     let opcodes = [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE];
     let global = opcodes
         .iter()
-        .map(|&opcode| Rv64BranchEqual256Opcode(opcode).global_opcode())
+        .map(|&opcode| BranchEqual256Opcode(opcode).global_opcode())
         .collect::<Vec<_>>();
     let adapter_width = BranchCols::<F>::width();
     let width = adapter_width + BranchEqualCoreCols::<F, INT256_NUM_U16_LIMBS>::width();
@@ -802,7 +800,7 @@ fn branch_compare(
 }
 
 pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
-    chip: &Rv64BranchLessThan256Chip<F>,
+    chip: &BranchLessThan256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -814,7 +812,7 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
     ];
     let global = opcodes
         .iter()
-        .map(|&opcode| Rv64BranchLessThan256Opcode(opcode).global_opcode())
+        .map(|&opcode| BranchLessThan256Opcode(opcode).global_opcode())
         .collect::<Vec<_>>();
     let adapter_width = BranchCols::<F>::width();
     let width =
@@ -944,7 +942,7 @@ fn mul_with_carry(x: &[u8; INT256_NUM_U8_LIMBS], y: &[u8; INT256_NUM_U8_LIMBS]) 
         for j in 0..=i {
             value += u32::from(x[j]) * u32::from(y[i - j]);
         }
-        carry[i] = value >> RV64_BYTE_BITS;
+        carry[i] = value >> BYTE_BITS;
         result[i] = value as u8;
     }
     Multiplication {
@@ -954,15 +952,15 @@ fn mul_with_carry(x: &[u8; INT256_NUM_U8_LIMBS], y: &[u8; INT256_NUM_U8_LIMBS]) 
 }
 
 pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
-    chip: &Rv64Multiplication256Chip<F>,
+    chip: &Multiplication256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
     range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
-    let opcode = Rv64Mul256Opcode(MulOpcode::MUL).global_opcode();
+    let opcode = Mul256Opcode(MulOpcode::MUL).global_opcode();
     let adapter_width = AluByteCols::<F>::width();
     let width =
-        adapter_width + MultiplicationCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width();
+        adapter_width + MultiplicationCoreCols::<F, INT256_NUM_U8_LIMBS, BYTE_BITS>::width();
     let mut trace = trace(postflight.steps(opcode).len(), width);
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
@@ -991,7 +989,7 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
                 .bitwise_lookup_chip
                 .request_range(u32::from(b), u32::from(c));
         }
-        let core: &mut MultiplicationCoreCols<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS> =
+        let core: &mut MultiplicationCoreCols<F, INT256_NUM_U8_LIMBS, BYTE_BITS> =
             core_row.borrow_mut();
         core.is_valid = F::ONE;
         core.a = replay.output.map(F::from_u8);
@@ -1102,12 +1100,12 @@ fn fill_shift_decomposition<F: PrimeField32>(
 }
 
 pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
-    chip: &Rv64ShiftLogical256Chip<F>,
+    chip: &ShiftLogical256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftOpcode::SLL, ShiftOpcode::SRL];
-    let global = opcodes.map(|opcode| Rv64Shift256Opcode(opcode).global_opcode());
+    let global = opcodes.map(|opcode| Shift256Opcode(opcode).global_opcode());
     let adapter_width = AluU16Cols::<F>::width();
     let width = adapter_width + ShiftLogicalCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width();
     let mut trace = trace(opcodes_rows(postflight, &global), width);
@@ -1203,11 +1201,11 @@ fn shift_arithmetic(
 }
 
 pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
-    chip: &Rv64ShiftRightArithmetic256Chip<F>,
+    chip: &ShiftRightArithmetic256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
-    let opcode = Rv64Shift256Opcode(ShiftOpcode::SRA).global_opcode();
+    let opcode = Shift256Opcode(ShiftOpcode::SRA).global_opcode();
     let adapter_width = AluU16Cols::<F>::width();
     let width =
         adapter_width + ShiftRightArithmeticCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width();

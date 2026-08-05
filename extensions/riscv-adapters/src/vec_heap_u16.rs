@@ -21,11 +21,11 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -42,7 +42,7 @@ use openvm_stark_backend::{
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv64VecHeapU16AdapterCols<
+pub struct VecHeapU16AdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -54,9 +54,9 @@ pub struct Rv64VecHeapU16AdapterCols<
     pub rd_ptr: T,
 
     /// Low 32 bits of rs registers as u16 limbs.
-    pub rs_val: [[T; RV64_PTR_U16_LIMBS]; NUM_READS],
+    pub rs_val: [[T; PTR_U16_LIMBS]; NUM_READS],
     /// Low 32 bits of rd register as u16 limbs.
-    pub rd_val: [T; RV64_PTR_U16_LIMBS],
+    pub rd_val: [T; PTR_U16_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T>,
@@ -67,8 +67,8 @@ pub struct Rv64VecHeapU16AdapterCols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64VecHeapU16AdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>)]
-pub struct Rv64VecHeapU16AdapterAir<
+#[columns_via(VecHeapU16AdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>)]
+pub struct VecHeapU16AdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -85,10 +85,10 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-    > BaseAir<F> for Rv64VecHeapU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+    > BaseAir<F> for VecHeapU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     fn width(&self) -> usize {
-        Rv64VecHeapU16AdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width()
+        VecHeapU16AdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width()
     }
 }
 
@@ -97,7 +97,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-    > VmAdapterAir<AB> for Rv64VecHeapU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+    > VmAdapterAir<AB> for VecHeapU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     type Interface = VecHeapAdapterInterface<
         AB::Expr,
@@ -114,7 +114,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv64VecHeapU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+        let cols: &VecHeapU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -129,11 +129,11 @@ impl<
             cols.rd_val,
             &cols.rd_read_aux,
         ))) {
-            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&val);
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&val);
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::F::from_u32(RV64_REGISTER_AS),
+                        AB::F::from_u32(REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
                     bus_payload,
@@ -158,7 +158,7 @@ impl<
         let rd_val_f: AB::Expr = u16_limbs_to_ptr(&cols.rd_val);
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
-        let e = AB::F::from_u32(RV64_MEMORY_AS);
+        let e = AB::F::from_u32(MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -210,7 +210,7 @@ impl<
                         .get(1)
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -221,7 +221,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64VecHeapU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+        let cols: &VecHeapU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             local.borrow();
         cols.from_state.pc
     }

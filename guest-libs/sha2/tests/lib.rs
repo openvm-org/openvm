@@ -9,10 +9,10 @@ mod tests {
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
     use openvm_riscv_transpiler::{
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
+        RiscvITranspilerExtension, RiscvIoTranspilerExtension, RiscvMTranspilerExtension,
     };
     use openvm_sdk::StdIn;
-    use openvm_sha2_circuit::{Sha2Rv64Builder, Sha2Rv64Config};
+    use openvm_sha2_circuit::{Sha2Builder, Sha2VmConfig};
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
@@ -69,15 +69,15 @@ mod tests {
     }
 
     fn test_sha2_base(test_vector_file_name: &str, sha2_type: Sha2Type, prove: bool) -> Result<()> {
-        let config = Sha2Rv64Config::default();
+        let config = Sha2VmConfig::default();
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "sha2", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(Sha2TranspilerExtension),
         )?;
 
@@ -95,7 +95,7 @@ mod tests {
         }
 
         if prove {
-            air_test_with_min_segments(Sha2Rv64Builder, config, openvm_exe, stdin, 1);
+            air_test_with_min_segments(Sha2Builder, config, openvm_exe, stdin, 1);
         } else {
             let executor = VmExecutor::new(config.clone())?;
             let instance = executor.instance(&openvm_exe)?;
@@ -114,7 +114,7 @@ mod tests {
     }
 
     fn test_sha2_reset_base() -> Result<()> {
-        let config = Sha2Rv64Config::default();
+        let config = Sha2VmConfig::default();
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "sha2_reset",
@@ -123,9 +123,9 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
                 .with_extension(Sha2TranspilerExtension),
         )?;
 

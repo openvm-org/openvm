@@ -5,18 +5,17 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, JAL, LUI};
+use openvm_riscv_transpiler::JalLuiOpcode::{self, JAL, LUI};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{
-    get_signed_imm, run_jal_lui, Rv64JalLuiChip, Rv64JalLuiCoreCols, LUI_IMM_LOW_BITS,
-    PC_HIGH_U16_SHIFT,
+    get_signed_imm, run_jal_lui, JalLuiChip, JalLuiCoreCols, LUI_IMM_LOW_BITS, PC_HIGH_U16_SHIFT,
 };
-use crate::adapters::{Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterFiller, U16_BITS};
+use crate::adapters::{CondRdWriteAdapterCols, CondRdWriteAdapterFiller, U16_BITS};
 
 /// Generates the JAL/LUI trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64JalLuiChip<F>,
+    chip: &JalLuiChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [JAL, LUI];
@@ -24,8 +23,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64CondRdWriteAdapterCols::<F>::width();
-    let width = adapter_width + Rv64JalLuiCoreCols::<F>::width();
+    let adapter_width = CondRdWriteAdapterCols::<F>::width();
+    let width = adapter_width + JalLuiCoreCols::<F>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
@@ -35,9 +34,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let instruction = postflight.instruction(step);
-            let is_jal = local_opcode == Rv64JalLuiOpcode::JAL;
+            let is_jal = local_opcode == JalLuiOpcode::JAL;
             let signed_imm = get_signed_imm(is_jal, instruction.c);
-            let (rd_data, _) = Rv64CondRdWriteAdapterFiller::replay(
+            let (rd_data, _) = CondRdWriteAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
@@ -48,7 +47,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 },
             )?;
 
-            let core_row: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
+            let core_row: &mut JalLuiCoreCols<F> = core_row.borrow_mut();
             let rd_lo = rd_data[0];
             let rd_hi = rd_data[1];
             let is_sign_extend = (rd_hi >> (U16_BITS - 1)) & 1;

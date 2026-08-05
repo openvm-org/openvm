@@ -20,17 +20,17 @@ mod tests {
         utils::{air_test, air_test_with_min_segments, test_cpu_engine, test_system_config},
     };
     use openvm_instructions::{
-        exe::VmExe, instruction::Instruction, program::Program, riscv::RV64_REGISTER_NUM_LIMBS,
+        exe::VmExe, instruction::Instruction, program::Program, riscv::REGISTER_NUM_LIMBS,
         LocalOpcode, SystemOpcode,
     };
     #[cfg(not(feature = "rvr"))]
-    use openvm_riscv_circuit::Rv64ImCpuBuilder;
-    use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
+    use openvm_riscv_circuit::RiscvImCpuBuilder;
+    use openvm_riscv_circuit::{RiscvIBuilder, RiscvIConfig, RiscvImBuilder, RiscvImConfig};
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
-        BaseAluImmOpcode, DivRemOpcode, MulHOpcode, MulOpcode, Rv64HintStoreOpcode,
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalLuiOpcode, Rv64LoadStoreOpcode,
-        Rv64MTranspilerExtension,
+        BaseAluImmOpcode, DivRemOpcode, HintStoreOpcode, JalLuiOpcode, LoadStoreOpcode, MulHOpcode,
+        MulOpcode, RiscvITranspilerExtension, RiscvIoTranspilerExtension,
+        RiscvMTranspilerExtension,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
@@ -48,10 +48,10 @@ mod tests {
     use {
         openvm_circuit::system::memory::online::{GuestMemory, PAGE_SIZE},
         openvm_instructions::{
-            riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+            riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
             SysPhantom, PUBLIC_VALUES_AS,
         },
-        openvm_riscv_transpiler::{BranchEqualOpcode, Rv64JalrOpcode, Rv64Phantom},
+        openvm_riscv_transpiler::{BranchEqualOpcode, JalrOpcode, RiscvPhantom},
     };
     #[cfg(not(feature = "rvr"))]
     use {
@@ -64,9 +64,9 @@ mod tests {
 
     type F = BabyBear;
     #[cfg(test)]
-    fn test_rv64im_config() -> Rv64ImConfig {
-        Rv64ImConfig {
-            rv64i: Rv64IConfig {
+    fn test_riscv_im_config() -> RiscvImConfig {
+        RiscvImConfig {
+            riscv_i: RiscvIConfig {
                 system: test_system_config(),
                 ..Default::default()
             },
@@ -76,25 +76,25 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn callback_phantom_exe() -> VmExe<F> {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
-                Rv64Phantom::HintInput as isize,
+                RiscvPhantom::HintInput as isize,
                 0,
                 0,
             ),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 reg(1) as isize,
                 0,
-                Rv64Phantom::HintRandom as isize,
+                RiscvPhantom::HintRandom as isize,
                 0,
                 0,
             ),
@@ -102,7 +102,7 @@ mod tests {
                 SystemOpcode::PHANTOM.global_opcode(),
                 reg(2) as isize,
                 reg(3) as isize,
-                Rv64Phantom::PrintStr as isize,
+                RiscvPhantom::PrintStr as isize,
                 0,
                 0,
             ),
@@ -113,19 +113,19 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn configure_callback_state(mut state: VmState<GuestMemory>) -> VmState<GuestMemory> {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         state.streams.hint_stream.set_hint(vec![0xa5]);
         unsafe {
             state
                 .memory
-                .write_bytes(RV64_REGISTER_AS, reg(1) as u32, 1u64.to_le_bytes());
+                .write_bytes(REGISTER_AS, reg(1) as u32, 1u64.to_le_bytes());
             state
                 .memory
-                .write_bytes(RV64_REGISTER_AS, reg(2) as u32, 0u64.to_le_bytes());
+                .write_bytes(REGISTER_AS, reg(2) as u32, 0u64.to_le_bytes());
             state
                 .memory
-                .write_bytes(RV64_REGISTER_AS, reg(3) as u32, 3u64.to_le_bytes());
-            state.memory.write_bytes(RV64_MEMORY_AS, 0, *b"ok\n");
+                .write_bytes(REGISTER_AS, reg(3) as u32, 3u64.to_le_bytes());
+            state.memory.write_bytes(MEMORY_AS, 0, *b"ok\n");
         }
         state
     }
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     #[cfg(not(feature = "rvr"))]
     fn owned_and_borrowed_preflight_instances_match() -> Result<()> {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
@@ -148,65 +148,65 @@ mod tests {
                     reg(1),
                     reg(0),
                     32,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
-                    openvm_instructions::riscv::RV64_IMM_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
+                    openvm_instructions::riscv::IMM_AS as usize,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64LoadStoreOpcode::LOADW.global_opcode(),
+                LoadStoreOpcode::LOADW.global_opcode(),
                 [
                     reg(3),
                     reg(1),
                     0,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
-                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
+                    openvm_instructions::riscv::MEMORY_AS as usize,
                     1,
                     0,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64LoadStoreOpcode::LOADW.global_opcode(),
+                LoadStoreOpcode::LOADW.global_opcode(),
                 [
                     reg(0),
                     reg(1),
                     4,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
-                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
+                    openvm_instructions::riscv::MEMORY_AS as usize,
                     0,
                     0,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64LoadStoreOpcode::STOREW.global_opcode(),
+                LoadStoreOpcode::STOREW.global_opcode(),
                 [
                     reg(2),
                     reg(1),
                     6,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
-                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
+                    openvm_instructions::riscv::MEMORY_AS as usize,
                     1,
                     0,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
+                JalLuiOpcode::JAL.global_opcode(),
                 [
                     0,
                     0,
                     4,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
                     0,
                     0,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+                HintStoreOpcode::HINT_STORED.global_opcode(),
                 [
                     0,
                     reg(4),
                     0,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
-                    openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
+                    openvm_instructions::riscv::MEMORY_AS as usize,
                     1,
                     0,
                 ],
@@ -214,23 +214,23 @@ mod tests {
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let (vm, _pk) =
-            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)?;
+            VirtualMachine::new_with_keygen(test_cpu_engine(), RiscvImCpuBuilder, config)?;
         let mut initial = vm.create_initial_state(&exe, Streams::default());
         unsafe {
             initial.memory.write_bytes(
-                openvm_instructions::riscv::RV64_REGISTER_AS,
+                openvm_instructions::riscv::REGISTER_AS,
                 reg(2) as u32,
                 0x1122_3344_5566_7788u64.to_le_bytes(),
             );
             initial.memory.write_bytes(
-                openvm_instructions::riscv::RV64_MEMORY_AS,
+                openvm_instructions::riscv::MEMORY_AS,
                 32,
                 0x8877_6655_4433_2211u64.to_le_bytes(),
             );
             initial.memory.write_bytes(
-                openvm_instructions::riscv::RV64_REGISTER_AS,
+                openvm_instructions::riscv::REGISTER_AS,
                 reg(4) as u32,
                 64u64.to_le_bytes(),
             );
@@ -262,13 +262,13 @@ mod tests {
                 output
                     .state
                     .memory
-                    .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
+                    .read_bytes::<16>(openvm_instructions::riscv::MEMORY_AS, 32)
             },
             unsafe {
                 owned_output
                     .state
                     .memory
-                    .read_bytes::<16>(openvm_instructions::riscv::RV64_MEMORY_AS, 32)
+                    .read_bytes::<16>(openvm_instructions::riscv::MEMORY_AS, 32)
             }
         );
         assert_eq!(
@@ -276,13 +276,13 @@ mod tests {
                 output
                     .state
                     .memory
-                    .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
+                    .read_bytes::<8>(openvm_instructions::riscv::MEMORY_AS, 64)
             },
             unsafe {
                 owned_output
                     .state
                     .memory
-                    .read_bytes::<8>(openvm_instructions::riscv::RV64_MEMORY_AS, 64)
+                    .read_bytes::<8>(openvm_instructions::riscv::MEMORY_AS, 64)
             }
         );
         Ok(())
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     #[cfg(not(feature = "rvr"))]
     fn interpreter_preflight_proves_from_append_only_history() {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
@@ -299,8 +299,8 @@ mod tests {
                     reg(1),
                     reg(0),
                     7,
-                    openvm_instructions::riscv::RV64_REGISTER_AS as usize,
-                    openvm_instructions::riscv::RV64_IMM_AS as usize,
+                    openvm_instructions::riscv::REGISTER_AS as usize,
+                    openvm_instructions::riscv::IMM_AS as usize,
                 ],
             ),
             Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
@@ -310,8 +310,8 @@ mod tests {
         let debug = std::env::var("OPENVM_SKIP_DEBUG") != Ok("1".to_string());
         air_test_impl::<BabyBearPoseidon2CpuEngine, _>(
             SystemParams::new_for_testing(22),
-            Rv64ImCpuBuilder,
-            test_rv64im_config(),
+            RiscvImCpuBuilder,
+            test_riscv_im_config(),
             exe,
             Streams::default(),
             1,
@@ -329,8 +329,8 @@ mod tests {
         for &(index, value) in registers {
             unsafe {
                 state.memory.write_bytes(
-                    RV64_REGISTER_AS,
-                    (index * RV64_REGISTER_NUM_LIMBS) as u32,
+                    REGISTER_AS,
+                    (index * REGISTER_NUM_LIMBS) as u32,
                     value.to_le_bytes(),
                 );
             }
@@ -346,7 +346,7 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn read_main_word(state: &VmState<GuestMemory>, byte_addr: u32) -> u64 {
-        let limbs: [u16; 4] = unsafe { state.memory.read(RV64_MEMORY_AS, byte_addr / 2) };
+        let limbs: [u16; 4] = unsafe { state.memory.read(MEMORY_AS, byte_addr / 2) };
         u64::from(limbs[0])
             | (u64::from(limbs[1]) << 16)
             | (u64::from(limbs[2]) << 32)
@@ -356,10 +356,9 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn read_register(state: &VmState<GuestMemory>, index: usize) -> u64 {
         let limbs: [u16; 4] = unsafe {
-            state.memory.read(
-                RV64_REGISTER_AS,
-                (index * RV64_REGISTER_NUM_LIMBS / 2) as u32,
-            )
+            state
+                .memory
+                .read(REGISTER_AS, (index * REGISTER_NUM_LIMBS / 2) as u32)
         };
         u64::from(limbs[0])
             | (u64::from(limbs[1]) << 16)
@@ -369,18 +368,18 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn hint_store_instruction(
-        opcode: Rv64HintStoreOpcode,
+        opcode: HintStoreOpcode,
         ptr_reg: usize,
         count_reg: usize,
     ) -> Instruction<F> {
         Instruction::from_usize(
             opcode.global_opcode(),
             [
-                count_reg * RV64_REGISTER_NUM_LIMBS,
-                ptr_reg * RV64_REGISTER_NUM_LIMBS,
+                count_reg * REGISTER_NUM_LIMBS,
+                ptr_reg * REGISTER_NUM_LIMBS,
                 0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
                 1,
                 0,
             ],
@@ -389,7 +388,7 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn reveal_instruction(
-        opcode: Rv64LoadStoreOpcode,
+        opcode: LoadStoreOpcode,
         src_reg: usize,
         base_reg: usize,
         offset: i16,
@@ -397,10 +396,10 @@ mod tests {
         Instruction::from_usize(
             opcode.global_opcode(),
             [
-                src_reg * RV64_REGISTER_NUM_LIMBS,
-                base_reg * RV64_REGISTER_NUM_LIMBS,
+                src_reg * REGISTER_NUM_LIMBS,
+                base_reg * REGISTER_NUM_LIMBS,
                 offset as u16 as usize,
-                RV64_REGISTER_AS as usize,
+                REGISTER_AS as usize,
                 PUBLIC_VALUES_AS as usize,
                 1,
                 usize::from(offset.is_negative()),
@@ -417,8 +416,8 @@ mod tests {
         for &(index, value) in registers {
             unsafe {
                 state.memory.write_bytes(
-                    RV64_REGISTER_AS,
-                    (index * RV64_REGISTER_NUM_LIMBS) as u32,
+                    REGISTER_AS,
+                    (index * REGISTER_NUM_LIMBS) as u32,
                     value.to_le_bytes(),
                 );
             }
@@ -436,15 +435,15 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn execute_rvr_example_with_input(program_name: &str, input: Vec<Vec<u8>>) {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf =
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
@@ -464,34 +463,34 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_matches_branch_suspension_and_resume() -> Result<()> {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
             Instruction::<F>::from_isize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 reg(1) as isize,
                 reg(0) as isize,
                 1,
-                RV64_REGISTER_AS as isize,
-                RV64_IMM_AS as isize,
+                REGISTER_AS as isize,
+                IMM_AS as isize,
             ),
             Instruction::<F>::from_isize(
                 BranchEqualOpcode::BNE.global_opcode(),
                 reg(1) as isize,
                 reg(0) as isize,
                 8,
-                RV64_REGISTER_AS as isize,
-                RV64_REGISTER_AS as isize,
+                REGISTER_AS as isize,
+                REGISTER_AS as isize,
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 8, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 8, REGISTER_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 2, 0, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
 
         let exact_error = match preflight.execute_segment(
@@ -551,16 +550,16 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_carries_dirty_memory_across_segments() -> Result<()> {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
-        let memory = |opcode: Rv64LoadStoreOpcode, value: usize, base: usize| {
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
+        let memory = |opcode: LoadStoreOpcode, value: usize, base: usize| {
             Instruction::<F>::from_usize(
                 opcode.global_opcode(),
                 [
                     reg(value),
                     reg(base),
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                     1,
                     0,
                 ],
@@ -568,20 +567,20 @@ mod tests {
         };
         let jump_to_next = || {
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0],
             )
         };
         let instructions = [
-            memory(Rv64LoadStoreOpcode::STORED, 2, 1),
+            memory(LoadStoreOpcode::STORED, 2, 1),
             jump_to_next(),
-            memory(Rv64LoadStoreOpcode::LOADD, 3, 1),
-            memory(Rv64LoadStoreOpcode::STORED, 0, 1),
+            memory(LoadStoreOpcode::LOADD, 3, 1),
+            memory(LoadStoreOpcode::STORED, 0, 1),
             jump_to_next(),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let checkpoint = executor.preflight_instance(&exe)?;
         let address = PAGE_SIZE as u64 + 8;
         let value = 0x0123_4567_89ab_cdef;
@@ -591,7 +590,7 @@ mod tests {
             &[],
         );
         let page_is_marked = |state: &VmState<GuestMemory>| {
-            state.memory.memory.touched_pages[RV64_MEMORY_AS as usize]
+            state.memory.memory.touched_pages[MEMORY_AS as usize]
                 .touched_byte_ranges(2 * PAGE_SIZE)
                 .iter()
                 .any(|&(start, end)| start <= address as usize && (address as usize) < end)
@@ -609,8 +608,8 @@ mod tests {
         assert_eq!(read_main_word(&first.state, address as u32), value);
         assert!(page_is_marked(&first.state));
         assert!(
-            !first.state.memory.memory.touched_pages[RV64_REGISTER_AS as usize]
-                .touched_byte_ranges(RV64_REGISTER_NUM_LIMBS * 32 * 2)
+            !first.state.memory.memory.touched_pages[REGISTER_AS as usize]
+                .touched_byte_ranges(REGISTER_NUM_LIMBS * 32 * 2)
                 .is_empty()
         );
 
@@ -627,16 +626,16 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_load_replay_values_omit_x0() -> Result<()> {
-        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
-        let load = |opcode: Rv64LoadStoreOpcode, rd: usize, offset: usize| {
+        let reg = |index: usize| index * REGISTER_NUM_LIMBS;
+        let load = |opcode: LoadStoreOpcode, rd: usize, offset: usize| {
             Instruction::<F>::from_usize(
                 opcode.global_opcode(),
                 [
                     reg(rd),
                     reg(1),
                     offset,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                     1,
                     0,
                 ],
@@ -649,19 +648,19 @@ mod tests {
                     reg(1),
                     reg(0),
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_IMM_AS as usize,
+                    REGISTER_AS as usize,
+                    IMM_AS as usize,
                     1,
                     0,
                 ],
             ),
-            load(Rv64LoadStoreOpcode::LOADD, 2, 0),
-            load(Rv64LoadStoreOpcode::LOADD, 0, 8),
-            load(Rv64LoadStoreOpcode::LOADW, 3, 16),
+            load(LoadStoreOpcode::LOADD, 2, 0),
+            load(LoadStoreOpcode::LOADD, 0, 8),
+            load(LoadStoreOpcode::LOADW, 3, 16),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let loaded = 0x0123_4567_89ab_cdefu64;
         let x0_only = 0xfedc_ba98_7654_3210u64;
@@ -671,13 +670,13 @@ mod tests {
         unsafe {
             initial
                 .memory
-                .write_bytes(RV64_MEMORY_AS, 0, loaded.to_le_bytes());
+                .write_bytes(MEMORY_AS, 0, loaded.to_le_bytes());
             initial
                 .memory
-                .write_bytes(RV64_MEMORY_AS, 8, x0_only.to_le_bytes());
+                .write_bytes(MEMORY_AS, 8, x0_only.to_le_bytes());
             initial
                 .memory
-                .write_bytes(RV64_MEMORY_AS, 16, (sign_extended as u32).to_le_bytes());
+                .write_bytes(MEMORY_AS, 16, (sign_extended as u32).to_le_bytes());
         }
 
         let execution = preflight.execute_from_state(
@@ -698,22 +697,20 @@ mod tests {
 
         let (vm, _) = VirtualMachine::new_with_keygen(
             test_cpu_engine(),
-            openvm_riscv_circuit::Rv64ImCpuBuilder,
-            test_rv64im_config(),
+            openvm_riscv_circuit::RiscvImCpuBuilder,
+            test_riscv_im_config(),
         )?;
         let mut metered_initial = vm.create_initial_state(&exe, Vec::<Vec<u8>>::new());
         unsafe {
             metered_initial
                 .memory
-                .write_bytes(RV64_MEMORY_AS, 0, loaded.to_le_bytes());
+                .write_bytes(MEMORY_AS, 0, loaded.to_le_bytes());
             metered_initial
                 .memory
-                .write_bytes(RV64_MEMORY_AS, 8, x0_only.to_le_bytes());
-            metered_initial.memory.write_bytes(
-                RV64_MEMORY_AS,
-                16,
-                (sign_extended as u32).to_le_bytes(),
-            );
+                .write_bytes(MEMORY_AS, 8, x0_only.to_le_bytes());
+            metered_initial
+                .memory
+                .write_bytes(MEMORY_AS, 16, (sign_extended as u32).to_le_bytes());
         }
         let metered_ctx = vm.build_metered_ctx(&exe);
         let (segments, _) = vm
@@ -729,12 +726,12 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_hint_replay_value_order_and_memory() -> Result<()> {
         let instructions = [
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 2, 3),
+            hint_store_instruction(HintStoreOpcode::HINT_STORED, 1, 0),
+            hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 2, 3),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let hint_words = [
             0x0123_4567_89ab_cdef,
@@ -775,12 +772,12 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_reveal_matches_clock_and_public_values() -> Result<()> {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(16);
         let instructions = [
-            reveal_instruction(Rv64LoadStoreOpcode::STOREB, 1, 2, 0),
+            reveal_instruction(LoadStoreOpcode::STOREB, 1, 2, 0),
             // A word at byte address 7 crosses an eight-byte memory block.
-            reveal_instruction(Rv64LoadStoreOpcode::STOREW, 3, 4, 0),
+            reveal_instruction(LoadStoreOpcode::STOREW, 3, 4, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
@@ -854,7 +851,7 @@ mod tests {
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let execution = preflight.execute_for(
             Vec::<Vec<u8>>::new(),
@@ -878,7 +875,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_callback_phantoms_are_serial() -> Result<()> {
         let exe = callback_phantom_exe();
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let inputs = vec![b"first".to_vec(), b"second".to_vec()];
         let initial_state =
@@ -965,13 +962,13 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_hint_store_preflight_handles_all_word_counts() -> Result<()> {
         let instructions = [
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 1, 2),
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 3, 4),
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 5, 6),
+            hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 1, 2),
+            hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 3, 4),
+            hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 5, 6),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let word_counts = [1usize, 3, MAX_HINT_BUFFER_DWORDS];
         let destinations = [0u64, 16, 64];
@@ -1031,16 +1028,16 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_hint_store_suspends_only_after_consuming_the_whole_instruction() -> Result<()> {
         let instructions = [
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            hint_store_instruction(HintStoreOpcode::HINT_STORED, 1, 0),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            hint_store_instruction(HintStoreOpcode::HINT_STORED, 1, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let hint_words = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
         let initial = configure_hint_state(
@@ -1079,11 +1076,11 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_hint_store_uses_the_memory_block_alignment_contract() -> Result<()> {
         let instructions = [
-            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 1, 2),
+            hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 1, 2),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let pure = executor.instance(&exe)?;
         let unaligned = configure_hint_state(
@@ -1156,7 +1153,7 @@ mod tests {
                     .memory
                     .memory
                     .get_memory()
-                    .get_unchecked(RV64_MEMORY_AS as usize)
+                    .get_unchecked(MEMORY_AS as usize)
                     .read(8)
             };
             assert_eq!(bytes, hint.to_le_bytes());
@@ -1168,15 +1165,15 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_reveal_preflight_suspends_after_committed_store() -> Result<()> {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(PAGE_SIZE);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(PAGE_SIZE);
         let instructions = [
-            reveal_instruction(Rv64LoadStoreOpcode::STOREW, 1, 2, 0),
+            reveal_instruction(LoadStoreOpcode::STOREW, 1, 2, 0),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
-            reveal_instruction(Rv64LoadStoreOpcode::STOREB, 3, 4, 0),
+            reveal_instruction(LoadStoreOpcode::STOREB, 3, 4, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
@@ -1221,13 +1218,13 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_reveal_preflight_fails_before_commit() -> Result<()> {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(16);
         let executor = VmExecutor::new(config)?;
         // The effective address wraps to zero, but the non-u32 base still
         // fails closed in both execution modes.
         let address_exe = VmExe::from(Program::from_instructions(&[
-            reveal_instruction(Rv64LoadStoreOpcode::STOREB, 1, 2, 1),
+            reveal_instruction(LoadStoreOpcode::STOREB, 1, 2, 1),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ]));
         let preflight = executor.preflight_instance(&address_exe)?;
@@ -1267,14 +1264,14 @@ mod tests {
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
-                Rv64Phantom::HintInput as isize,
+                RiscvPhantom::HintInput as isize,
                 0,
                 0,
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let preflight_error = match preflight.execute(
             Vec::<Vec<u8>>::new(),
@@ -1305,11 +1302,11 @@ mod tests {
             Instruction::<F>::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
                     0,
                     1,
-                    RV64_REGISTER_AS as usize,
-                    RV64_IMM_AS as usize,
+                    REGISTER_AS as usize,
+                    IMM_AS as usize,
                     1,
                     0,
                 ],
@@ -1317,11 +1314,11 @@ mod tests {
             Instruction::<F>::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
                     2,
-                    RV64_REGISTER_AS as usize,
-                    RV64_IMM_AS as usize,
+                    REGISTER_AS as usize,
+                    IMM_AS as usize,
                     1,
                     0,
                 ],
@@ -1329,8 +1326,8 @@ mod tests {
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let mut config = test_rv64im_config();
-        config.rv64i.system.memory_config.timestamp_max_bits = 2;
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system.memory_config.timestamp_max_bits = 2;
         let executor = VmExecutor::new(config)?;
         let preflight = executor.preflight_instance(&exe)?;
         let error = match preflight.execute(
@@ -1352,33 +1349,17 @@ mod tests {
         let instructions = [
             Instruction::<F>::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
-                [
-                    0,
-                    0,
-                    8,
-                    RV64_REGISTER_AS as usize,
-                    RV64_IMM_AS as usize,
-                    0,
-                    0,
-                ],
+                [0, 0, 8, REGISTER_AS as usize, IMM_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_usize(
-                Rv64JalrOpcode::JALR.global_opcode(),
-                [
-                    0,
-                    0,
-                    12,
-                    RV64_REGISTER_AS as usize,
-                    RV64_IMM_AS as usize,
-                    0,
-                    0,
-                ],
+                JalrOpcode::JALR.global_opcode(),
+                [0, 0, 12, REGISTER_AS as usize, IMM_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::new(test_riscv_im_config())?;
 
         let pure = executor.instance(&exe)?.execute(Vec::<Vec<u8>>::new())?;
         assert_eq!(pure.pc(), 12);
@@ -1404,8 +1385,8 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_rvr_reveal_negative_offset() -> Result<()> {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(32);
         let elf = build_example_program_at_path(
             get_programs_dir!(),
             "rvr_reveal_negative_offset",
@@ -1414,9 +1395,9 @@ mod tests {
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
         let executor = VmExecutor::new(config)?;
         let state = executor.instance(&exe)?.execute(vec![])?;
@@ -1441,15 +1422,15 @@ mod tests {
         const NUM_THREADS: usize = 8;
         const NUM_RUNS: usize = 8;
 
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(64);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
         let executor = VmExecutor::new(config)?;
         let instance = executor.instance(&exe)?;
@@ -1482,23 +1463,27 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_traps(program_name: &str) {
-        assert_rvr_example_with_config_and_input_traps(program_name, test_rv64im_config(), vec![]);
+        assert_rvr_example_with_config_and_input_traps(
+            program_name,
+            test_riscv_im_config(),
+            vec![],
+        );
     }
 
     #[cfg(feature = "rvr")]
-    fn assert_rvr_example_with_config_traps(program_name: &str, config: Rv64ImConfig) {
+    fn assert_rvr_example_with_config_traps(program_name: &str, config: RiscvImConfig) {
         assert_rvr_example_with_config_and_input_traps(program_name, config, vec![]);
     }
 
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_traps_with_input(program_name: &str, input: Vec<Vec<u8>>) {
-        assert_rvr_example_with_config_and_input_traps(program_name, test_rv64im_config(), input);
+        assert_rvr_example_with_config_and_input_traps(program_name, test_riscv_im_config(), input);
     }
 
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_with_config_and_input_traps(
         program_name: &str,
-        config: Rv64ImConfig,
+        config: RiscvImConfig,
         input: Vec<Vec<u8>>,
     ) {
         let elf =
@@ -1506,9 +1491,9 @@ mod tests {
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
@@ -1524,31 +1509,31 @@ mod tests {
     }
 
     #[test_case("fibonacci", 1)]
-    fn test_rv64i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = Rv64IConfig::default();
+    fn test_riscv_i(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = RiscvIConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
-        change_rv64m_insn_to_nop(&mut exe);
-        air_test_with_min_segments(Rv64IBuilder, config, exe, vec![], min_segments);
+        change_riscv_m_insn_to_nop(&mut exe);
+        air_test_with_min_segments(RiscvIBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test]
     fn test_suspend() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
 
         let executor = VmExecutor::new(config)?;
@@ -1629,17 +1614,17 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv64im(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv64im_config();
+    fn test_riscv_im(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(RiscvImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -1648,8 +1633,8 @@ mod tests {
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     #[test_case("std_collections", 1)]
-    fn test_rv64im_std(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv64im_config();
+    fn test_riscv_im_std(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             example_name,
@@ -1659,27 +1644,27 @@ mod tests {
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(RiscvImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
         let input = vec![vec![0u8, 1, 2, 3]];
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(RiscvImBuilder, config, exe, input, 1);
         Ok(())
     }
 
@@ -1689,39 +1674,39 @@ mod tests {
     #[test]
     #[ignore = "slow test: processes >1MB of data"]
     fn test_hint_buffer_chunking() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_large_buffer", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
 
         // Create input buffer larger than MAX_HINT_BUFFER_WORDS
         // This will require chunking to succeed
         let expected_words = MAX_HINT_BUFFER_DWORDS + 100;
-        let expected_len = expected_words * RV64_REGISTER_NUM_LIMBS;
+        let expected_len = expected_words * REGISTER_NUM_LIMBS;
 
         // Create data with a pattern that can be verified
         let data: Vec<u8> = (0..expected_len).map(|i| (i % 256) as u8).collect();
 
         let input = vec![data];
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(RiscvImBuilder, config, exe, input, 1);
         Ok(())
     }
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
 
         #[derive(serde::Serialize)]
@@ -1738,7 +1723,7 @@ mod tests {
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
             .collect();
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![input], 1);
+        air_test_with_min_segments(RiscvImBuilder, config, exe, vec![input], 1);
         Ok(())
     }
 
@@ -1746,15 +1731,15 @@ mod tests {
     #[should_panic(expected = "Memory access out of bounds")]
     #[cfg(not(feature = "rvr"))]
     fn test_reveal_beyond_num_public_values_errors() {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(32);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )
         .unwrap();
 
@@ -1766,22 +1751,22 @@ mod tests {
     #[test]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_reveal_beyond_num_public_values_errors() {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(32);
         assert_rvr_example_with_config_traps("reveal", config);
     }
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(64);
+        let mut config = test_riscv_im_config();
+        config.riscv_i.system = config.riscv_i.system.with_public_values_bytes(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
 
         let executor = VmExecutor::new(config.clone())?;
@@ -1824,29 +1809,29 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(RiscvImBuilder, config, exe);
         Ok(())
     }
 
     #[test]
     fn test_heap_overflow() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
 
         let executor = VmExecutor::new(config)?;
@@ -1861,22 +1846,22 @@ mod tests {
 
     #[test]
     fn test_hashmap() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hashmap", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(RiscvImBuilder, config, exe);
         Ok(())
     }
 
     #[test]
     fn test_tiny_mem_test() -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "tiny-mem-test",
@@ -1886,11 +1871,11 @@ mod tests {
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )?;
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(RiscvImBuilder, config, exe);
         Ok(())
     }
 
@@ -1899,16 +1884,16 @@ mod tests {
     #[test_case("misaligned_store", 1)]
     #[test_case("mem_intrinsics", 1)]
     fn test_misaligned_mem_access(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(RiscvImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -1916,14 +1901,14 @@ mod tests {
     #[should_panic]
     #[cfg(not(feature = "rvr"))]
     fn test_load_x0() {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
@@ -1960,7 +1945,7 @@ mod tests {
     #[test_case("getrandom_v02", vec!["getrandom-v02", "getrandom-unsupported"])]
     #[test_case("getrandom_v02", vec!["getrandom-v02/custom"])]
     fn test_getrandom_unsupported(program: &str, features: Vec<&str>) {
-        let config = test_rv64im_config();
+        let config = test_riscv_im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             program,
@@ -1971,18 +1956,18 @@ mod tests {
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
+                .with_extension(RiscvITranspilerExtension)
+                .with_extension(RiscvMTranspilerExtension)
+                .with_extension(RiscvIoTranspilerExtension),
         )
         .unwrap();
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(RiscvImBuilder, config, exe);
     }
 
     // For testing programs that should only execute RV64I:
     // The ELF might still have Mul instructions even though the program doesn't use them. We
     // mask those to NOP here.
-    fn change_rv64m_insn_to_nop(exe: &mut VmExe<F>) {
+    fn change_riscv_m_insn_to_nop(exe: &mut VmExe<F>) {
         for (insn, _) in exe
             .program
             .instructions_and_debug_infos

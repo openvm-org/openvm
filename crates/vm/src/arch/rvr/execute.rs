@@ -13,8 +13,7 @@ use rvr_state::{ExecutionStatus, InstretTrackingState, RvState};
 
 use super::{
     bridge::{
-        deferral_memory_ptr, public_values_slice, read_rv64_registers, rv64_memory_ptr,
-        write_rv64_registers,
+        deferral_memory_ptr, memory_ptr, public_values_slice, read_registers, write_registers,
     },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
@@ -67,7 +66,7 @@ fn build_io_state_borrowed<'a>(
     vm_state: &'a mut VmState<GuestMemory>,
     preflight_deferral_dirty_pages: Option<&'a mut [u64]>,
 ) -> OpenVmIoState<'a> {
-    let memory_ptr = rv64_memory_ptr(vm_state);
+    let memory_ptr = memory_ptr(vm_state);
     let (deferral_memory, deferral_memory_len_bytes) =
         deferral_memory_ptr(&mut vm_state.memory.memory);
     let streams = &mut vm_state.streams;
@@ -190,14 +189,14 @@ fn run_and_finalize<ModeState>(
     let exit_code = state.exit_code();
     match status {
         ExecutionStatus::Terminated if exit_code == 0 => {
-            write_rv64_registers(vm_state, &state.regs);
+            write_registers(vm_state, &state.regs);
             vm_state.set_pc(
                 u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
             );
             Ok(status)
         }
         ExecutionStatus::Suspended if allow_suspended => {
-            write_rv64_registers(vm_state, &state.regs);
+            write_registers(vm_state, &state.regs);
             vm_state.set_pc(
                 u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
             );
@@ -226,7 +225,7 @@ pub(super) fn execute_pure(
 ) -> Result<(), ExecuteError> {
     require_execution_kind(compiled, "Pure", &[RvrExecutionKind::Pure])?;
     let pc = vm_state.pc();
-    let initial_regs = read_rv64_registers(vm_state);
+    let initial_regs = read_registers(vm_state);
     let mut state: PureRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
     run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
@@ -254,7 +253,7 @@ pub(super) fn execute_preflight(
     let mut dirty_pages = PreflightDirtyPages::new(&vm_state.memory.memory)
         .map_err(ExecuteError::InvalidPreflightContext)?;
     let mut state: PreflightRvState = init_state(vm_state, pc);
-    state.regs = read_rv64_registers(vm_state);
+    state.regs = read_registers(vm_state);
     state.mode_state = buffers.ffi_state(&mut dirty_pages);
 
     let execution = run_and_finalize(
@@ -336,7 +335,7 @@ fn execute_pure_with_instret_tracking_impl(
     )?;
     let pc = vm_state.pc();
     let mut state: PureWithInstretTrackingRvState = init_state(vm_state, pc);
-    state.regs = read_rv64_registers(vm_state);
+    state.regs = read_registers(vm_state);
     state.mode_state = tracking;
     let status = run_and_finalize(
         compiled,
@@ -361,7 +360,7 @@ pub(super) fn execute_metered_cost(
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     require_execution_kind(compiled, "MeteredCost", &[RvrExecutionKind::MeteredCost])?;
     let pc = vm_state.pc();
-    let initial_regs = read_rv64_registers(vm_state);
+    let initial_regs = read_registers(vm_state);
 
     let mut state: MeteredCostRvState = init_state(vm_state, pc);
     state.regs = initial_regs;
@@ -423,7 +422,7 @@ fn execute_metered_impl(
     )?;
 
     let pc = vm_state.pc();
-    let initial_regs = read_rv64_registers(vm_state);
+    let initial_regs = read_registers(vm_state);
 
     let mut state: MeteredRvState = init_state(vm_state, pc);
     state.regs = initial_regs;

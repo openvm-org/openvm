@@ -8,11 +8,11 @@ use std::{
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_BYTES, REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_platform::WORD_SIZE;
-use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, MAX_HINT_BUFFER_DWORDS};
+use openvm_riscv_transpiler::{HintStoreOpcode, LoadStoreOpcode, MAX_HINT_BUFFER_DWORDS};
 use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, MemWidth, PageAddressSpace,
 };
@@ -24,7 +24,7 @@ use rvr_openvm_lift::{
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
 
 // HINT_BUFFER writes the maximum hint payload as one contiguous range.
-const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+const IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(MAX_HINT_BUFFER_DWORDS * WORD_SIZE);
 
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
@@ -46,7 +46,7 @@ impl ExtInstr for HintStoreWInstr {
             ctx.trace_page_access(
                 &ptr,
                 MemWidth::Double,
-                PageAddressSpace::MainMemory(RV64_MEMORY_AS),
+                PageAddressSpace::MainMemory(MEMORY_AS),
             );
             return;
         }
@@ -128,7 +128,7 @@ impl ExtInstr for HintBufferInstr {
                 &[&ptr, &callback_count],
             );
             ctx.append_replay_memory_u64_range(&ptr, &callback_count);
-            ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
+            ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(MEMORY_AS));
         }
         // Block entry credits one row; runtime metering adds the remaining
         // `(n - 1)` rows.
@@ -210,24 +210,24 @@ impl ExtInstr for RevealInstr {
 
 /// RVR extension for RV64 IO hint-store instructions and stores to public
 /// values, including REVEAL.
-pub struct Rv64IoExtension {
+pub struct RiscvIoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
 
-impl Rv64IoExtension {
+impl RiscvIoExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let hint_store_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_STORED)?;
+        let hint_store_chip_idx = opcode_air_idx(ctx, HintStoreOpcode::HINT_STORED)?;
         Ok(Self {
             hint_store_chip_idx,
         })
     }
 }
 
-impl RvrExtension for Rv64IoExtension {
+impl RvrExtension for RiscvIoExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
-        if opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode_usize() {
+        if opcode == HintStoreOpcode::HINT_STORED.global_opcode_usize() {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
@@ -236,7 +236,7 @@ impl RvrExtension for Rv64IoExtension {
             }));
         }
 
-        if opcode == Rv64HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
+        if opcode == HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
             let num_words_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
@@ -271,37 +271,37 @@ impl RvrExtension for Rv64IoExtension {
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "rv64io_callbacks.h",
-            include_str!("../c/rv64io_callbacks.h"),
+            "riscv_io_callbacks.h",
+            include_str!("../c/riscv_io_callbacks.h"),
         )]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "rv64io_callbacks.c",
-            include_str!("../c/rv64io_callbacks.c"),
+            "riscv_io_callbacks.c",
+            include_str!("../c/riscv_io_callbacks.c"),
         )]
     }
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
-        RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+        IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }
 
-pub struct Rv64IoRuntimeHooks;
+pub struct RiscvIoRuntimeHooks;
 
-impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
+impl RvrRuntimeExtension for RiscvIoRuntimeHooks {
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
     ) -> Result<(), ExtensionError> {
-        let register_fn: RegisterRv64IoHostCallbacksFn = unsafe {
+        let register_fn: RegisterRiscvIoHostCallbacksFn = unsafe {
             let sym = lib
-                .get::<RegisterRv64IoHostCallbacksFn>(b"register_rv64io_host_callbacks")
+                .get::<RegisterRiscvIoHostCallbacksFn>(b"register_riscv_io_host_callbacks")
                 .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
             *sym
         };
-        let callbacks = Rv64IoHostCallbacks {
+        let callbacks = RiscvIoHostCallbacks {
             hint_prepare: host_hint_prepare,
             hint_read_words: host_hint_read_words,
             hint_storew: host_hint_storew,
@@ -315,43 +315,35 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
 }
 
 fn public_values_store_width(insn: &RvrInstruction) -> Option<MemWidth> {
-    if insn.d != RV64_REGISTER_AS || insn.e != PUBLIC_VALUES_AS {
+    if insn.d != REGISTER_AS || insn.e != PUBLIC_VALUES_AS {
         return None;
     }
 
     match insn.opcode.as_usize() {
-        opcode if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() => {
-            Some(MemWidth::Double)
-        }
-        opcode if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() => {
-            Some(MemWidth::Word)
-        }
-        opcode if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() => {
-            Some(MemWidth::Half)
-        }
-        opcode if opcode == Rv64LoadStoreOpcode::STOREB.global_opcode_usize() => {
-            Some(MemWidth::Byte)
-        }
+        opcode if opcode == LoadStoreOpcode::STORED.global_opcode_usize() => Some(MemWidth::Double),
+        opcode if opcode == LoadStoreOpcode::STOREW.global_opcode_usize() => Some(MemWidth::Word),
+        opcode if opcode == LoadStoreOpcode::STOREH.global_opcode_usize() => Some(MemWidth::Half),
+        opcode if opcode == LoadStoreOpcode::STOREB.global_opcode_usize() => Some(MemWidth::Byte),
         _ => None,
     }
 }
 
-type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallbacks);
+type RegisterRiscvIoHostCallbacksFn = unsafe extern "C" fn(*const RiscvIoHostCallbacks);
 
-/// Host callback table shared with `rv64io_callbacks.c`.
+/// Host callback table shared with `riscv_io_callbacks.c`.
 #[repr(C)]
-struct Rv64IoHostCallbacks {
+struct RiscvIoHostCallbacks {
     hint_prepare: extern "C" fn(*mut c_void, u64, u32) -> bool,
     hint_read_words: unsafe extern "C" fn(*mut c_void, *mut u64, u32),
     hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
     hint_buffer: extern "C" fn(*mut c_void, u64, u32) -> bool,
-    reveal_prepare: extern "C" fn(*mut c_void, u64, u64, u64, u8, *mut Rv64RevealPlan) -> bool,
-    reveal_commit: unsafe extern "C" fn(*mut c_void, *const Rv64RevealPlan),
+    reveal_prepare: extern "C" fn(*mut c_void, u64, u64, u64, u8, *mut RevealPlan) -> bool,
+    reveal_commit: unsafe extern "C" fn(*mut c_void, *const RevealPlan),
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct Rv64RevealPlan {
+struct RevealPlan {
     block_addr: u64,
     previous: [u64; 2],
     post: [u64; 2],
@@ -360,8 +352,8 @@ struct Rv64RevealPlan {
 }
 
 const _: () = {
-    assert!(size_of::<Rv64RevealPlan>() == 48);
-    assert!(align_of::<Rv64RevealPlan>() == 8);
+    assert!(size_of::<RevealPlan>() == 48);
+    assert!(align_of::<RevealPlan>() == 8);
 };
 
 fn checked_hint_range(
@@ -372,12 +364,12 @@ fn checked_hint_range(
     let num_words = num_words as usize;
     if num_words == 0
         || num_words > MAX_HINT_BUFFER_DWORDS
-        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES)
+        || !dest_addr.is_multiple_of(REGISTER_BYTES)
         || io.memory_ptr.is_null()
     {
         return None;
     }
-    let num_bytes = num_words.checked_mul(RV64_REGISTER_NUM_LIMBS)?;
+    let num_bytes = num_words.checked_mul(REGISTER_NUM_LIMBS)?;
     if io.hint_stream.remaining() < num_bytes {
         return None;
     }
@@ -401,7 +393,7 @@ unsafe extern "C" fn host_hint_read_words(ctx: *mut c_void, words: *mut u64, num
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let words = unsafe { std::slice::from_raw_parts_mut(words, num_words as usize) };
     for word in words {
-        let mut bytes = [0; RV64_REGISTER_NUM_LIMBS];
+        let mut bytes = [0; REGISTER_NUM_LIMBS];
         io.hint_stream.copy_to_slice(&mut bytes);
         *word = u64::from_le_bytes(bytes);
     }
@@ -410,13 +402,13 @@ unsafe extern "C" fn host_hint_read_words(ctx: *mut c_void, words: *mut u64, num
 /// Validate and copy one hint word directly into guest memory.
 extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    if io.hint_stream.remaining() < RV64_REGISTER_NUM_LIMBS
-        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES)
+    if io.hint_stream.remaining() < REGISTER_NUM_LIMBS
+        || !dest_addr.is_multiple_of(REGISTER_BYTES)
         || io.memory_ptr.is_null()
     {
         return false;
     }
-    let Some(range) = checked_mem_bounds_range(dest_addr, RV64_REGISTER_BYTES) else {
+    let Some(range) = checked_mem_bounds_range(dest_addr, REGISTER_BYTES) else {
         return false;
     };
     let dst =
@@ -444,7 +436,7 @@ extern "C" fn host_reveal_prepare(
     base_addr: u64,
     effective_addr: u64,
     width: u8,
-    plan: *mut Rv64RevealPlan,
+    plan: *mut RevealPlan,
 ) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let width = match width {
@@ -494,7 +486,7 @@ extern "C" fn host_reveal_prepare(
         post[1] = u64::from_le_bytes(post_bytes[8..].try_into().unwrap());
     }
     unsafe {
-        plan.write(Rv64RevealPlan {
+        plan.write(RevealPlan {
             block_addr: block_addr as u64,
             previous,
             post,
@@ -511,7 +503,7 @@ extern "C" fn host_reveal_prepare(
 ///
 /// `plan` must point to a plan produced by [`host_reveal_prepare`] for this IO
 /// context, with no intervening AS3 mutation.
-unsafe extern "C" fn host_reveal_commit(ctx: *mut c_void, plan: *const Rv64RevealPlan) {
+unsafe extern "C" fn host_reveal_commit(ctx: *mut c_void, plan: *const RevealPlan) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let plan = unsafe { &*plan };
     let block_count = 1 + usize::from(plan.crosses != 0);
@@ -650,19 +642,19 @@ mod tests {
         }
     }
 
-    #[test_case(Rv64LoadStoreOpcode::STORED, 8; "dword")]
-    #[test_case(Rv64LoadStoreOpcode::STOREW, 4; "word")]
-    #[test_case(Rv64LoadStoreOpcode::STOREH, 2; "halfword")]
-    #[test_case(Rv64LoadStoreOpcode::STOREB, 1; "byte")]
-    fn rv64io_lifts_public_values_store_width(opcode: Rv64LoadStoreOpcode, width: u8) {
-        let ext = Rv64IoExtension::new(None).unwrap();
+    #[test_case(LoadStoreOpcode::STORED, 8; "dword")]
+    #[test_case(LoadStoreOpcode::STOREW, 4; "word")]
+    #[test_case(LoadStoreOpcode::STOREH, 2; "halfword")]
+    #[test_case(LoadStoreOpcode::STOREB, 1; "byte")]
+    fn riscv_io_lifts_public_values_store_width(opcode: LoadStoreOpcode, width: u8) {
+        let ext = RiscvIoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             opcode.global_opcode(),
             [
                 8,
                 16,
                 0,
-                RV64_REGISTER_AS as usize,
+                REGISTER_AS as usize,
                 PUBLIC_VALUES_AS as usize,
                 1,
                 0,
@@ -690,10 +682,10 @@ mod tests {
     }
 
     #[test]
-    fn rv64io_rejects_public_values_store_with_non_register_d() {
-        let ext = Rv64IoExtension::new(None).unwrap();
+    fn riscv_io_rejects_public_values_store_with_non_register_d() {
+        let ext = RiscvIoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
-            Rv64LoadStoreOpcode::STORED.global_opcode(),
+            LoadStoreOpcode::STORED.global_opcode(),
             [
                 8,
                 16,
@@ -709,15 +701,15 @@ mod tests {
     }
 
     #[test]
-    fn rv64io_ignores_non_store_public_values_shaped_instruction() {
-        let ext = Rv64IoExtension::new(None).unwrap();
+    fn riscv_io_ignores_non_store_public_values_shaped_instruction() {
+        let ext = RiscvIoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
             [
                 8,
                 16,
                 0,
-                RV64_REGISTER_AS as usize,
+                REGISTER_AS as usize,
                 PUBLIC_VALUES_AS as usize,
                 1,
                 0,
@@ -876,7 +868,7 @@ mod tests {
         };
 
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
-        let mut plan = Rv64RevealPlan::default();
+        let mut plan = RevealPlan::default();
         assert!(host_reveal_prepare(
             ctx, src_val, addr, addr, width, &mut plan,
         ));
@@ -912,7 +904,7 @@ mod tests {
             deferrals: &mut deferrals,
         };
 
-        let mut plan = Rv64RevealPlan::default();
+        let mut plan = RevealPlan::default();
         assert!(!host_reveal_prepare(
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             u64::MAX,
@@ -943,7 +935,7 @@ mod tests {
             preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
-        let mut plan = Rv64RevealPlan::default();
+        let mut plan = RevealPlan::default();
 
         assert!(!host_reveal_prepare(
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
@@ -1095,7 +1087,7 @@ mod tests {
     fn host_hint_prepare_accepts_the_maximum_word_count() {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
-        let hint = (0..MAX_HINT_BUFFER_DWORDS * RV64_REGISTER_NUM_LIMBS)
+        let hint = (0..MAX_HINT_BUFFER_DWORDS * REGISTER_NUM_LIMBS)
             .map(|i| i as u8)
             .collect::<Vec<_>>();
         hint_stream.set_hint(hint.clone());

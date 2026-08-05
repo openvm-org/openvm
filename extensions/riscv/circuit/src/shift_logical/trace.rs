@@ -8,12 +8,12 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{run_shift_logical, Rv64ShiftLogicalChip, ShiftLogicalCoreCols};
-use crate::adapters::{Rv64BaseAluRegU16AdapterCols, Rv64BaseAluRegU16AdapterFiller, U16_BITS};
+use super::{run_shift_logical, ShiftLogicalChip, ShiftLogicalCoreCols};
+use crate::adapters::{BaseAluRegU16AdapterCols, BaseAluRegU16AdapterFiller, U16_BITS};
 
 /// Generates the RV64 logical-shift trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64ShiftLogicalChip<F>,
+    chip: &ShiftLogicalChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftOpcode::SLL, ShiftOpcode::SRL];
@@ -21,7 +21,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64BaseAluRegU16AdapterCols::<F>::width();
+    let adapter_width = BaseAluRegU16AdapterCols::<F>::width();
     let width = adapter_width + ShiftLogicalCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -32,7 +32,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let mut shifts = (0, 0);
-            let ([rs1, rs2], output) = Rv64BaseAluRegU16AdapterFiller::replay(
+            let ([rs1, rs2], output) = BaseAluRegU16AdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),

@@ -12,22 +12,22 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BaseAluRegU16AdapterCols, U16_BITS},
+    adapters::{BaseAluRegU16AdapterCols, U16_BITS},
     LessThanCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64LessThanChipGpu {
+pub struct LessThanChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64LessThanChipGpu {
+impl LessThanChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -50,7 +50,7 @@ impl Rv64LessThanChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BaseAluRegU16AdapterCols::<F>::width()
+        let trace_width = BaseAluRegU16AdapterCols::<F>::width()
             + LessThanCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
@@ -72,7 +72,7 @@ impl Rv64LessThanChipGpu {
                 transcript.error_ptr(),
                 LessThanOpcode::SLT.global_opcode().as_usize() as u32,
                 LessThanOpcode::SLTU.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

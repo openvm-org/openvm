@@ -1,7 +1,7 @@
 #include "riscv/store_multibyte_replay.cuh"
 
 
-__global__ void rv64_store_doubleword_replay_tracegen(
+__global__ void store_doubleword_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -27,8 +27,8 @@ __global__ void rv64_store_doubleword_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64StoreDoublewordCols<uint8_t>));
-    COL_WRITE_VALUE(row, Rv64StoreDoublewordCols, adapter.mem_as, main_memory_as);
+    row.fill_zero(0, sizeof(StoreDoublewordCols<uint8_t>));
+    COL_WRITE_VALUE(row, StoreDoublewordCols, adapter.mem_as, main_memory_as);
     if (idx >= num_steps) return;
 
     ReplayStoreMultiByteInput input = {};
@@ -51,7 +51,7 @@ __global__ void rv64_store_doubleword_replay_tracegen(
         return;
     }
 
-    auto adapter = Rv64StoreAdapter(
+    auto adapter = StoreAdapter(
         pointer_max_bits,
         VariableRangeChecker(range_checker, range_checker_num_bins),
         timestamp_max_bits
@@ -73,7 +73,7 @@ __global__ void rv64_store_doubleword_replay_tracegen(
     );
     auto core = StoreDoublewordCore(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64StoreDoublewordCols, core)),
+        row.slice_from(COL_INDEX(StoreDoublewordCols, core)),
         input.read_data,
         input.prev_data,
         input.shift
@@ -82,7 +82,7 @@ __global__ void rv64_store_doubleword_replay_tracegen(
 
 
 
-extern "C" int _rv64_store_doubleword_replay_tracegen(
+extern "C" int _store_doubleword_replay_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -107,13 +107,13 @@ extern "C" int _rv64_store_doubleword_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64StoreDoublewordCols<uint8_t>));
+    assert(width == sizeof(StoreDoublewordCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_store_doubleword_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    store_doubleword_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_instructions,
