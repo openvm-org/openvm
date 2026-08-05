@@ -68,7 +68,6 @@ pub(crate) fn whir_round_encoder(num_rounds: usize) -> Encoder {
     Encoder::new(num_rounds.max(2), 2, false)
 }
 
-
 #[inline]
 fn eval_final_poly_at_u(final_poly: &[EF], u_tail: &[EF]) -> EF {
     let mut evals = final_poly.to_vec();

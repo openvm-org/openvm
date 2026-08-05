@@ -15,9 +15,8 @@ use p3_matrix::Matrix;
 
 use crate::{
     bus::{
-        ColumnClaimsBus, ColumnClaimsMessage,
-        LiftedHeightsBus, LiftedHeightsBusMessage, StackingModuleBus, StackingModuleMessage,
-        TranscriptBus, TranscriptBusMessage,
+        ColumnClaimsBus, ColumnClaimsMessage, LiftedHeightsBus, LiftedHeightsBusMessage,
+        StackingModuleBus, StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     stacking::bus::{
         ClaimCoefficientsBus, ClaimCoefficientsMessage, EqBitsLookupBus, EqBitsLookupMessage,
