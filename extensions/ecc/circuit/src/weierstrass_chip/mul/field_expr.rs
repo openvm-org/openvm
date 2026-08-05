@@ -121,11 +121,12 @@ fn build_ec_mul_step_expr(
     // included, substitutes 1, since a zero denominator makes the row unsatisfiable. `select`
     // takes a flag index rather than an expression, so the disjunction is expressed by nesting.
     let two_ry = ry.int_mul(2);
-    let denom_d = FieldVariable::select(
+    let mut denom_d = FieldVariable::select(
         f_dbl,
         &two_ry,
         &FieldVariable::select(f_dbl_add, &two_ry, &one),
     );
+    denom_d.save();
     let mut lambda_d = (rx.square().int_mul(3) + a) / denom_d;
 
     // `Select` requires both branches to have equal limb counts, and the output selection below
@@ -150,26 +151,18 @@ fn build_ec_mul_step_expr(
     // ---- output selection ------------------------------------------------------
     // Exactly one flag is set, so the nested selects form a 4-way one-hot mux. The fall-through
     // arm, reached when no flag is set, is the setup row, whose output is unconstrained.
-    let mut out_x = FieldVariable::select(
-        f_dbl,
-        &dx,
-        &FieldVariable::select(
-            f_dbl_add,
-            &ax,
-            &FieldVariable::select(f_inf_stay, &zero, &px),
-        ),
-    );
+    let mut inner_x = FieldVariable::select(f_inf_stay, &zero, &px);
+    inner_x.save();
+    let mut mid_x = FieldVariable::select(f_dbl_add, &ax, &inner_x);
+    mid_x.save();
+    let mut out_x = FieldVariable::select(f_dbl, &dx, &mid_x);
     out_x.save_output();
 
-    let mut out_y = FieldVariable::select(
-        f_dbl,
-        &dy,
-        &FieldVariable::select(
-            f_dbl_add,
-            &ay,
-            &FieldVariable::select(f_inf_stay, &zero, &py),
-        ),
-    );
+    let mut inner_y = FieldVariable::select(f_inf_stay, &zero, &py);
+    inner_y.save();
+    let mut mid_y = FieldVariable::select(f_dbl_add, &ay, &inner_y);
+    mid_y.save();
+    let mut out_y = FieldVariable::select(f_dbl, &dy, &mid_y);
     out_y.save_output();
 
     let builder = (*builder).borrow().clone();
