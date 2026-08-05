@@ -5,8 +5,12 @@
 //! AIR's maximum constraint degree low enough not to raise the application's `log_blowup`;
 //! `tests/ecmul_air.rs` asserts the bound.
 //!
-//! Two properties are assumed rather than constrained here:
+//! Three properties are assumed rather than constrained here:
 //!
+//! - That the scalar operand is less than the curve order. The ladder's addition uses the
+//!   incomplete affine formula, and at or above the order an intermediate `2R` can equal `P`,
+//!   collapsing the addition constraint to `0 = 0`. Callers must enforce the bound, as they must
+//!   for `EC_ADD_NE`'s distinct-x precondition.
 //! - That the guest called `SETUP_EC_MUL`, as for the neighbouring chips. With continuations only
 //!   the first segment would observe the setup row, so it is enforced at the program level.
 //! - Curve membership of the base point. The chip constrains the group law, not that `P` lies on
@@ -14,11 +18,24 @@
 
 use std::borrow::Borrow;
 
-use num_bigint::BigUint;
-use num_traits::{One, Zero};
-use openvm_circuit::{arch::ExecutionBridge, system::memory::offline_checker::MemoryBridge};
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, SubAir};
+use openvm_circuit::{
+    arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
+    system::memory::{
+        offline_checker::{pack_u8_block, MemoryBridge},
+        MemoryAddress,
+    },
+};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, SubAir, U16_BITS};
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_mod_circuit_builder::{FieldExpr, FieldExprCols};
+use openvm_riscv_circuit::adapters::{
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -44,10 +61,6 @@ pub struct EcMulAir<const NUM_LIMBS: usize, const BLOCKS: usize> {
     pub ptr_max_bits: usize,
     /// Global opcode offset for this curve's chip instance.
     pub offset: usize,
-    /// Little-endian 8-bit limbs of `n - 1`, where `n` is the curve order. Used to bound the
-    /// scalar, which is what keeps the incomplete affine addition sound — see
-    /// [`EcMulDigestCols::scalar_lt_borrow`].
-    order_minus_one: Vec<u8>,
 }
 
 impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
@@ -58,11 +71,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
         range_bus: VariableRangeCheckerBus,
         ptr_max_bits: usize,
         offset: usize,
-        curve_order: &BigUint,
     ) -> Self {
-        assert!(!curve_order.is_zero(), "curve order must be nonzero");
-        let mut order_minus_one = (curve_order - BigUint::one()).to_bytes_le();
-        order_minus_one.resize(SCALAR_LIMBS, 0);
         Self {
             expr,
             execution_bridge,
@@ -70,7 +79,6 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
             range_bus,
             ptr_max_bits,
             offset,
-            order_minus_one,
         }
     }
 
@@ -296,6 +304,161 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
                 .assert_eq(local.scalar_acc[i], local_digest.scalar_data[i]);
         }
 
-        let _ = (local_digest, next_digest);
+        let _ = next_digest;
+        self.eval_io(builder, local, local_digest);
+    }
+}
+
+impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
+    /// The instruction's memory accesses, all gated by `is_digest`, so one `EC_MUL` costs
+    /// `EC_MUL_REGISTER_READS + BLOCKS + SCALAR_BLOCKS + BLOCKS` accesses regardless of the number
+    /// of ladder steps.
+    fn eval_io<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        header: &EcMulHeaderCols<AB::Var>,
+        digest: &EcMulDigestCols<AB::Var, NUM_LIMBS, BLOCKS>,
+    ) {
+        let is_digest = header.is_digest;
+
+        let start_timestamp = digest.from_state.timestamp;
+        let mut timestamp_delta = 0usize;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            start_timestamp + AB::F::from_usize(timestamp_delta - 1)
+        };
+
+        // ==== Register reads: rd, rs1 (point pointer), rs2 (scalar pointer) ==================
+        for ((ptr, val), aux) in [
+            (digest.rd_ptr, &digest.rd_val),
+            (digest.rs1_ptr, &digest.rs1_val),
+            (digest.rs2_ptr, &digest.rs2_val),
+        ]
+        .into_iter()
+        .zip(digest.rs_read_aux.iter())
+        {
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        AB::F::from_u32(RV64_REGISTER_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
+                    expand_to_rv64_block(val),
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, is_digest);
+
+            // Bound the high u16 cell against the guest pointer limit.
+            self.range_bus
+                .range_check(
+                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(
+                        val[RV64_PTR_U16_LIMBS - 1],
+                        self.ptr_max_bits,
+                    ),
+                    U16_BITS,
+                )
+                .eval(builder, is_digest);
+        }
+
+        let rd_addr: AB::Expr = u16_limbs_to_ptr(&digest.rd_val);
+        let point_addr: AB::Expr = u16_limbs_to_ptr(&digest.rs1_val);
+        let scalar_addr: AB::Expr = u16_limbs_to_ptr(&digest.rs2_val);
+
+        let heap = AB::F::from_u32(RV64_MEMORY_AS);
+
+        // A point is stored as `x ‖ y`, so block `blk` spans limbs
+        // `[blk * MEMORY_BLOCK_BYTES, (blk+1) * MEMORY_BLOCK_BYTES)` of that concatenation.
+        let coord_block = |x: &[AB::Var; NUM_LIMBS],
+                           y: &[AB::Var; NUM_LIMBS],
+                           blk: usize|
+         -> [AB::Expr; MEMORY_BLOCK_BYTES] {
+            std::array::from_fn(|i| {
+                let idx = blk * MEMORY_BLOCK_BYTES + i;
+                if idx < NUM_LIMBS {
+                    x[idx].into()
+                } else {
+                    y[idx - NUM_LIMBS].into()
+                }
+            })
+        };
+
+        // ==== Read the base point ===========================================================
+        for (blk, aux) in digest.point_read_aux.iter().enumerate() {
+            let bytes = coord_block(&digest.point_x, &digest.point_y, blk);
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        heap,
+                        byte_ptr_to_u16_ptr::<AB>(
+                            point_addr.clone() + AB::Expr::from_usize(blk * MEMORY_BLOCK_BYTES),
+                        ),
+                    ),
+                    pack_u8_block::<AB>(&bytes),
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, is_digest);
+        }
+
+        // ==== Read the scalar ===============================================================
+        for (blk, aux) in digest.scalar_read_aux.iter().enumerate() {
+            let bytes: [AB::Expr; MEMORY_BLOCK_BYTES] =
+                std::array::from_fn(|i| digest.scalar_data[blk * MEMORY_BLOCK_BYTES + i].into());
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        heap,
+                        byte_ptr_to_u16_ptr::<AB>(
+                            scalar_addr.clone() + AB::Expr::from_usize(blk * MEMORY_BLOCK_BYTES),
+                        ),
+                    ),
+                    pack_u8_block::<AB>(&bytes),
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, is_digest);
+        }
+
+        // ==== Write the result ==============================================================
+        for (blk, aux) in digest.write_aux.iter().enumerate() {
+            let bytes = coord_block(&digest.result_x, &digest.result_y, blk);
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        heap,
+                        byte_ptr_to_u16_ptr::<AB>(
+                            rd_addr.clone() + AB::Expr::from_usize(blk * MEMORY_BLOCK_BYTES),
+                        ),
+                    ),
+                    pack_u8_block::<AB>(&bytes),
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, is_digest);
+        }
+
+        // ==== Execution bus =================================================================
+        // The opcode is selected by `is_setup`, so one chip instance serves both opcodes.
+        let ec_mul =
+            AB::Expr::from_usize(Rv64WeierstrassOpcode::EC_MUL.local_usize() + self.offset);
+        let setup =
+            AB::Expr::from_usize(Rv64WeierstrassOpcode::SETUP_EC_MUL.local_usize() + self.offset);
+        let opcode = (AB::Expr::ONE - header.is_setup) * ec_mul + header.is_setup * setup;
+
+        self.execution_bridge
+            .execute_and_increment_pc(
+                opcode,
+                [
+                    digest.rd_ptr.into(),
+                    digest.rs1_ptr.into(),
+                    digest.rs2_ptr.into(),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_MEMORY_AS),
+                ],
+                ExecutionState::new(digest.from_state.pc, digest.from_state.timestamp),
+                AB::F::from_usize(timestamp_delta),
+            )
+            .eval(builder, is_digest);
     }
 }
