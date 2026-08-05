@@ -45,7 +45,6 @@ pub struct FinalyPolyMleEvalCols<T> {
     pub left_value: [T; D_EF],
     pub right_value: [T; D_EF],
     pub value: [T; D_EF],
-    pub result: [T; D_EF],
     pub eq_alpha_u: [T; D_EF],
     pub num_nodes_in_layer: T,
 }
@@ -203,12 +202,6 @@ where
                 ),
             ),
         );
-        assert_array_eq(
-            &mut builder.when(local.is_root),
-            local.value.map(Into::into),
-            local.result.map(Into::into),
-        );
-
         let is_leaf = local.is_enabled - is_nonleaf;
         let delta = AB::Expr::from_usize(D_EF);
         let tidx_node = local.tidx_final_poly_start + local.node_idx * delta;

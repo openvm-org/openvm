@@ -204,7 +204,6 @@ impl RowMajorChip<F> for EqSharpUniReceiverTraceGenerator {
                     let cols: &mut EqSharpUniReceiverCols<_> = chunk.borrow_mut();
                     cols.is_valid = F::ONE;
                     cols.is_first = F::from_bool(i == 0);
-                    cols.is_last = F::from_bool(i + 1 == one_height);
                     cols.proof_idx = F::from_usize(pidx);
                     cols.coeff
                         .copy_from_slice(product.as_basis_coefficients_slice());

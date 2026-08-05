@@ -98,11 +98,6 @@ impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
                     // constraint group (i == 2*num_present)
                     cols.is_first_in_group = F::from_bool(i == 0 || i == 2 * num_present);
                     cols.num_multilinear_sumcheck_rounds = F::from_usize(num_rounds);
-                    cols.idx = F::from_usize(if i < 2 * num_present {
-                        i
-                    } else {
-                        i - 2 * num_present
-                    });
                     cols.idx_parity = F::from_bool(is_interaction && i % 2 == 1);
                     let trace_idx = if is_interaction {
                         i / 2
@@ -140,7 +135,7 @@ impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
                     let multiplier = if cols.group_idx == F::ZERO {
                         let mut mult =
                             EF::from_basis_coefficients_slice(&cols.eq_sharp_ns).unwrap();
-                        if cols.n_sign == F::ONE && cols.idx.as_canonical_u32() % 2 == 0 {
+                        if cols.n_sign == F::ONE && cols.idx_parity == F::ZERO {
                             mult *= F::from_u32(1 << cols.n_abs.as_canonical_u32()).inverse();
                         }
                         mult

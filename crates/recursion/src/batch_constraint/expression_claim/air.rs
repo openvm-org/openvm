@@ -64,9 +64,6 @@ pub struct ExpressionClaimCols<T> {
     pub is_first_in_group: T,
 
     // --- Claim indexing (derived from loop counters) ---
-    /// Claim index within its group. For interactions: `2 * trace_idx + idx_parity` (0..2t).
-    /// For constraints: `trace_idx` (0..t).
-    pub idx: T,
     /// 0 = numerator, 1 = denominator. Always 0 on constraint rows. Alternates on interaction
     /// rows.
     pub idx_parity: T,
@@ -196,17 +193,6 @@ where
         // only group 0 can have idx_parity set.
         builder.when(local.idx_parity).assert_zero(local.group_idx);
 
-        // idx binding to trace_idx / idx_parity
-        // Interaction rows: idx = 2 * trace_idx + idx_parity
-        builder.when(is_interaction.clone()).assert_eq(
-            local.idx,
-            local.trace_idx * AB::Expr::TWO + local.idx_parity,
-        );
-        // Constraint rows: idx = trace_idx
-        builder
-            .when(local.group_idx)
-            .assert_eq(local.idx, local.trace_idx);
-
         // === mu constancy within a proof ===
         assert_array_eq(
             &mut builder.when(is_same_proof.clone()),
@@ -278,7 +264,9 @@ where
             local.proof_idx,
             ExpressionClaimMessage {
                 is_interaction: is_interaction.clone(),
-                idx: local.idx.into(),
+                // Claim index within its group: `2 * trace_idx + idx_parity` on interaction
+                // rows and `trace_idx` on constraint rows (where idx_parity = 0).
+                idx: (AB::Expr::TWO - local.group_idx) * local.trace_idx + local.idx_parity,
                 value: local.value.map(Into::into),
             },
             local.is_valid,

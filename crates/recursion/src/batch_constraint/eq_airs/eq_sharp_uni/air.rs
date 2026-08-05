@@ -285,7 +285,6 @@ where
 pub struct EqSharpUniReceiverCols<T> {
     pub is_valid: T,
     pub is_first: T,
-    pub is_last: T,
     pub proof_idx: T,
 
     pub idx: T,
@@ -352,7 +351,6 @@ where
             ),
         );
 
-        builder.assert_bool(local.is_last);
         let is_same_proof = next.is_valid - next.is_first;
 
         // ============================= idx consistency ============================

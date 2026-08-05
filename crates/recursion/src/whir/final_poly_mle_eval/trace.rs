@@ -26,7 +26,6 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
         let preflights = ctx.0.preflights;
         let blob = ctx.1;
         let whir_round_tidx_per_round = &blob.whir_round_tidx_per_round;
-        let final_poly_at_u = &blob.final_poly_at_u;
         let eq_partials = &blob.eq_partials;
         let sumcheck_rows_per_proof = eq_partials.layout().items_per_proof();
         debug_assert_eq!(proofs.len(), preflights.len());
@@ -69,7 +68,6 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
                 .collect::<Vec<_>>();
             let eval_points = &u_all[num_sumcheck_rounds..num_sumcheck_rounds + num_vars];
 
-            let result = final_poly_at_u[proof_idx];
             let eq_alpha_u = eq_partials[(proof_idx, sumcheck_rows_per_proof - 1)];
 
             let mut buf = proof.whir_proof.final_poly.clone();
@@ -119,8 +117,6 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
                         .copy_from_slice(right.as_basis_coefficients_slice());
                     cols.value
                         .copy_from_slice(value.as_basis_coefficients_slice());
-                    cols.result
-                        .copy_from_slice(result.as_basis_coefficients_slice());
                     cols.eq_alpha_u
                         .copy_from_slice(eq_alpha_u.as_basis_coefficients_slice());
                     cols.num_nodes_in_layer = F::from_usize(1 << (num_vars - layer));
