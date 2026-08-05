@@ -19,7 +19,9 @@ use serde::{Deserialize, Serialize};
 pub const MAX_NUM_CHILDREN_LEAF: usize = 4;
 pub const MAX_NUM_CHILDREN_INTERNAL: usize = 3;
 
-fn default_system_params() -> SystemParams {
+/// The default app [SystemParams], used when the `system_params` field of an [AppConfig] is not
+/// specified.
+pub fn default_system_params() -> SystemParams {
     app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT)
 }
 

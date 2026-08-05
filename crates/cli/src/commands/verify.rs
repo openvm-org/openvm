@@ -6,7 +6,7 @@ use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof_with_expected_exe_commit,
     types::{AppExecutionCommit, VerificationBaselineJson, VersionedVmStarkProof},
-    Sdk, OPENVM_VERSION,
+    Sdk, VerificationBaseline, OPENVM_VERSION,
 };
 
 use crate::{
@@ -85,7 +85,7 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Additionally verify the STARK proof with the formally verified Lean verifier (requires a build with the 'lean-verifier' feature)",
+            help = "Additionally verify the STARK proof with the formally verified Lean verifier (requires a build with the 'lean-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
             help_heading = "OpenVM Options"
         )]
         lean_verified: bool,
@@ -226,7 +226,7 @@ impl VerifyCmd {
                     get_app_baseline_path(&target_output_dir, target_name)
                 };
                 let baseline_json: VerificationBaselineJson = read_from_file_json(baseline_path)?;
-                let expected_app_commit = baseline_json.into();
+                let expected_baseline: VerificationBaseline = baseline_json.into();
 
                 let proof_path = resolve_proof_path(proof, STARK_PROOF_EXT)?;
                 println!("Verifying STARK proof at {}", proof_path.display());
@@ -238,11 +238,12 @@ impl VerifyCmd {
                     eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", stark_proof.version);
                 }
                 let vm_stark_proof = stark_proof.try_into()?;
+                Sdk::verify_proof(agg_vk, expected_baseline.clone(), &vm_stark_proof)?;
                 if *lean_verified {
                     #[cfg(feature = "lean-verifier")]
                     {
-                        println!("Verifying STARK proof with the Lean verifier");
-                        Sdk::verify_proof_with_lean_verifier(&agg_vk, &vm_stark_proof)?;
+                        println!("Verifying STARK proof with the canonical RISC-V Lean verifier");
+                        Sdk::verify_proof_with_lean_verifier(&expected_baseline, &vm_stark_proof)?;
                         println!("Lean verifier accepted the proof");
                     }
                     #[cfg(not(feature = "lean-verifier"))]
@@ -251,7 +252,6 @@ impl VerifyCmd {
                          feature (cargo install --features lean-verifier ...)"
                     );
                 }
-                Sdk::verify_proof(agg_vk, expected_app_commit, &vm_stark_proof)?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm {
