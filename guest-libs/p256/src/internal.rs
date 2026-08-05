@@ -1,7 +1,7 @@
 use core::ops::{Add, Neg};
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
     weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
@@ -79,5 +79,24 @@ impl P256Point {
 
     pub fn y_be_bytes(&self) -> [u8; 32] {
         <Self as WeierstrassPoint>::y(self).to_be_bytes()
+    }
+
+    /// Returns `scalar * self`, for any scalar representation and any point.
+    ///
+    /// [`P256Point::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar below
+    /// the group order; this discharges both preconditions, so it is total.
+    ///
+    /// `P256Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
+    /// `from_be_bytes_unchecked` do not reduce. P-256 has cofactor 1, so every point on the curve
+    /// has order dividing the group order and reducing the scalar leaves the product unchanged.
+    pub fn mul_scalar(&self, scalar: &P256Scalar) -> Self {
+        if self.is_identity() {
+            return <Self as Group>::IDENTITY;
+        }
+        let reduced = P256Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
+        // SAFETY: `self` is not the identity, and `reduce_le_bytes` returns a value below the group
+        // order.
+        unsafe { self.mul_scalar_le_unchecked(&bytes) }
     }
 }
