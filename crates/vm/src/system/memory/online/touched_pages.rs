@@ -1,13 +1,13 @@
 use super::PAGE_SIZE;
 
-/// Tracks which fixed-size pages of an address space's linear memory may contain non-zero data,
-/// for the GPU host-to-device transfer. Pages that are *not* marked are guaranteed zero and are
-/// skipped by the transport (which zero-fills the device buffer first).
+/// Tracks which fixed-size pages of an address space's linear memory may contain non-zero data.
+/// Pages that are *not* marked are guaranteed zero and are skipped by sparse CPU snapshots,
+/// initial Merkle construction, and the GPU host-to-device transfer.
 /// Pages are [`PAGE_SIZE`] bytes, matching the mmap page size.
 ///
 /// A freshly constructed set is empty: callers must [`mark_byte_range`](Self::mark_byte_range)
-/// every page they write before the memory is transferred. Unmarked pages are transferred as
-/// zero. `bits` is a little-endian bitset over pages: bit `i` set means page `i` may be non-zero.
+/// every page they write before the memory is consumed. Unmarked pages are treated as zero.
+/// `bits` is a little-endian bitset over pages: bit `i` set means page `i` may be non-zero.
 #[derive(Debug, Clone)]
 pub struct TouchedPages {
     bits: Box<[u64]>,
