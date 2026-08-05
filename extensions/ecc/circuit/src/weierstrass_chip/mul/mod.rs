@@ -24,14 +24,14 @@
 //!
 //! # Preconditions
 //!
-//! The scalar operand must be less than the curve order, which is constrained on the digest row
-//! (see [`EcMulDigestCols::scalar_lt_borrow`]). This is required for soundness rather than only
-//! correctness: the ladder's addition uses the incomplete affine formula, and for a scalar at or
-//! above the order an intermediate `2R` can equal `P`, at which point the constraint
-//! `lambda * (Px - Dx) = Py - Dy` degenerates to `0 = 0` and leaves `lambda` unconstrained.
+//! The scalar operand must be less than the curve order. The ladder's addition uses the incomplete
+//! affine formula, so it requires `Dx != Px` where `D = 2R`; at or above the order an intermediate
+//! `2R` can equal `P`, at which point `lambda * (Px - Dx) = Py - Dy` degenerates to `0 = 0` and
+//! leaves `lambda` unconstrained. The bound is not checked here, in the same way that `EC_ADD_NE`
+//! does not check its distinct-x precondition; callers are responsible for it.
 //!
-//! The bound applies to the raw 256-bit operand; an unreduced scalar is rejected rather than
-//! reduced.
+//! The precondition is on the raw 256-bit operand, since the chip consumes every bit of what it
+//! reads rather than reducing.
 
 mod air;
 mod columns;
@@ -75,7 +75,6 @@ pub fn get_ec_mul_air<const NUM_LIMBS: usize, const BLOCKS: usize>(
     ptr_max_bits: usize,
     offset: usize,
     a: BigUint,
-    curve_order: &BigUint,
 ) -> EcMulAir<NUM_LIMBS, BLOCKS> {
     let expr = ec_mul_step_expr(config, range_checker_bus, a);
     EcMulAir::new(
@@ -85,7 +84,6 @@ pub fn get_ec_mul_air<const NUM_LIMBS: usize, const BLOCKS: usize>(
         range_checker_bus,
         ptr_max_bits,
         offset,
-        curve_order,
     )
 }
 
@@ -104,10 +102,9 @@ pub fn get_ec_mul_chip<F, const NUM_LIMBS: usize, const BLOCKS: usize>(
     range_checker: openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
     ptr_max_bits: usize,
     a: BigUint,
-    curve_order: &BigUint,
 ) -> EcMulChip<F, NUM_LIMBS, BLOCKS> {
     let expr = ec_mul_step_expr(config, range_checker.bus(), a);
-    EcMulChip::new(expr, range_checker, mem_helper, ptr_max_bits, curve_order)
+    EcMulChip::new(expr, range_checker, mem_helper, ptr_max_bits)
 }
 
 /// Scalar width in bits; one compute row per bit.
