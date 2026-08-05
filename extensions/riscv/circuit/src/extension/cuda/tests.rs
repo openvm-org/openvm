@@ -366,7 +366,7 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
             [
                 reg(2),
                 reg(1),
-                6,
+                5,
                 REGISTER_AS as usize,
                 PUBLIC_VALUES_AS as usize,
                 1,
