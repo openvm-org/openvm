@@ -158,25 +158,23 @@ pub struct BaseAluWImmU16AdapterFiller {
 impl BaseAluWImmU16AdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         &self,
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut BaseAluWImmU16AdapterCols<F>,
         compute: impl FnOnce([u16; WORD_U16_LIMBS], u32) -> [u16; WORD_U16_LIMBS],
     ) -> Result<([u16; WORD_U16_LIMBS], [u16; WORD_U16_LIMBS]), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != IMM_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != IMM_AS {
             return Err(PostflightError::new(
                 "word register-immediate ALU instruction has invalid address spaces",
             ));
         }
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
-        let rs1_ptr = instruction.b.as_canonical_u32();
-        let rd_ptr = instruction.a.as_canonical_u32();
-        let immediate = instruction.c.as_canonical_u32();
+        let rs1_ptr = instruction.b.as_u32();
+        let rd_ptr = instruction.a.as_u32();
+        let immediate = instruction.c.as_u32();
         if !is_canonical_i12(immediate) {
             return Err(PostflightError::new(
                 "word register-immediate ALU instruction has a non-canonical immediate",

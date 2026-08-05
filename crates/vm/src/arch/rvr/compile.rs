@@ -10,7 +10,6 @@ use std::{
 use openvm_instructions::{
     exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, RvrExecutionKind};
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, AirIndex, ExtensionRegistry, TraceChipIndex,
@@ -279,8 +278,8 @@ fn pc_for_instruction_index(pc_base: u32, instruction_index: usize) -> Result<u3
         .ok_or(CompileError::ProgramCounterOutOfBounds { instruction_index })
 }
 
-pub fn build_pc_to_chip<F, E>(
-    exe: &VmExe<F>,
+pub fn build_pc_to_chip<E>(
+    exe: &VmExe,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
 ) -> Result<Vec<TraceChipIndex>, CompileError> {
@@ -333,16 +332,16 @@ pub struct CompileOptions<'a> {
 /// Sanitize in debug/test builds, but never when profiling.
 const DEFAULT_SANITIZE: bool = cfg!(debug_assertions) && !cfg!(feature = "profiling");
 
-pub fn compile_with_options<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn compile_with_options(
+    exe: &VmExe,
     opts: CompileOptions<'_>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(exe, &opts)
 }
 
 /// Compile a VmExe into a shared library for unlimited pure execution.
-pub fn compile<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn compile(
+    exe: &VmExe,
     extensions: &ExtensionRegistry,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -362,8 +361,8 @@ pub fn compile<F: PrimeField32>(
 }
 
 /// Compile a VmExe for pure execution with instret tracking and block-boundary suspension.
-pub fn compile_with_instret_tracking<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn compile_with_instret_tracking(
+    exe: &VmExe,
     extensions: &ExtensionRegistry,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -383,8 +382,8 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
 }
 
 /// Compile a `VmExe` for preflight execution.
-pub(crate) fn compile_preflight<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub(crate) fn compile_preflight(
+    exe: &VmExe,
     extensions: &ExtensionRegistry,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -404,8 +403,8 @@ pub(crate) fn compile_preflight<F: PrimeField32>(
 }
 
 /// Compile a VmExe with per-chip metered execution.
-pub fn compile_metered<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn compile_metered(
+    exe: &VmExe,
     extensions: &ExtensionRegistry,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
@@ -426,8 +425,8 @@ pub fn compile_metered<F: PrimeField32>(
 }
 
 /// Compile a VmExe with per-chip metered execution and segment-boundary suspension.
-pub fn compile_metered_segment_boundary<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn compile_metered_segment_boundary(
+    exe: &VmExe,
     extensions: &ExtensionRegistry,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
@@ -448,8 +447,8 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
 }
 
 /// Compile a VmExe with metered-cost tracking.
-pub fn compile_metered_cost<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn compile_metered_cost(
+    exe: &VmExe,
     extensions: &ExtensionRegistry,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
@@ -561,10 +560,7 @@ fn load_num_airs(
     Ok(Some(num_airs))
 }
 
-fn compile_impl<F: PrimeField32>(
-    exe: &VmExe<F>,
-    opts: &CompileOptions<'_>,
-) -> Result<RvrCompiled, CompileError> {
+fn compile_impl(exe: &VmExe, opts: &CompileOptions<'_>) -> Result<RvrCompiled, CompileError> {
     let toolchain = ensure_toolchain_available()?;
 
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));

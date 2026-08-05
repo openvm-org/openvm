@@ -16,7 +16,7 @@ use crate::adapters::{
 /// Generates the RV64 MUL trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &MultiplicationChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = MulOpcode::MUL.global_opcode();
     let rows_used = postflight.steps(opcode).len();

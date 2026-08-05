@@ -35,8 +35,8 @@ fn preflight_enforces_exact_terminal_instruction_count() {
     let engine = test_cpu_engine();
     let (vm, _) =
         VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();
-    let instruction = Instruction::<F>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0);
-    let vm_exe: VmExe<F> = Program::from_instructions(&[instruction]).into();
+    let instruction = Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0);
+    let vm_exe: VmExe = Program::from_instructions(&[instruction]).into();
     let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
     let initial_state = || {
         let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
@@ -60,8 +60,8 @@ fn preflight_enforces_exact_terminal_instruction_count() {
         }
     ));
 
-    let instruction = Instruction::<F>::from_isize(TERMINATE.global_opcode(), 0, 0, 1, 0, 0);
-    let vm_exe: VmExe<F> = Program::from_instructions(&[instruction]).into();
+    let instruction = Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 1, 0, 0);
+    let vm_exe: VmExe = Program::from_instructions(&[instruction]).into();
     let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
     let error = match interpreter.execute_segment(initial_state(), &Segment::new(0, 1, 0, vec![])) {
         Ok(_) => panic!("failed guest termination must be rejected"),
@@ -105,7 +105,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();
     let vk = pk.get_vk();
 
-    let instructions = vec![Instruction::<F>::from_isize(
+    let instructions = vec![Instruction::from_isize(
         TERMINATE.global_opcode(),
         0,
         0,
@@ -115,7 +115,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     )];
 
     let program = Program::from_instructions(&instructions);
-    let vm_exe: VmExe<F> = program.into();
+    let vm_exe: VmExe = program.into();
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));

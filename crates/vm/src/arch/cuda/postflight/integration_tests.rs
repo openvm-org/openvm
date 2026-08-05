@@ -352,18 +352,9 @@ fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order
             .collect::<Vec<_>>(),
         [(MEMORY_AS, 0, 5), (DEFERRAL_AS, 0, 4), (DEFERRAL_AS, 4, 7),]
     );
-    assert_eq!(
-        touched[0].values.map(|value| value.as_canonical_u32()),
-        [0x00aa, 2, 3, 4]
-    );
-    assert_eq!(
-        touched[1].values.map(|value| value.as_canonical_u32()),
-        first_write.values
-    );
-    assert_eq!(
-        touched[2].values.map(|value| value.as_canonical_u32()),
-        second_write.values
-    );
+    assert_eq!(touched[0].values, [0x00aa, 2, 3, 4]);
+    assert_eq!(touched[1].values, first_write.values);
+    assert_eq!(touched[2].values, second_write.values);
     assert_eq!(
         touched
             .iter()
@@ -514,7 +505,7 @@ fn gpu_chronology_rejects_partial_or_noncanonical_field_values() {
 #[test]
 fn gpu_program_rejects_memory_configs_outside_the_compact_key_abi() {
     let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
-    let program = Program::<BabyBear>::from_instructions(&[]);
+    let program = Program::from_instructions(&[]);
     let assert_invalid = |config: &MemoryConfig| {
         assert!(matches!(
             GpuPostflightProgram::upload(&program, config, &device_ctx),
@@ -600,7 +591,7 @@ fn gpu_program_index_matches_cpu_oracle_and_preserves_order() {
         ..Default::default()
     };
     let endpoint = PreflightEndpoint::Terminated;
-    let cpu_program = Program::<BabyBear>::new_without_debug_infos(
+    let cpu_program = Program::new_without_debug_infos(
         &[
             Instruction::from_usize(VmOpcode::from_usize(100), [0; 5]),
             Instruction::from_usize(VmOpcode::from_usize(200), [0; 5]),

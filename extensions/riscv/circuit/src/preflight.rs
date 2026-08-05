@@ -22,7 +22,6 @@ use openvm_instructions::{
     riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
     DEFERRAL_AS,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, RvrCheckpoint};
 
 use crate::{cuda_abi::rvr_checkpoint_replay, Rv64ImPreflightGpuTracegen};
@@ -153,8 +152,8 @@ impl PreflightReplayProgram {
 
     /// Uploads one program together with the extension schedules used only by
     /// compiled checkpoint expansion.
-    pub fn upload_with_postflight_access_registry<F: PrimeField32>(
-        program: &Program<F>,
+    pub fn upload_with_postflight_access_registry(
+        program: &Program,
         memory_config: &MemoryConfig,
         registry: &PostflightAccessRegistry,
         device_ctx: &GpuDeviceCtx,

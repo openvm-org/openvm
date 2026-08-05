@@ -20,7 +20,6 @@ use openvm_instructions::{
 };
 #[cfg(feature = "cuda")]
 use openvm_stark_backend::StarkEngine;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{modular_is_eq_x0_destination, Rv64ModularConfig, Rv64ModularCpuBuilder};
 #[cfg(feature = "cuda")]
@@ -74,7 +73,7 @@ fn padded_bytes(value: &BigUint) -> [u8; 32] {
     std::array::from_fn(|index| bytes.get(index).copied().unwrap_or_default())
 }
 
-fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program<BabyBear>, VmExe<BabyBear>) {
+fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program, VmExe) {
     let instructions = [
         Instruction::from_usize(
             ModularArithmeticOpcode::SETUP_ADDSUB.global_opcode(),
@@ -157,7 +156,7 @@ fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program<BabyBear>, VmExe
     )
 }
 
-fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
+fn fixture() -> (Program, VmExe) {
     fixture_with_pointer_offset(0)
 }
 
@@ -198,7 +197,7 @@ fn field_expr_instruction(
     destination: usize,
     lhs: usize,
     rhs: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction {
     Instruction::from_usize(
         opcode,
         [
@@ -212,7 +211,7 @@ fn field_expr_instruction(
 }
 
 #[cfg(feature = "cuda")]
-fn field_expr_fixture(modulus: &BigUint) -> (Program<BabyBear>, VmExe<BabyBear>) {
+fn field_expr_fixture(modulus: &BigUint) -> (Program, VmExe) {
     let instructions = [
         field_expr_instruction(
             ModularArithmeticOpcode::SETUP_MULDIV.global_opcode(),
@@ -405,7 +404,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
         ModularArithmeticOpcode::SETUP_ISEQ,
     ] {
         let program = Program::from_instructions(&[
-            Instruction::<BabyBear>::from_usize(
+            Instruction::from_usize(
                 opcode.global_opcode(),
                 [
                     reg(0),

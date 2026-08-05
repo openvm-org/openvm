@@ -2,10 +2,7 @@ use std::{array::from_fn, fmt::Debug, mem::size_of_val, slice};
 
 use getset::Getters;
 use openvm_instructions::exe::SparseMemoryImage;
-use openvm_stark_backend::{
-    p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::*,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use rvr_state::{
     PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT,
 };
@@ -322,7 +319,7 @@ impl<M: LinearMemory> AddressMap<M> {
     ///
     /// `touched` is the [`TouchedMemory`] produced by `TracingMemory::finalize`; its `ptr` is in
     /// AS-native cells and each block spans `BLOCK_FE_WIDTH` cells.
-    pub fn extend_touched_pages_from_touched<F>(&mut self, touched: &TouchedMemory<F>) {
+    pub fn extend_touched_pages_from_touched(&mut self, touched: &TouchedMemory) {
         for block in touched.iter() {
             let cell_size = self.config[block.address_space as usize].layout.size();
             let start = block.ptr as usize * cell_size;
@@ -888,7 +885,7 @@ impl TracingMemory {
 
     /// Finalize the boundary and merkle chips.
     #[instrument(name = "memory_finalize", skip_all)]
-    pub fn finalize<F: Field>(&mut self) -> TouchedMemory<F> {
+    pub fn finalize<F: PrimeField32>(&mut self) -> TouchedMemory {
         self.touched_blocks_to_equipartition::<F>(self.touched_blocks())
     }
 
@@ -921,10 +918,10 @@ impl TracingMemory {
 
     /// Returns touched memory in `BLOCK_FE_WIDTH`-cell blocks, each stamped with its
     /// per-write dirty bit.
-    fn touched_blocks_to_equipartition<F: Field>(
+    fn touched_blocks_to_equipartition<F: PrimeField32>(
         &self,
         touched_blocks: Vec<((u32, u32), u32)>,
-    ) -> TouchedMemory<F> {
+    ) -> TouchedMemory {
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
         touched_blocks
             .into_par_iter()
@@ -934,11 +931,12 @@ impl TracingMemory {
                 let values = from_fn(|i| unsafe {
                     addr_space_config
                         .layout
-                        .to_field(self.data.memory.get_u8_slice(
+                        .to_field::<F>(self.data.memory.get_u8_slice(
                             addr_space,
                             (ptr as usize + i) * cell_size,
                             cell_size,
                         ))
+                        .as_canonical_u32()
                 });
                 let is_dirty =
                     self.is_dirty[addr_space as usize].get(ptr as usize / BLOCK_FE_WIDTH);
@@ -1057,6 +1055,38 @@ mod tests {
         assert_eq!(
             log.field_initial_values[0].values,
             initial.map(|value| unsafe { std::mem::transmute::<F, u32>(value) })
+        );
+    }
+
+    #[test]
+    fn field_touched_memory_is_canonical() {
+        let mem_config = MemoryConfig::new(
+            1,
+            vec![
+                AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+                AddressSpaceHostConfig::new(BLOCK_FE_WIDTH, MemoryCellType::field32()),
+                AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+            ],
+            2,
+            20,
+            17,
+        );
+        let mut memory = TracingMemory::new(&mem_config);
+        let values = [
+            F::ZERO,
+            F::ONE,
+            F::from_u32(123_456),
+            F::from_u32(F::ORDER_U32 - 1),
+        ];
+        unsafe {
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 0, values);
+        }
+
+        let touched = memory.finalize::<F>();
+        assert_eq!(touched.len(), 1);
+        assert_eq!(
+            touched[0].values,
+            values.map(|value| value.as_canonical_u32())
         );
     }
 

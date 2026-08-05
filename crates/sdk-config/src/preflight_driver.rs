@@ -15,7 +15,7 @@ use openvm_circuit::arch::{
     },
 };
 #[cfg(not(feature = "rvr"))]
-use openvm_circuit::arch::{PreflightInterpretedInstance, PreflightOutput, VmExecutionConfig};
+use openvm_circuit::arch::{PreflightInterpretedInstance, PreflightOutput, VmFieldExecutionConfig};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
@@ -40,7 +40,7 @@ use crate::{SdkVmGpuBuilder, SC};
 
 #[cfg(not(feature = "rvr"))]
 type InterpretedPreflight =
-    PreflightInterpretedInstance<Val<SC>, <SdkVmConfig as VmExecutionConfig<Val<SC>>>::Executor>;
+    PreflightInterpretedInstance<<SdkVmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor>;
 
 /// Fixed-program GPU prover for standalone, independently scheduled segments.
 ///

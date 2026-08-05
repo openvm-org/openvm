@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluWOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::AddSubWCoreExecutor;
 
@@ -26,20 +25,20 @@ pub(super) struct AddSubWPreCompute {
 
 impl AddSubWCoreExecutor {
     #[inline(always)]
-    pub(super) fn pre_compute_impl<F: PrimeField32>(
+    pub(super) fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut AddSubWPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
+        if d.as_u32() != REGISTER_AS || e.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddSubWPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
         Ok(())
     }
@@ -56,10 +55,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for AddSubWCoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterExecutor for AddSubWCoreExecutor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluWOpcode::from_usize(opcode - self.offset))
     }
@@ -73,7 +69,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -89,7 +85,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -102,10 +98,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for AddSubWCoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterMeteredExecutor for AddSubWCoreExecutor {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AddSubWPreCompute>>()
@@ -116,7 +109,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -134,7 +127,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

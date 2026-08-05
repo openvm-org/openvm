@@ -19,9 +19,7 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security,
-    baby_bear_poseidon2::{Digest, F},
-    MAX_APP_LOG_STACKED_HEIGHT,
+    app_params_with_100_bits_security, baby_bear_poseidon2::Digest, MAX_APP_LOG_STACKED_HEIGHT,
 };
 use openvm_verify_stark_host::VmStarkProof;
 use tracing::info_span;
@@ -172,7 +170,7 @@ pub fn compute_root_proof_heights(
     root_params: SystemParams,
     def_prover: Option<Arc<DeferralAggProver>>,
 ) -> Result<Vec<usize>> {
-    let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
+    let dummy_program = Program::from_instructions(&[Instruction::from_isize(
         SystemOpcode::TERMINATE.global_opcode(),
         0,
         0,

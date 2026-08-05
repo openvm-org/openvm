@@ -29,7 +29,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
         InitFileGenerator, MeteredExecutor, VirtualMachine, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmExecutor, VmState, U16_CELL_SIZE,
+        VmFieldExecutionConfig, VmFieldExecutor, VmState, U16_CELL_SIZE,
     },
     system::memory::{merkle::public_values::extract_public_values, online::GuestMemory},
 };
@@ -145,7 +145,7 @@ pub struct GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmExecutionConfig<F>,
+    VB::VmConfig: VmFieldExecutionConfig<F>,
 {
     #[getset(get = "pub")]
     app_config: AppConfig<VB::VmConfig>,
@@ -166,13 +166,13 @@ where
     #[getset(get = "pub")]
     app_vm_builder: VB,
 
-    transpiler: Option<Transpiler<F>>,
+    transpiler: Option<Transpiler>,
 
     /// The `executor` may be used to construct different types of interpreters, given the program,
     /// for more specific execution purposes. By default, it is recommended to use the
     /// [`execute`](GenericSdk::execute) method.
     #[getset(get = "pub")]
-    executor: VmExecutor<F, VB::VmConfig>,
+    executor: VmFieldExecutor<F, VB::VmConfig>,
 
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     agg_prover: OnceLock<Arc<AggProver>>,
@@ -276,7 +276,7 @@ where
     ) -> Result<Self, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         Self::builder()
             .app_config(app_config)
@@ -410,7 +410,7 @@ where
     }
 
     /// Transpiler for transpiling RISC-V ELF to OpenVM executable.
-    pub fn transpiler(&self) -> Result<&Transpiler<F>, SdkError> {
+    pub fn transpiler(&self) -> Result<&Transpiler, SdkError> {
         self.transpiler
             .as_ref()
             .ok_or(SdkError::TranspilerNotAvailable)
@@ -420,7 +420,7 @@ where
     pub fn convert_to_exe(
         &self,
         executable: impl Into<ExecutableFormat>,
-    ) -> Result<Arc<VmExe<F>>, SdkError> {
+    ) -> Result<Arc<VmExe>, SdkError> {
         let executable = executable.into();
         let exe = match executable {
             ExecutableFormat::Elf(elf) => {
@@ -465,7 +465,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    fn guest_debug_map(&self, elf_path: &Path, exe: &VmExe<F>) -> Result<GuestDebugMap, SdkError> {
+    fn guest_debug_map(&self, elf_path: &Path, exe: &VmExe) -> Result<GuestDebugMap, SdkError> {
         let pcs = exe
             .program
             .instructions_and_debug_infos
@@ -487,7 +487,7 @@ impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E> + Clone,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
+    <VB::VmConfig as VmFieldExecutionConfig<F>>::Executor: Executor + MeteredExecutor + 'static,
 {
     fn app_vm(&self) -> Result<VirtualMachine<E, VB>, SdkError> {
         let app_pk = self.app_pk();

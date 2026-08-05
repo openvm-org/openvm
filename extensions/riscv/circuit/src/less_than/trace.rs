@@ -14,7 +14,7 @@ use crate::adapters::{BaseAluRegU16AdapterCols, BaseAluRegU16AdapterFiller, U16_
 /// Generates the RV64 less-than trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &LessThanChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [LessThanOpcode::SLT, LessThanOpcode::SLTU];
     let rows_used = opcodes

@@ -30,7 +30,6 @@ syn = { version = "1", features = ["full"] }
 
 [dev-dependencies]
 openvm-instructions = { path = "../../crates/toolchain/instructions", default-features = false }
-openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }

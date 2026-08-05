@@ -19,7 +19,7 @@ use crate::adapters::{
 /// Generates the RV64 multiply-high trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &MulHChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [MulHOpcode::MULH, MulHOpcode::MULHSU, MulHOpcode::MULHU];
     let rows_used = opcodes

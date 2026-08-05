@@ -10,7 +10,6 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{Keccak256Rv64Config, Keccak256Rv64CpuBuilder};
 
@@ -21,7 +20,7 @@ fn reg(index: usize) -> usize {
 #[test]
 fn xorin_metering_counts_runtime_replay_words() {
     let instructions = [
-        Instruction::<BabyBear>::from_usize(
+        Instruction::from_usize(
             XorinOpcode::XORIN.global_opcode(),
             [
                 reg(1),

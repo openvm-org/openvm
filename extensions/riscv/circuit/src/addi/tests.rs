@@ -146,10 +146,10 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
     )
 }
 
-fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
+fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     b: Option<[u8; REGISTER_NUM_LIMBS]>,
     c: Option<[u8; REGISTER_NUM_LIMBS]>,
@@ -180,10 +180,10 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     )
 }
 
-fn set_and_execute_w<E: openvm_circuit::arch::Executor<F> + Clone>(
+fn set_and_execute_w<E: openvm_circuit::arch::Executor + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     rs1: u64,
     imm: usize,

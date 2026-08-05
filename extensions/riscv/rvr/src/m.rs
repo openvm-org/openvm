@@ -3,12 +3,13 @@
 mod instruction;
 
 use openvm_instructions::{
+    instruction::Instruction,
     riscv::{IMM_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode, MulWOpcode};
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{RvrExtension, RvrInstruction};
+use rvr_openvm_lift::RvrExtension;
 
 use self::instruction::{MulDivOp, Rv64MInstr};
 use crate::instruction::decode_reg;
@@ -29,7 +30,7 @@ impl Default for Rv64MExtension {
 }
 
 impl RvrExtension for Rv64MExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         let operations = [
             (MulOpcode::MUL.global_opcode_usize(), MulDivOp::Mul, false),
@@ -93,16 +94,16 @@ impl RvrExtension for Rv64MExtension {
         let (_, op, word) = operations
             .into_iter()
             .find(|(candidate, _, _)| *candidate == opcode)?;
-        if insn.d != REGISTER_AS || insn.e != IMM_AS {
+        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != IMM_AS {
             return None;
         }
 
         let instruction: Box<dyn ExtInstr> = Box::new(Rv64MInstr {
             op,
             word,
-            rd: decode_reg(insn.a),
-            lhs: decode_reg(insn.b),
-            rhs: decode_reg(insn.c),
+            rd: decode_reg(insn.a.as_u32()),
+            lhs: decode_reg(insn.b.as_u32()),
+            rhs: decode_reg(insn.c.as_u32()),
         });
         Some(LiftedInstr::Body(InstrAt {
             pc,
@@ -122,14 +123,13 @@ impl RvrExtension for Rv64MExtension {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{instruction::Instruction, riscv::REGISTER_NUM_LIMBS, VmOpcode};
-    use p3_baby_bear::BabyBear;
+    use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, VmOpcode};
     use rvr_openvm_ir::{InstrAt, LiftedInstr};
 
     use super::*;
 
-    fn instruction(opcode: VmOpcode, d: u32, e: u32) -> RvrInstruction {
-        RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+    fn instruction(opcode: VmOpcode, d: u32, e: u32) -> Instruction {
+        Instruction::from_usize(
             opcode,
             [
                 REGISTER_NUM_LIMBS,
@@ -140,7 +140,7 @@ mod tests {
                 1,
                 0,
             ],
-        ))
+        )
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn writes_to_x0_keep_the_preflight_schedule() {
-        let insn = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+        let insn = Instruction::from_usize(
             MulOpcode::MUL.global_opcode(),
             [
                 0,
@@ -187,7 +187,7 @@ mod tests {
                 1,
                 0,
             ],
-        ));
+        );
         let LiftedInstr::Body(InstrAt { instr, .. }) =
             Rv64MExtension.try_lift(&insn, 0x100).unwrap()
         else {

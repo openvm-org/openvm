@@ -382,10 +382,10 @@ struct ModularIsEqualPreCompute<const READ_LIMBS: usize> {
 impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
     VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
@@ -402,11 +402,11 @@ impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
             ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.0.offset));
 
         // Validate instruction format
-        let a = a.as_canonical_u32();
-        let b = b.as_canonical_u32();
-        let c = c.as_canonical_u32();
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
+        let a = a.as_u32();
+        let b = b.as_u32();
+        let c = c.as_u32();
+        let d = d.as_u32();
+        let e = e.as_u32();
         if a == 0 || d != REGISTER_AS || e != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -441,10 +441,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor<F>
+impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor
     for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -462,7 +460,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
@@ -475,7 +473,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -488,10 +486,8 @@ where
     }
 }
 
-impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterMeteredExecutor<F>
+impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterMeteredExecutor
     for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
-where
-    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -503,7 +499,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
@@ -520,7 +516,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =

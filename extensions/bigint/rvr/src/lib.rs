@@ -9,6 +9,7 @@ use openvm_bigint_transpiler::{
     Mul256Opcode, Shift256Opcode,
 };
 use openvm_instructions::{
+    instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
@@ -19,9 +20,7 @@ use openvm_riscv_transpiler::{
 use rvr_openvm_ir::{
     CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, Variable,
 };
-use rvr_openvm_lift::{
-    decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
-};
+use rvr_openvm_lift::{decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension};
 use strum::EnumCount;
 
 // An Int256 operation can read two independent 32-byte values and write one.
@@ -299,7 +298,7 @@ impl Default for Int256Extension {
 }
 
 impl RvrExtension for Int256Extension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         // ── ALU body instructions ───────────────────────────────────────
@@ -353,9 +352,9 @@ impl RvrExtension for Int256Extension {
         let beq_start = BranchEqual256Opcode::CLASS_OFFSET;
         if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {
             let is_ne = opcode - beq_start == 1;
-            let rs1_reg = decode_reg(insn.a);
-            let rs2_reg = decode_reg(insn.b);
-            let imm = insn.signed_c();
+            let rs1_reg = decode_reg(insn.a.as_u32());
+            let rs2_reg = decode_reg(insn.b.as_u32());
+            let imm = insn.c.as_i32();
             let target_pc = (pc as i64 + imm as i64) as u64;
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
             return Some(LiftedInstr::Term {
@@ -381,9 +380,9 @@ impl RvrExtension for Int256Extension {
                 3 => Int256BranchLtOp::Bgeu,
                 _ => unreachable!(),
             };
-            let rs1_reg = decode_reg(insn.a);
-            let rs2_reg = decode_reg(insn.b);
-            let imm = insn.signed_c();
+            let rs1_reg = decode_reg(insn.a.as_u32());
+            let rs2_reg = decode_reg(insn.b.as_u32());
+            let imm = insn.c.as_i32();
             let target_pc = (pc as i64 + imm as i64) as u64;
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
             return Some(LiftedInstr::Term {
@@ -424,10 +423,10 @@ impl RvrExtension for Int256Extension {
 
 impl Int256Extension {
     /// Lift an R-type ALU instruction: a=rd, b=rs1, c=rs2.
-    fn lift_alu(&self, insn: &RvrInstruction, pc: u64, op: Int256AluOp) -> LiftedInstr {
-        let rd_reg = decode_reg(insn.a);
-        let rs1_reg = decode_reg(insn.b);
-        let rs2_reg = decode_reg(insn.c);
+    fn lift_alu(&self, insn: &Instruction, pc: u64, op: Int256AluOp) -> LiftedInstr {
+        let rd_reg = decode_reg(insn.a.as_u32());
+        let rs1_reg = decode_reg(insn.b.as_u32());
+        let rs2_reg = decode_reg(insn.c.as_u32());
         LiftedInstr::Body(InstrAt {
             pc,
             instr: Box::new(Int256AluInstr {
@@ -610,18 +609,18 @@ mod tests {
         }
     }
 
-    fn instruction(opcode: impl LocalOpcode, c: u32) -> RvrInstruction {
-        RvrInstruction::from_canonical(opcode.global_opcode(), [8, 16, c, 0, 0, 0, 0], 101)
+    fn instruction(opcode: impl LocalOpcode, c: i32) -> Instruction {
+        Instruction::from_isize(opcode.global_opcode(), 8, 16, c as isize, 0, 0)
     }
 
     #[test]
-    fn bigint_branches_preserve_negative_field_encoded_offsets() {
+    fn bigint_branches_preserve_negative_offsets() {
         let pc = 0x1000;
         let ext = Int256Extension::new();
 
         for insn in [
-            instruction(BranchEqual256Opcode(BranchEqualOpcode::BEQ), 101 - 12),
-            instruction(BranchLessThan256Opcode(BranchLessThanOpcode::BLT), 101 - 12),
+            instruction(BranchEqual256Opcode(BranchEqualOpcode::BEQ), -12),
+            instruction(BranchLessThan256Opcode(BranchLessThanOpcode::BLT), -12),
         ] {
             let lifted = ext.try_lift(&insn, pc).unwrap();
             let LiftedInstr::Term { terminator, .. } = lifted else {

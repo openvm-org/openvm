@@ -72,10 +72,10 @@ where
     fn execute<E>(
         &mut self,
         executor: &mut E,
-        preflight: &mut TestPreflight<F>,
-        instruction: &Instruction<F>,
+        preflight: &mut TestPreflight,
+        instruction: &Instruction,
     ) where
-        E: Executor<F> + Clone,
+        E: Executor + Clone,
     {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(executor, preflight, instruction, initial_pc);
@@ -84,11 +84,11 @@ where
     fn execute_with_pc<E>(
         &mut self,
         executor: &mut E,
-        preflight: &mut TestPreflight<F>,
-        instruction: &Instruction<F>,
+        preflight: &mut TestPreflight,
+        instruction: &Instruction,
         initial_pc: u32,
     ) where
-        E: Executor<F> + Clone,
+        E: Executor + Clone,
     {
         let program =
             Program::new_without_debug_infos(std::slice::from_ref(instruction), initial_pc);
@@ -98,7 +98,7 @@ where
         let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
         let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
         state.rng = self.rng.clone();
-        let output = execute_test_preflight(
+        let output = execute_test_preflight::<F, E>(
             self.memory.controller.memory_config(),
             executor,
             &program,

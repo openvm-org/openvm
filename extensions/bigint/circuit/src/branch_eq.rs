@@ -9,9 +9,10 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::bytes_to_u32;
+use openvm_riscv_circuit::adapters::{
+    bytes_to_u32, decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS,
+};
 use openvm_riscv_transpiler::BranchEqualOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256},
@@ -27,7 +28,7 @@ impl BranchEqual256Executor {
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct BranchEqPreCompute {
-    imm: isize,
+    imm: i32,
     a: u8,
     b: u8,
 }
@@ -41,7 +42,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for BranchEqual256Executor {
+impl InterpreterExecutor for BranchEqual256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -57,7 +58,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for BranchEqual256Executor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -72,7 +73,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for BranchEqual256Executor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -84,7 +85,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for BranchEqual256Executor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BranchEqual256Executor {
+impl InterpreterMeteredExecutor for BranchEqual256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqPreCompute>>()
     }
@@ -94,7 +95,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BranchEqual256Executor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -111,7 +112,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BranchEqual256Executor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -136,7 +137,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
     let rs2 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs2_ptr))?;
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
-        pc = (pc as isize + pre_compute.imm) as u32;
+        pc = pc.wrapping_add_signed(pre_compute.imm);
     } else {
         pc = pc.wrapping_add(DEFAULT_PC_STEP);
     }
@@ -171,10 +172,10 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
 }
 
 impl BranchEqual256Executor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut BranchEqPreCompute,
     ) -> Result<BranchEqualOpcode, StaticProgramError> {
         let Instruction {
@@ -186,20 +187,16 @@ impl BranchEqual256Executor {
             e,
             ..
         } = inst;
-        let c = c.as_canonical_u32();
-        let imm = if F::ORDER_U32 - c < c {
-            -((F::ORDER_U32 - c) as isize)
-        } else {
-            c as isize
-        };
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let imm = decode_signed_instruction_imm(*c, RV_B_TYPE_IMM_BITS)
+            .ok_or(StaticProgramError::InvalidInstruction(pc))?;
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchEqPreCompute {
             imm,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         let local_opcode = BranchEqualOpcode::from_usize(
             opcode.local_opcode_idx(BranchEqual256Opcode::CLASS_OFFSET),

@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BitwiseLogicImmCoreExecutor;
 use crate::adapters::{imm_to_u64, is_canonical_i12};
@@ -29,10 +28,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     BitwiseLogicImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
-    pub(super) fn pre_compute_impl<F: PrimeField32>(
+    pub(super) fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut BitwiseLogicImmPreCompute,
     ) -> Result<BaseAluImmOpcode, StaticProgramError> {
         let Instruction {
@@ -44,17 +43,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
             e,
             ..
         } = inst;
-        let c = c.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS
-            || e.as_canonical_u32() != IMM_AS
-            || !is_canonical_i12(c)
-        {
+        let c = c.as_u32();
+        if d.as_u32() != REGISTER_AS || e.as_u32() != IMM_AS || !is_canonical_i12(c) {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BitwiseLogicImmPreCompute {
             imm: imm_to_u64(c),
-            rd_ptr: a.as_canonical_u32() as u8,
-            rs1_ptr: b.as_canonical_u32() as u8,
+            rd_ptr: a.as_u32() as u8,
+            rs1_ptr: b.as_u32() as u8,
         };
         Ok(BaseAluImmOpcode::from_usize(
             opcode.local_opcode_idx(self.offset),
@@ -62,10 +58,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     for BitwiseLogicImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
@@ -80,7 +74,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -100,7 +94,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -117,10 +111,8 @@ where
     }
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
     for BitwiseLogicImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -132,7 +124,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -154,7 +146,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

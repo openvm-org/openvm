@@ -13,7 +13,7 @@ mod tests {
     };
     #[cfg(feature = "rvr")]
     use openvm_circuit::{
-        arch::{rvr::PreflightLimits, ExecutionError, VirtualMachine, VmExecutor, VmState},
+        arch::{rvr::PreflightLimits, ExecutionError, VirtualMachine, VmFieldExecutor, VmState},
         system::memory::online::{GuestMemory, LinearMemory, TouchedPages, PAGE_SIZE},
         utils::test_cpu_engine,
     };
@@ -106,7 +106,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -156,7 +156,7 @@ mod tests {
     fn test_preflight_carries_deferral_state_across_segments() -> Result<()> {
         let config = make_config(1);
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
                     REGISTER_NUM_LIMBS,
@@ -166,11 +166,11 @@ mod tests {
                     MEMORY_AS as usize,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
                     REGISTER_NUM_LIMBS,
@@ -180,7 +180,7 @@ mod tests {
                     MEMORY_AS as usize,
                 ],
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let output_ptr = 128u64;
         let input_ptr = 64u64;
@@ -214,7 +214,7 @@ mod tests {
             deferrals: vec![deferral],
             ..Default::default()
         };
-        let executor = VmExecutor::new(config)?;
+        let executor = VmFieldExecutor::<F, _>::new(config)?;
         let checkpoint = executor.preflight_instance(&exe)?;
         let mut initial = checkpoint.create_initial_vm_state(streams);
         let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
@@ -249,7 +249,7 @@ mod tests {
     fn deferral_output_oob_sizing_read_traps_in_every_rvr_mode() -> Result<()> {
         let config = make_config(1);
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 DeferralOpcode::OUTPUT.global_opcode(),
                 [
                     REGISTER_NUM_LIMBS,
@@ -259,7 +259,7 @@ mod tests {
                     MEMORY_AS as usize,
                 ],
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let mut exe = VmExe::from(Program::from_instructions(&instructions));
         for (offset, byte) in u64::MAX.to_le_bytes().into_iter().enumerate() {
@@ -269,7 +269,7 @@ mod tests {
             );
         }
 
-        let executor = VmExecutor::new(config.clone())?;
+        let executor = VmFieldExecutor::<F, _>::new(config.clone())?;
         let pure_error = executor
             .instance(&exe)?
             .execute(Streams::default())

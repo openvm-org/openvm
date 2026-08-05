@@ -39,12 +39,12 @@ struct DeferralCallPrecompute<'a> {
     deferral_fn: &'a DeferralFn,
 }
 
-impl DeferralCallExecutor {
+impl<F: VmField> DeferralCallExecutor<F> {
     #[inline(always)]
-    fn pre_compute_impl<'a, F: VmField>(
+    fn pre_compute_impl<'a>(
         &'a self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut DeferralCallPrecompute<'a>,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -58,13 +58,13 @@ impl DeferralCallExecutor {
         } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::CALL as usize
-            || d.as_canonical_u32() != REGISTER_AS
-            || e.as_canonical_u32() != MEMORY_AS
+            || d.as_u32() != REGISTER_AS
+            || e.as_u32() != MEMORY_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        let deferral_idx = c.as_canonical_u32();
+        let deferral_idx = c.as_u32();
         let deferral_fn = self
             .deferral_fns
             .get(deferral_idx as usize)
@@ -72,8 +72,8 @@ impl DeferralCallExecutor {
 
         let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
         *data = DeferralCallPrecompute {
-            rd_ptr: a.as_canonical_u32(),
-            rs_ptr: b.as_canonical_u32(),
+            rd_ptr: a.as_u32(),
+            rs_ptr: b.as_u32(),
             deferral_idx,
             input_acc_ptr,
             output_acc_ptr,
@@ -84,7 +84,7 @@ impl DeferralCallExecutor {
     }
 }
 
-impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
+impl<F: VmField> InterpreterExecutor for DeferralCallExecutor<F> {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         format!("{:?}", DeferralOpcode::CALL)
     }
@@ -97,7 +97,7 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -112,7 +112,7 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -124,7 +124,7 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     }
 }
 
-impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
+impl<F: VmField> InterpreterMeteredExecutor for DeferralCallExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DeferralCallPrecompute>>()
     }
@@ -134,7 +134,7 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -151,7 +151,7 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

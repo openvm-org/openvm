@@ -52,7 +52,7 @@ struct DeferralOutputReplay {
 /// never reads deferral streams or invokes a host callback.
 pub fn generate_trace_from_postflight<F: VmField>(
     chip: &DeferralOutputChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(DeferralOpcode::OUTPUT.global_opcode());
     let width = DeferralOutputCols::<F>::width();
@@ -62,14 +62,12 @@ pub fn generate_trace_from_postflight<F: VmField>(
     // Validate and collect every section before mutating lookup producers.
     for &step in steps {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != MEMORY_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
             return Err(PostflightError::new(
                 "Deferral OUTPUT has invalid address spaces",
             ));
         }
-        let deferral_idx = instruction.c.as_canonical_u32();
+        let deferral_idx = instruction.c.as_u32();
         if deferral_idx as usize >= chip.inner.count_chip.count.len() {
             return Err(PostflightError::new(
                 "Deferral OUTPUT index is out of bounds",
@@ -77,8 +75,8 @@ pub fn generate_trace_from_postflight<F: VmField>(
         }
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
-        let rd_ptr = instruction.a.as_canonical_u32();
-        let rs_ptr = instruction.b.as_canonical_u32();
+        let rd_ptr = instruction.a.as_u32();
+        let rs_ptr = instruction.b.as_u32();
         let mut replay = postflight.replay(step);
         let rd = replay.read_u16(
             REGISTER_AS,

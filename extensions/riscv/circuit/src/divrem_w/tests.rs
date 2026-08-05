@@ -146,10 +146,10 @@ fn create_harness(
 /// Only the low 32-bit word participates in the core div/rem relation; upper bytes are
 /// consumed by adapter full-width read constraints.
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
+fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
     b: Option<[u32; REGISTER_NUM_LIMBS]>,
@@ -219,10 +219,10 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 
 // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
 // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
-fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor<F> + Clone>(
+fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
 ) {

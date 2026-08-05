@@ -26,7 +26,7 @@ use crate::{
     primitives::Chip,
     system::{
         memory::{offline_checker::MemoryBus, MemoryAddress, MemoryImage},
-        TouchedMemory,
+        TouchedBlock,
     },
 };
 
@@ -214,8 +214,8 @@ type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // ((addr_space, leaf_label)
 pub(crate) type LeafGroupedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
 /// Groups final memory blocks that are strictly ordered by `(address_space, pointer)`.
-pub(crate) fn group_sorted_touched_memory_by_leaf<F: Copy + Send + Sync>(
-    final_memory: &TouchedMemory<F>,
+pub(crate) fn group_sorted_touched_memory_by_leaf<F: PrimeField32>(
+    final_memory: &[TouchedBlock],
 ) -> LeafGroupedTouchedMemory<F> {
     let enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
@@ -227,7 +227,13 @@ pub(crate) fn group_sorted_touched_memory_by_leaf<F: Copy + Send + Sync>(
                 block_idx,
                 block.timestamp,
                 block.is_dirty != 0,
-                block.values,
+                block.values.map(|value| {
+                    assert!(
+                        value < F::ORDER_U32,
+                        "touched memory value must be canonical"
+                    );
+                    F::from_u32(value)
+                }),
             );
             (key, block_info)
         })
@@ -390,5 +396,42 @@ where
             RowMajorMatrix::new(rows, width)
         };
         AirProvingContext::simple_no_pis(trace)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::system::TouchedBlock;
+
+    #[test]
+    fn touched_memory_values_must_be_canonical() {
+        let block = TouchedBlock {
+            address_space: 0,
+            ptr: 0,
+            is_dirty: 1,
+            timestamp: 1,
+            values: [0, 1, 123_456, BabyBear::ORDER_U32 - 1],
+        };
+        let grouped = group_sorted_touched_memory_by_leaf::<BabyBear>(&[block]);
+        assert_eq!(
+            grouped[0].1[0].3.map(|value| value.as_canonical_u32()),
+            [0, 1, 123_456, BabyBear::ORDER_U32 - 1]
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "touched memory value must be canonical")]
+    fn touched_memory_rejects_noncanonical_values() {
+        let block = TouchedBlock {
+            address_space: 0,
+            ptr: 0,
+            is_dirty: 1,
+            timestamp: 1,
+            values: [0, 1, 123_456, BabyBear::ORDER_U32],
+        };
+        group_sorted_touched_memory_by_leaf::<BabyBear>(&[block]);
     }
 }

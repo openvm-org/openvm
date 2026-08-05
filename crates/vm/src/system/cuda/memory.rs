@@ -20,7 +20,7 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 #[cfg(feature = "parallel")]
 use openvm_stark_backend::p3_maybe_rayon::prelude::IndexedParallelIterator;
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice, ParallelSliceMut},
     prover::AirProvingContext,
 };
@@ -60,16 +60,16 @@ const _: () = assert!(
     "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
 );
 
-// `TouchedBlock<F>` must exactly match the CUDA `MemoryTouchedBlock` layout so
+// `TouchedBlock` must exactly match the CUDA `MemoryTouchedBlock` layout so
 // the merge path can upload the vector's bytes without repacking.
 const _: () = assert!(
-    std::mem::size_of::<TouchedBlock<F>>() == (4 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>()
-        && std::mem::offset_of!(TouchedBlock<F>, address_space) == 0
-        && std::mem::offset_of!(TouchedBlock<F>, ptr) == std::mem::size_of::<u32>()
-        && std::mem::offset_of!(TouchedBlock<F>, is_dirty) == 2 * std::mem::size_of::<u32>()
-        && std::mem::offset_of!(TouchedBlock<F>, timestamp) == 3 * std::mem::size_of::<u32>()
-        && std::mem::offset_of!(TouchedBlock<F>, values) == 4 * std::mem::size_of::<u32>(),
-    "TouchedBlock<F> must match MemoryTouchedBlock in system/memory/touched_block.cuh"
+    std::mem::size_of::<TouchedBlock>() == (4 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock, address_space) == 0
+        && std::mem::offset_of!(TouchedBlock, ptr) == std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock, is_dirty) == 2 * std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock, timestamp) == 3 * std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock, values) == 4 * std::mem::size_of::<u32>(),
+    "TouchedBlock must match MemoryTouchedBlock in system/memory/touched_block.cuh"
 );
 
 pub struct MemoryInventoryGPU {
@@ -273,8 +273,14 @@ impl MemoryInventoryGPU {
     #[instrument(name = "generate_proving_ctxs", skip_all)]
     pub fn generate_proving_ctxs(
         &mut self,
-        touched_memory: TouchedMemory<F>,
+        touched_memory: TouchedMemory,
     ) -> Vec<AirProvingContext<GpuBackend>> {
+        assert!(
+            touched_memory
+                .iter()
+                .all(|block| block.values.iter().all(|&value| value < F::ORDER_U32)),
+            "touched memory contains a non-canonical field value"
+        );
         let in_num_records = touched_memory.len();
         if in_num_records == 0 {
             // SAFETY: the exact empty prefix has no backing allocation to keep
@@ -289,7 +295,7 @@ impl MemoryInventoryGPU {
                 )
             };
         }
-        let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock<F>>();
+        let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock>();
         let mut h_in = pinned::take(in_bytes + 4);
         let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
         let dirty_len = align_offset + in_bytes;
@@ -339,8 +345,9 @@ impl MemoryInventoryGPU {
     ///
     /// # Safety
     ///
-    /// `touched_memory` must point to `in_num_records` valid `TouchedBlock<F>`
-    /// records on `self.device_ctx` and remain alive until this method returns.
+    /// `touched_memory` must point to `in_num_records` valid `TouchedBlock`
+    /// records on `self.device_ctx`, every value must be canonical for the CUDA
+    /// proof field, and the allocation must remain alive until this method returns.
     #[instrument(name = "generate_proving_ctxs_from_device", skip_all)]
     pub(crate) unsafe fn generate_proving_ctxs_from_device(
         &mut self,
@@ -357,10 +364,10 @@ impl MemoryInventoryGPU {
         &mut self,
         touched_memory: DeviceBufferView,
         in_num_records: usize,
-        host_touched_memory: Option<&[TouchedBlock<F>]>,
+        host_touched_memory: Option<&[TouchedBlock]>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let expected_bytes = in_num_records
-            .checked_mul(std::mem::size_of::<TouchedBlock<F>>())
+            .checked_mul(std::mem::size_of::<TouchedBlock>())
             .expect("touched-memory byte length overflow");
         assert_eq!(
             touched_memory.size, expected_bytes,
@@ -663,12 +670,16 @@ impl Drop for MemoryInventoryGPU {
 #[cfg(test)]
 mod tests {
     use std::{
+        array,
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
     };
 
     use openvm_circuit::{
-        arch::{vm_poseidon2_config, MemoryConfig, ADDR_SPACE_OFFSET, MEMORY_BLOCK_BYTES},
+        arch::{
+            vm_poseidon2_config, AddressSpaceHostConfig, MemoryCellType, MemoryConfig,
+            ADDR_SPACE_OFFSET, MEMORY_BLOCK_BYTES,
+        },
         system::{
             memory::{
                 merkle::{memory_to_vec_partition, MemoryMerkleChip, MerkleTree},
@@ -693,6 +704,7 @@ mod tests {
     use openvm_instructions::{
         exe::SparseMemoryImage,
         riscv::{MEMORY_AS, REGISTER_AS},
+        DEFERRAL_AS,
     };
     use openvm_stark_backend::{
         interaction::PermutationCheckBus,
@@ -713,11 +725,15 @@ mod tests {
         cpu_merkle_tree.root()
     }
 
+    fn pack_u8_block_canonical(bytes: [u8; MEMORY_BLOCK_BYTES]) -> [u32; BLOCK_FE_WIDTH] {
+        pack_u8_block_value(&bytes.map(F::from_u8)).map(|value| value.as_canonical_u32())
+    }
+
     /// Builds a GPU inventory, loads `initial_memory`, returns the contexts for `touched_memory`.
     fn run_inventory(
         mem_config: &MemoryConfig,
         initial_memory: &AddressMap,
-        touched_memory: TouchedMemory<F>,
+        touched_memory: TouchedMemory,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
@@ -735,7 +751,7 @@ mod tests {
     fn run_inventory_direct(
         mem_config: &MemoryConfig,
         initial_memory: &AddressMap,
-        touched_memory: TouchedMemory<F>,
+        touched_memory: TouchedMemory,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
@@ -872,28 +888,28 @@ mod tests {
                 ptr: 0,
                 is_dirty: 0,
                 timestamp: 1,
-                values: pack_u8_block_value(&clean_register_bytes.map(F::from_u8)),
+                values: pack_u8_block_canonical(clean_register_bytes),
             },
             TouchedBlock {
                 address_space: REGISTER_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
                 timestamp: 2,
-                values: pack_u8_block_value(&touched_register_bytes.map(F::from_u8)),
+                values: pack_u8_block_canonical(touched_register_bytes),
             },
             TouchedBlock {
                 address_space: MEMORY_AS,
                 ptr: 0,
                 is_dirty: 0,
                 timestamp: 3,
-                values: pack_u8_block_value(&clean_memory_bytes.map(F::from_u8)),
+                values: pack_u8_block_canonical(clean_memory_bytes),
             },
             TouchedBlock {
                 address_space: MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
                 timestamp: 4,
-                values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
+                values: pack_u8_block_canonical(touched_bytes_late),
             },
         ];
         let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory.clone());
@@ -909,6 +925,56 @@ mod tests {
             "boundary chip should not emit public values"
         );
 
+        assert_eq!(expected_root, gpu_merkle_root(&ctxs));
+    }
+
+    #[test]
+    fn test_canonical_field_touched_memory_matches_cpu_merkle_root() {
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        addr_spaces[DEFERRAL_AS as usize] =
+            AddressSpaceHostConfig::new(2 * VM_DIGEST_WIDTH, MemoryCellType::field32());
+        let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
+        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        let mut first_leaf = array::from_fn(|i| 100 + i as u32);
+        first_leaf[BLOCK_FE_WIDTH] = F::ORDER_U32 - 2;
+        let second_leaf = array::from_fn(|i| 1_000 + i as u32);
+        unsafe {
+            memory.write::<F, VM_DIGEST_WIDTH>(DEFERRAL_AS, 0, first_leaf.map(F::from_u32));
+            memory.write::<F, VM_DIGEST_WIDTH>(
+                DEFERRAL_AS,
+                VM_DIGEST_WIDTH as u32,
+                second_leaf.map(F::from_u32),
+            );
+        }
+        memory.memory.recompute_touched_pages();
+        let mut final_memory = memory.clone();
+        let dirty_values = [0, 1, 123_456, F::ORDER_U32 - 1];
+        let clean_values: [u32; BLOCK_FE_WIDTH] = second_leaf[..BLOCK_FE_WIDTH].try_into().unwrap();
+        unsafe {
+            final_memory.write::<F, BLOCK_FE_WIDTH>(DEFERRAL_AS, 0, dirty_values.map(F::from_u32));
+        }
+
+        let expected_root = cpu_merkle_root(&final_memory.memory, &mem_config);
+        let touched_memory = vec![
+            TouchedBlock {
+                address_space: DEFERRAL_AS,
+                ptr: 0,
+                is_dirty: 1,
+                timestamp: 1,
+                values: dirty_values,
+            },
+            TouchedBlock {
+                address_space: DEFERRAL_AS,
+                ptr: VM_DIGEST_WIDTH as u32,
+                is_dirty: 0,
+                timestamp: 2,
+                values: clean_values,
+            },
+        ];
+        let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory.clone());
+        let direct_ctxs = run_inventory_direct(&mem_config, &memory.memory, touched_memory);
+
+        assert_same_contexts(&ctxs, &direct_ctxs);
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 
@@ -994,14 +1060,14 @@ mod tests {
                 ptr: 0,
                 is_dirty: 1,
                 timestamp: 1,
-                values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
+                values: pack_u8_block_canonical(touched_bytes),
             },
             TouchedBlock {
                 address_space: MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
                 timestamp: 3,
-                values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
+                values: pack_u8_block_canonical(touched_bytes_late),
             },
         ];
         let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory);

@@ -14,7 +14,7 @@ use crate::adapters::{BaseAluRegAdapterCols, BaseAluRegAdapterFiller};
 /// Generates the RV64 bitwise trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &BitwiseLogicChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND];
     let rows_used = opcodes

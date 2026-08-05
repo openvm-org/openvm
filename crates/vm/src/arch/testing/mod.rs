@@ -48,20 +48,20 @@ pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
 #[derive(Clone)]
-pub struct TestPreflightExecution<F> {
-    pub program: Program<F>,
+pub struct TestPreflightExecution {
+    pub program: Program,
     pub history: PreflightHistory,
 }
 
 #[derive(Clone, Default)]
-pub struct TestPreflight<F> {
-    pub executions: Vec<TestPreflightExecution<F>>,
+pub struct TestPreflight {
+    pub executions: Vec<TestPreflightExecution>,
 }
 
 type TestTraceGenerator<F, C> =
-    Box<dyn for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>>;
+    Box<dyn for<'a> Fn(&C, &Postflight<'a>) -> Result<RowMajorMatrix<F>, PostflightError>>;
 type TestBatchTraceGenerator<F, C> =
-    Box<dyn for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>>;
+    Box<dyn for<'a> Fn(&C, &[Postflight<'a>]) -> Result<RowMajorMatrix<F>, PostflightError>>;
 type TestTracePadding<F> = Box<dyn Fn(&mut [F])>;
 type TestTraceRows<F> = Box<dyn Fn(&RowMajorMatrix<F>) -> usize>;
 
@@ -69,7 +69,7 @@ pub struct TestChipHarness<F, E, A, C> {
     pub executor: E,
     pub air: A,
     pub chip: C,
-    pub preflight: TestPreflight<F>,
+    pub preflight: TestPreflight,
     pub generate_trace: TestTraceGenerator<F, C>,
     pub generate_batch_trace: Option<TestBatchTraceGenerator<F, C>>,
     pub rows_used: TestTraceRows<F>,
@@ -81,12 +81,12 @@ pub struct TestChipHarness<F, E, A, C> {
 pub(crate) fn execute_test_preflight<F, E>(
     _memory_config: &MemoryConfig,
     executor: &E,
-    program: &Program<F>,
+    program: &Program,
     state: VmState<GuestMemory>,
 ) -> PreflightOutput
 where
     F: VmField,
-    E: Executor<F>,
+    E: Executor,
 {
     let instruction = &program
         .get_instruction_and_debug_info(0)
@@ -103,7 +103,7 @@ where
     let handler = executor
         .pre_compute::<PreflightCtx>(state.pc(), instruction, pre_compute)
         .expect("test instruction must be statically valid");
-    let ctx = PreflightCtx::new::<F>(&state.memory, Some(1));
+    let ctx = PreflightCtx::new_for_field::<F>(&state.memory, Some(1));
     let mut exec_state = VmExecState::new(state, ctx);
     assert!(!PreflightCtx::should_suspend(&mut exec_state));
     let pc = exec_state.pc();
@@ -130,12 +130,12 @@ where
 pub(crate) fn execute_test_preflight<F, E>(
     memory_config: &MemoryConfig,
     executor: &E,
-    program: &Program<F>,
+    program: &Program,
     state: VmState<GuestMemory>,
 ) -> PreflightOutput
 where
     F: VmField,
-    E: Executor<F> + Clone,
+    E: Executor + Clone,
 {
     let instruction = &program
         .get_instruction_and_debug_info(0)
@@ -161,8 +161,7 @@ where
 {
     pub fn with_capacity<G>(executor: E, air: A, chip: C, height: usize, generate_trace: G) -> Self
     where
-        G: for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>
-            + 'static,
+        G: for<'a> Fn(&C, &Postflight<'a>) -> Result<RowMajorMatrix<F>, PostflightError> + 'static,
     {
         Self {
             executor,
@@ -181,7 +180,7 @@ where
 
     pub fn with_batch_trace_generator(
         mut self,
-        generate_trace: impl for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>
+        generate_trace: impl for<'a> Fn(&C, &[Postflight<'a>]) -> Result<RowMajorMatrix<F>, PostflightError>
             + 'static,
     ) -> Self {
         self.generate_batch_trace = Some(Box::new(generate_trace));
@@ -208,18 +207,18 @@ where
 }
 
 pub trait TestBuilder<F: PrimeField32> {
-    fn execute<E: Executor<F> + Clone>(
+    fn execute<E: Executor + Clone>(
         &mut self,
         executor: &mut E,
-        preflight: &mut TestPreflight<F>,
-        instruction: &Instruction<F>,
+        preflight: &mut TestPreflight,
+        instruction: &Instruction,
     );
 
-    fn execute_with_pc<E: Executor<F> + Clone>(
+    fn execute_with_pc<E: Executor + Clone>(
         &mut self,
         executor: &mut E,
-        preflight: &mut TestPreflight<F>,
-        instruction: &Instruction<F>,
+        preflight: &mut TestPreflight,
+        instruction: &Instruction,
         initial_pc: u32,
     );
 

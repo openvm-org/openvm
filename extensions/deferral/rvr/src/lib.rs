@@ -15,6 +15,7 @@ use openvm_circuit::arch::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
+    instruction::Instruction,
     riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode, VM_DIGEST_WIDTH,
 };
@@ -25,7 +26,7 @@ use rvr_openvm_ir::{
 use rvr_openvm_lift::{
     air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
     max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    RvrExtension, RvrExtensionCtx, RvrRuntimeExtension,
 };
 
 fn decode_reg(value: u32) -> Variable {
@@ -257,13 +258,13 @@ impl DeferralRvrExtension {
 }
 
 impl RvrExtension for DeferralRvrExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == DeferralOpcode::CALL.global_opcode_usize() {
-            let rd_reg = decode_reg(insn.a);
-            let rs_reg = decode_reg(insn.b);
-            let def_idx = insn.c;
+            let rd_reg = decode_reg(insn.a.as_u32());
+            let rs_reg = decode_reg(insn.b.as_u32());
+            let def_idx = insn.c.as_u32();
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(DeferralCallInstr {
@@ -277,9 +278,9 @@ impl RvrExtension for DeferralRvrExtension {
         }
 
         if opcode == DeferralOpcode::OUTPUT.global_opcode_usize() {
-            let rd_reg = decode_reg(insn.a);
-            let rs_reg = decode_reg(insn.b);
-            let def_idx = insn.c;
+            let rd_reg = decode_reg(insn.a.as_u32());
+            let rs_reg = decode_reg(insn.b.as_u32());
+            let def_idx = insn.c.as_u32();
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(DeferralOutputInstr {

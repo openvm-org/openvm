@@ -18,11 +18,8 @@ mod tests {
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sdk::StdIn;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-    type F = BabyBear;
 
     struct TestVector {
         input: Vec<u8>,
@@ -74,7 +71,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Keccak256TranspilerExtension)
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)

@@ -19,7 +19,7 @@ use crate::{
 /// Generates the RV64 MULW trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &MulWChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = MulWOpcode::MULW.global_opcode();
     let rows_used = postflight.steps(opcode).len();

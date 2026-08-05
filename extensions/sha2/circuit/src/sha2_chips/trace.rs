@@ -5,7 +5,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::u16_block_to_bytes;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{Sha2Config, SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
@@ -28,21 +27,20 @@ pub(crate) struct Sha2ReplayRow {
     pub write_prev_data: Vec<[u8; SHA2_WRITE_SIZE]>,
 }
 
-pub(crate) fn replay_sha2_from_postflight<F, C>(
-    postflight: &Postflight<'_, F>,
+pub(crate) fn replay_sha2_from_postflight<C>(
+    postflight: &Postflight<'_>,
     step: PostflightStep,
     pointer_max_bits: usize,
 ) -> Result<Sha2ReplayRow, PostflightError>
 where
-    F: PrimeField32,
     C: Sha2Config,
 {
     let instruction = postflight.instruction(step);
     if instruction.opcode != C::OPCODE.global_opcode()
-        || instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-        || instruction.f.as_canonical_u32() != 0
-        || instruction.g.as_canonical_u32() != 0
+        || instruction.d.as_u32() != REGISTER_AS
+        || instruction.e.as_u32() != MEMORY_AS
+        || instruction.f.as_u32() != 0
+        || instruction.g.as_u32() != 0
     {
         return Err(PostflightError::new(
             "SHA-2 instruction has invalid opcode or address spaces",
@@ -50,9 +48,9 @@ where
     }
 
     let register_ptrs = [
-        instruction.a.as_canonical_u32(),
-        instruction.b.as_canonical_u32(),
-        instruction.c.as_canonical_u32(),
+        instruction.a.as_u32(),
+        instruction.b.as_u32(),
+        instruction.c.as_u32(),
     ];
     if register_ptrs.iter().any(|&ptr| {
         ptr as usize >= NUM_REGISTERS * REGISTER_NUM_LIMBS

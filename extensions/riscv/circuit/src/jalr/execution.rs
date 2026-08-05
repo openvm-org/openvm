@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalrOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::JalrExecutor;
 use crate::adapters::{address_add_imm, bytes_to_u32};
@@ -26,20 +25,20 @@ struct JalrPreCompute {
 
 impl JalrExecutor {
     /// Return true if enabled.
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut JalrPreCompute,
     ) -> Result<bool, StaticProgramError> {
-        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
-        if inst.d.as_canonical_u32() != REGISTER_AS {
+        let imm_extended = inst.c.as_u32() + inst.g.as_u32() * 0xffff0000;
+        if inst.d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = JalrPreCompute {
             imm_extended,
-            a: inst.a.as_canonical_u32() as u8,
-            b: inst.b.as_canonical_u32() as u8,
+            a: inst.a.as_u32() as u8,
+            b: inst.b.as_u32() as u8,
         };
         let enabled = !inst.f.is_zero();
         Ok(enabled)
@@ -56,10 +55,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for JalrExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterExecutor for JalrExecutor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -76,7 +72,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut JalrPreCompute = data.borrow_mut();
@@ -88,7 +84,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -100,10 +96,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for JalrExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterMeteredExecutor for JalrExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<JalrPreCompute>>()
     }
@@ -113,7 +106,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -130,7 +123,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

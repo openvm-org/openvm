@@ -22,7 +22,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{load_sign_extend_width_for_opcode, LoadSignExtendExecutor};
 use crate::adapters::{
@@ -39,10 +38,10 @@ struct LoadSignExtendPreCompute {
 }
 
 impl<const LOAD_WIDTH: usize> LoadSignExtendExecutor<LOAD_WIDTH> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut LoadSignExtendPreCompute,
     ) -> Result<(LoadStoreOpcode, bool), StaticProgramError> {
         let Instruction {
@@ -58,8 +57,8 @@ impl<const LOAD_WIDTH: usize> LoadSignExtendExecutor<LOAD_WIDTH> {
         } = inst;
         let enabled = !f.is_zero();
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -71,12 +70,12 @@ impl<const LOAD_WIDTH: usize> LoadSignExtendExecutor<LOAD_WIDTH> {
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
+        let imm = c.as_u32();
+        let imm_sign = g.as_u32();
         *data = LoadSignExtendPreCompute {
             imm_extended: sign_extend_imm16(imm, imm_sign),
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok((local_opcode, enabled))
     }
@@ -96,10 +95,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadSignExtendExecutor<LOAD_WIDTH>
-where
-    F: PrimeField32,
-{
+impl<const LOAD_WIDTH: usize> InterpreterExecutor for LoadSignExtendExecutor<LOAD_WIDTH> {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", LoadStoreOpcode::from_usize(opcode - self.offset))
     }
@@ -114,7 +110,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
@@ -126,7 +122,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -138,11 +134,7 @@ where
     }
 }
 
-impl<F, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F>
-    for LoadSignExtendExecutor<LOAD_WIDTH>
-where
-    F: PrimeField32,
-{
+impl<const LOAD_WIDTH: usize> InterpreterMeteredExecutor for LoadSignExtendExecutor<LOAD_WIDTH> {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<LoadSignExtendPreCompute>>()
     }
@@ -152,7 +144,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -169,7 +161,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

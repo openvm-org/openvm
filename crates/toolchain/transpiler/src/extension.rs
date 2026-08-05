@@ -5,14 +5,14 @@ use openvm_instructions::{exe::SparseMemoryImage, instruction::Instruction};
 /// RISC-V instructions always come in 32-bit chunks.
 /// An important feature is that multiple 32-bit RISC-V instructions can be transpiled into a single
 /// OpenVM instruction. See [process_custom](Self::process_custom) for details.
-pub trait TranspilerExtension<F> {
+pub trait TranspilerExtension {
     /// The `instruction_stream` provides a view of the remaining RISC-V instructions to be
     /// processed, presented as 32-bit chunks. The [process_custom](Self::process_custom) should
     /// determine if it knows how to transpile the next contiguous section of RISC-V
     /// instructions into an [`Instruction`]. It returns `None` if it cannot transpile.
     /// Otherwise it returns `TranspilerOutput { instructions, used_u32s }` to indicate that
     /// `instruction_stream[..used_u32s]` should be transpiled into `instructions`.
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>>;
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput>;
 
     /// Each transpiler extension is given the opportunity to modify the initial memory state.
     /// By default, nothing is done.
@@ -21,20 +21,20 @@ pub trait TranspilerExtension<F> {
     }
 }
 
-pub struct TranspilerOutput<F> {
-    pub instructions: Vec<Option<Instruction<F>>>,
+pub struct TranspilerOutput {
+    pub instructions: Vec<Option<Instruction>>,
     pub used_u32s: usize,
 }
 
-impl<F> TranspilerOutput<F> {
-    pub fn one_to_one(instruction: Instruction<F>) -> Self {
+impl TranspilerOutput {
+    pub fn one_to_one(instruction: Instruction) -> Self {
         Self {
             instructions: vec![Some(instruction)],
             used_u32s: 1,
         }
     }
 
-    pub fn many_to_one(instruction: Instruction<F>, used_u32s: usize) -> Self {
+    pub fn many_to_one(instruction: Instruction, used_u32s: usize) -> Self {
         Self {
             instructions: vec![Some(instruction)],
             used_u32s,

@@ -16,7 +16,6 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::bytes_to_u32;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
 
@@ -29,10 +28,10 @@ struct XorinPreCompute {
 }
 
 impl XorinVmExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut XorinPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -45,22 +44,22 @@ impl XorinVmExecutor {
             ..
         } = inst;
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = XorinPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
 
         Ok(())
     }
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
+impl InterpreterExecutor for XorinVmExecutor {
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", XorinOpcode::XORIN)
     }
@@ -73,7 +72,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -88,7 +87,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -100,7 +99,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
+impl InterpreterMeteredExecutor for XorinVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<XorinPreCompute>>()
     }
@@ -110,7 +109,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -127,7 +126,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

@@ -14,7 +14,6 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::ShiftOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
@@ -54,7 +53,7 @@ macro_rules! dispatch {
 
 macro_rules! impl_shift256_executor {
     ($executor:ty, $is_right_arithmetic:expr) => {
-        impl<F: PrimeField32> InterpreterExecutor<F> for $executor {
+        impl InterpreterExecutor for $executor {
             fn get_opcode_name(&self, opcode: usize) -> String {
                 format!(
                     "{:?}",
@@ -70,7 +69,7 @@ macro_rules! impl_shift256_executor {
             fn pre_compute<Ctx>(
                 &self,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
             where
@@ -85,7 +84,7 @@ macro_rules! impl_shift256_executor {
             fn handler<Ctx>(
                 &self,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<Handler<Ctx>, StaticProgramError>
             where
@@ -97,7 +96,7 @@ macro_rules! impl_shift256_executor {
             }
         }
 
-        impl<F: PrimeField32> InterpreterMeteredExecutor<F> for $executor {
+        impl InterpreterMeteredExecutor for $executor {
             fn metered_pre_compute_size(&self) -> usize {
                 size_of::<E2PreCompute<ShiftPreCompute>>()
             }
@@ -107,7 +106,7 @@ macro_rules! impl_shift256_executor {
                 &self,
                 chip_idx: usize,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
             where
@@ -124,7 +123,7 @@ macro_rules! impl_shift256_executor {
                 &self,
                 chip_idx: usize,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<Handler<Ctx>, StaticProgramError>
             where
@@ -138,10 +137,10 @@ macro_rules! impl_shift256_executor {
         }
 
         impl $executor {
-            fn pre_compute_impl<F: PrimeField32>(
+            fn pre_compute_impl(
                 &self,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut ShiftPreCompute,
             ) -> Result<ShiftOpcode, StaticProgramError> {
                 let Instruction {
@@ -153,14 +152,14 @@ macro_rules! impl_shift256_executor {
                     e,
                     ..
                 } = inst;
-                let e_u32 = e.as_canonical_u32();
-                if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+                let e_u32 = e.as_u32();
+                if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
                     return Err(StaticProgramError::InvalidInstruction(pc));
                 }
                 *data = ShiftPreCompute {
-                    a: a.as_canonical_u32() as u8,
-                    b: b.as_canonical_u32() as u8,
-                    c: c.as_canonical_u32() as u8,
+                    a: a.as_u32() as u8,
+                    b: b.as_u32() as u8,
+                    c: c.as_u32() as u8,
                 };
                 let local_opcode =
                     ShiftOpcode::from_usize(opcode.local_opcode_idx(Shift256Opcode::CLASS_OFFSET));

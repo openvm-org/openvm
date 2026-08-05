@@ -1,29 +1,32 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use openvm_instructions::{instruction::Instruction, program::Program, VmOpcode};
-use p3_baby_bear::BabyBear;
+use openvm_instructions::{
+    instruction::{Instruction, InstructionOperand},
+    program::Program,
+    VmOpcode,
+};
 use rand::prelude::*;
 
-type F = BabyBear;
-
-fn random_instruction(rng: &mut impl Rng) -> Instruction<F> {
+fn random_instruction(rng: &mut impl Rng) -> Instruction {
+    let opcode = VmOpcode::from_usize(rng.random::<u16>() as usize);
+    let mut operand = || rng.random_range(InstructionOperand::MIN..=InstructionOperand::MAX);
     Instruction::new(
-        VmOpcode::from_usize(rng.random::<u16>() as usize),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
+        opcode,
+        InstructionOperand::from_i32(operand()),
+        InstructionOperand::from_i32(operand()),
+        InstructionOperand::from_i32(operand()),
+        InstructionOperand::from_i32(operand()),
+        InstructionOperand::from_i32(operand()),
+        InstructionOperand::from_i32(operand()),
+        InstructionOperand::from_i32(operand()),
     )
 }
 
 fn program_serde_bench(c: &mut Criterion) {
     let mut rng = StdRng::from_seed([42; 32]);
     let instructions: Vec<_> = (0..100_000).map(|_| random_instruction(&mut rng)).collect();
-    let program: Program<F> = Program::from_instructions(&instructions);
+    let program: Program = Program::from_instructions(&instructions);
     c.bench_function("bitcode serialize Program with 100000 instructions", |b| {
         b.iter(|| bitcode::serialize(black_box(&program)))
     });
@@ -31,7 +34,7 @@ fn program_serde_bench(c: &mut Criterion) {
     println!("Result length in bytes: {}", bytes.len());
     c.bench_function(
         "bitcode deserialize Program with 100000 instructions",
-        |b| b.iter(|| bitcode::deserialize::<'_, Program<F>>(black_box(&bytes))),
+        |b| b.iter(|| bitcode::deserialize::<'_, Program>(black_box(&bytes))),
     );
 }
 

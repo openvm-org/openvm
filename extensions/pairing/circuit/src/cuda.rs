@@ -15,9 +15,7 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_ecc_circuit::{EccProverExt, WeierstrassPreflightGpuTracegen};
 use openvm_instructions::program::Program;
 use openvm_stark_backend::prover::ProvingContext;
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{PairingProverExt, Rv64PairingConfig};
 
@@ -29,14 +27,14 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
 
     fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        program: &Program<BabyBear>,
+        program: &Program,
     ) -> Result<Self::Prepared, GenerationError> {
         prepare_gpu_postflight(vm, program)
     }
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        _host_program: &Program<BabyBear>,
+        _host_program: &Program,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
@@ -108,7 +106,7 @@ mod tests {
     };
     use openvm_instructions::{
         exe::{SparseMemoryImage, VmExe},
-        instruction::Instruction,
+        instruction::{Instruction, InstructionOperand},
         program::Program,
         riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, PhantomDiscriminant, SystemOpcode,
@@ -122,8 +120,7 @@ mod tests {
         Rv64ImPreflightGpuTracegen,
     };
     use openvm_riscv_transpiler::{HintStoreOpcode, JalLuiOpcode};
-    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, StarkEngine};
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_backend::StarkEngine;
     use rvr_state::PreflightProgramEvent;
 
     use super::*;
@@ -195,8 +192,8 @@ mod tests {
         let instructions = [
             Instruction::phantom(
                 PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
-                BabyBear::from_usize(reg(1)),
-                BabyBear::from_usize(reg(2)),
+                InstructionOperand::from_usize(reg(1)),
+                InstructionOperand::from_usize(reg(2)),
                 curve as u16,
             ),
             Instruction::from_usize(
@@ -326,7 +323,7 @@ mod tests {
 
     #[test]
     fn pairing_config_record_free_inventory_proves() {
-        let program = Program::from_instructions(&[Instruction::<BabyBear>::from_usize(
+        let program = Program::from_instructions(&[Instruction::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
             [0; 5],
         )]);

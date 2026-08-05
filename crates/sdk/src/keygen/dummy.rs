@@ -20,7 +20,7 @@ use {
         SC,
     },
     openvm_circuit::arch::{
-        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmFieldExecutionConfig,
     },
     openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, Val},
 };
@@ -29,7 +29,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::AppProvingKey,
     prover::{AggProver, StarkProver},
-    DeferralSetup, StdIn, F,
+    DeferralSetup, StdIn,
 };
 
 type CpuRootE =
@@ -43,8 +43,8 @@ cfg_if::cfg_if! {
     }
 }
 
-fn dummy_terminate_exe() -> Arc<VmExe<F>> {
-    let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
+fn dummy_terminate_exe() -> Arc<VmExe> {
+    let dummy_program = Program::from_instructions(&[Instruction::from_isize(
         SystemOpcode::TERMINATE.global_opcode(),
         0,
         0,
@@ -141,7 +141,8 @@ where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E> + Clone,
     Val<SC>: PrimeField32,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
+    <VB::VmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor:
+        Executor + MeteredExecutor + 'static,
 {
     let dummy_exe = dummy_terminate_exe();
 

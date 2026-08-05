@@ -1,8 +1,11 @@
 //! Shared RV64 instruction decoding and IR helpers.
 
-use openvm_instructions::riscv::{NUM_REGISTERS, REGISTER_BYTES};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
+};
 use rvr_openvm_ir::{CfgOperand, Variable};
-use rvr_openvm_lift::{decode_variable, RvrInstruction};
+use rvr_openvm_lift::decode_variable;
 
 /// The IR representation of an RV64 integer register.
 pub(crate) type Reg = Variable;
@@ -22,9 +25,9 @@ pub(crate) fn decode_reg(value: u32) -> Reg {
 /// OpenVM stores the lower 16 bits of the sign-extended immediate in `c` and
 /// the sign marker in `g`. A negative value is reconstructed by adding
 /// `0xffff0000` to `(c & 0xffff)`.
-pub(crate) fn decode_imm_cg(insn: &RvrInstruction) -> u32 {
-    let low16 = insn.c & 0xffff;
-    low16.wrapping_add(if insn.g != 0 { 0xffff_0000 } else { 0 })
+pub(crate) fn decode_imm_cg(insn: &Instruction) -> u32 {
+    let low16 = insn.c.as_u32() & 0xffff;
+    low16.wrapping_add(if !insn.g.is_zero() { 0xffff_0000 } else { 0 })
 }
 
 pub(crate) const fn reg_operand(reg: Reg) -> CfgOperand {

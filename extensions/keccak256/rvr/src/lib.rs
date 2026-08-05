@@ -6,6 +6,7 @@
 //! tracer helpers across the call boundary.
 
 use openvm_instructions::{
+    instruction::Instruction,
     riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
 };
@@ -15,7 +16,7 @@ use rvr_openvm_ir::{
 };
 use rvr_openvm_lift::{
     decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
-    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
 };
 
 fn decode_reg(value: u32) -> Variable {
@@ -144,11 +145,11 @@ impl KeccakExtension {
 }
 
 impl RvrExtension for KeccakExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == KeccakfOpcode::KECCAKF.global_opcode_usize() {
-            let buffer_ptr_reg = decode_reg(insn.a);
+            let buffer_ptr_reg = decode_reg(insn.a.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(KeccakfInstr {
@@ -160,9 +161,9 @@ impl RvrExtension for KeccakExtension {
         }
 
         if opcode == XorinOpcode::XORIN.global_opcode_usize() {
-            let buffer_ptr_reg = decode_reg(insn.a);
-            let input_ptr_reg = decode_reg(insn.b);
-            let len_reg = decode_reg(insn.c);
+            let buffer_ptr_reg = decode_reg(insn.a.as_u32());
+            let input_ptr_reg = decode_reg(insn.b.as_u32());
+            let len_reg = decode_reg(insn.c.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(XorinInstr {

@@ -1,12 +1,14 @@
+use openvm_stark_backend::p3_field::PrimeField32;
+
 use super::*;
 use crate::arch::{
     testing::memory::{air::MemoryDummyChip, PostflightTestMemory},
     VmField,
 };
 
-impl<'a, F: PrimeField32> Postflight<'a, F> {
+impl<'a> Postflight<'a> {
     pub fn new_for_test(
-        program: &'a Program<F>,
+        program: &'a Program,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
     ) -> Result<Self, PostflightError> {
@@ -14,7 +16,9 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         Self::new_inner(program, &program_index, history, memory_config, None, false)
     }
 
-    pub(crate) fn balance_test_memory(&self, chip: &mut MemoryDummyChip<F>) {
+    pub(crate) fn balance_test_memory<F: PrimeField32>(&self, chip: &mut MemoryDummyChip<F>) {
+        self.validate_field_values(F::ORDER_U32)
+            .expect("postflight field values must be canonical");
         for event_index in 0..self.history.memory.accesses.len() {
             let event = self.history.memory.accesses[event_index];
             let previous_timestamp = self.previous_timestamp(event_index);
@@ -36,8 +40,8 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                     );
                 }
                 MemoryCellType::FIELD32 => {
-                    let value = self.field_value(event_index);
-                    let previous = self.previous_field32(event_index);
+                    let value = self.field_value(event_index).map(F::from_u32);
+                    let previous = self.previous_field32(event_index).map(F::from_u32);
                     chip.send(
                         event.address_space(),
                         event.pointer,
@@ -74,11 +78,13 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         &self.opcode_ranges
     }
 
-    pub(crate) fn record_test_writes<M>(&self, memory: &mut M)
+    pub(crate) fn record_test_writes<F, M>(&self, memory: &mut M)
     where
         F: VmField,
         M: PostflightTestMemory<F>,
     {
+        self.validate_field_values(F::ORDER_U32)
+            .expect("postflight field values must be canonical");
         let mut first_writes = FxHashMap::<u64, usize>::default();
         for (event_index, event) in self.history.memory.accesses.iter().enumerate() {
             if event.is_write() {
@@ -102,7 +108,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                     memory.tracing_memory().data.write::<F, BLOCK_FE_WIDTH>(
                         event.address_space(),
                         event.pointer,
-                        self.previous_field32(event_index),
+                        self.previous_field32(event_index).map(F::from_u32),
                     );
                 },
                 _ => unreachable!("postflight validates every accessed memory layout"),
@@ -116,7 +122,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             let value = match self.memory_config.addr_spaces[event.address_space() as usize].layout
             {
                 MemoryCellType::U16 => event.value.map(F::from_u16),
-                MemoryCellType::FIELD32 => self.field_value(event_index),
+                MemoryCellType::FIELD32 => self.field_value(event_index).map(F::from_u32),
                 _ => unreachable!("postflight validates every accessed memory layout"),
             };
             memory.write_block(

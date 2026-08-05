@@ -259,7 +259,7 @@ type LoadMultiReplay = ([[u16; BLOCK_FE_WIDTH]; 2], usize, [u16; BLOCK_FE_WIDTH]
 impl LoadMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const LOAD_WIDTH: usize>(
         &self,
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut LoadMultiByteAdapterCols<F>,
@@ -271,14 +271,12 @@ impl LoadMultiByteAdapterFiller {
             ));
         }
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != MEMORY_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
             return Err(PostflightError::new(
                 "multi-byte load has invalid address spaces",
             ));
         }
-        let needs_write = match instruction.f.as_canonical_u32() {
+        let needs_write = match instruction.f.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -287,7 +285,7 @@ impl LoadMultiByteAdapterFiller {
                 ));
             }
         };
-        let imm_sign = match instruction.g.as_canonical_u32() {
+        let imm_sign = match instruction.g.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -296,7 +294,7 @@ impl LoadMultiByteAdapterFiller {
                 ));
             }
         };
-        let imm = instruction.c.as_canonical_u32();
+        let imm = instruction.c.as_u32();
         if imm > u16::MAX as u32 {
             return Err(PostflightError::new(
                 "multi-byte load has a non-canonical immediate",
@@ -305,8 +303,8 @@ impl LoadMultiByteAdapterFiller {
 
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
-        let rs1_ptr = instruction.b.as_canonical_u32();
-        let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_ptr = instruction.b.as_u32();
+        let rd_ptr = instruction.a.as_u32();
         checked_register_pointer(rs1_ptr)?;
         checked_register_pointer(rd_ptr)?;
         if needs_write != (rd_ptr != 0) {

@@ -30,8 +30,6 @@ use openvm_riscv_transpiler::{
     MulOpcode, MulWOpcode, RevealOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
     ShiftWOpcode,
 };
-#[cfg(feature = "rvr")]
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_riscv::{
@@ -105,7 +103,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Rv64I {
+impl VmRvrExtension for Rv64I {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(Rv64IExtension::new());
         extensions.register_lifter(Rv64PhantomExtension::new());
@@ -114,7 +112,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64I {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Rv64Io {
+impl VmRvrExtension for Rv64Io {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(
             Rv64IoExtension::new(ctx).expect("Rv64IoExtension chip resolution failed"),
@@ -124,7 +122,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64Io {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {
+impl VmRvrExtension for Rv64M {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
         extensions.register_lifter(Rv64MExtension::new());
     }

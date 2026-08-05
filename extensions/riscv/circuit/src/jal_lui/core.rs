@@ -7,6 +7,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
+    instruction::InstructionOperand,
     program::{DEFAULT_PC_STEP, PC_BITS},
     LocalOpcode,
 };
@@ -14,7 +15,7 @@ use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 
@@ -168,20 +169,13 @@ pub struct JalLuiFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-// returns the canonical signed representation of the immediate
-// `imm` can be "negative" as a field element
-pub(super) fn get_signed_imm<F: PrimeField32>(is_jal: bool, imm: F) -> i32 {
-    let imm_f = imm.as_canonical_u32();
+/// Returns the signed machine representation of a valid JAL or LUI immediate.
+pub(super) fn get_signed_imm(is_jal: bool, imm: InstructionOperand) -> Option<i32> {
     if is_jal {
-        if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
-            imm_f as i32
-        } else {
-            let neg_imm_f = F::ORDER_U32 - imm_f;
-            debug_assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
-            -(neg_imm_f as i32)
-        }
+        crate::adapters::decode_signed_instruction_imm(imm, RV_J_TYPE_IMM_BITS)
     } else {
-        imm_f as i32
+        let imm = u32::try_from(imm.as_i32()).ok()?;
+        (imm < (1 << 20)).then_some(imm as i32)
     }
 }
 
@@ -190,9 +184,8 @@ pub(super) fn get_signed_imm<F: PrimeField32>(is_jal: bool, imm: F) -> i32 {
 pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     if is_jal {
         let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
-        let next_pc = pc as i32 + imm;
-        debug_assert!(next_pc >= 0);
-        (next_pc as u32, u32_to_u16_block(rd_low))
+        let next_pc = pc.wrapping_add_signed(imm);
+        (next_pc, u32_to_u16_block(rd_low))
     } else {
         let imm = imm as u32;
         let rd_low = imm << RV_IS_TYPE_IMM_BITS;

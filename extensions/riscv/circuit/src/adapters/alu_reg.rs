@@ -140,25 +140,23 @@ pub struct BaseAluRegAdapterFiller;
 
 impl BaseAluRegAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut BaseAluRegAdapterCols<F>,
         compute: impl FnOnce([[u8; REGISTER_NUM_LIMBS]; 2]) -> [u8; REGISTER_NUM_LIMBS],
     ) -> Result<([[u8; REGISTER_NUM_LIMBS]; 2], [u8; REGISTER_NUM_LIMBS]), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != REGISTER_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != REGISTER_AS {
             return Err(PostflightError::new(
                 "register-register ALU instruction has invalid address spaces",
             ));
         }
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
-        let rs1_ptr = instruction.b.as_canonical_u32();
-        let rs2_ptr = instruction.c.as_canonical_u32();
-        let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_ptr = instruction.b.as_u32();
+        let rs2_ptr = instruction.c.as_u32();
+        let rd_ptr = instruction.a.as_u32();
         let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
         let rs2_u16_ptr = checked_register_u16_pointer(rs2_ptr)?;
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;

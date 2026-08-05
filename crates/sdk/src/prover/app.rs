@@ -6,8 +6,8 @@ use openvm_circuit::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationProverBuilder, ContinuationVmProof, Executor, MeteredExecutor,
-        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmExecutionConfig,
-        VmInstance, VmVerificationError,
+        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmField,
+        VmFieldExecutionConfig, VmInstance, VmVerificationError,
     },
     system::{
         memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
@@ -15,8 +15,7 @@ use openvm_circuit::{
 };
 use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
-    StarkEngine, Val,
+    keygen::types::MultiStarkVerifyingKey, prover::ProverBackend, StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use tracing::instrument;
@@ -32,6 +31,7 @@ use crate::{
 pub struct AppProver<E, VB>
 where
     E: StarkEngine,
+    Val<E::SC>: VmField,
     VB: ContinuationProverBuilder<E>,
 {
     pub program_name: Option<String>,
@@ -47,7 +47,7 @@ impl<E, VB> AppProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E>,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
 {
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
     /// If a cached version of the program already exists on device, then directly use the
@@ -58,7 +58,7 @@ where
     pub fn new(
         vm_builder: VB,
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmExe<Val<E::SC>>>,
+        app_exe: Arc<VmExe>,
     ) -> Result<Self, VirtualMachineError> {
         let instance = new_local_prover(vm_builder, app_vm_pk, app_exe)?;
         let app_vm_vk = app_vm_pk.vm_pk.get_vk();
@@ -124,8 +124,8 @@ where
     )]
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+        <VB::VmConfig as VmFieldExecutionConfig<Val<E::SC>>>::Executor:
+            Executor + MeteredExecutor + 'static,
     {
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
@@ -144,7 +144,7 @@ where
     }
 
     /// App Exe
-    pub fn exe(&self) -> Arc<VmExe<Val<E::SC>>> {
+    pub fn exe(&self) -> Arc<VmExe> {
         self.instance.exe().clone()
     }
 

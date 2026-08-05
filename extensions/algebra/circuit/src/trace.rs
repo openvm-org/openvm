@@ -94,16 +94,14 @@ fn write_u16_bytes<'a>(output: &mut Vec<u8>, limbs: impl IntoIterator<Item = &'a
     }
 }
 
-fn replay_vec_heap<const NUM_READS: usize, const BLOCKS: usize, F: PrimeField32>(
-    postflight: &Postflight<'_, F>,
+fn replay_vec_heap<const NUM_READS: usize, const BLOCKS: usize>(
+    postflight: &Postflight<'_>,
     step: PostflightStep,
     local_opcode: usize,
     pointer_max_bits: usize,
 ) -> Result<VecHeapTraceInput<NUM_READS, BLOCKS>, PostflightError> {
     let instruction = postflight.instruction(step);
-    if instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-    {
+    if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
         return Err(PostflightError::new(
             "vector-heap instruction has invalid address spaces",
         ));
@@ -113,12 +111,12 @@ fn replay_vec_heap<const NUM_READS: usize, const BLOCKS: usize, F: PrimeField32>
     let from_timestamp = postflight.timestamp(step);
     let rs_ptrs = from_fn(|index| {
         if index == 0 {
-            instruction.b.as_canonical_u32()
+            instruction.b.as_u32()
         } else {
-            instruction.c.as_canonical_u32()
+            instruction.c.as_u32()
         }
     });
-    let rd_ptr = instruction.a.as_canonical_u32();
+    let rd_ptr = instruction.a.as_u32();
     let mut rs_u16_ptrs = [0; NUM_READS];
     for index in 0..NUM_READS {
         rs_u16_ptrs[index] = checked_u16_pointer(rs_ptrs[index], "source register")?;
@@ -195,7 +193,7 @@ pub(crate) fn generate_field_expression_trace_from_postflight<
     const BLOCKS: usize,
 >(
     chip: &VmChipWrapper<F, FieldExpressionFiller<VecHeapAdapterFiller<2, BLOCKS, BLOCKS>>>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
     opcode_base: usize,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -240,12 +238,8 @@ pub(crate) fn generate_field_expression_trace_from_postflight<
             .par_chunks_exact_mut(width)
             .zip(steps.par_iter())
             .try_for_each(|(row, &step)| {
-                let input = replay_vec_heap::<2, BLOCKS, F>(
-                    postflight,
-                    step,
-                    local_opcode,
-                    pointer_max_bits,
-                )?;
+                let input =
+                    replay_vec_heap::<2, BLOCKS>(postflight, step, local_opcode, pointer_max_bits)?;
                 let (adapter_row, core_row) = row.split_at_mut(adapter_width);
                 let mut read_bytes = Vec::with_capacity(2 * BLOCKS * MEMORY_BLOCK_BYTES);
                 let mut write_bytes = Vec::with_capacity(BLOCKS * MEMORY_BLOCK_BYTES);
@@ -296,7 +290,7 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
     const TOTAL_LIMBS: usize,
 >(
     chip: &ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
     opcode_base: usize,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -338,9 +332,9 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
         let steps = postflight.steps(VmOpcode::from_usize(opcode));
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let instruction = postflight.instruction(step);
-            if instruction.a.as_canonical_u32() == 0
-                || instruction.d.as_canonical_u32() != REGISTER_AS
-                || instruction.e.as_canonical_u32() != MEMORY_AS
+            if instruction.a.as_u32() == 0
+                || instruction.d.as_u32() != REGISTER_AS
+                || instruction.e.as_u32() != MEMORY_AS
             {
                 return Err(PostflightError::new(
                     "modular equality instruction has invalid operands",
@@ -348,11 +342,8 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
             }
             let from_pc = postflight.pc(step);
             let from_timestamp = postflight.timestamp(step);
-            let rs_ptrs = [
-                instruction.b.as_canonical_u32(),
-                instruction.c.as_canonical_u32(),
-            ];
-            let rd_ptr = instruction.a.as_canonical_u32();
+            let rs_ptrs = [instruction.b.as_u32(), instruction.c.as_u32()];
+            let rd_ptr = instruction.a.as_u32();
             let rs_u16_ptrs = [
                 checked_u16_pointer(rs_ptrs[0], "source register")?,
                 checked_u16_pointer(rs_ptrs[1], "source register")?,

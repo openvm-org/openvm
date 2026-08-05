@@ -8,7 +8,6 @@ use openvm_instructions::{
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
-use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::IType;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr};
@@ -49,8 +48,8 @@ impl DeferralTranspilerExtension {
     }
 }
 
-impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for DeferralTranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }

@@ -1,14 +1,14 @@
 use openvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use openvm_decoder::instruction_formats::{BType, RType};
 use openvm_instructions::{
-    instruction::Instruction, riscv::REGISTER_NUM_LIMBS, utils::isize_to_field, LocalOpcode,
-    VmOpcode,
+    instruction::{Instruction, InstructionOperand},
+    riscv::REGISTER_NUM_LIMBS,
+    LocalOpcode, VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use strum::IntoEnumIterator;
 
@@ -79,8 +79,8 @@ impl Mul256Opcode {
 #[derive(Default)]
 pub struct Int256TranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for Int256TranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -140,13 +140,13 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
                     VmOpcode::from_usize(
                         BranchEqualOpcode::BEQ.local_usize() + BranchEqual256Opcode::CLASS_OFFSET,
                     ),
-                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs2),
-                    isize_to_field(dec_insn.imm as isize),
-                    F::ONE,
-                    F::TWO,
-                    F::ZERO,
-                    F::ZERO,
+                    InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    InstructionOperand::from_i32(dec_insn.imm),
+                    InstructionOperand::ONE,
+                    InstructionOperand::TWO,
+                    InstructionOperand::ZERO,
+                    InstructionOperand::ZERO,
                 ))
             }
             _ => None,
