@@ -44,6 +44,7 @@ pub const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 pub const BYTE_XOR_BUS: BusIndex = 10;
 pub const RANGE_TUPLE_CHECKER_BUS: BusIndex = 11;
 pub const MEMORY_MERKLE_BUS: BusIndex = 12;
+pub const PUBLIC_VALUES_BUS: BusIndex = 13;
 
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
@@ -88,6 +89,7 @@ where
     F: VmField,
     E: Executor<F>,
 {
+    let initial_public_values_len = state.public_values.len();
     let instruction = &program
         .get_instruction_and_debug_info(0)
         .expect("test program must contain a starting instruction")
@@ -121,6 +123,7 @@ where
     let history = exec_state.ctx.finish(pc);
     PreflightOutput {
         history,
+        initial_public_values_len,
         state: exec_state.vm_state,
         exit_code,
     }

@@ -18,11 +18,12 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 
 - `app_exe_commit: Commit` — commitment to the app executable whose execution is being verified
 - `app_vm_commit: Commit` — commitment to the app VM configuration
-- `user_public_values: Vec<u8>` — user public values revealed by the verified app
+- `num_public_values: u32` — number of `u64` values revealed by the verified app
+- `user_public_values: Vec<u8>` — densely packed little-endian bytes of those revealed values
 
 When correctly configured with the [`DeferredVerifyCircuit`](#host), verification is performed outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). From the guest perspective, this establishes that **there exists a proof** matching `input_commit` that verifies and yields the returned `ProofOutput`; the proof itself is never accessible from the guest program.
 
-The deferral circuit output stores each user public value byte as a field element, but the guest helper returns the dense byte representation. `ProofOutput.user_public_values` should therefore match the bytes revealed by the verified app.
+The deferral circuit output stores a fixed-capacity, zero-padded cell array, but the guest helper validates the explicit count and returns only the dense published prefix. `ProofOutput.user_public_values` therefore matches the bytes revealed by the verified app.
 
 `DEF_IDX` must match the index of the corresponding entry in `DeferralConfig.circuits`, as configured when [building the VM extension](#using-deferralconfig). Each STARK verifying key will correspond to a different deferral circuit, and thus a different `DEF_IDX`.
 
@@ -39,8 +40,8 @@ Calls `verify_stark_unchecked` and panics if the result does not match `expected
 The circuit crate (`openvm-verify-stark-circuit`) provides the `DeferredVerifyCircuit`, which is the deferral circuit that actually verifies the STARK proof during aggregation. It:
 
 1. Verifies the child STARK proof using the recursion verifier sub-circuit
-2. Constrains that the user public values are present in the final memory state
-3. Produces the output commitment containing `app_exe_commit`, `app_vm_commit`, and `user_public_values`
+2. Constrains the revealed user public values against the app's final public-values commitment
+3. Produces the output commitment containing `app_exe_commit`, `app_vm_commit`, the explicit output count, and the fixed-capacity public-value cells
 
 There should be a unique `DeferredVerifyCircuit` for each STARK verifying key you want to support.
 

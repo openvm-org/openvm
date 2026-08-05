@@ -10,7 +10,7 @@ use openvm_circuit::{
         VmInstance, VmVerificationError,
     },
     system::{
-        memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
+        memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_config,
     },
 };
 use openvm_continuations::CommitBytes;
@@ -69,10 +69,10 @@ where
         instance: VmInstance<E, VB>,
         app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     ) -> Result<Self, VirtualMachineError> {
-        let app_exe_commit = compute_exe_commit_from_mem_config(
+        let app_exe_commit = compute_exe_commit_from_config(
             instance.program_commitment(),
             instance.exe(),
-            &instance.vm.config().as_ref().memory_config,
+            instance.vm.config().as_ref(),
         );
         let prepared = VB::prepare_continuation(&instance)?;
         Ok(Self {
@@ -113,7 +113,7 @@ where
     }
 
     pub fn num_user_pvs(&self) -> usize {
-        self.instance.vm.config().as_ref().num_public_values
+        self.instance.vm.config().as_ref().num_public_value_cells
     }
 
     /// Generates proof for every continuation segment.
@@ -133,13 +133,8 @@ where
         );
         let proof = VB::prove_continuation(&mut self.prepared, &mut self.instance, input.into())?;
         #[cfg(debug_assertions)]
-        let _ = verify_app_proof_inner::<E>(
-            &self.app_vm_vk,
-            self.memory_dimensions(),
-            self.num_user_pvs(),
-            &proof,
-        )
-        .expect("app proof verification failed");
+        let _ = verify_app_proof_inner::<E>(&self.app_vm_vk, self.num_user_pvs(), &proof)
+            .expect("app proof verification failed");
         Ok(proof)
     }
 
@@ -164,12 +159,7 @@ pub fn verify_app_proof<E: StarkEngine<SC = SC>>(
     app_vk: &AppVerifyingKey,
     proof: &ContinuationVmProof<E::SC>,
 ) -> Result<Digest, SdkError> {
-    verify_app_proof_inner::<E>(
-        &app_vk.vk,
-        app_vk.memory_dimensions,
-        app_vk.num_user_pvs,
-        proof,
-    )
+    verify_app_proof_inner::<E>(&app_vk.vk, app_vk.num_user_pvs, proof)
 }
 
 /// Verifies a ContinuationVmProof and optionally checks that the recovered app_exe_commit matches
@@ -196,7 +186,6 @@ pub fn verify_app_proof_with_expected_exe_commit<E: StarkEngine<SC = SC>>(
 /// [`AppVerifyingKey`], returning the app_exe_commit.
 fn verify_app_proof_inner<E: StarkEngine<SC = SC>>(
     vk: &MultiStarkVerifyingKey<SC>,
-    memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,
     proof: &ContinuationVmProof<E::SC>,
 ) -> Result<Digest, SdkError> {
@@ -204,23 +193,23 @@ fn verify_app_proof_inner<E: StarkEngine<SC = SC>>(
     let engine = E::new(vk.inner.params.clone());
     let VerifiedExecutionPayload {
         exe_commit,
-        final_memory_root,
+        final_public_values_commit,
+        ..
     } = verify_segments(&engine, vk, &proof.per_segment)?;
 
-    if proof.user_public_values.public_values.len() != num_user_pvs {
+    if proof.public_values_opening.public_values.len() != num_user_pvs {
         return Err(SdkError::Other(eyre::eyre!(
             "wrong number of user public values (expected: {}, actual: {})",
             num_user_pvs,
-            proof.user_public_values.public_values.len()
+            proof.public_values_opening.public_values.len()
         )));
     }
 
     proof
-        .user_public_values
+        .public_values_opening
         .verify(
             POSEIDON2_HASHER.get_or_init(vm_poseidon2_hasher),
-            memory_dimensions,
-            final_memory_root,
+            final_public_values_commit,
         )
         .map_err(VmVerificationError::from)?;
 

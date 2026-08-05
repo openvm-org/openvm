@@ -1,6 +1,6 @@
 [app_vm_config.system.config]
 max_constraint_degree = 3
-num_public_values = 32
+num_public_value_cells = 32
 
 [app_vm_config.system.config.memory_config]
 addr_space_height = 3

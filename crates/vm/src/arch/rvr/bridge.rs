@@ -1,13 +1,13 @@
 //! Buffer access between [`VmState`] and the rvr FFI layer.
 //!
-//! Memory and public-values bytes are aliased via raw pointer; registers are
-//! the only field still copied (a 256-byte memcpy at execution boundaries).
+//! Main-memory bytes are aliased via raw pointer; registers are the only field
+//! still copied (a 256-byte memcpy at execution boundaries).
 //! `Streams` and the host RNG are borrowed directly into [`OpenVmIoState`]
 //! and never converted upfront.
 
 use openvm_instructions::{
     riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
-    DEFERRAL_AS, PUBLIC_VALUES_AS,
+    DEFERRAL_AS,
 };
 use rvr_state::NUM_REGS;
 
@@ -31,10 +31,6 @@ pub fn memory_ptr(vm_state: &mut VmState<GuestMemory>) -> *mut u8 {
     vm_state.memory.memory.mem[MEMORY_AS as usize]
         .as_mut_slice()
         .as_mut_ptr()
-}
-
-pub fn public_values_slice(memory: &mut AddressMap) -> &mut [u8] {
-    memory.mem[PUBLIC_VALUES_AS as usize].as_mut_slice()
 }
 
 pub fn deferral_memory_ptr(memory: &mut AddressMap) -> (*mut u8, usize) {

@@ -12,7 +12,6 @@ use crate::{
 
 mod air;
 mod columns;
-pub mod public_values;
 mod trace;
 mod tree;
 

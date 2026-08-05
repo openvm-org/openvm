@@ -26,9 +26,9 @@ use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, AirRefWithColumns, BusIndexManager,
         ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutorInventory,
-        ExecutorInventoryError, PhantomSubExecutor, Postflight, SystemConfig, VmBuilder,
-        VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField, BLOCK_FE_WIDTH,
-        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        ExecutorInventoryError, PhantomSubExecutor, Postflight, PublicValuesState, SystemConfig,
+        VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField, BLOCK_FE_WIDTH,
+        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -45,6 +45,7 @@ use crate::{
             air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
         },
         program::{ProgramBus, ProgramChip},
+        public_values::{PublicValuesAir, PublicValuesBus, PublicValuesChip},
     },
 };
 
@@ -55,6 +56,7 @@ pub mod memory;
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;
+pub mod public_values;
 
 /// **If** internal poseidon2 chip exists, then its insertion index is 1.
 const POSEIDON2_INSERTION_IDX: usize = 1;
@@ -123,6 +125,7 @@ pub struct SystemPort {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
     pub memory_bridge: MemoryBridge,
+    pub public_values_bus: PublicValuesBus,
 }
 
 #[derive(Clone)]
@@ -130,6 +133,7 @@ pub struct SystemAirInventory {
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
     pub memory: MemoryAirInventory,
+    pub public_values: PublicValuesAir,
 }
 
 impl SystemAirInventory {
@@ -143,6 +147,7 @@ impl SystemAirInventory {
             execution_bus,
             program_bus,
             memory_bridge,
+            public_values_bus,
         } = port;
         let range_bus = memory_bridge.range_bus();
         let program = ProgramAir::new(program_bus);
@@ -158,11 +163,17 @@ impl SystemAirInventory {
             merkle_bus,
             compression_bus,
         );
+        let public_values = PublicValuesAir::new(
+            config.num_public_value_cells,
+            public_values_bus,
+            compression_bus,
+        );
 
         Self {
             program,
             connector,
             memory,
+            public_values,
         }
     }
 
@@ -171,6 +182,7 @@ impl SystemAirInventory {
             memory_bridge: self.memory.bridge,
             program_bus: self.program.bus,
             execution_bus: self.connector.execution_bus,
+            public_values_bus: self.public_values.public_values_bus,
         }
     }
 
@@ -179,6 +191,7 @@ impl SystemAirInventory {
         airs.push(Arc::new(self.program));
         airs.push(Arc::new(self.connector));
         airs.extend(self.memory.into_airs());
+        airs.push(Arc::new(self.public_values));
         airs
     }
 }
@@ -236,6 +249,7 @@ where
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
         let program_bus = ProgramBus::new(bus_idx_mgr.new_bus_idx());
+        let public_values_bus = PublicValuesBus::new(bus_idx_mgr.new_bus_idx());
         let range_bus =
             VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), self.memory_config.decomp);
 
@@ -248,6 +262,7 @@ where
             execution_bus,
             program_bus,
             memory_bridge,
+            public_values_bus,
         };
         let system = SystemAirInventory::new(self, system_port, merkle_bus, compression_bus);
 
@@ -290,6 +305,7 @@ where
     pub connector_chip: VmConnectorChip,
     /// Contains all memory chips
     pub memory_controller: MemoryController<Val<SC>>,
+    pub public_values_chip: PublicValuesChip<Val<SC>>,
 }
 
 // Note[jpw]: We could get rid of the `mem_inventory` input because `MemoryController` doesn't need
@@ -301,6 +317,7 @@ where
     pub fn new(
         config: &SystemConfig,
         mem_inventory: &MemoryAirInventory,
+        public_values_air: &PublicValuesAir,
         range_checker: SharedVariableRangeCheckerChip,
         hasher_chip: Arc<Poseidon2PeripheryChip<Val<SC>>>,
     ) -> Self {
@@ -318,13 +335,15 @@ where
             range_checker.clone(),
             mem_inventory.interface.merkle.merkle_bus,
             mem_inventory.interface.merkle.compression_bus,
-            hasher_chip,
+            hasher_chip.clone(),
         );
+        let public_values_chip = PublicValuesChip::new(public_values_air.clone(), hasher_chip);
 
         Self {
             program_chip,
             connector_chip,
             memory_controller,
+            public_values_chip,
         }
     }
 
@@ -335,6 +354,8 @@ where
     pub fn generate_proving_ctx_from_postflight(
         &mut self,
         postflight: &Postflight<'_, Val<SC>>,
+        initial_public_values_len: usize,
+        final_public_values: &PublicValuesState,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let program_ctx = self
             .program_chip
@@ -348,10 +369,14 @@ where
         let memory_ctxs = self
             .memory_controller
             .generate_proving_ctx(postflight.touched_memory());
+        let public_values_ctx = self
+            .public_values_chip
+            .generate_proving_ctx(final_public_values, initial_public_values_len);
 
         [program_ctx, connector_ctx]
             .into_iter()
             .chain(memory_ctxs)
+            .chain([public_values_ctx])
             .collect()
     }
 }
@@ -422,6 +447,7 @@ where
         let system = SystemChipInventory::new(
             config,
             &inventory.airs().system().memory,
+            &inventory.airs().system().public_values,
             range_checker,
             hasher_chip,
         );
@@ -451,6 +477,10 @@ where
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         self.memory_controller
-            .set_override_trace_heights(&heights[BOUNDARY_AIR_ID..]);
+            .set_override_trace_heights(&heights[BOUNDARY_AIR_ID..PUBLIC_VALUES_AIR_ID]);
+        assert_eq!(
+            heights[PUBLIC_VALUES_AIR_ID] as usize,
+            self.public_values_chip.air.trace_height()
+        );
     }
 }

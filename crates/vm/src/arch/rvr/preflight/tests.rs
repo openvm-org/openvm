@@ -68,6 +68,7 @@ fn segment_boundary_rejects_replay_value_count_mismatch() {
     let config = SystemConfig::default();
     let state = VmState::initial(&config, &Default::default(), 0, Streams::default());
     let execution = PreflightExecution {
+        initial_public_values_len: state.public_values.len(),
         state,
         transcript: PreflightTranscript {
             checkpoints: vec![],

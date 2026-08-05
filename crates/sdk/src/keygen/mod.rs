@@ -92,7 +92,7 @@ where
     }
 
     pub fn num_public_values_bytes(&self) -> usize {
-        self.app_vm_pk.vm_config.as_ref().num_public_values * U16_CELL_SIZE
+        self.app_vm_pk.vm_config.as_ref().num_public_value_cells * U16_CELL_SIZE
     }
 
     pub fn get_app_vk(&self) -> AppVerifyingKey {
@@ -100,7 +100,7 @@ where
         AppVerifyingKey {
             vk: self.app_vm_pk.vm_pk.get_vk(),
             memory_dimensions: system_config.memory_config.memory_dimensions(),
-            num_user_pvs: system_config.num_public_values,
+            num_user_pvs: system_config.num_public_value_cells,
         }
     }
 

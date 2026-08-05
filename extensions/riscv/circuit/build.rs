@@ -4,7 +4,7 @@ use std::{env, fmt::Write, fs, path::Path};
 #[cfg(feature = "cuda")]
 use openvm_cuda_builder::{cuda_available, CudaBuilder};
 #[cfg(feature = "cuda")]
-use openvm_instructions::{LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS};
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 #[cfg(feature = "cuda")]
 use openvm_riscv_transpiler::{
     AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
@@ -154,9 +154,7 @@ fn write_replay_opcode_registry(out_dir: &Path) {
         opcode("PHANTOM", SystemOpcode::PHANTOM),
         opcode("TERMINATE", SystemOpcode::TERMINATE),
     ];
-    let mut header = format!(
-        "#pragma once\n\n#include <cstdint>\n\nstatic constexpr uint32_t REVEAL_PUBLIC_VALUES_ADDRESS_SPACE = {PUBLIC_VALUES_AS}u;\n"
-    );
+    let mut header = String::from("#pragma once\n\n#include <cstdint>\n\n");
     for &(name, base, count) in &families {
         writeln!(
             header,

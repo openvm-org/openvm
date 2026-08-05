@@ -22,7 +22,7 @@ use crate::{
         subair::hash_slice_trace,
         SingleAirTraceData,
     },
-    utils::pad_slice_to_poseidon2_input,
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
 };
 
 pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
@@ -55,6 +55,8 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
+    let padded_initial_public_values_commit =
+        pad_slice_to_poseidon2_input(&child_vm_pvs.initial_public_values_commit, F::ZERO);
     let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc], F::ZERO);
 
     let perm = poseidon2_perm();
@@ -64,24 +66,39 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     cols.initial_root_hash = perm.permute(padded_initial_root)[..DIGEST_SIZE]
         .try_into()
         .unwrap();
+    cols.initial_public_values_commit_hash = perm.permute(padded_initial_public_values_commit)
+        [..DIGEST_SIZE]
+        .try_into()
+        .unwrap();
     cols.initial_pc_hash = perm.permute(padded_initial_pc)[..DIGEST_SIZE]
         .try_into()
         .unwrap();
 
-    let mut poseidon2_compress_inputs = Vec::with_capacity(5);
+    let mut poseidon2_compress_inputs = Vec::with_capacity(7);
     let mut poseidon2_permute_inputs = Vec::new();
 
     poseidon2_compress_inputs.extend_from_slice(&[
         padded_program_commit,
         padded_initial_root,
+        padded_initial_public_values_commit,
         padded_initial_pc,
     ]);
 
     cols.intermediate_exe_commit =
         poseidon2_compress_with_capacity(cols.program_commit_hash, cols.initial_root_hash).0;
-    poseidon2_compress_inputs.push(crate::utils::digests_to_poseidon2_input(
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
         cols.program_commit_hash,
         cols.initial_root_hash,
+    ));
+
+    cols.intermediate_public_values_exe_commit = poseidon2_compress_with_capacity(
+        cols.intermediate_exe_commit,
+        cols.initial_public_values_commit_hash,
+    )
+    .0;
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        cols.intermediate_exe_commit,
+        cols.initial_public_values_commit_hash,
     ));
 
     let vk_elements = [
@@ -102,10 +119,13 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     let mut public_values = vec![F::ZERO; RootVerifierPvs::<u8>::width()];
     let root_pvs: &mut RootVerifierPvs<F> = public_values.as_mut_slice().borrow_mut();
 
-    root_pvs.app_exe_commit =
-        poseidon2_compress_with_capacity(cols.intermediate_exe_commit, cols.initial_pc_hash).0;
-    poseidon2_compress_inputs.push(crate::utils::digests_to_poseidon2_input(
-        cols.intermediate_exe_commit,
+    root_pvs.app_exe_commit = poseidon2_compress_with_capacity(
+        cols.intermediate_public_values_exe_commit,
+        cols.initial_pc_hash,
+    )
+    .0;
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        cols.intermediate_public_values_exe_commit,
         cols.initial_pc_hash,
     ));
 

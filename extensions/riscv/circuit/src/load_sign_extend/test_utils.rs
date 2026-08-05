@@ -9,9 +9,7 @@ use openvm_circuit::arch::{
     },
     MemoryConfig, MEMORY_BLOCK_BYTES,
 };
-use openvm_instructions::{
-    instruction::Instruction, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
-};
+use openvm_instructions::{instruction::Instruction, riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -127,9 +125,7 @@ pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 }
 
 pub(crate) fn memory_config_for() -> MemoryConfig {
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-    mem_config
+    MemoryConfig::default()
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

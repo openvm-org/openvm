@@ -1,9 +1,7 @@
 use std::iter::once;
 
 use itertools::Itertools;
-use openvm_circuit::{
-    arch::POSEIDON2_WIDTH, system::memory::merkle::public_values::UserPublicValuesProof,
-};
+use openvm_circuit::{arch::POSEIDON2_WIDTH, system::public_values::proof::PublicValuesOpening};
 use openvm_continuations::{circuit::deferral::DeferralMerkleProofs, SC};
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
@@ -13,7 +11,7 @@ use openvm_stark_backend::{
     prover::{ProverBackend, ProvingContext},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    default_duplex_sponge_recorder, Digest, DIGEST_SIZE, EF, F,
+    default_duplex_sponge_recorder, Digest, EF, F,
 };
 use p3_field::PrimeCharacteristicRing;
 use tracing::instrument;
@@ -30,7 +28,7 @@ where
     pub fn generate_proving_ctx<DC>(
         &self,
         proof: Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
         device_ctx: &DC,
     ) -> ProvingContext<PB>
@@ -40,7 +38,7 @@ where
         DC: Clone + Send + Sync,
     {
         assert_eq!(
-            user_pvs_proof.public_values.len(),
+            public_values_opening.public_values.len(),
             self.circuit.num_user_pvs
         );
 
@@ -54,7 +52,7 @@ where
             output_commit,
         } = self.agg_node_tracegen.pre_verifier_subcircuit_tracegen(
             &proof,
-            user_pvs_proof,
+            public_values_opening,
             self.circuit.memory_dimensions,
             self.circuit.def_idx,
             deferral_merkle_proofs,

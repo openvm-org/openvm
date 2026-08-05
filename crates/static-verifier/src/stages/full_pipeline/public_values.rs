@@ -15,13 +15,14 @@ use crate::{
 
 #[repr(C)]
 pub struct StaticVerifierPvs<T> {
-    /// Hashed combination of the app-level ProgramAir cached trace, the Merkle root commit of
-    /// the starting app memory state (i.e. initial_root), and the initial app program counter
-    /// (i.e. initial_pc).
+    /// Hashed combination of the app-level ProgramAir cached trace, starting memory root,
+    /// initial public-output accumulator, and initial program counter.
     pub app_exe_commit: T,
     /// Commit to the app-level verifying key, computed by hashing the cached_commit and
     /// vk_pre_hash components of the app, leaf, and internal-for-leaf vk commits.
     pub app_vm_commit: T,
+    /// Number of values in the append-only public-output stream.
+    pub num_public_values: T,
     /// The number of user public values is a configuration parameter in the App VM. This parameter
     /// is treated as a constant in the static verifier circuit.
     pub user_public_values: Vec<T>,
@@ -29,7 +30,11 @@ pub struct StaticVerifierPvs<T> {
 
 impl<T: Clone> StaticVerifierPvs<T> {
     pub fn to_vec(&self) -> Vec<T> {
-        let mut vec = vec![self.app_exe_commit.clone(), self.app_vm_commit.clone()];
+        let mut vec = vec![
+            self.app_exe_commit.clone(),
+            self.app_vm_commit.clone(),
+            self.num_public_values.clone(),
+        ];
         vec.extend_from_slice(&self.user_public_values);
         vec
     }
@@ -38,7 +43,8 @@ impl<T: Clone> StaticVerifierPvs<T> {
         Self {
             app_exe_commit: slice[0].clone(),
             app_vm_commit: slice[1].clone(),
-            user_public_values: slice[2..].to_vec(),
+            num_public_values: slice[2].clone(),
+            user_public_values: slice[3..].to_vec(),
         }
     }
 }
@@ -56,11 +62,16 @@ pub fn extract_public_values(
     let app_exe_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_exe_commit);
     let app_vm_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_vm_commit);
     let user_pvs = &proof.public_values[USER_PVS_COMMIT_AIR_ID];
-    let user_public_values = user_pvs.iter().map(|bb| bb.value()).collect::<Vec<_>>();
+    let num_public_values = user_pvs[0].value();
+    let user_public_values = user_pvs[1..]
+        .iter()
+        .map(|bb| bb.value())
+        .collect::<Vec<_>>();
 
     StaticVerifierPvs {
         app_exe_commit,
         app_vm_commit,
+        num_public_values,
         user_public_values,
     }
 }

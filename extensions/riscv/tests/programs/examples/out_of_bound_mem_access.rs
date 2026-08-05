@@ -12,5 +12,5 @@ pub fn main() {
     let wild = black_box(0x2000_0008u32) as *const u64;
 
     let leaked = unsafe { black_box(*wild) };
-    reveal_u64(leaked, 0);
+    reveal_u64(leaked);
 }

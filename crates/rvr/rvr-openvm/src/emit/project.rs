@@ -144,15 +144,13 @@ impl RvrExecutionKind {
                 writeln!(out, "  uint32_t error;").unwrap();
                 writeln!(out, "  uint32_t instruction_limit;").unwrap();
                 writeln!(out, "  uint64_t* memory_dirty_pages;").unwrap();
-                writeln!(out, "  uint64_t* public_values_dirty_pages;").unwrap();
                 writeln!(out, "  uint64_t memory_dirty_page_words;").unwrap();
-                writeln!(out, "  uint64_t public_values_dirty_page_words;").unwrap();
                 writeln!(out, "  uint32_t last_memory_dirty_page;").unwrap();
                 writeln!(out, "  uint32_t padding;").unwrap();
                 writeln!(out, "}} PreflightTranscriptState;").unwrap();
                 writeln!(
                     out,
-                    "static_assert(sizeof(PreflightTranscriptState) == 112);"
+                    "static_assert(sizeof(PreflightTranscriptState) == 96);"
                 )
                 .unwrap();
                 writeln!(
@@ -207,27 +205,17 @@ impl RvrExecutionKind {
                 .unwrap();
                 writeln!(
                     out,
-                    "static_assert(offsetof(PreflightTranscriptState, public_values_dirty_pages) == 80);"
+                    "static_assert(offsetof(PreflightTranscriptState, memory_dirty_page_words) == 80);"
                 )
                 .unwrap();
                 writeln!(
                     out,
-                    "static_assert(offsetof(PreflightTranscriptState, memory_dirty_page_words) == 88);"
+                    "static_assert(offsetof(PreflightTranscriptState, last_memory_dirty_page) == 88);"
                 )
                 .unwrap();
                 writeln!(
                     out,
-                    "static_assert(offsetof(PreflightTranscriptState, public_values_dirty_page_words) == 96);"
-                )
-                .unwrap();
-                writeln!(
-                    out,
-                    "static_assert(offsetof(PreflightTranscriptState, last_memory_dirty_page) == 104);"
-                )
-                .unwrap();
-                writeln!(
-                    out,
-                    "static_assert(offsetof(PreflightTranscriptState, padding) == 108);"
+                    "static_assert(offsetof(PreflightTranscriptState, padding) == 92);"
                 )
                 .unwrap();
             }
@@ -250,7 +238,6 @@ impl RvrExecutionKind {
                 writeln!(out, "typedef struct MeteringState {{").unwrap();
                 writeln!(out, "  TraceHeights* trace_heights;").unwrap();
                 writeln!(out, "  struct PageTouch* mem_page_buf;").unwrap();
-                writeln!(out, "  struct PageTouch* pv_page_buf;").unwrap();
                 writeln!(out, "  struct PageTouch* deferral_page_buf;").unwrap();
                 writeln!(out, "  uint8_t (*on_check)(struct MeteringState*);").unwrap();
                 writeln!(out, "  void (*on_memory_flush)(struct MeteringState*);").unwrap();
@@ -261,18 +248,16 @@ impl RvrExecutionKind {
                 .unwrap();
                 writeln!(out, "  struct SegmentationState* seg_state;").unwrap();
                 writeln!(out, "  uint32_t mem_page_buf_len;").unwrap();
-                writeln!(out, "  uint32_t pv_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t deferral_page_buf_len;").unwrap();
-                writeln!(out, "  uint32_t pv_page_buf_cap;").unwrap();
                 writeln!(out, "  uint32_t deferral_page_buf_cap;").unwrap();
                 writeln!(out, "  uint32_t check_counter;").unwrap();
                 writeln!(out, "  uint32_t last_mem_page;").unwrap();
                 writeln!(out, "  uint32_t num_preflight_replay_values;").unwrap();
                 writeln!(out, "}} MeteringState;").unwrap();
-                writeln!(out, "static_assert(sizeof(MeteringState) == 96);").unwrap();
+                writeln!(out, "static_assert(sizeof(MeteringState) == 80);").unwrap();
                 writeln!(
                     out,
-                    "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 92);"
+                    "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 76);"
                 )
                 .unwrap();
             }
@@ -1601,11 +1586,11 @@ mod tests {
         assert!(header.contains("void (*on_memory_flush)(struct MeteringState*);"));
         assert!(header
             .contains("void (*on_page_buffer_resize)(struct MeteringState*, uint32_t, uint32_t);"));
-        assert!(header.contains("uint32_t pv_page_buf_cap;"));
+        assert!(!header.contains("pv_page_buf"));
         assert!(header.contains("uint32_t deferral_page_buf_cap;"));
-        assert!(header.contains("static_assert(sizeof(MeteringState) == 96);"));
+        assert!(header.contains("static_assert(sizeof(MeteringState) == 80);"));
         assert!(header.contains(
-            "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 92);"
+            "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 76);"
         ));
     }
 
@@ -1709,9 +1694,9 @@ mod tests {
 
         assert!(header.contains("uint64_t regs[31];"));
         assert!(header.contains("static_assert(sizeof(RvrCheckpoint) == 264);"));
-        assert!(header.contains("static_assert(sizeof(PreflightTranscriptState) == 112);"));
+        assert!(header.contains("static_assert(sizeof(PreflightTranscriptState) == 96);"));
         assert!(header.contains("uint64_t* memory_dirty_pages;"));
-        assert!(header.contains("uint64_t* public_values_dirty_pages;"));
+        assert!(!header.contains("public_values_dirty_pages"));
         assert!(header.contains("PreflightTranscriptState mode_state;"));
         assert!(!header.contains("PreflightProgramEvent"));
         assert!(!header.contains("PreflightMemoryEvent"));

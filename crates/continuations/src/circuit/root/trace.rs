@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use itertools::Itertools;
 use openvm_circuit::{
     arch::POSEIDON2_WIDTH,
-    system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
+    system::{memory::dimensions::MemoryDimensions, public_values::proof::PublicValuesOpening},
 };
 #[cfg(feature = "cuda")]
 use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
@@ -17,14 +17,12 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ProverBackend},
     StarkProtocolConfig,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::PrimeField32;
 
 use crate::circuit::{
-    deferral::DeferralMerkleProofs,
-    root::{commit, memory},
-    SingleAirTraceData, SubCircuitTraceData,
+    deferral::DeferralMerkleProofs, root::commit, SingleAirTraceData, SubCircuitTraceData,
 };
 
 // Trait that root provers use to remain generic in PB. Tracegen returns the AIR proving
@@ -34,8 +32,7 @@ pub trait RootTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
     fn generate_pre_verifier_subcircuit_ctx(
         &self,
         proof: &Proof<BabyBearPoseidon2Config>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-        memory_dimensions: MemoryDimensions,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
         device_ctx: &DC,
     ) -> SubCircuitTraceData<PB>;
     fn generate_other_proving_ctxs(
@@ -59,8 +56,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>, ()> for RootTr
     fn generate_pre_verifier_subcircuit_ctx(
         &self,
         proof: &Proof<BabyBearPoseidon2Config>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
-        memory_dimensions: MemoryDimensions,
+        public_values_opening: &PublicValuesOpening<F>,
         _device_ctx: &(),
     ) -> SubCircuitTraceData<CpuBackend<SC>> {
         let SingleAirTraceData {
@@ -69,20 +65,15 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>, ()> for RootTr
             poseidon2_permute_inputs: verifier_permute_inputs,
             range_check_inputs,
         } = super::verifier::generate_proving_ctx(proof, self.deferral_enabled);
-        let (commit_ctx, commit_inputs) =
-            commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
-        let (memory_ctx, memory_inputs) = memory::generate_proving_input(
-            user_pvs_proof.public_values_commit,
-            &user_pvs_proof.proof,
-            memory_dimensions,
-            user_pvs_proof.public_values.len(),
+        let (commit_ctx, commit_inputs) = commit::generate_proving_ctx(
+            public_values_opening.public_values.clone(),
+            public_values_opening.num_values,
         );
         SubCircuitTraceData {
-            air_proving_ctxs: vec![verifier_ctx, commit_ctx, memory_ctx],
+            air_proving_ctxs: vec![verifier_ctx, commit_ctx],
             poseidon2_compress_inputs: verifier_compress_inputs
                 .into_iter()
                 .chain(commit_inputs)
-                .chain(memory_inputs)
                 .collect_vec(),
             poseidon2_permute_inputs: verifier_permute_inputs,
             range_check_inputs,
@@ -133,16 +124,14 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>, GpuDevice
     fn generate_pre_verifier_subcircuit_ctx(
         &self,
         proof: &Proof<BabyBearPoseidon2Config>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
-        memory_dimensions: MemoryDimensions,
+        public_values_opening: &PublicValuesOpening<F>,
         device_ctx: &GpuDeviceCtx,
     ) -> SubCircuitTraceData<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
         let data: SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> =
             <Self as RootTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::generate_pre_verifier_subcircuit_ctx(
                 self,
                 proof,
-                user_pvs_proof,
-                memory_dimensions,
+                public_values_opening,
                 &(),
             );
         SubCircuitTraceData {

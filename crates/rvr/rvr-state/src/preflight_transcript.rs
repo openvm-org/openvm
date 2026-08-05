@@ -47,9 +47,7 @@ pub struct PreflightTranscriptState {
     pub error: u32,
     pub instruction_limit: u32,
     pub memory_dirty_pages: *mut u64,
-    pub public_values_dirty_pages: *mut u64,
     pub memory_dirty_page_words: u64,
-    pub public_values_dirty_page_words: u64,
     pub last_memory_dirty_page: u32,
     pub padding: u32,
 }
@@ -70,9 +68,7 @@ impl Default for PreflightTranscriptState {
             error: 0,
             instruction_limit: u32::MAX,
             memory_dirty_pages: core::ptr::null_mut(),
-            public_values_dirty_pages: core::ptr::null_mut(),
             memory_dirty_page_words: 0,
-            public_values_dirty_page_words: 0,
             last_memory_dirty_page: u32::MAX,
             padding: 0,
         }
@@ -88,7 +84,7 @@ const _: () = {
     assert!(offset_of!(RvrCheckpoint, replay_value_cursor) == 12);
     assert!(offset_of!(RvrCheckpoint, regs) == 16);
 
-    assert!(size_of::<PreflightTranscriptState>() == 112);
+    assert!(size_of::<PreflightTranscriptState>() == 96);
     assert!(align_of::<PreflightTranscriptState>() == 8);
     assert!(offset_of!(PreflightTranscriptState, checkpoint_log) == 0);
     assert!(offset_of!(PreflightTranscriptState, replay_value_log) == 8);
@@ -103,9 +99,7 @@ const _: () = {
     assert!(offset_of!(PreflightTranscriptState, error) == 64);
     assert!(offset_of!(PreflightTranscriptState, instruction_limit) == 68);
     assert!(offset_of!(PreflightTranscriptState, memory_dirty_pages) == 72);
-    assert!(offset_of!(PreflightTranscriptState, public_values_dirty_pages) == 80);
-    assert!(offset_of!(PreflightTranscriptState, memory_dirty_page_words) == 88);
-    assert!(offset_of!(PreflightTranscriptState, public_values_dirty_page_words) == 96);
-    assert!(offset_of!(PreflightTranscriptState, last_memory_dirty_page) == 104);
-    assert!(offset_of!(PreflightTranscriptState, padding) == 108);
+    assert!(offset_of!(PreflightTranscriptState, memory_dirty_page_words) == 80);
+    assert!(offset_of!(PreflightTranscriptState, last_memory_dirty_page) == 88);
+    assert!(offset_of!(PreflightTranscriptState, padding) == 92);
 };

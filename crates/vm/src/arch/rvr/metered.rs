@@ -10,9 +10,9 @@ use std::{
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::MEMORY_AS,
-    DEFERRAL_AS, PUBLIC_VALUES_AS,
+    DEFERRAL_AS,
 };
-use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
+use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP};
 use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
@@ -68,20 +68,17 @@ pub type RvrMeteredExecutionOutcome = ExecutionOutcome<SegmentationState>;
 pub struct MeteringState {
     pub trace_heights: *mut u32,
     pub mem_page_buf: *mut PageTouch,
-    pub pv_page_buf: *mut PageTouch,
     pub deferral_page_buf: *mut PageTouch,
     /// Periodic-check callback. Always initialized; generated C calls it
     /// unconditionally to keep the hot metered path branch-free.
     pub on_check: unsafe extern "C" fn(*mut MeteringState) -> u8,
     /// Drains the main-memory page buffer during variable-size memory access.
     pub on_memory_flush: unsafe extern "C" fn(*mut MeteringState),
-    /// Grows a public-value or deferral page buffer before an overflowing append.
+    /// Grows the deferral page buffer before an overflowing append.
     pub on_page_buffer_resize: unsafe extern "C" fn(*mut MeteringState, u32, u32),
     pub seg_state: *mut SegmentationState,
     pub mem_page_buf_len: u32,
-    pub pv_page_buf_len: u32,
     pub deferral_page_buf_len: u32,
-    pub pv_page_buf_cap: u32,
     pub deferral_page_buf_cap: u32,
     pub check_counter: u32,
     /// Dedup cache for AS_MEMORY pages. `u32::MAX` = none. Reset on flush.
@@ -91,8 +88,8 @@ pub struct MeteringState {
 }
 
 const _: () = {
-    assert!(size_of::<MeteringState>() == 96);
-    assert!(offset_of!(MeteringState, num_preflight_replay_values) == 92);
+    assert!(size_of::<MeteringState>() == 80);
+    assert!(offset_of!(MeteringState, num_preflight_replay_values) == 76);
 };
 
 /// Sentinel indicating no last-seen page (matches `NO_LAST_PAGE` in C).
@@ -103,16 +100,13 @@ impl Default for MeteringState {
         Self {
             trace_heights: std::ptr::null_mut(),
             mem_page_buf: std::ptr::null_mut(),
-            pv_page_buf: std::ptr::null_mut(),
             deferral_page_buf: std::ptr::null_mut(),
             on_check: metered_periodic_check,
             on_memory_flush: metered_memory_buffer_flush,
             on_page_buffer_resize: metered_page_buffer_resize,
             seg_state: std::ptr::null_mut(),
             mem_page_buf_len: 0,
-            pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
-            pv_page_buf_cap: PV_PAGE_BUF_CAP as u32,
             deferral_page_buf_cap: DEFERRAL_PAGE_BUF_CAP as u32,
             check_counter: 0,
             last_mem_page: NO_LAST_PAGE,
@@ -123,16 +117,12 @@ impl Default for MeteringState {
 
 // ── Segmentation runtime ─────────────────────────────────────────────────────
 
-// TODO: generalize non-memory page buffers to a config-driven set of N
-// buffers (one per additional address space) instead of hardcoding
-// pv + deferral. The memory AS buffer stays separate as the hot path.
 pub struct SegmentationState {
     /// OpenVM metered execution context - holds trace heights, memory tracking,
     /// and segmentation logic.
     pub ctx: MeteredCtx,
     /// Per-address-space page buffers. Each entry = local page id + leaf mask.
     mem_page_buf: Vec<PageTouch>,
-    pv_page_buf: Vec<PageTouch>,
     deferral_page_buf: Vec<PageTouch>,
     drained_mem_page_touches: Vec<PageTouch>,
     address_height: usize,
@@ -148,7 +138,6 @@ impl SegmentationState {
         Self {
             ctx,
             mem_page_buf: vec![PageTouch::default(); MEM_PAGE_BUF_CAP],
-            pv_page_buf: vec![PageTouch::default(); PV_PAGE_BUF_CAP],
             deferral_page_buf: if uses_deferral_address_space {
                 vec![PageTouch::default(); DEFERRAL_PAGE_BUF_CAP]
             } else {
@@ -175,18 +164,6 @@ impl SegmentationState {
     /// Get the AS_MEMORY page buffer used by generated C.
     pub fn mem_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.mem_page_buf.as_mut_ptr()
-    }
-
-    /// Get the AS_PUBLIC_VALUES page buffer used by generated C.
-    pub fn pv_page_buf_ptr(&mut self) -> *mut PageTouch {
-        self.pv_page_buf.as_mut_ptr()
-    }
-
-    pub fn pv_page_buf_cap(&self) -> u32 {
-        self.pv_page_buf
-            .len()
-            .try_into()
-            .expect("public-value page buffer capacity must fit in u32")
     }
 
     /// Get the AS_DEFERRAL page buffer used by generated C.
@@ -235,18 +212,12 @@ impl SegmentationState {
     /// Apply all page buffers: convert local pages to global ids and update
     /// memory metering state.
     #[inline(always)]
-    fn apply_page_buffers(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
+    fn apply_page_buffers(&mut self, mem_len: u32, deferral_len: u32) {
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
             MEMORY_AS,
             &self.mem_page_buf[..mem_len as usize],
-        );
-        Self::apply_addr_space_buffer(
-            &mut self.ctx.memory_ctx,
-            self.address_height,
-            PUBLIC_VALUES_AS,
-            &self.pv_page_buf[..pv_len as usize],
         );
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
@@ -281,7 +252,7 @@ impl SegmentationState {
         );
     }
 
-    fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
+    fn initialize_segment_memory(&mut self, mem_len: u32, deferral_len: u32) {
         // RVR can only suspend at block boundaries, so segmentation uses the
         // last safe checkpoint. The pages accumulated since that checkpoint
         // belong to the next segment and must seed its memory trace heights
@@ -295,7 +266,7 @@ impl SegmentationState {
             MEMORY_AS,
             &self.drained_mem_page_touches,
         );
-        self.apply_page_buffers(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, deferral_len);
         self.ctx
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
@@ -304,13 +275,13 @@ impl SegmentationState {
         self.ctx
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
+        self.ctx.restore_public_values_trace_heights();
     }
 
     /// Applies a periodic block-boundary check and returns whether a segment was created.
     pub fn on_periodic_check(
         &mut self,
         mem_len: u32,
-        pv_len: u32,
         deferral_len: u32,
         remaining_counter: u32,
         num_preflight_replay_values: u32,
@@ -321,7 +292,7 @@ impl SegmentationState {
         self.ctx.segmentation_ctx.instret = instret;
         self.ctx.segmentation_ctx.instrets_until_check = seg_check_insns;
 
-        self.apply_page_buffers(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, deferral_len);
         self.ctx
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
@@ -336,7 +307,7 @@ impl SegmentationState {
             self.ctx
                 .segmentation_ctx
                 .initialize_segment(&mut self.ctx.trace_heights);
-            self.initialize_segment_memory(mem_len, pv_len, deferral_len);
+            self.initialize_segment_memory(mem_len, deferral_len);
 
             self.ctx
                 .segmentation_ctx
@@ -358,12 +329,11 @@ impl SegmentationState {
     pub fn on_termination(
         &mut self,
         mem_len: u32,
-        pv_len: u32,
         deferral_len: u32,
         remaining_counter: u32,
         num_preflight_replay_values: u32,
     ) {
-        self.apply_page_buffers(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, deferral_len);
         self.ctx
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
@@ -390,17 +360,14 @@ pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8
     let metering = &mut *state;
     let seg_state = &mut *metering.seg_state;
     let mem_len = metering.mem_page_buf_len;
-    let pv_len = metering.pv_page_buf_len;
     let deferral_len = metering.deferral_page_buf_len;
     metering.mem_page_buf_len = 0;
-    metering.pv_page_buf_len = 0;
     metering.deferral_page_buf_len = 0;
     // The cleared buffer no longer contains the entry cached by last_mem_page.
     metering.last_mem_page = NO_LAST_PAGE;
 
     let did_segment = seg_state.on_periodic_check(
         mem_len,
-        pv_len,
         deferral_len,
         metering.check_counter,
         metering.num_preflight_replay_values,
@@ -431,11 +398,11 @@ pub unsafe extern "C" fn metered_memory_buffer_flush(state: *mut MeteringState) 
     seg_state.drain_main_memory_buffer(mem_len);
 }
 
-/// Grows the selected non-memory page buffer while preserving recorded touches.
+/// Grows the deferral page buffer while preserving recorded touches.
 ///
 /// # Safety
 /// `state` must satisfy the same lifetime requirements as [`metered_periodic_check`].
-/// `addr_space` must be [`PUBLIC_VALUES_AS`] or [`DEFERRAL_AS`].
+/// `addr_space` must be [`DEFERRAL_AS`].
 pub unsafe extern "C" fn metered_page_buffer_resize(
     state: *mut MeteringState,
     addr_space: u32,
@@ -444,21 +411,12 @@ pub unsafe extern "C" fn metered_page_buffer_resize(
     let metering = &mut *state;
     let seg_state = &mut *metering.seg_state;
 
-    let (buffer, len, buffer_ptr, buffer_cap) = match addr_space {
-        PUBLIC_VALUES_AS => (
-            &mut seg_state.pv_page_buf,
-            metering.pv_page_buf_len,
-            &mut metering.pv_page_buf,
-            &mut metering.pv_page_buf_cap,
-        ),
-        DEFERRAL_AS => (
-            &mut seg_state.deferral_page_buf,
-            metering.deferral_page_buf_len,
-            &mut metering.deferral_page_buf,
-            &mut metering.deferral_page_buf_cap,
-        ),
-        _ => panic!("unsupported resizable metered address space {addr_space}"),
-    };
+    assert_eq!(
+        addr_space, DEFERRAL_AS,
+        "unsupported resizable metered address space {addr_space}"
+    );
+    let buffer = &mut seg_state.deferral_page_buf;
+    let len = metering.deferral_page_buf_len;
 
     let required_len = (len as usize)
         .checked_add(additional_entries as usize)
@@ -476,8 +434,8 @@ pub unsafe extern "C" fn metered_page_buffer_resize(
         let new_len = doubled_len.max(required_len);
         buffer.resize(new_len, PageTouch::default());
     }
-    *buffer_ptr = buffer.as_mut_ptr();
-    *buffer_cap =
+    metering.deferral_page_buf = buffer.as_mut_ptr();
+    metering.deferral_page_buf_cap =
         u32::try_from(buffer.len()).expect("metered page buffer capacity must fit in u32");
 }
 
@@ -692,7 +650,7 @@ mod tests {
                 ctx::MeteredCtxInputs,
                 segment_ctx::{SegmentationLimits, DEFAULT_MAX_MEMORY},
             },
-            BOUNDARY_AIR_ID, MERKLE_AIR_ID,
+            BOUNDARY_AIR_ID, MERKLE_AIR_ID, PUBLIC_VALUES_AIR_ID, U16_CELLS_PER_PUBLIC_VALUE,
         },
         utils::{test_cpu_engine, test_system_config},
     };
@@ -701,12 +659,13 @@ mod tests {
         uses_deferral_address_space: bool,
     ) -> SegmentationState {
         let system_config = test_system_config();
-        let num_airs = 6;
+        let num_airs = 7;
         let mut air_names = (0..num_airs)
             .map(|idx| format!("Air {idx}"))
             .collect::<Vec<_>>();
         air_names[BOUNDARY_AIR_ID] = "Memory Boundary".to_string();
         air_names[MERKLE_AIR_ID] = "Memory Merkle".to_string();
+        air_names[PUBLIC_VALUES_AIR_ID] = "PublicValues".to_string();
         air_names[num_airs - 2] = "Poseidon2".to_string();
         let constant_trace_heights = vec![None; num_airs];
         let widths = vec![1; num_airs];
@@ -744,20 +703,20 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        with_interval_buffer.pv_page_buf[0] = PageTouch {
-            page_id: 3,
-            _padding: 0,
-            leaf_mask: 1,
-        };
         with_interval_buffer.deferral_page_buf[0] = PageTouch {
             page_id: 2,
             _padding: 0,
             leaf_mask: 1,
         };
-        with_interval_buffer.initialize_segment_memory(1, 1, 1);
+        with_interval_buffer.initialize_segment_memory(1, 1);
 
         let mut clean = make_segmentation_state();
-        clean.initialize_segment_memory(0, 0, 0);
+        clean.initialize_segment_memory(0, 0);
+
+        assert_eq!(
+            clean.ctx.trace_heights[PUBLIC_VALUES_AIR_ID],
+            (test_system_config().num_public_value_cells / U16_CELLS_PER_PUBLIC_VALUE) as u32
+        );
 
         assert!(
             with_interval_buffer.ctx.trace_heights[BOUNDARY_AIR_ID]
@@ -782,7 +741,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        assert!(!seg_state.on_periodic_check(1, 0, 0, 0, 0));
+        assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
 
         let poseidon2_idx = seg_state.ctx.trace_heights.len() - 2;
         let poseidon_before = seg_state.ctx.trace_heights[poseidon2_idx];
@@ -791,7 +750,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        assert!(!seg_state.on_periodic_check(1, 0, 0, 0, 0));
+        assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
 
         assert_eq!(
             seg_state.ctx.trace_heights[poseidon2_idx] - poseidon_before,
@@ -807,7 +766,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 0b11,
         };
-        buffered.on_termination(1, 0, 0, 0, 0);
+        buffered.on_termination(1, 0, 0, 0);
 
         let mut explicit = make_segmentation_state();
         explicit
@@ -848,16 +807,13 @@ mod tests {
         let mut metering = MeteringState {
             trace_heights: drained.trace_heights_ptr(),
             mem_page_buf: drained.mem_page_buf_ptr(),
-            pv_page_buf: drained.pv_page_buf_ptr(),
             deferral_page_buf: drained.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
             on_memory_flush: metered_memory_buffer_flush,
             on_page_buffer_resize: metered_page_buffer_resize,
             seg_state: &mut drained,
             mem_page_buf_len: 1,
-            pv_page_buf_len: 3,
             deferral_page_buf_len: 4,
-            pv_page_buf_cap: PV_PAGE_BUF_CAP as u32,
             deferral_page_buf_cap: DEFERRAL_PAGE_BUF_CAP as u32,
             check_counter: 17,
             last_mem_page: 7,
@@ -867,7 +823,6 @@ mod tests {
         unsafe { metered_memory_buffer_flush(&mut metering) };
         assert_eq!(metering.mem_page_buf_len, 0);
         assert_eq!(metering.last_mem_page, NO_LAST_PAGE);
-        assert_eq!(metering.pv_page_buf_len, 3);
         assert_eq!(metering.deferral_page_buf_len, 4);
         assert_eq!(metering.check_counter, 17);
         assert_eq!(drained.ctx.trace_heights, initial_heights);
@@ -881,7 +836,7 @@ mod tests {
         metering.mem_page_buf_len = 1;
         metering.last_mem_page = 7;
         unsafe { metered_memory_buffer_flush(&mut metering) };
-        drained.on_termination(0, 0, 0, 0, 0);
+        drained.on_termination(0, 0, 0, 0);
 
         let mut once = make_segmentation_state();
         once.mem_page_buf[0] = PageTouch {
@@ -889,7 +844,7 @@ mod tests {
             _padding: 0,
             leaf_mask: 1,
         };
-        once.on_termination(1, 0, 0, 0, 0);
+        once.on_termination(1, 0, 0, 0);
 
         assert_eq!(drained.ctx.trace_heights, once.ctx.trace_heights);
     }
@@ -906,48 +861,38 @@ mod tests {
         drained.mem_page_buf[0] = touch;
         drained.drain_main_memory_buffer(1);
         *drained.ctx.trace_heights.last_mut().unwrap() = 4096;
-        assert!(drained.on_periodic_check(0, 0, 0, 0, 0));
+        assert!(drained.on_periodic_check(0, 0, 0, 0));
 
         let mut buffered = make_segmentation_state();
         buffered.mem_page_buf[0] = touch;
         *buffered.ctx.trace_heights.last_mut().unwrap() = 4096;
-        assert!(buffered.on_periodic_check(1, 0, 0, 0, 0));
+        assert!(buffered.on_periodic_check(1, 0, 0, 0));
 
         assert_eq!(drained.ctx.trace_heights, buffered.ctx.trace_heights);
     }
 
     #[test]
-    fn test_non_memory_page_buffers_resize_and_preserve_entries() {
+    fn test_deferral_page_buffer_resize_preserves_entries() {
         let touch = PageTouch {
             page_id: 7,
             _padding: 0,
             leaf_mask: 3,
         };
         let mut seg_state = make_segmentation_state();
-        seg_state.pv_page_buf = vec![touch];
         seg_state.deferral_page_buf = vec![touch];
         let original_mem_ptr = seg_state.mem_page_buf_ptr();
         let original_mem_len = seg_state.mem_page_buf.len();
-        let pv_page_buf = seg_state.pv_page_buf_ptr();
         let deferral_page_buf = seg_state.deferral_page_buf_ptr();
 
         let mut metering = MeteringState {
             mem_page_buf: original_mem_ptr,
-            pv_page_buf,
             deferral_page_buf,
             seg_state: &mut seg_state,
             mem_page_buf_len: 5,
-            pv_page_buf_len: 1,
             deferral_page_buf_len: 1,
-            pv_page_buf_cap: 1,
             deferral_page_buf_cap: 1,
             ..Default::default()
         };
-
-        unsafe { metered_page_buffer_resize(&mut metering, PUBLIC_VALUES_AS, 1) };
-        assert_eq!(metering.pv_page_buf_cap, 2);
-        assert_eq!(metering.pv_page_buf, seg_state.pv_page_buf.as_mut_ptr());
-        assert_eq!(seg_state.pv_page_buf[0], touch);
 
         unsafe { metered_page_buffer_resize(&mut metering, DEFERRAL_AS, 3) };
         assert_eq!(metering.deferral_page_buf_cap, 4);
@@ -978,7 +923,6 @@ mod tests {
         );
 
         assert_eq!(disabled.mem_page_buf.len(), enabled.mem_page_buf.len());
-        assert_eq!(disabled.pv_page_buf.len(), enabled.pv_page_buf.len());
     }
 
     #[test]
@@ -987,7 +931,6 @@ mod tests {
         let mut metering = MeteringState {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
-            pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             seg_state: &mut seg_state,
             deferral_page_buf_cap: 0,
@@ -1009,7 +952,7 @@ mod tests {
         let mut seg_state = make_segmentation_state();
         seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
 
-        assert!(!seg_state.on_periodic_check(0, 0, 0, remaining, 0));
+        assert!(!seg_state.on_periodic_check(0, 0, remaining, 0));
 
         assert_eq!(
             seg_state.ctx.segmentation_ctx.instret,
@@ -1029,16 +972,13 @@ mod tests {
         let mut metering = MeteringState {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
-            pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
             on_memory_flush: metered_memory_buffer_flush,
             on_page_buffer_resize: metered_page_buffer_resize,
             seg_state: &mut seg_state,
             mem_page_buf_len: 0,
-            pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
-            pv_page_buf_cap: PV_PAGE_BUF_CAP as u32,
             deferral_page_buf_cap: DEFERRAL_PAGE_BUF_CAP as u32,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
@@ -1064,16 +1004,13 @@ mod tests {
         let mut metering = MeteringState {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
-            pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
             on_memory_flush: metered_memory_buffer_flush,
             on_page_buffer_resize: metered_page_buffer_resize,
             seg_state: &mut seg_state,
             mem_page_buf_len: 0,
-            pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
-            pv_page_buf_cap: PV_PAGE_BUF_CAP as u32,
             deferral_page_buf_cap: DEFERRAL_PAGE_BUF_CAP as u32,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
@@ -1098,16 +1035,13 @@ mod tests {
         let mut metering = MeteringState {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
-            pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
             on_memory_flush: metered_memory_buffer_flush,
             on_page_buffer_resize: metered_page_buffer_resize,
             seg_state: &mut seg_state,
             mem_page_buf_len: 0,
-            pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
-            pv_page_buf_cap: PV_PAGE_BUF_CAP as u32,
             deferral_page_buf_cap: DEFERRAL_PAGE_BUF_CAP as u32,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,

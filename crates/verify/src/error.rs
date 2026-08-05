@@ -1,4 +1,4 @@
-use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProofError;
+use openvm_circuit::system::public_values::proof::PublicValuesOpeningError;
 use openvm_stark_backend::verifier::VerifierError;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use thiserror::Error;
@@ -7,8 +7,8 @@ use thiserror::Error;
 pub enum VerifyStarkError {
     #[error("Stark verifier failed with error: {0}")]
     StarkVerificationFailure(#[from] VerifierError<EF>),
-    #[error("User public value proof verification failed with error: {0}")]
-    UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
+    #[error("Public-values opening verification failed with error: {0}")]
+    PublicValuesOpeningFailure(#[from] PublicValuesOpeningError),
     #[error("Invalid user public values length: expected {expected}, actual {actual}")]
     UserPvsLengthMismatch { expected: usize, actual: usize },
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]

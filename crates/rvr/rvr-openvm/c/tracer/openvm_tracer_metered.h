@@ -33,10 +33,6 @@ static_assert(
         TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_MEM_PAGES_PER_INSN,
     "MEM_PAGE_BUF_CAP too small for worst-case pages per flush interval");
 static_assert(
-    TRACER_PV_PAGE_BUF_CAP >=
-        TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_PV_PAGES_PER_INSN,
-    "PV_PAGE_BUF_CAP too small for worst-case pages per flush interval");
-static_assert(
     TRACER_DEFERRAL_PAGE_BUF_CAP >=
         TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_DEFERRAL_PAGES_PER_INSN,
     "DEFERRAL_PAGE_BUF_CAP too small for worst-case pages per flush interval");
@@ -84,7 +80,7 @@ deferral_addr_to_local_leaf(uint64_t ptr) {
 
 static __attribute__((always_inline)) inline uint32_t addr_to_local_leaf(
     uint32_t addr_space, uint64_t ptr) {
-  if (likely(addr_space == AS_MEMORY || addr_space == AS_PUBLIC_VALUES)) {
+  if (likely(addr_space == AS_MEMORY)) {
     return byte_addr_to_local_leaf(ptr);
   }
   return deferral_addr_to_local_leaf(ptr);
@@ -130,8 +126,8 @@ static __attribute__((always_inline)) inline void append_page_touch_range(
   }
 }
 
-/* AS_PUBLIC_VALUES and AS_DEFERRAL are not on the main-memory hot path. Grow
- * their Rust-owned buffers before an append that would exceed capacity. */
+/* AS_DEFERRAL is not on the main-memory hot path. Grow its Rust-owned buffer
+ * before an append that would exceed capacity. */
 static __attribute__((always_inline)) inline void
 ensure_resizable_page_buffer_capacity(MeteringState* metering,
                                       uint32_t addr_space, uint32_t len,
@@ -141,14 +137,6 @@ ensure_resizable_page_buffer_capacity(MeteringState* metering,
     metering->on_page_buffer_resize(metering, addr_space,
                                     additional_entries);
   }
-}
-
-static __attribute__((always_inline)) inline void
-ensure_pv_page_buffer_capacity(MeteringState* metering,
-                               uint32_t additional_entries) {
-  ensure_resizable_page_buffer_capacity(
-      metering, AS_PUBLIC_VALUES, metering->pv_page_buf_len,
-      metering->pv_page_buf_cap, additional_entries);
 }
 
 static __attribute__((always_inline)) inline void
@@ -201,24 +189,6 @@ static __attribute__((always_inline)) inline void record_mem_page_range(
   metering->last_mem_page = last_page;
 }
 
-static __attribute__((always_inline)) inline void record_pv_page(
-    MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
-  ensure_pv_page_buffer_capacity(metering, 1u);
-  append_page_touch(metering->pv_page_buf, &metering->pv_page_buf_len, page,
-                    leaf_mask);
-}
-
-static __attribute__((always_inline)) inline void record_pv_page_range(
-    MeteringState* metering, uint32_t first_leaf, uint32_t last_leaf) {
-  uint32_t additional_entries =
-      (last_leaf >> TRACER_PAGE_BITS) -
-      (first_leaf >> TRACER_PAGE_BITS) + 1u;
-  ensure_pv_page_buffer_capacity(metering, additional_entries);
-  uint32_t len = metering->pv_page_buf_len;
-  append_page_touch_range(metering->pv_page_buf, &len, first_leaf, last_leaf);
-  metering->pv_page_buf_len = len;
-}
-
 static __attribute__((always_inline)) inline void record_deferral_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
   ensure_deferral_page_buffer_capacity(metering, 1u);
@@ -253,13 +223,6 @@ static __attribute__((always_inline)) inline void record_page(
     } else {
       record_mem_page_range(metering, first_leaf, last_leaf);
     }
-  } else if (addr_space == AS_PUBLIC_VALUES) {
-    if (first_page == last_page) {
-      record_pv_page(metering, first_page,
-                     leaf_mask_range(first_leaf, last_leaf));
-    } else {
-      record_pv_page_range(metering, first_leaf, last_leaf);
-    }
   } else {
     if (first_page == last_page) {
       record_deferral_page(metering, first_page,
@@ -279,8 +242,6 @@ static __attribute__((always_inline)) inline void record_page_range(
   uint32_t last_leaf = addr_to_local_leaf(addr_space, last_addr);
   if (likely(addr_space == AS_MEMORY)) {
     record_mem_page_range(metering, first_leaf, last_leaf);
-  } else if (addr_space == AS_PUBLIC_VALUES) {
-    record_pv_page_range(metering, first_leaf, last_leaf);
   } else {
     record_deferral_page_range(metering, first_leaf, last_leaf);
   }

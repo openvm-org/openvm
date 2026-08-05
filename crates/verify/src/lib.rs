@@ -3,9 +3,7 @@ use std::borrow::Borrow;
 use eyre::Result;
 use openvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, ExitCode},
-    system::{
-        memory::merkle::public_values::UserPublicValuesProof, program::trace::compute_exe_commit,
-    },
+    system::{program::trace::compute_exe_commit, public_values::proof::PublicValuesOpening},
 };
 use openvm_stark_backend::{
     codec::{Decode, Encode},
@@ -13,7 +11,7 @@ use openvm_stark_backend::{
     StarkEngine,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config as SC, BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
+    BabyBearPoseidon2Config as SC, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
 };
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
@@ -39,14 +37,14 @@ pub(crate) type VkCommit = pvs::VkCommit<F>;
 #[derive(Clone, Debug)]
 pub struct VmStarkProof {
     pub inner: Proof<SC>,
-    pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
+    pub public_values_opening: PublicValuesOpening<F>,
     pub deferral_merkle_proofs: Option<DeferralMerkleProofs<F>>,
 }
 
 impl Encode for VmStarkProof {
     fn encode<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         self.inner.encode(writer)?;
-        self.user_pvs_proof.encode::<SC, _>(writer)?;
+        self.public_values_opening.encode::<SC, _>(writer)?;
         (self.deferral_merkle_proofs.is_some() as u8).encode(writer)?;
         if let Some(ref proofs) = self.deferral_merkle_proofs {
             proofs.encode(writer)?;
@@ -58,7 +56,7 @@ impl Encode for VmStarkProof {
 impl Decode for VmStarkProof {
     fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let inner = Proof::<SC>::decode(reader)?;
-        let user_pvs_proof = UserPublicValuesProof::decode::<SC, _>(reader)?;
+        let public_values_opening = PublicValuesOpening::decode::<SC, _>(reader)?;
         let deferral_merkle_proofs = if u8::decode(reader)? != 0 {
             Some(DeferralMerkleProofs::decode(reader)?)
         } else {
@@ -66,7 +64,7 @@ impl Decode for VmStarkProof {
         };
         Ok(Self {
             inner,
-            user_pvs_proof,
+            public_values_opening,
             deferral_merkle_proofs,
         })
     }
@@ -119,27 +117,34 @@ pub fn verify_vm_stark_proof_pvs(
         is_terminate,
         initial_root,
         final_root,
+        initial_public_values_commit,
+        final_public_values_commit,
         ..
     } = proof.inner.public_values[VM_PVS_AIR_ID].as_slice().borrow();
 
     let hasher = vm_poseidon2_hasher();
 
-    // Verify the merkle root proof against final_root.
+    // Verify the terminal payload against the final append-only public-values endpoint.
     proof
-        .user_pvs_proof
-        .verify(&hasher, vk.baseline.memory_dimensions, final_root)?;
+        .public_values_opening
+        .verify(&hasher, final_public_values_commit)?;
 
-    // Check that user_pvs_proof has the correct number of public values.
-    if proof.user_pvs_proof.public_values.len() != vk.baseline.num_user_pvs {
+    // Check that the opening has the configured public-values capacity.
+    if proof.public_values_opening.public_values.len() != vk.baseline.num_user_pvs {
         return Err(VerifyStarkError::UserPvsLengthMismatch {
             expected: vk.baseline.num_user_pvs,
-            actual: proof.user_pvs_proof.public_values.len(),
+            actual: proof.public_values_opening.public_values.len(),
         });
     }
 
     // Check that the app_commit is as expected.
-    let claimed_app_exe_commit =
-        compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc);
+    let claimed_app_exe_commit = compute_exe_commit(
+        &hasher,
+        &program_commit,
+        &initial_root,
+        &initial_public_values_commit,
+        initial_pc,
+    );
     if claimed_app_exe_commit != vk.baseline.app_exe_commit {
         return Err(VerifyStarkError::AppExeCommitMismatch {
             expected: vk.baseline.app_exe_commit,

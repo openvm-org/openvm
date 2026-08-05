@@ -228,17 +228,9 @@ preflight_append_checkpoint(
  * callback-facing hooks only preserve execution behavior. */
 static __attribute__((always_inline)) inline void
 trace_write_other_block_u64(
-    RvState* restrict state,
-    uint32_t address_space, uint32_t pointer,
-    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {
-  if (address_space == AS_PUBLIC_VALUES) {
-    PreflightTranscriptState* restrict p = &state->mode_state;
-    uint64_t byte_address = (uint64_t)pointer * sizeof(uint16_t);
-    uint64_t page = byte_address >> PREFLIGHT_DIRTY_PAGE_BITS;
-    preflight_mark_dirty_page(
-        p->public_values_dirty_pages, p->public_values_dirty_page_words, page);
-  }
-}
+    RvState* restrict state [[maybe_unused]],
+    uint32_t address_space [[maybe_unused]], uint32_t pointer [[maybe_unused]],
+    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {}
 
 static __attribute__((always_inline)) inline void read_mem_u64_range(
     RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,

@@ -170,6 +170,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             execution_bus,
             program_bus,
             memory_bridge,
+            ..
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);

@@ -143,7 +143,7 @@ fn make_verify_stark_circuit_prover(
         .unwrap();
     let system_config = sdk.app_config().app_vm_config.as_ref().clone();
     let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.num_public_values;
+    let num_user_pvs = system_config.num_public_value_cells;
     let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
         ir_pcs_data.commitment.into(),
@@ -233,7 +233,7 @@ fn make_recursive_verify_stark_sdk(
 ) -> Result<Sdk> {
     let vm_config = SdkVmConfig::riscv64();
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
-    let num_user_pvs = vm_config.system.config.num_public_values;
+    let num_user_pvs = vm_config.system.config.num_public_value_cells;
     let deferral_agg_prover = DeferralAggProver::verify_stark(
         &agg_params,
         hook_params_with_100_bits_security(),
@@ -427,8 +427,8 @@ fn test_preflight_app_prover_reuse() -> Result<()> {
     verify_segments(&prover.vm().engine, &app_vk.vk, &first.per_segment)?;
     verify_segments(&prover.vm().engine, &app_vk.vk, &second.per_segment)?;
     assert_eq!(
-        first.user_public_values.public_values,
-        second.user_public_values.public_values
+        first.public_values_opening.public_values,
+        second.public_values_opening.public_values
     );
     Ok(())
 }
@@ -835,7 +835,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
         vs_ir_pcs_data.commitment.into(),
         agg_params.internal.clone(),
         vs_system_config.memory_config.memory_dimensions(),
-        vs_system_config.num_public_values,
+        vs_system_config.num_public_value_cells,
         Some(expected_def_hook_commit.into()),
         0,
     );
@@ -1040,7 +1040,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let onion_commit = compute_dag_onion_commit(&ir_vk);
 
             let memory_dimensions = system_config.memory_config.memory_dimensions();
-            let num_user_pvs = system_config.num_public_values;
+            let num_user_pvs = system_config.num_public_value_cells;
 
             let root_prover = std::sync::Arc::new(RootProver::from_pk(
                 ir_vk,

@@ -22,12 +22,12 @@ pub struct VmStarkVerifyingKey {
 /// (i.e. internal-recursive) VM STARK proof
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationBaseline {
-    /// Commit to the app exe (i.e. hash of the program commit, initial memory merkle root,
-    /// and initial program counter)
+    /// Commit to the app exe (i.e. hash of the program commit, initial memory Merkle root,
+    /// initial public-output accumulator, and initial program counter)
     pub app_exe_commit: Digest,
-    /// VM memory metadata used to verify the user public values merkle proof
+    /// VM memory metadata used to verify deferral Merkle proofs when deferrals are enabled.
     pub memory_dimensions: MemoryDimensions,
-    /// Number of raw user public values
+    /// Number of fixed-capacity `u16` public-value cells.
     pub num_user_pvs: usize,
     /// Commit to the app_vk's DAG and its pre-hash, first exposed by the leaf verifier.
     pub app_vk_commit: VkCommit,

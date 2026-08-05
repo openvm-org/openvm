@@ -17,7 +17,10 @@ use openvm_deferral_circuit::{
 };
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{
-    codec::Decode, p3_field::PrimeField32, verifier::verify, TranscriptHistory,
+    codec::Decode,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    verifier::verify,
+    TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, poseidon2_compress_with_capacity,
@@ -50,6 +53,7 @@ fn output_raw_from_proof(proof: &VmStarkProof) -> OutputRaw {
         &vm_poseidon2_hasher(),
         &vm_pvs.program_commit,
         &vm_pvs.initial_root,
+        &vm_pvs.initial_public_values_commit,
         vm_pvs.initial_pc,
     );
     let app_vm_commit =
@@ -58,7 +62,11 @@ fn output_raw_from_proof(proof: &VmStarkProof) -> OutputRaw {
     let output_f = app_exe_commit
         .into_iter()
         .chain(app_vm_commit)
-        .chain(proof.user_pvs_proof.public_values.iter().copied())
+        .chain([
+            F::from_usize(proof.public_values_opening.num_values),
+            F::ZERO,
+        ])
+        .chain(proof.public_values_opening.public_values.iter().copied())
         .collect_vec();
     f_slice_to_bytes(&output_f)
 }

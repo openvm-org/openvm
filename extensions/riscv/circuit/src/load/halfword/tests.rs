@@ -13,7 +13,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADHU};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -99,7 +99,6 @@ fn positive_loadhu_shift6_test() {
         Some([6, 0, 0, 0, 0, 0, 0, 0]),
         Some(0),
         Some(0),
-        Some(MEMORY_AS as usize),
     );
     tester
         .build()
@@ -122,7 +121,6 @@ fn rand_load_halfword_test() {
             &mut harness.preflight,
             &mut rng,
             LOADHU,
-            None,
             None,
             None,
             None,
@@ -182,7 +180,6 @@ fn negative_split_write_data_test() {
         &mut harness.preflight,
         &mut rng,
         LOADHU,
-        None,
         None,
         None,
         None,
@@ -272,7 +269,6 @@ fn test_cuda_rand_load_halfword_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester

@@ -252,7 +252,7 @@ fn hint_random_byte_len(num_words: u64) -> Result<usize, &'static str> {
 mod tests {
     use std::{collections::VecDeque, ptr::null_mut};
 
-    use openvm_circuit::arch::HintStream;
+    use openvm_circuit::arch::{HintStream, PublicValuesState};
     use openvm_instructions::{instruction::Instruction, VmOpcode};
     use p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -443,7 +443,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
         let mut expected_rng = rng.clone();
         let mut memory = Vec::new();
-        let mut public_values = Vec::new();
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -474,7 +474,7 @@ mod tests {
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0xff];
-        let mut public_values = Vec::new();
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -503,7 +503,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
         let mut expected_rng = rng.clone();
         let mut memory = b"ok\n".to_vec();
-        let mut public_values = Vec::new();
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -538,7 +538,7 @@ mod tests {
         hint_stream.set_hint(vec![0xa5]);
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = Vec::new();
-        let mut public_values = Vec::new();
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,

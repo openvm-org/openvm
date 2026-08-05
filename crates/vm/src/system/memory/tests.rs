@@ -1,11 +1,8 @@
 use std::array;
 
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 #[cfg(feature = "cuda")]
 use openvm_instructions::DEFERRAL_AS;
-use openvm_instructions::{
-    riscv::{MEMORY_AS, REGISTER_AS},
-    PUBLIC_VALUES_AS,
-};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
@@ -27,7 +24,7 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
     // and intersecting/overlapping blocks,
     // by limiting the space of valid pointers.
     let max_ptr = 10;
-    let value_bounds = [u16::MAX as u32 + 1; 3];
+    let value_bounds = [u16::MAX as u32 + 1; 2];
     for _ in 0..its {
         let addr_sp = rng.random_range(1..=value_bounds.len());
         let value_bound: u32 = value_bounds[addr_sp - 1];
@@ -49,7 +46,6 @@ fn test_memory_write(its: usize) {
     let small = 1 << small_bits;
     mem_config.addr_spaces[REGISTER_AS as usize].num_cells = small;
     mem_config.addr_spaces[MEMORY_AS as usize].num_cells = small;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
     let mut tester = VmChipTestBuilder::<F>::from_config(mem_config);
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
@@ -66,7 +62,6 @@ fn test_cuda_memory_write(its: usize) {
     let small = 1 << small_bits;
     mem_config.addr_spaces[REGISTER_AS as usize].num_cells = small;
     mem_config.addr_spaces[MEMORY_AS as usize].num_cells = small;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
     mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = small;
     mem_config.pointer_max_bits = small_bits;
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());

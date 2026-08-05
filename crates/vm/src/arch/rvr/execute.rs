@@ -12,9 +12,7 @@ use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
 use rvr_state::{ExecutionStatus, InstretTrackingState, RvState};
 
 use super::{
-    bridge::{
-        deferral_memory_ptr, memory_ptr, public_values_slice, read_registers, write_registers,
-    },
+    bridge::{deferral_memory_ptr, memory_ptr, read_registers, write_registers},
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{
@@ -75,7 +73,7 @@ fn build_io_state_borrowed<'a>(
         hint_stream: &mut streams.hint_stream,
         rng: &mut vm_state.rng,
         memory_ptr,
-        public_values: public_values_slice(&mut vm_state.memory.memory),
+        public_values: &mut vm_state.public_values,
         deferral_memory,
         deferral_memory_len_bytes,
         preflight_deferral_dirty_pages,
@@ -436,9 +434,7 @@ fn execute_metered_impl(
         })?;
     state.mode_state.trace_heights = seg_state.trace_heights_ptr();
     state.mode_state.mem_page_buf = seg_state.mem_page_buf_ptr();
-    state.mode_state.pv_page_buf = seg_state.pv_page_buf_ptr();
     state.mode_state.deferral_page_buf = seg_state.deferral_page_buf_ptr();
-    state.mode_state.pv_page_buf_cap = seg_state.pv_page_buf_cap();
     state.mode_state.deferral_page_buf_cap = seg_state.deferral_page_buf_cap();
     state.mode_state.check_counter = check_counter;
     state.mode_state.num_preflight_replay_values =
@@ -465,7 +461,6 @@ fn execute_metered_impl(
     if terminated {
         seg_state.on_termination(
             state.mode_state.mem_page_buf_len,
-            state.mode_state.pv_page_buf_len,
             state.mode_state.deferral_page_buf_len,
             state.mode_state.check_counter,
             state.mode_state.num_preflight_replay_values,

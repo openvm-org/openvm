@@ -20,18 +20,17 @@ use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
         execution_mode::Segment,
-        hasher::poseidon2::vm_poseidon2_hasher,
-        ContinuationVmProof, ExitCode, GenerationError, Streams, VirtualMachine,
-        VirtualMachineError, VmInstance, VmState,
+        ContinuationVmProof, ExitCode, GenerationError, SegmentProofOutput, Streams,
+        VirtualMachine, VirtualMachineError, VmInstance, VmState,
     },
-    system::memory::{merkle::public_values::UserPublicValuesProof, online::GuestMemory},
+    system::{memory::online::GuestMemory, public_values::proof::PublicValuesOpening},
 };
 use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
 #[cfg(feature = "rvr")]
 use openvm_riscv_circuit::preflight::PreflightReplayProgram;
+use openvm_stark_backend::StarkEngine;
 #[cfg(not(feature = "rvr"))]
 use openvm_stark_backend::Val;
-use openvm_stark_backend::{proof::Proof, StarkEngine};
 use tracing::info_span;
 
 #[cfg(not(feature = "rvr"))]
@@ -75,12 +74,12 @@ impl SegmentProver {
 
     /// Proves one segment from an arbitrary segment-start state.
     ///
-    /// Final memory is returned only when the segment terminates successfully.
+    /// The final VM state is returned only when the segment terminates successfully.
     pub fn prove(
         &mut self,
         state: VmState<GuestMemory>,
         segment: &Segment,
-    ) -> Result<(Proof<SC>, Option<GuestMemory>), VirtualMachineError> {
+    ) -> Result<SegmentProofOutput<SC>, VirtualMachineError> {
         self.prepared.prove(&mut self.instance, state, segment)
     }
 
@@ -179,7 +178,7 @@ impl PreparedSegment {
         instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
         state: VmState<GuestMemory>,
         segment: &Segment,
-    ) -> Result<(Proof<SC>, Option<GuestMemory>), VirtualMachineError> {
+    ) -> Result<SegmentProofOutput<SC>, VirtualMachineError> {
         let _prove_span = info_span!("total_proof").entered();
         #[cfg(feature = "perf-metrics")]
         let exe = instance.exe().clone();
@@ -239,8 +238,11 @@ impl PreparedSegment {
             .engine
             .prove(instance.vm.pk(), ctx)
             .map_err(|error| GenerationError::Proving(error.to_string()))?;
-        let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(state.memory);
-        Ok((proof, final_memory))
+        let terminal_state = (exit_code == Some(ExitCode::Success as u32)).then_some(state);
+        Ok(SegmentProofOutput {
+            proof,
+            terminal_state,
+        })
     }
 }
 
@@ -420,21 +422,12 @@ fn prove_inner(
         proofs.push(proof);
     }
 
-    let final_memory_top_tree = instance
-        .vm
-        .memory_top_tree()
-        .ok_or_else(|| generation_error("final memory top tree was not generated"))?;
-    let user_public_values = UserPublicValuesProof::compute(
-        instance.vm.config().as_ref(),
-        &vm_poseidon2_hasher(),
-        &state.memory.memory,
-        final_memory_top_tree,
-    );
+    let public_values_opening = PublicValuesOpening::from_state(&state.public_values);
     *instance.state_mut() = Some(state);
 
     Ok(ContinuationVmProof {
         per_segment: proofs,
-        user_public_values,
+        public_values_opening,
     })
 }
 

@@ -102,7 +102,6 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
     rs1: Option<[u8; 8]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
-    mem_as: Option<usize>,
 ) {
     assert!(
         matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU),
@@ -110,7 +109,7 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
     );
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
-    let mem_as = mem_as.unwrap_or(MEMORY_AS as usize);
+    let mem_as = MEMORY_AS as usize;
 
     tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
 

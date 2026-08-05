@@ -3,7 +3,7 @@
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::{MEMORY_AS, REGISTER_AS},
-    DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
+    DEFERRAL_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 use rvr_openvm_lift::MAIN_MEMORY_PAGE_BYTES;
@@ -22,14 +22,6 @@ const _: () = assert!(BYTE_SPACE_PTRS_PER_LEAF << PAGE_MASK_LEAF_BITS == MAIN_ME
 /// verifies this capacity against the extension-contributed
 /// `TRACER_MAX_MEM_PAGES_PER_INSN` bound.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
-
-/// Worst-case AS_PUBLIC_VALUES pages a fixed-width reveal can touch.
-const MAX_PV_PAGES_PER_INSN: usize = 2;
-
-/// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
-/// A reveal can span two pages. The C tracer verifies capacity and grows this
-/// cold-path buffer before an overflowing append.
-pub const PV_PAGE_BUF_CAP: usize = 1 << 12;
 
 /// Maximum AS_DEFERRAL page buffer entries per segment check interval.
 /// Deferral CALL records two reads and two writes. The C tracer verifies
@@ -59,7 +51,6 @@ pub fn constants_header(
 static constexpr uint64_t MEMORY_MASK = 0x{memory_mask:x}ull;
 static constexpr uint32_t AS_REGISTER = {REGISTER_AS};
 static constexpr uint32_t AS_MEMORY = {MEMORY_AS};
-static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
 static_assert(WORD_SIZE == sizeof(uint64_t), \"RV64 backend requires 64-bit OpenVM words\");
@@ -73,11 +64,9 @@ static constexpr uint32_t TRACER_PAGE_BITS = {PAGE_MASK_LEAF_BITS};
 static constexpr uint32_t PREFLIGHT_DIRTY_PAGE_BITS = {preflight_dirty_page_bits};
 static_assert((1u << PREFLIGHT_DIRTY_PAGE_BITS) == {PREFLIGHT_DIRTY_PAGE_BYTES}u);
 static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
-static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {SEGMENT_CHECK_INSNS};
 static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {max_mem_pages_per_insn};
-static constexpr uint32_t TRACER_MAX_PV_PAGES_PER_INSN = {MAX_PV_PAGES_PER_INSN};
 static constexpr uint32_t TRACER_MAX_DEFERRAL_PAGES_PER_INSN = {MAX_DEFERRAL_PAGES_PER_INSN};
 "
     );

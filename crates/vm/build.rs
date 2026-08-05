@@ -30,6 +30,7 @@ fn main() {
                 "cuda/src/system/poseidon2.cu",
                 "cuda/src/system/program.cu",
                 "cuda/src/system/postflight.cu",
+                "cuda/src/system/public_values.cu",
             ])
             .build();
 

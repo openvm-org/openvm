@@ -58,8 +58,6 @@ pub fn get_or_create_bitwise_op_lookup(
 
 /// **If** internal poseidon2 chip exists, then its insertion index is 1.
 const POSEIDON2_INSERTION_IDX: usize = 1;
-/// **If** public values chip exists, then its executor index is 0.
-pub const PV_EXECUTOR_IDX: usize = 0;
 
 #[derive(Clone)]
 pub struct SystemGpuBuilder;
@@ -78,6 +76,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         ChipInventoryError,
     > {
         let device_ctx = device_ctx.clone();
+        let public_values_air = airs.system().public_values.clone();
         let range_bus = airs.range_checker().bus;
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
             Arc::new(VariableRangeCheckerChip::new(range_bus)),
@@ -109,8 +108,13 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
             device_ctx.clone(),
         ));
         inventory.add_periphery_chip(hasher_chip.clone());
-        let system =
-            SystemChipInventoryGPU::new(config, range_checker, hasher_chip, device_ctx.clone());
+        let system = SystemChipInventoryGPU::new(
+            config,
+            public_values_air,
+            range_checker,
+            hasher_chip,
+            device_ctx.clone(),
+        );
 
         let phantom_chip = PhantomChipGPU::new(device_ctx.clone());
         inventory.add_executor_chip(phantom_chip);

@@ -6,9 +6,7 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, ContinuationVmProver,
         VirtualMachine, VmInstance,
     },
-    system::{
-        memory::merkle::public_values::UserPublicValuesProof, program::trace::compute_exe_commit,
-    },
+    system::{program::trace::compute_exe_commit, public_values::proof::PublicValuesOpening},
     utils::test_utils::test_system_config,
 };
 use openvm_continuations::{
@@ -23,15 +21,15 @@ use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, proof::Proof, prover::CommittedTraceData,
-    verifier::verify, StarkEngine, TranscriptHistory,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing, proof::Proof,
+    prover::CommittedTraceData, verifier::verify, StarkEngine, TranscriptHistory,
 };
 use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security,
         baby_bear_poseidon2::{
             default_duplex_sponge_recorder, poseidon2_compress_with_capacity,
-            BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
+            BabyBearPoseidon2CpuEngine, DuplexSponge, F,
         },
         internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
         root_params_with_100_bits_security,
@@ -81,7 +79,7 @@ fn run_leaf_aggregation(
 ) -> Result<(
     Arc<MultiStarkVerifyingKey<SC>>,
     Proof<SC>,
-    UserPublicValuesProof<DIGEST_SIZE, F>,
+    PublicValuesOpening<F>,
 )> {
     let config = test_rv64im_config();
     let elf = Elf::decode(
@@ -117,7 +115,7 @@ fn run_leaf_aggregation(
     let leaf_vk = leaf_prover.get_vk();
     let engine = Engine::new(leaf_vk.inner.params.clone());
     engine.verify(&leaf_vk, &leaf_proof)?;
-    Ok((leaf_vk, leaf_proof, app_proof.user_public_values))
+    Ok((leaf_vk, leaf_proof, app_proof.public_values_opening))
 }
 
 #[allow(clippy::type_complexity)]
@@ -128,9 +126,9 @@ fn run_full_aggregation(
     Arc<MultiStarkVerifyingKey<SC>>,
     CommittedTraceData<PB>,
     Proof<SC>,
-    UserPublicValuesProof<DIGEST_SIZE, F>,
+    PublicValuesOpening<F>,
 )> {
-    let (leaf_vk, leaf_proof, user_pvs_proof) = run_leaf_aggregation(log_fib_input)?;
+    let (leaf_vk, leaf_proof, public_values_opening) = run_leaf_aggregation(log_fib_input)?;
 
     let internal_for_leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_vk,
@@ -159,7 +157,7 @@ fn run_full_aggregation(
         internal_recursive_prover.get_vk(),
         internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
         internal_recursive_proof,
-        user_pvs_proof,
+        public_values_opening,
     ))
 }
 
@@ -171,7 +169,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         internal_recursive_vk,
         internal_recursive_pcs_data,
         internal_recursive_proof,
-        user_pvs_proof,
+        public_values_opening,
     ) = run_full_aggregation(10, child_extra_recursive_layers)?;
 
     let system_config = test_rv64im_config().rv64i.system;
@@ -180,12 +178,12 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         internal_recursive_pcs_data.commitment.into(),
         root_params_with_100_bits_security(),
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
+        system_config.num_public_value_cells,
         None,
         0,
     );
     let def_proof = deferred_verify_prover
-        .prove_no_def::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
+        .prove_no_def::<Engine>(internal_recursive_proof.clone(), &public_values_opening)?;
 
     let vk = deferred_verify_prover.get_vk();
     let engine = Engine::new(vk.inner.params.clone());
@@ -215,17 +213,18 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         &vm_poseidon2_hasher::<F>(),
         &vm_pvs.program_commit,
         &vm_pvs.initial_root,
+        &vm_pvs.initial_public_values_commit,
         vm_pvs.initial_pc,
     );
     let app_vm_commit =
         poseidon2_hash_slice(&vk_commit_components(verifier_pvs).into_flattened()).0;
-    let expected_output_commit = crate::output::generate_proving_ctx(
-        app_exe_commit,
-        app_vm_commit,
-        user_pvs_proof.public_values,
-        0,
-    )
-    .output_commit;
+    let output_user_pvs = [F::from_usize(public_values_opening.num_values), F::ZERO]
+        .into_iter()
+        .chain(public_values_opening.public_values.iter().copied())
+        .collect();
+    let expected_output_commit =
+        crate::output::generate_proving_ctx(app_exe_commit, app_vm_commit, output_user_pvs, 0)
+            .output_commit;
 
     let def_pvs: &DeferralCircuitPvs<F> = def_proof.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()

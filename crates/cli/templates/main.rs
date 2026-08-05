@@ -1,5 +1,8 @@
 // src/main.rs
-#![cfg_attr(all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")), no_main)]
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm::io::{read, reveal_u64};
@@ -15,5 +18,5 @@ pub fn main() {
         a = b;
         b = c;
     }
-    reveal_u64(a, 0);
+    reveal_u64(a);
 }

@@ -34,8 +34,8 @@ use tracing::{info_span, span::EnteredSpan};
 use crate::{
     arch::{
         postflight::validate_postflight_memory_config, AddressSpaceHostLayout, ExecutionState,
-        MemoryCellType, MemoryConfig, PreflightHistory, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH,
-        POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
+        MemoryCellType, MemoryConfig, PreflightHistory, PublicValuesState, ADDR_SPACE_OFFSET,
+        BLOCK_FE_WIDTH, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
     },
     cuda_abi::postflight,
     system::TouchedBlock,
@@ -1055,6 +1055,7 @@ pub struct GpuPostflightPlan {
     from_state: ExecutionState<u32>,
     to_state: ExecutionState<u32>,
     exit_code: Option<u32>,
+    public_values_boundary: Option<(usize, PublicValuesState)>,
     device_ctx: GpuDeviceCtx,
     program_identity: Arc<()>,
     segment_identity: Arc<()>,
@@ -1177,6 +1178,7 @@ impl GpuPostflightPlan {
             from_state: boundary.0,
             to_state: boundary.1,
             exit_code: boundary.2,
+            public_values_boundary: None,
             device_ctx: program.device_ctx.clone(),
             program_identity,
             segment_identity,
@@ -1202,6 +1204,38 @@ impl GpuPostflightPlan {
     /// preflight hot-path logs.
     pub(crate) const fn connector_boundary(&self) -> ConnectorBoundary {
         (self.from_state, self.to_state, self.exit_code)
+    }
+
+    /// Attaches the VM-owned public-values boundary for this segment.
+    ///
+    /// Interpreter postflight calls this after uploading host history. Compiled RVR producers
+    /// use the same seam after finalizing their device-resident history.
+    pub fn set_public_values_boundary(
+        &mut self,
+        initial_len: usize,
+        final_state: &PublicValuesState,
+    ) -> Result<(), GpuPostflightError> {
+        if initial_len > final_state.len() {
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "public-values length decreased from {initial_len} to {} within one segment",
+                final_state.len()
+            )));
+        }
+        self.public_values_boundary = Some((initial_len, final_state.clone()));
+        Ok(())
+    }
+
+    pub(crate) fn public_values_boundary(
+        &self,
+    ) -> Result<(usize, &PublicValuesState), GpuPostflightError> {
+        self.public_values_boundary
+            .as_ref()
+            .map(|(initial_len, final_state)| (*initial_len, final_state))
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(
+                    "GPU postflight plan is missing its public-values boundary".to_string(),
+                )
+            })
     }
 
     pub fn opcode_range(&self, opcode: VmOpcode) -> Range<usize> {

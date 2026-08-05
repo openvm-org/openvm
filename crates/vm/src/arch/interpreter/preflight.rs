@@ -38,6 +38,7 @@ impl InterpretedInstance<'_, PreflightCtx> {
         from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<PreflightOutput, ExecutionError> {
+        let initial_public_values_len = from_state.public_values.len();
         let ctx = PreflightCtx::new::<F>(&from_state.memory, num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
         let start_instret_left = exec_state.ctx.instret_left;
@@ -68,6 +69,7 @@ impl InterpretedInstance<'_, PreflightCtx> {
         let history = exec_state.ctx.finish(pc);
         Ok(PreflightOutput {
             history,
+            initial_public_values_len,
             state: exec_state.vm_state,
             exit_code,
         })

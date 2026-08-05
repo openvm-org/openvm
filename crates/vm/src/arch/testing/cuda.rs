@@ -74,10 +74,12 @@ use crate::{
             memory::DeviceMemoryTester,
             program::{air::ProgramDummyAir, DeviceProgramTester},
             TestBuilder, TestChipHarness, TestPreflight, TestPreflightExecution, EXECUTION_BUS,
-            MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
+            MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, PUBLIC_VALUES_BUS,
+            READ_INSTRUCTION_BUS,
         },
         to_byte_ptr_bits, ExecutionBridge, ExecutionBus, ExecutionState, Executor, MemoryConfig,
-        Postflight, Streams, VmState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_REGISTERS,
+        Postflight, PublicValuesState, Streams, VmState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        NUM_REGISTERS,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -88,6 +90,7 @@ use crate::{
         },
         poseidon2::air::Poseidon2PeripheryAir,
         program::ProgramBus,
+        public_values::PublicValuesBus,
         SystemPort,
     },
     utils::test_gpu_engine,
@@ -247,7 +250,13 @@ impl TestBuilder<F> for GpuChipTestBuilder {
             Program::new_without_debug_infos(std::slice::from_ref(instruction), initial_pc);
         let empty_memory = GuestMemory::new(AddressMap::from_mem_config(&self.memory.config));
         let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
-        let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
+        let mut state = VmState::new_with_public_values(
+            initial_pc,
+            memory,
+            self.public_values.clone(),
+            self.streams.clone(),
+            0,
+        );
         state.rng = self.rng.clone();
         let output = execute_test_preflight(&self.memory.config, executor, &program, state);
         let initial_state = ExecutionState::new(initial_pc, 1u32);
@@ -259,6 +268,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         let final_state = ExecutionState::new(final_event.pc, final_event.timestamp);
 
         self.memory.memory.data = output.state.memory;
+        self.public_values = output.state.public_values;
         self.streams = output.state.streams;
         self.rng = output.state.rng;
         let postflight = Postflight::new_for_test(&program, &output.history, &self.memory.config);
@@ -379,6 +389,7 @@ pub struct GpuChipTestBuilder {
     pub execution: DeviceExecutionTester,
     pub program: DeviceProgramTester,
     pub streams: Streams,
+    pub public_values: PublicValuesState,
 
     var_range_checker: Arc<VariableRangeCheckerChipGPU>,
     bitwise_op_lookup: Option<Arc<BitwiseOperationLookupChipGPU<8>>>,
@@ -424,6 +435,7 @@ impl GpuChipTestBuilder {
             ),
             program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS), device_ctx),
             streams: Default::default(),
+            public_values: PublicValuesState::new(32),
             var_range_checker: range_checker,
             bitwise_op_lookup: None,
             range_tuple_checker: None,
@@ -505,6 +517,7 @@ impl GpuChipTestBuilder {
             execution_bus: self.execution_bus(),
             program_bus: self.program_bus(),
             memory_bridge: self.memory_bridge(),
+            public_values_bus: PublicValuesBus::new(PUBLIC_VALUES_BUS),
         }
     }
     pub fn execution_bridge(&self) -> ExecutionBridge {

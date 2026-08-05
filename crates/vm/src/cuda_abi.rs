@@ -53,6 +53,55 @@ pub mod boundary {
     }
 }
 
+pub mod public_values {
+    use super::*;
+
+    extern "C" {
+        fn _public_values_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_values: *const F,
+            initial_len: usize,
+            final_len: usize,
+            d_pvs: *mut F,
+            d_poseidon2_raw_buffer: *mut F,
+            d_poseidon2_buffer_idx: *mut u32,
+            poseidon2_capacity: usize,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        width: usize,
+        d_values: &DeviceBuffer<F>,
+        initial_len: usize,
+        final_len: usize,
+        d_pvs: &DeviceBuffer<F>,
+        d_poseidon2_raw_buffer: &DeviceBuffer<F>,
+        d_poseidon2_buffer_idx: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_public_values_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            width,
+            d_values.as_ptr(),
+            initial_len,
+            final_len,
+            d_pvs.as_mut_ptr(),
+            d_poseidon2_raw_buffer.as_mut_ptr(),
+            d_poseidon2_buffer_idx.as_mut_ptr(),
+            // Length in F elements; the CUDA side converts to record count.
+            d_poseidon2_raw_buffer.len(),
+            stream,
+        ))
+    }
+}
+
 pub mod phantom {
     use super::*;
 

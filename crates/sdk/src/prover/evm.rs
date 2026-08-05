@@ -122,7 +122,7 @@ where
             .halo2_prover
             .as_ref()
             .unwrap()
-            .prove_for_evm(&root_proof);
+            .prove_for_evm(&root_proof)?;
         Ok(evm_proof)
     }
 }

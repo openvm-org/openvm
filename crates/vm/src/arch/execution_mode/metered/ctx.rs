@@ -14,9 +14,12 @@ use super::{
 use crate::{
     arch::{
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        SystemConfig, VmExecState, BOUNDARY_AIR_ID, MERKLE_AIR_ID,
+        SystemConfig, VmExecState, BOUNDARY_AIR_ID, MERKLE_AIR_ID, PUBLIC_VALUES_AIR_ID,
     },
-    system::memory::online::GuestMemory,
+    system::{
+        memory::online::GuestMemory,
+        public_values::{public_values_poseidon2_record_count, public_values_trace_height},
+    },
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -34,6 +37,8 @@ pub struct MeteredCtx {
     pub trace_heights: Vec<u32>,
     pub memory_ctx: MemoryCtx,
     pub segmentation_ctx: SegmentationCtx,
+    public_values_height: u32,
+    public_values_poseidon_rows: u32,
 }
 
 pub struct MeteredCtxInputs<'a> {
@@ -52,7 +57,7 @@ impl MeteredCtx {
         config: &SystemConfig,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
-        let (mut trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) = inputs
+        let (mut trace_heights, mut is_trace_height_constant): (Vec<u32>, Vec<bool>) = inputs
             .constant_trace_heights
             .iter()
             .map(|&constant_height| {
@@ -72,6 +77,13 @@ impl MeteredCtx {
             inputs.segmentation_limits,
             memory_config,
         );
+        let public_values_height = public_values_trace_height(config.num_public_value_cells) as u32;
+        trace_heights[PUBLIC_VALUES_AIR_ID] = public_values_height;
+        is_trace_height_constant[PUBLIC_VALUES_AIR_ID] = true;
+        let public_values_poseidon_rows =
+            public_values_poseidon2_record_count(config.num_public_value_cells) as u32;
+        let poseidon2_idx = trace_heights.len() - 2;
+        trace_heights[poseidon2_idx] += public_values_poseidon_rows;
         let initial_trace_heights = trace_heights.clone();
         let mut memory_ctx = MemoryCtx::new(config);
         memory_ctx.add_register_merkle_heights();
@@ -95,6 +107,11 @@ impl MeteredCtx {
             "air_name={}",
             air_names[MERKLE_AIR_ID]
         );
+        debug_assert!(
+            air_names[PUBLIC_VALUES_AIR_ID].contains("PublicValues"),
+            "air_name={}",
+            air_names[PUBLIC_VALUES_AIR_ID]
+        );
         debug_assert!(air_names.len() >= 2);
         let poseidon2_idx = air_names.len() - 2;
         debug_assert!(
@@ -111,6 +128,8 @@ impl MeteredCtx {
             trace_heights,
             memory_ctx,
             segmentation_ctx,
+            public_values_height,
+            public_values_poseidon_rows,
         }
     }
 
@@ -144,6 +163,10 @@ impl MeteredCtx {
         system_config: &SystemConfig,
     ) -> Self {
         let mut memory_ctx = MemoryCtx::new(system_config);
+        let public_values_height =
+            public_values_trace_height(system_config.num_public_value_cells) as u32;
+        let public_values_poseidon_rows =
+            public_values_poseidon2_record_count(system_config.num_public_value_cells) as u32;
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
         memory_ctx.apply_height_updates(&mut trace_heights);
@@ -158,7 +181,16 @@ impl MeteredCtx {
             config,
             memory_ctx,
             segmentation_ctx,
+            public_values_height,
+            public_values_poseidon_rows,
         }
+    }
+
+    /// Restores fixed public-output accumulator costs after a segment reset.
+    pub(crate) fn restore_public_values_trace_heights(&mut self) {
+        self.trace_heights[PUBLIC_VALUES_AIR_ID] = self.public_values_height;
+        let poseidon2_idx = self.trace_heights.len() - 2;
+        self.trace_heights[poseidon2_idx] += self.public_values_poseidon_rows;
     }
 
     pub fn set_suspend_on_segment(&mut self, suspend_on_segment: bool) {
@@ -203,6 +235,7 @@ impl MeteredCtx {
             self.segmentation_ctx
                 .initialize_segment(&mut self.trace_heights);
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
+            self.restore_public_values_trace_heights();
 
             // Check if the new segment is within limits
             self.segmentation_ctx

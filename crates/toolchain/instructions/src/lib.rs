@@ -26,8 +26,6 @@ pub const BLOCK_FE_WIDTH: usize = 4;
 /// Bytes in one memory-bus block.
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
-/// Public values address space.
-pub const PUBLIC_VALUES_AS: u32 = 3;
 /// Deferral output address space.
 pub const DEFERRAL_AS: u32 = 4;
 /// Field elements in an OpenVM VM-level digest, including memory roots and commitments.

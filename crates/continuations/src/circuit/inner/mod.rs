@@ -22,6 +22,7 @@ use crate::{
 pub mod app {
     pub use openvm_circuit::arch::{
         CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+        PUBLIC_VALUES_AIR_ID,
     };
 }
 

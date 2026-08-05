@@ -6,7 +6,7 @@ use openvm_decoder::{
 };
 use openvm_instructions::{
     instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
-    SystemOpcode, PUBLIC_VALUES_AS,
+    SystemOpcode,
 };
 use openvm_riscv_guest::{
     PhantomImm, ALU_OPCODE, ALU_OP_32, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3,
@@ -174,17 +174,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
             }
             REVEAL_FUNCT3 => {
                 let dec_insn = IType::new(instruction_u32);
-                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
-                Some(Instruction::large_from_isize(
-                    RevealOpcode::REVEAL.global_opcode(),
-                    (REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
-                    (REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
-                    imm_u16 as isize,
-                    1,
-                    PUBLIC_VALUES_AS as isize,
-                    1,
-                    (dec_insn.imm < 0) as isize,
-                ))
+                (dec_insn.rd == 0 && dec_insn.imm == 0).then(|| {
+                    Instruction::from_usize(
+                        RevealOpcode::REVEAL.global_opcode(),
+                        [REGISTER_NUM_LIMBS * dec_insn.rs1],
+                    )
+                })
             }
             _ => return None,
         };
@@ -195,10 +190,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{
-        instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PUBLIC_VALUES_AS,
-    };
-    use openvm_riscv_guest::{ALU_OPCODE, REVEAL_FUNCT3, SYSTEM_OPCODE};
+    use openvm_instructions::{instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode};
+    use openvm_riscv_guest::{REVEAL_FUNCT3, SYSTEM_OPCODE};
     use openvm_transpiler::TranspilerExtension;
     use p3_baby_bear::BabyBear;
 
@@ -213,49 +206,38 @@ mod tests {
             | u32::from(SYSTEM_OPCODE)
     }
 
-    fn transpile(instruction: u32) -> Option<Instruction<BabyBear>> {
-        <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
+    #[test]
+    fn reveal_decodes_only_the_source_register() {
+        let output = <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
             &Rv64IoTranspilerExtension,
-            &[instruction],
-        )?
-        .instructions
-        .into_iter()
-        .next()?
-    }
+            &[encode_reveal(7, 0, 0)],
+        )
+        .expect("canonical REVEAL must transpile");
 
-    #[test]
-    fn reveal_preserves_legacy_operands() {
-        for (rs1, rd, imm) in [(7, 3, 123), (31, 0, -2048), (0, 31, 2047)] {
-            let actual =
-                transpile(encode_reveal(rs1, rd, imm)).expect("well-formed REVEAL must transpile");
-            let expected = Instruction::large_from_isize(
+        assert_eq!(output.used_u32s, 1);
+        assert_eq!(
+            output.instructions,
+            vec![Some(Instruction::from_usize(
                 RevealOpcode::REVEAL.global_opcode(),
-                (REGISTER_NUM_LIMBS * rs1 as usize) as isize,
-                (REGISTER_NUM_LIMBS * rd as usize) as isize,
-                (imm as i16 as u16) as isize,
-                1,
-                PUBLIC_VALUES_AS as isize,
-                1,
-                isize::from(imm.is_negative()),
-            );
-            assert_eq!(actual, expected);
-        }
+                [REGISTER_NUM_LIMBS * 7],
+            ))]
+        );
     }
 
     #[test]
-    fn reveal_rejects_non_reveal_instruction_shapes() {
-        let reveal = encode_reveal(7, 3, -1);
-        let wrong_opcode = (reveal & !0x7f) | u32::from(ALU_OPCODE);
-        let wrong_funct3 = (reveal & !(0b111 << 12)) | (0b111 << 12);
-
-        assert!(transpile(wrong_opcode).is_none());
-        assert!(transpile(wrong_funct3).is_none());
-        assert!(
-            <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
-                &Rv64IoTranspilerExtension,
-                &[],
-            )
-            .is_none()
-        );
+    fn reveal_rejects_nonzero_unused_i_type_fields() {
+        for instruction in [
+            encode_reveal(7, 1, 0),
+            encode_reveal(7, 0, 1),
+            encode_reveal(7, 0, -1),
+        ] {
+            assert!(
+                <Rv64IoTranspilerExtension as TranspilerExtension<BabyBear>>::process_custom(
+                    &Rv64IoTranspilerExtension,
+                    &[instruction],
+                )
+                .is_none()
+            );
+        }
     }
 }

@@ -716,13 +716,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverEx
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
+
         inventory.next_air::<HintStoreAir>()?;
         let hint_store =
             HintStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(hint_store);
 
         inventory.next_air::<RevealAir>()?;
-        let reveal = RevealChipGpu::new(range_checker, byte_ptr_max_bits, timestamp_max_bits);
+        let reveal = RevealChipGpu::new(range_checker, timestamp_max_bits);
         inventory.add_executor_chip(reveal);
 
         Ok(())

@@ -8,15 +8,89 @@ use eyre::eyre;
 use getset::{CopyGetters, MutGetters};
 use openvm_instructions::exe::SparseMemoryImage;
 use rand::{rngs::StdRng, SeedableRng};
+use thiserror::Error;
 use tracing::instrument;
 
 use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut, U16_CELL_SIZE},
     system::memory::online::{GuestMemory, LinearMemory},
 };
+
+/// Size in bytes of one public value.
+pub const PUBLIC_VALUE_SIZE: usize = size_of::<u64>();
+/// Number of little-endian `u16` cells used to encode one public `u64` value.
+pub const U16_CELLS_PER_PUBLIC_VALUE: usize = PUBLIC_VALUE_SIZE / U16_CELL_SIZE;
+
+/// Errors returned when accessing [`PublicValuesState`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum PublicValuesStateError {
+    #[error("public-values capacity of {max_public_values} values exceeded")]
+    CapacityExceeded { max_public_values: usize },
+}
+
+/// VM-owned append-only public output.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PublicValuesState {
+    values: Vec<u64>,
+    max_public_values: usize,
+}
+
+impl PublicValuesState {
+    /// Creates state that accepts at most `max_public_values` values.
+    pub fn new(max_public_values: usize) -> Self {
+        Self {
+            values: Vec::with_capacity(max_public_values),
+            max_public_values,
+        }
+    }
+
+    /// Creates state sized from [`SystemConfig::num_public_value_cells`].
+    pub fn from_num_cells(num_public_value_cells: usize) -> Self {
+        assert!(
+            num_public_value_cells.is_multiple_of(U16_CELLS_PER_PUBLIC_VALUE),
+            "num_public_value_cells must represent a whole number of u64 slots"
+        );
+        Self::new(num_public_value_cells / U16_CELLS_PER_PUBLIC_VALUE)
+    }
+
+    /// Number of values revealed so far.
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// Values in reveal order.
+    pub fn values(&self) -> &[u64] {
+        &self.values
+    }
+
+    /// Maximum number of values this state accepts.
+    pub fn max_public_values(&self) -> usize {
+        self.max_public_values
+    }
+
+    /// Appends one value, rejecting writes beyond the configured capacity.
+    pub fn try_push(&mut self, value: u64) -> Result<(), PublicValuesStateError> {
+        if self.values.len() >= self.max_public_values {
+            return Err(PublicValuesStateError::CapacityExceeded {
+                max_public_values: self.max_public_values,
+            });
+        }
+        self.values.push(value);
+        Ok(())
+    }
+
+    /// Clears every public value without changing capacity.
+    pub fn reset(&mut self) {
+        self.values.clear();
+    }
+}
 
 /// Represents the core state of a VM.
 #[repr(C)]
@@ -25,6 +99,7 @@ pub struct VmState<MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
     pub memory: MEM,
+    pub public_values: PublicValuesState,
     pub streams: Streams,
     pub rng: StdRng,
     #[cfg(feature = "metrics")]
@@ -40,9 +115,20 @@ impl<MEM> VmState<MEM> {
     }
 
     pub fn new_with_defaults(pc: u32, memory: MEM, streams: impl Into<Streams>, seed: u64) -> Self {
+        Self::new_with_public_values(pc, memory, PublicValuesState::default(), streams, seed)
+    }
+
+    pub fn new_with_public_values(
+        pc: u32,
+        memory: MEM,
+        public_values: PublicValuesState,
+        streams: impl Into<Streams>,
+        seed: u64,
+    ) -> Self {
         Self {
             pc,
             memory,
+            public_values,
             streams: streams.into(),
             rng: StdRng::seed_from_u64(seed),
             #[cfg(feature = "metrics")]
@@ -55,6 +141,7 @@ impl<MEM> VmState<MEM> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,
+            public_values: &mut self.public_values,
             streams: &mut self.streams,
             rng: &mut self.rng,
             ctx,
@@ -73,7 +160,8 @@ impl VmState<GuestMemory> {
         inputs: impl Into<Streams>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
-        VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
+        let public_values = PublicValuesState::from_num_cells(system_config.num_public_value_cells);
+        VmState::new_with_public_values(pc_start, memory, public_values, inputs, DEFAULT_RNG_SEED)
     }
 
     pub fn reset(
@@ -85,6 +173,7 @@ impl VmState<GuestMemory> {
         self.pc = pc_start;
         self.memory.memory.fill_zero();
         self.memory.memory.set_from_sparse(init_memory);
+        self.public_values.reset();
         self.streams = streams.into();
         self.rng = StdRng::seed_from_u64(DEFAULT_RNG_SEED);
     }
@@ -313,5 +402,50 @@ where
         // SAFETY:
         // - panics if the byte range is out of bounds
         unsafe { self.memory.get_u8_slice(addr_space, byte_ptr, len) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_values_are_append_only_and_bounded() {
+        let mut state = PublicValuesState::new(2);
+
+        assert!(state.is_empty());
+        assert_eq!(state.max_public_values(), 2);
+        state.try_push(0).unwrap();
+        state.try_push(7).unwrap();
+        assert_eq!(state.values(), &[0, 7]);
+        assert_eq!(
+            state.try_push(9),
+            Err(PublicValuesStateError::CapacityExceeded {
+                max_public_values: 2,
+            })
+        );
+        assert_eq!(state.values(), &[0, 7]);
+    }
+
+    #[test]
+    fn vm_state_sizes_clones_and_resets_public_values() {
+        let config = SystemConfig::default().with_public_values_bytes(16);
+        assert_eq!(config.memory_config.addr_spaces[3].num_cells, 0);
+        let mut state = VmState::initial(
+            &config,
+            &SparseMemoryImage::default(),
+            0,
+            Streams::default(),
+        );
+        assert!(state.public_values.is_empty());
+        assert_eq!(state.public_values.max_public_values(), 2);
+
+        state.public_values.try_push(42).unwrap();
+        let cloned = state.clone();
+        assert_eq!(cloned.public_values, state.public_values);
+
+        state.reset(&SparseMemoryImage::default(), 0, Streams::default());
+        assert!(state.public_values.values().is_empty());
+        assert_eq!(state.public_values.max_public_values(), 2);
     }
 }

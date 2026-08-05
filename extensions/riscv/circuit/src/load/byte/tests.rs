@@ -100,7 +100,6 @@ fn rand_load_byte_test() {
             None,
             None,
             None,
-            None,
         );
     }
     tester
@@ -127,7 +126,6 @@ fn negative_load_address_wraparound_test() {
         Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
         Some(16),
         Some(0),
-        None,
     );
 }
 
@@ -191,7 +189,6 @@ fn negative_split_opcode_role_test() {
         &mut harness.preflight,
         &mut rng,
         LOADBU,
-        None,
         None,
         None,
         None,
@@ -276,7 +273,6 @@ fn test_cuda_rand_load_byte_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester

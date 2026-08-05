@@ -9,8 +9,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     circuit::{
-        root::bus::{DeferralAccPathBus, DeferralMerkleRootsBus},
-        subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
+        root::bus::{DeferralAccPathBus, DeferralMerkleRootsBus, UserPvsCommitBus},
+        subair::HashSliceSubAir,
         Circuit,
     },
     CommitBytes, VkCommitBytes,
@@ -19,7 +19,6 @@ use crate::{
 pub mod bus;
 pub mod commit;
 pub mod def_paths;
-pub mod memory;
 pub mod verifier;
 
 #[cfg(feature = "root-prover")]
@@ -44,11 +43,9 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
 
-        let merkle_root_bus = MerkleRootBus::new(next_bus_idx);
-        let merkle_tree_internal_bus = MerkleTreeInternalBus::new(next_bus_idx + 1);
-        let memory_merkle_commit_bus = bus::MemoryMerkleCommitBus::new(next_bus_idx + 2);
-        let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 3);
-        let memory_merkle_roots_bus = DeferralMerkleRootsBus::new(next_bus_idx + 4);
+        let user_pvs_commit_bus = UserPvsCommitBus::new(next_bus_idx);
+        let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 1);
+        let memory_merkle_roots_bus = DeferralMerkleRootsBus::new(next_bus_idx + 2);
 
         let verifier_pvs_air = verifier::RootVerifierPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
@@ -56,7 +53,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
             pre_hash_bus: bus_inventory.pre_hash_bus,
             range_bus: bus_inventory.range_checker_bus,
             poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
-            memory_merkle_commit_bus,
+            user_pvs_commit_bus,
             def_acc_paths_bus,
             def_merkle_roots_bus: memory_merkle_roots_bus,
             hash_slice_subair: HashSliceSubAir {
@@ -65,18 +62,11 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
             },
             expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit,
             expected_def_hook_commit: self.def_hook_commit,
+            num_user_pvs: self.num_user_pvs,
         };
         let user_pvs_commit_air = commit::UserPvsCommitAir::new(
             bus_inventory.poseidon2_compress_bus,
-            merkle_root_bus,
-            merkle_tree_internal_bus,
-            self.num_user_pvs,
-        );
-        let user_pvs_memory_air = memory::UserPvsInMemoryAir::new(
-            bus_inventory.poseidon2_compress_bus,
-            merkle_root_bus,
-            memory_merkle_commit_bus,
-            self.memory_dimensions,
+            user_pvs_commit_bus,
             self.num_user_pvs,
         );
         let acc_paths_air = self.def_hook_commit.map(|_| {
@@ -91,7 +81,6 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
         [Arc::new(verifier_pvs_air) as AirRef<SC>]
             .into_iter()
             .chain([Arc::new(user_pvs_commit_air) as AirRef<SC>])
-            .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
             .chain(self.verifier_circuit.airs())
             .chain(acc_paths_air)
             .collect_vec()
@@ -101,9 +90,8 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct RootVerifierPvs<F> {
-    /// Hashed combination of the app-level ProgramAir cached trace, the Merkle root commit of
-    /// the starting app memory state (i.e. initial_root), and the initial app program counter
-    /// (i.e. initial_pc).
+    /// Hashed combination of the app-level ProgramAir cached trace, the starting app memory root,
+    /// the initial public-values commitment, and the initial app program counter.
     pub app_exe_commit: [F; DIGEST_SIZE],
     /// Commit to the app-level verifying key, computed by hashing the cached_commit and
     /// vk_pre_hash components of the app, leaf, and internal-for-leaf vk commits.

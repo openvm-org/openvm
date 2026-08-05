@@ -105,18 +105,16 @@ pub fn hint_random(len: usize) {
     );
 }
 
-/// Reveal rs1 at public-value address `[rd] + imm`.
-///
-/// The destination address must be eight-byte aligned.
+/// Append one `u64` public value.
 #[macro_export]
 macro_rules! reveal {
-    ($rd:ident, $rs1:ident, $imm:expr) => {
+    ($value:expr) => {
         openvm_custom_insn::custom_insn_i!(
             opcode = openvm_riscv_guest::SYSTEM_OPCODE,
             funct3 = openvm_riscv_guest::REVEAL_FUNCT3,
-            rd = In $rd,
-            rs1 = In $rs1,
-            imm = Const $imm
+            rd = Const "x0",
+            rs1 = In $value,
+            imm = Const 0
         )
     };
 }

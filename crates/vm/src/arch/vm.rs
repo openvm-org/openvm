@@ -91,7 +91,7 @@ use super::{
     ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PostflightProgramIndex,
     PreflightOutput, StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
     VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
-    PROGRAM_CACHED_TRACE_INDEX,
+    PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 #[cfg(feature = "cuda")]
 use crate::system::cuda::SystemChipInventoryGPU;
@@ -99,15 +99,12 @@ use crate::{
     arch::deferral::DeferralState,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{
-            merkle::{
-                public_values::{UserPublicValuesProof, UserPublicValuesProofError},
-                MemoryMerklePvs,
-            },
-            online::GuestMemory,
-            AddressMap,
-        },
+        memory::{merkle::MemoryMerklePvs, online::GuestMemory, AddressMap},
         program::trace::generate_cached_trace,
+        public_values::{
+            proof::{PublicValuesOpening, PublicValuesOpeningError},
+            PublicValuesPvs,
+        },
         SystemChipComplex, SystemChipInventory, SystemWithFixedTraceHeights,
     },
 };
@@ -229,7 +226,11 @@ where
         let result = {
             let _span = info_span!("trace_gen").entered();
             vm.chip_complex
-                .generate_proving_ctx_from_postflight(&postflight)
+                .generate_proving_ctx_from_postflight(
+                    &postflight,
+                    output.initial_public_values_len,
+                    &output.state.public_values,
+                )
                 .and_then(|ctx| vm.validate_proving_ctx(ctx))
         };
         if result.is_ok() {
@@ -811,6 +812,9 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
     #[error("initial memory root mismatch")]
     InitialMemoryRootMismatch,
 
+    #[error("initial public-values commitment mismatch")]
+    InitialPublicValuesCommitMismatch,
+
     #[error("is terminate mismatch (expected: {expected}, actual: {actual})")]
     IsTerminateMismatch { expected: bool, actual: bool },
 
@@ -829,8 +833,8 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
     #[error("stark verification error: {0}")]
     StarkError(#[from] VerifierError<SC::EF>),
 
-    #[error("user public values proof error: {0}")]
-    UserPublicValuesError(#[from] UserPublicValuesProofError),
+    #[error("public-values opening error: {0}")]
+    PublicValuesOpening(#[from] PublicValuesOpeningError),
 }
 
 #[derive(Error, Debug)]
@@ -1604,14 +1608,19 @@ where
             )
         })?;
         let to = output.history.program.last().unwrap();
-        context.upload_history(
+        let (transcript, mut replay_plan) = context.upload_history(
             &output.history,
             GpuPostflightBoundary::new(
                 ExecutionState::new(from.pc, from.timestamp),
                 ExecutionState::new(to.pc, to.timestamp),
                 output.exit_code,
             ),
-        )
+        )?;
+        replay_plan.set_public_values_boundary(
+            output.initial_public_values_len,
+            &output.state.public_values,
+        )?;
+        Ok((transcript, replay_plan))
     }
 
     #[cfg(feature = "metrics")]
@@ -1720,7 +1729,7 @@ where
 mod tests {
     use super::{
         begin_preflight_tracegen_session, GenerationError, SystemConfig, VirtualMachine,
-        CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
     };
     use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
 
@@ -1746,6 +1755,7 @@ mod tests {
         assert!(pk.per_air[CONNECTOR_AIR_ID].vk.is_required);
         assert!(pk.per_air[merkle_air_id].vk.is_required);
         assert!(pk.per_air[boundary_air_id].vk.is_required);
+        assert!(pk.per_air[PUBLIC_VALUES_AIR_ID].vk.is_required);
     }
 }
 
@@ -1756,7 +1766,7 @@ mod tests {
 ))]
 pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub per_segment: Vec<Proof<SC>>,
-    pub user_public_values: UserPublicValuesProof<{ VM_DIGEST_WIDTH }, Val<SC>>,
+    pub public_values_opening: PublicValuesOpening<Val<SC>>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
@@ -1872,6 +1882,15 @@ where
 ///
 /// The prover owns the VM used to prepare its interpreter, so compiled program
 /// data cannot be paired with another executable or proving key.
+pub struct SegmentProofOutput<SC: StarkProtocolConfig> {
+    pub proof: Proof<SC>,
+    /// Final VM state when this segment terminates successfully.
+    ///
+    /// In particular, this retains the append-only public-output state needed to construct the
+    /// terminal [`PublicValuesOpening`] without treating public values as memory.
+    pub terminal_state: Option<VmState<GuestMemory>>,
+}
+
 pub struct SegmentProver<E, VB>
 where
     E: StarkEngine,
@@ -1906,12 +1925,12 @@ where
 
     /// Proves one segment from an arbitrary segment-start state.
     ///
-    /// Final memory is returned only when the segment terminates successfully.
+    /// The final VM state is returned only when the segment terminates successfully.
     pub fn prove(
         &mut self,
         state: VmState<GuestMemory>,
         segment: &Segment,
-    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError> {
+    ) -> Result<SegmentProofOutput<E::SC>, VirtualMachineError> {
         let (proof, output) = self.instance.vm.prove_segment_inner(
             &self.preflight,
             &self.exe.program,
@@ -1919,9 +1938,12 @@ where
             state,
             segment,
         )?;
-        let final_memory =
-            (output.exit_code == Some(ExitCode::Success as u32)).then_some(output.state.memory);
-        Ok((proof, final_memory))
+        let terminal_state =
+            (output.exit_code == Some(ExitCode::Success as u32)).then_some(output.state);
+        Ok(SegmentProofOutput {
+            proof,
+            terminal_state,
+        })
     }
 
     pub fn vm(&self) -> &VirtualMachine<E, VB> {
@@ -1991,18 +2013,11 @@ where
             state = Some(output.state);
         }
         let to_state = state.unwrap();
-        let final_memory = &to_state.memory.memory;
-        let final_memory_top_tree = vm.memory_top_tree().expect("memory top tree should exist");
-        let user_public_values = UserPublicValuesProof::compute(
-            vm.config().as_ref(),
-            &vm_poseidon2_hasher(),
-            final_memory,
-            final_memory_top_tree,
-        );
+        let public_values_opening = PublicValuesOpening::from_state(&to_state.public_values);
         self.state = Some(to_state);
         Ok(ContinuationVmProof {
             per_segment: proofs,
-            user_public_values,
+            public_values_opening,
         })
     }
 }
@@ -2012,6 +2027,7 @@ pub struct VerifiedExecutionPayload<F> {
     /// The Merklelized hash of:
     /// - Program code commitment (commitment of the cached trace)
     /// - Merkle root of the initial memory
+    /// - Initial append-only public-output accumulator
     /// - Starting program counter (`pc_start`)
     ///
     /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
@@ -2019,6 +2035,8 @@ pub struct VerifiedExecutionPayload<F> {
     pub exe_commit: [F; VM_DIGEST_WIDTH],
     /// The Merkle root of the final memory state.
     pub final_memory_root: [F; VM_DIGEST_WIDTH],
+    /// The ordered accumulator of the final public-output stream.
+    pub final_public_values_commit: [F; VM_DIGEST_WIDTH],
 }
 
 /// Verify segment proofs with boundary condition checks for continuation between segments.
@@ -2030,12 +2048,7 @@ pub struct VerifiedExecutionPayload<F> {
 /// - The commitment to the VM executable extracted from `proofs`. It is the responsibility of the
 ///   caller to check that the returned commitment matches the VM executable that the VM was
 ///   supposed to execute.
-/// - The Merkle root of the final memory state.
-///
-/// ## Note
-/// This function does not extract or verify any user public values from the final memory state.
-/// This verification requires an additional Merkle proof with respect to the Merkle root of
-/// the final memory state.
+/// - The final memory root and public-output accumulator.
 // @dev: This function doesn't need to be generic in `VC`.
 pub fn verify_segments<E>(
     engine: &E,
@@ -2051,9 +2064,11 @@ where
         return Err(VmVerificationError::ProofNotFound);
     }
     let mut prev_final_memory_root = None;
+    let mut prev_final_public_values_commit = None;
     let mut prev_final_pc = None;
     let mut start_pc = None;
     let mut initial_memory_root = None;
+    let mut initial_public_values_commit = None;
     let mut program_commit = None;
 
     for (i, proof) in proofs.iter().enumerate() {
@@ -2067,6 +2082,7 @@ where
         let mut connector_air_present = false;
         let mut boundary_air_present = false;
         let mut merkle_air_present = false;
+        let mut public_values_air_present = false;
 
         // Check public values.
         for (air_idx, (vdata, pvs)) in proof
@@ -2143,6 +2159,19 @@ where
                     initial_memory_root = Some(pvs.initial_root);
                 }
                 prev_final_memory_root = Some(pvs.final_root);
+            } else if air_idx == PUBLIC_VALUES_AIR_ID {
+                public_values_air_present = true;
+                let pvs: &PublicValuesPvs<_> = pvs.as_slice().borrow();
+
+                // Check that the public-output transition starts at the previous endpoint.
+                if i != 0 {
+                    if pvs.initial_commit != prev_final_public_values_commit.unwrap() {
+                        return Err(VmVerificationError::InitialPublicValuesCommitMismatch);
+                    }
+                } else {
+                    initial_public_values_commit = Some(pvs.initial_commit);
+                }
+                prev_final_public_values_commit = Some(pvs.final_commit);
             } else {
                 if !pvs.is_empty() {
                     return Err(VmVerificationError::UnexpectedPvs {
@@ -2174,16 +2203,23 @@ where
                 air_id: MERKLE_AIR_ID,
             });
         }
+        if !public_values_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: PUBLIC_VALUES_AIR_ID,
+            });
+        }
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
         &program_commit.unwrap().into(),
         initial_memory_root.as_ref().unwrap(),
+        initial_public_values_commit.as_ref().unwrap(),
         start_pc.unwrap(),
     );
     Ok(VerifiedExecutionPayload {
         exe_commit,
         final_memory_root: prev_final_memory_root.unwrap(),
+        final_public_values_commit: prev_final_public_values_commit.unwrap(),
     })
 }
 
@@ -2194,7 +2230,7 @@ where
     fn clone(&self) -> Self {
         Self {
             per_segment: self.per_segment.clone(),
-            user_public_values: self.user_public_values.clone(),
+            public_values_opening: self.public_values_opening.clone(),
         }
     }
 }

@@ -35,6 +35,6 @@ pub fn main() {
         panic!();
     }
 
-    openvm::io::reveal_u64(a, 0);
-    openvm::io::reveal_u64(b, 1);
+    openvm::io::reveal_u64(a);
+    openvm::io::reveal_u64(b);
 }

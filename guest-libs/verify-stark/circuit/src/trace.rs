@@ -1,13 +1,10 @@
 use std::{borrow::Borrow, iter::once};
 
 use itertools::Itertools;
-use openvm_circuit::system::memory::{
-    dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
+use openvm_circuit::system::{
+    memory::dimensions::MemoryDimensions, public_values::proof::PublicValuesOpening,
 };
-use openvm_continuations::circuit::{
-    deferral::DeferralMerkleProofs,
-    root::{def_paths, memory},
-};
+use openvm_continuations::circuit::{deferral::DeferralMerkleProofs, root::def_paths};
 use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_recursion_circuit::prelude::{DIGEST_SIZE, F, SC};
@@ -16,7 +13,7 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ProverBackend},
 };
 use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
-use p3_field::PrimeField32;
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 #[cfg(feature = "cuda")]
 use {
     openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu,
@@ -24,12 +21,13 @@ use {
 };
 
 use crate::{
+    commit::generate_proving_ctx as generate_commit_proving_ctx,
     output::DeferralOutputCtx,
     verifier::{generate_record, DeferredVerifyPvsRecord},
 };
 
 pub struct PreVerifierData<PB: ProverBackend> {
-    pub pre_verifier_ctxs: [AirProvingContext<PB>; 2],
+    pub pre_verifier_ctxs: [AirProvingContext<PB>; 1],
     pub post_verifier_ctxs: Vec<AirProvingContext<PB>>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
@@ -47,7 +45,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
     fn pre_verifier_subcircuit_tracegen(
         &self,
         proof: &Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
@@ -77,7 +75,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
     fn pre_verifier_subcircuit_tracegen(
         &self,
         proof: &Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
+        public_values_opening: &PublicValuesOpening<F>,
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
@@ -89,14 +87,14 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
             verifier_p2_permute_inputs,
             verifier_range_inputs,
         ) = generate_record(proof);
-        let (commit_ctx, commit_p2_inputs) =
-            super::commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
-        let (memory_ctx, memory_p2_inputs) = memory::generate_proving_input(
-            user_pvs_proof.public_values_commit,
-            &user_pvs_proof.proof,
-            memory_dimensions,
-            user_pvs_proof.public_values.len(),
+        let (commit_ctx, commit_p2_inputs) = generate_commit_proving_ctx(
+            &public_values_opening.public_values,
+            public_values_opening.num_values,
         );
+        let output_user_pvs = std::iter::once(F::from_usize(public_values_opening.num_values))
+            .chain(std::iter::once(F::ZERO))
+            .chain(public_values_opening.public_values.iter().copied())
+            .collect();
         let DeferralOutputCtx {
             proving_ctx: output_ctx,
             poseidon2_inputs: output_p2_inputs,
@@ -105,7 +103,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
         } = super::output::generate_proving_ctx(
             verifier_pvs_record.app_exe_commit,
             verifier_pvs_record.app_vm_commit,
-            user_pvs_proof.public_values.clone(),
+            output_user_pvs,
             def_idx,
         );
 
@@ -132,12 +130,11 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
         };
 
         PreVerifierData {
-            pre_verifier_ctxs: [commit_ctx, memory_ctx],
+            pre_verifier_ctxs: [commit_ctx],
             post_verifier_ctxs: once(output_ctx).chain(paths_ctx).collect_vec(),
             poseidon2_compress_inputs: verifier_p2_compress_inputs
                 .into_iter()
                 .chain(commit_p2_inputs)
-                .chain(memory_p2_inputs)
                 .chain(paths_p2_inputs)
                 .collect_vec(),
             poseidon2_permute_inputs: verifier_p2_permute_inputs
@@ -182,7 +179,7 @@ impl DeferredVerifyTraceGen<GpuBackend, GpuDeviceCtx> for DeferredVerifyTraceGen
     fn pre_verifier_subcircuit_tracegen(
         &self,
         proof: &Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
+        public_values_opening: &PublicValuesOpening<F>,
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
@@ -199,7 +196,7 @@ impl DeferredVerifyTraceGen<GpuBackend, GpuDeviceCtx> for DeferredVerifyTraceGen
         } = <Self as DeferredVerifyTraceGen<CpuBackend<SC>, ()>>::pre_verifier_subcircuit_tracegen(
             self,
             proof,
-            user_pvs_proof,
+            public_values_opening,
             memory_dimensions,
             def_idx,
             deferral_merkle_proofs,

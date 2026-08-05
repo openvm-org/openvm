@@ -67,6 +67,7 @@ impl GpuPostflightProgram {
             from_state: postflight.from_state(),
             to_state: postflight.to_state(),
             exit_code: postflight.exit_code(),
+            public_values_boundary: None,
             device_ctx: self.device_ctx.clone(),
             program_identity: self.identity.clone(),
             segment_identity,
@@ -233,6 +234,13 @@ impl GpuPostflightPlan {
             .into_iter()
             .map(|step| [step.program_index, step.memory_start])
             .collect())
+    }
+
+    /// Exposes the retained boundary to cross-crate GPU postflight tests.
+    pub fn public_values_boundary_for_test(
+        &self,
+    ) -> Result<(usize, &PublicValuesState), GpuPostflightError> {
+        self.public_values_boundary()
     }
 
     #[cfg(test)]

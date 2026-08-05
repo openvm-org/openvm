@@ -76,7 +76,8 @@ Each layer uses the following inputs:
 
 ## Root Basic Prover
 
-Used for the **root** layer, which wraps a single internal-recursive `Proof` and constrains user public values' presence in memory.
+Used for the **root** layer, which wraps a single internal-recursive `Proof` and binds the terminal
+public-value sidecar to the child's final accumulator endpoint.
 
 ### Constructor
 
@@ -95,8 +96,8 @@ pub fn new(
 - `child_vk` — the `internal_recursive_vk`
 - `internal_recursive_cached_commit` — the cached trace commit of the internal-recursive verifier circuit (the `vk_pre_hash` is derived from `child_vk` internally)
 - `system_params` — parent system parameters
-- `memory_dimensions` — the memory dimensions used for app execution, used to compute whether each sibling hash in the Merkle proof should be the left or right sibling
-- `num_user_pvs` — number of user public values
+- `memory_dimensions` — the app memory dimensions, used for deferral Merkle paths when deferrals are enabled
+- `num_user_pvs` — number of fixed-capacity `u16` public-value cells
 - `def_hook_commit` — expected commitment hash of the deferral hook aggregation tree; when present, the root circuit accepts either a combined VM/deferral child proof or a no-deferrals-used child proof with unset deferral public values
 - `trace_heights` - constant heights that the traces of the root proof must be
 
@@ -110,7 +111,7 @@ Root proving is a two-step flow:
 pub fn generate_proving_ctx_no_def<PB, DC: Clone + Send + Sync>(
     &self,
     proof: Proof<SC>,
-    user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+    public_values_opening: &PublicValuesOpening<PB::Val>,
     device_ctx: &DC,
 ) -> Option<ProvingContext<PB>>
 
@@ -120,5 +121,6 @@ pub fn root_prove_from_ctx<E>(&self, ctx: ProvingContext<E::PB>, engine: &E) -> 
 If deferrals are enabled, use `generate_proving_ctx(...)` instead and pass the deferral Merkle proofs. Deferral-aware root proofs also constrain the final deferral `node_idx` to be `0`, and they verify unchanged deferral memory when no deferral calls were used.
 
 - `proof` — the child internal-recursive `Proof`
-- `user_pvs_proof` — the user public values Merkle proof (proving presence in memory); generated at the app layer
+- `public_values_opening` — the fixed-capacity values and explicit prefix length used to open the final
+  append-only commitment; generated at the app layer
 - `ctx` — the fully assembled proving context returned by `generate_proving_ctx*`

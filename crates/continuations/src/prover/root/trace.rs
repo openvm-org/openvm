@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
+use openvm_circuit::system::public_values::proof::PublicValuesOpening;
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
@@ -7,9 +7,7 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{ProverBackend, ProvingContext},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    default_duplex_sponge_recorder, DIGEST_SIZE, EF, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{default_duplex_sponge_recorder, EF, F};
 use tracing::instrument;
 
 use super::RootProver;
@@ -22,7 +20,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     pub fn generate_proving_ctx<PB, DC: Clone + Send + Sync>(
         &self,
         proof: Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
         device_ctx: &DC,
     ) -> Option<ProvingContext<PB>>
@@ -33,15 +31,14 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         T: RootTraceGen<PB, DC>,
     {
         assert_eq!(
-            user_pvs_proof.public_values.len(),
+            public_values_opening.public_values.len(),
             self.circuit.num_user_pvs
         );
 
-        // These AIRs should have the same height regardless of proof or user_pvs_proof.
+        // These AIRs should have the same height regardless of proof or public-values opening.
         let mut pre_data = self.agg_node_tracegen.generate_pre_verifier_subcircuit_ctx(
             &proof,
-            user_pvs_proof,
-            self.circuit.memory_dimensions,
+            public_values_opening,
             device_ctx,
         );
         let (post_verifier_subcircuit_ctxs, other_compress_inputs) =
@@ -59,7 +56,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         // an additional AIR at the end.
         let verifier_trace_heights = self.trace_heights.as_ref().map(|v| {
             let num_airs = v.len() - deferral_merkle_proofs.is_some() as usize;
-            &v[3..num_airs]
+            &v[2..num_airs]
         });
 
         let power_check_inputs = vec![];
@@ -96,7 +93,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     pub fn generate_proving_ctx_no_def<PB, DC: Clone + Send + Sync>(
         &self,
         proof: Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
         device_ctx: &DC,
     ) -> Option<ProvingContext<PB>>
     where
@@ -109,6 +106,6 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             self.circuit.def_hook_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
         );
-        self.generate_proving_ctx(proof, user_pvs_proof, None, device_ctx)
+        self.generate_proving_ctx(proof, public_values_opening, None, device_ctx)
     }
 }

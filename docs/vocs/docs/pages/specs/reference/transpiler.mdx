@@ -79,7 +79,7 @@ Because `[0:8]_1` is initialized to `0` and never written to, this guarantees th
 | ----------- | ---------------------------------------------------------------- |
 | hintstored  | HINT_STORED_RV64 `0, ind(rd), _, 1, 2`                           |
 | hintbuffer  | HINT_BUFFER_RV64 `ind(rs1), ind(rd), _, 1, 2`                    |
-| reveal      | STORED_RV64 `ind(rs1), ind(rd), utof(sign_extend_16(imm)), 1, 3, 1, sign_of(imm)` |
+| reveal      | REVEAL_RV64 `ind(rs1)`                                          |
 | hintinput   | PHANTOM `_, _, disc(HintInput)`                              |
 | printstr    | PHANTOM `ind(rd), ind(rs1), disc(PrintStr)`                  |
 | hintrandom  | PHANTOM `ind(rd), _, disc(HintRandom)`                       |

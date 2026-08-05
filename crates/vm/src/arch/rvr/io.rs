@@ -7,10 +7,10 @@ use openvm_platform::memory::MEM_SIZE;
 use rand::rngs::StdRng;
 use rvr_state::PREFLIGHT_DIRTY_PAGE_BYTES;
 
-use crate::arch::{deferral::DeferralState, HintStream};
+use crate::arch::{deferral::DeferralState, HintStream, PublicValuesState};
 
 /// IO execution state borrowed from the host `VmState` for the duration of
-/// one rvr call. Streams, rng, and the public-values byte slice are mutable
+/// one rvr call. Streams, rng, and public values are mutable
 /// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
 /// (raw because the C engine accesses it directly via pointer).
 pub struct OpenVmIoState<'a> {
@@ -18,7 +18,7 @@ pub struct OpenVmIoState<'a> {
     pub hint_stream: &'a mut HintStream,
     pub rng: &'a mut StdRng,
     pub memory_ptr: *mut u8,
-    pub public_values: &'a mut [u8],
+    pub public_values: &'a mut PublicValuesState,
     pub deferral_memory: *mut u8,
     pub deferral_memory_len_bytes: usize,
     /// Executor-only AS4 dirty-page bits used by preflight execution. Other

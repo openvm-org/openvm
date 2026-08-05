@@ -273,6 +273,7 @@ pub enum HintStoreOpcode {
 )]
 #[opcode_offset = 0x262]
 #[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum RevealOpcode {
     REVEAL,
 }

@@ -12,7 +12,7 @@
 //   Leaf    one merkle-tree leaf = one Poseidon2 half = DIGEST_WIDTH cells =
 //           BLOCKS_PER_LEAF blocks.
 //
-// u16-celled AS layout (RV64 register/memory/public-values).
+// u16-celled AS layout (RV64 register/memory).
 // One merkle leaf = 16 bytes = 8 u16 cells = 2 bus blocks:
 //
 //   byte_ptr:     0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15

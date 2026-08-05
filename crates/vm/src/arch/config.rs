@@ -9,7 +9,7 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
     riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
-    DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
+    DEFERRAL_AS, VM_DIGEST_WIDTH,
 };
 pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_platform::memory::MEM_SIZE;
@@ -23,17 +23,17 @@ use openvm_stark_backend::{
 use rvr_openvm_lift::RvrExtensions;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
+use super::{
+    AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+};
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
         ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
-        memory::{
-            merkle::public_values::{assert_public_values_shape, public_values_cells_from_bytes},
-            num_memory_airs, DEFAULT_POINTER_MAX_BITS,
-        },
+        memory::{num_memory_airs, DEFAULT_POINTER_MAX_BITS},
+        public_values::{assert_public_values_shape, public_values_cells_from_bytes},
         SystemChipComplex,
     },
 };
@@ -41,7 +41,7 @@ use crate::{
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
 const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
-pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
+pub const DEFAULT_NUM_PUBLIC_VALUE_CELLS: usize = 32;
 /// Max number of deferral address space cells
 pub const DEFAULT_DEFERRAL_ADDR_SPACE_CELLS: usize = 1 << 14;
 /// Width of Poseidon2 VM uses.
@@ -226,11 +226,10 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        // RV64 register, memory, and public-values address spaces use u16 storage cells.
+        // RV64 register and memory address spaces use u16 storage cells.
         addr_spaces[REGISTER_AS as usize].num_cells =
             NUM_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
         addr_spaces[MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
-        addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, DEFAULT_POINTER_MAX_BITS, 29, 17)
     }
@@ -238,16 +237,12 @@ impl Default for MemoryConfig {
 
 impl MemoryConfig {
     pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
-        // By default only address spaces 1..=4 have non-empty cell counts.
         let mut addr_spaces =
             vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
         addr_spaces[IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
         addr_spaces[REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
         addr_spaces[MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
-
-        addr_spaces[PUBLIC_VALUES_AS as usize] =
-            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
         addr_spaces
     }
@@ -270,8 +265,8 @@ pub struct SystemConfig {
     pub max_constraint_degree: usize,
     /// Memory configuration
     pub memory_config: MemoryConfig,
-    /// Number of cells in the user public-values address space.
-    pub num_public_values: usize,
+    /// Number of `u16` cells reserved for the append-only public-output stream.
+    pub num_public_value_cells: usize,
     /// Max memory in bytes used across all chips for triggering segmentation.
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
@@ -283,19 +278,18 @@ pub struct SystemConfig {
 impl SystemConfig {
     pub fn new(
         max_constraint_degree: usize,
-        mut memory_config: MemoryConfig,
-        num_public_values: usize,
+        memory_config: MemoryConfig,
+        num_public_value_cells: usize,
     ) -> Self {
         assert!(
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
-        assert_public_values_shape::<VM_DIGEST_WIDTH>(num_public_values);
-        memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
+        assert_public_values_shape(num_public_value_cells);
         Self {
             max_constraint_degree,
             memory_config,
-            num_public_values,
+            num_public_value_cells,
             segmentation_max_memory: DEFAULT_MAX_MEMORY,
         }
     }
@@ -304,19 +298,18 @@ impl SystemConfig {
         Self::new(
             DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
             memory_config,
-            DEFAULT_MAX_NUM_PUBLIC_VALUES,
+            DEFAULT_NUM_PUBLIC_VALUE_CELLS,
         )
     }
 
-    pub fn with_public_values(mut self, num_public_values: usize) -> Self {
-        assert_public_values_shape::<VM_DIGEST_WIDTH>(num_public_values);
-        self.num_public_values = num_public_values;
-        self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
+    pub fn with_public_value_cells(mut self, num_public_value_cells: usize) -> Self {
+        assert_public_values_shape(num_public_value_cells);
+        self.num_public_value_cells = num_public_value_cells;
         self
     }
 
     pub fn with_public_values_bytes(self, num_public_values_bytes: usize) -> Self {
-        self.with_public_values(public_values_cells_from_bytes(num_public_values_bytes))
+        self.with_public_value_cells(public_values_cells_from_bytes(num_public_values_bytes))
     }
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
@@ -335,12 +328,13 @@ impl SystemConfig {
             || air_id == CONNECTOR_AIR_ID
             || air_id == self.memory_boundary_air_id()
             || air_id == self.memory_merkle_air_id()
+            || air_id == PUBLIC_VALUES_AIR_ID
     }
 
     /// This is O(1) and returns the length of
     /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
     pub fn num_airs(&self) -> usize {
-        self.memory_boundary_air_id() + num_memory_airs()
+        self.memory_boundary_air_id() + num_memory_airs() + 1
     }
 }
 

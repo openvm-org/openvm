@@ -9,9 +9,9 @@ use openvm_circuit::{
         instructions::{exe::VmExe, DEFERRAL_AS},
         ContinuationVmProver, Streams, VirtualMachine, VmInstance,
     },
-    system::memory::{
-        dimensions::MemoryDimensions,
-        merkle::{public_values::UserPublicValuesProof, MerkleTree},
+    system::{
+        memory::{dimensions::MemoryDimensions, merkle::MerkleTree},
+        public_values::proof::PublicValuesOpening,
     },
     utils::test_utils::test_system_config,
 };
@@ -392,7 +392,7 @@ fn test_deferral_e2e() -> Result<()> {
         &memory_dimensions,
         &vm_poseidon2_hasher::<F>(),
     );
-    let user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F> = app_proof.user_public_values;
+    let public_values_opening: PublicValuesOpening<F> = app_proof.public_values_opening;
 
     // =========================================================================
     // SECTION 3: Generate dummy deferral circuit proofs using EmptyAirWithPvs.
@@ -740,7 +740,7 @@ fn test_deferral_e2e() -> Result<()> {
         vm_ir_pcs_data.commitment.into(),
         root_system_params(),
         system.memory_config.memory_dimensions(),
-        system.num_public_values,
+        system.num_public_value_cells,
         Some(def_hook_commit.into()),
         None,
     );
@@ -748,7 +748,7 @@ fn test_deferral_e2e() -> Result<()> {
     let engine = root_prover.create_engine::<RootEngine>();
     let proving_ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB, _>(
         combined_proof,
-        &user_pvs_proof,
+        &public_values_opening,
         Some(&merkle_proofs),
         engine_device_ctx(&engine),
     );

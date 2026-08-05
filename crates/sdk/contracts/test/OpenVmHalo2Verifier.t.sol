@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import { LibString } from "./helpers/LibString.sol";
-import { Test, console2, safeconsole as console, stdError } from "forge-std/Test.sol";
-import { IOpenVmHalo2Verifier } from "../src/IOpenVmHalo2Verifier.sol";
+import {LibString} from "./helpers/LibString.sol";
+import {Test, console2, safeconsole as console, stdError} from "forge-std/Test.sol";
+import {IOpenVmHalo2Verifier} from "../src/IOpenVmHalo2Verifier.sol";
 
 contract TemplateTest is Test {
     // BN254 scalar field modulus (Fr), as specified in EIP-197:
@@ -14,7 +14,8 @@ contract TemplateTest is Test {
     bytes32 appExeCommit = 0x2222222222222222222222222222222222222222222222222222222222222222;
     bytes32 appVmCommit = 0x1111111111111111111111111111111111111111111111111111111111111111;
     bytes guestPvs;
-    uint256 publicValuesLength;
+    uint32 publicValuesCount;
+    uint256 publicValueCells;
     uint256 fullProofWords;
     uint256 fullProofLength;
 
@@ -31,28 +32,33 @@ contract TemplateTest is Test {
     }
 
     /// forge-config: default.fuzz.runs = 10
-    function testFuzz_ProofFormat(uint256 _publicValuesLength) public {
-        publicValuesLength = bound(_publicValuesLength, 1, 10_000);
-        publicValuesLength = 8;
-        fullProofWords = (12 + 2 + publicValuesLength + 43);
+    function testFuzz_ProofFormat(uint256 _publicValueCells, uint32 _publicValuesCount) public {
+        publicValueCells = bound(_publicValueCells, 4, 10_000) / 4 * 4;
+        publicValuesCount = uint32(bound(_publicValuesCount, 0, publicValueCells / 4));
+        fullProofWords = (12 + 2 + 1 + publicValueCells + 43);
         fullProofLength = fullProofWords * 32;
 
-        guestPvs = new bytes(publicValuesLength);
-        for (uint256 i = 0; i < publicValuesLength; i++) {
-            guestPvs[i] = bytes1(uint8(i));
+        guestPvs = new bytes(publicValueCells * 2);
+        for (uint256 i = 0; i < publicValueCells; i++) {
+            uint16 value = uint16(i);
+            guestPvs[2 * i] = bytes1(uint8(value));
+            guestPvs[2 * i + 1] = bytes1(uint8(value >> 8));
         }
 
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
-        (bool success,) = address(verifier)
-            .delegatecall(abi.encodeCall(IOpenVmHalo2Verifier.verify, (guestPvs, proofData, appExeCommit, appVmCommit)));
+        (bool success,) = address(verifier).delegatecall(
+            abi.encodeCall(
+                IOpenVmHalo2Verifier.verify, (publicValuesCount, guestPvs, proofData, appExeCommit, appVmCommit)
+            )
+        );
         require(success, "Verification failed");
     }
 
     fallback(bytes calldata proof) external returns (bytes memory) {
         bytes memory proofDataExpected = proofData;
 
-        uint256 proofSuffixOffset = 0x1c0 + (32 * publicValuesLength);
+        uint256 proofSuffixOffset = 0x1e0 + (32 * publicValueCells);
 
         bytes memory kzgAccumulator = proof[0:0x180];
         bytes memory proofSuffix = proof[proofSuffixOffset:];
@@ -66,9 +72,12 @@ contract TemplateTest is Test {
         require(bytes32(_appExeCommit) == appExeCommit, "App exe commit mismatch");
         require(bytes32(_appVmCommit) == appVmCommit, "App vm commit mismatch");
 
-        bytes calldata _guestPvs = proof[0x1c0:0x1c0 + 32 * publicValuesLength];
-        for (uint256 i = 0; i < publicValuesLength; ++i) {
-            uint256 expected = uint256(uint8(guestPvs[i]));
+        uint256 actualCount = uint256(bytes32(proof[0x1c0:0x1e0]));
+        require(actualCount == publicValuesCount, "Public values count mismatch");
+
+        bytes calldata _guestPvs = proof[0x1e0:0x1e0 + 32 * publicValueCells];
+        for (uint256 i = 0; i < publicValueCells; ++i) {
+            uint256 expected = uint256(uint8(guestPvs[2 * i])) | uint256(uint8(guestPvs[2 * i + 1])) << 8;
             uint256 actual = uint256(bytes32(_guestPvs[i * 32:(i + 1) * 32]));
             require(expected == actual, "Guest PVs hash mismatch");
         }
@@ -80,83 +89,94 @@ contract TemplateTest is Test {
     }
 
     function test_RevertWhen_InvalidPublicValuesLength() public {
-        publicValuesLength = 32;
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
         bytes memory invalidPvs = new bytes(0);
         bytes4 sig = bytes4(keccak256("InvalidPublicValuesLength(uint256,uint256)"));
 
-        vm.expectRevert(abi.encodeWithSelector(sig, 32, invalidPvs.length));
-        verifier.verify(invalidPvs, hex"", bytes32(0), bytes32(0));
+        vm.expectRevert(abi.encodeWithSelector(sig, 64, invalidPvs.length));
+        verifier.verify(0, invalidPvs, hex"", bytes32(0), bytes32(0));
+    }
+
+    function test_RevertWhen_InvalidPublicValuesCount() public {
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
+
+        uint32 invalidCount = 9;
+        bytes4 sig = bytes4(keccak256("InvalidPublicValuesCount(uint256,uint256)"));
+
+        vm.expectRevert(abi.encodeWithSelector(sig, 8, invalidCount));
+        verifier.verify(invalidCount, new bytes(64), hex"", bytes32(0), bytes32(0));
     }
 
     function test_RevertWhen_InvalidProofDataLength() public {
-        publicValuesLength = 32;
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
         bytes memory invalidProofData = new bytes(0);
         bytes4 sig = bytes4(keccak256("InvalidProofDataLength(uint256,uint256)"));
 
-        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory pvs = new bytes(publicValueCells * 2);
 
         vm.expectRevert(abi.encodeWithSelector(sig, 55 * 32, invalidProofData.length));
-        verifier.verify(pvs, invalidProofData, appExeCommit, appVmCommit);
+        verifier.verify(0, pvs, invalidProofData, appExeCommit, appVmCommit);
     }
 
     function test_RevertWhen_ProofVerificationFailed() public {
-        publicValuesLength = 32;
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
         bytes memory _proofData = new bytes(55 * 32);
-        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory pvs = new bytes(publicValueCells * 2);
 
         bytes4 sig = bytes4(keccak256("ProofVerificationFailed()"));
 
         vm.expectRevert(abi.encodeWithSelector(sig));
-        verifier.verify(pvs, _proofData, appExeCommit, appVmCommit);
+        verifier.verify(0, pvs, _proofData, appExeCommit, appVmCommit);
     }
 
     function test_RevertWhen_InvalidAppExeCommit() public {
-        publicValuesLength = 32;
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
-        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory pvs = new bytes(publicValueCells * 2);
         bytes memory _proofData = new bytes(55 * 32);
         bytes32 invalidAppExeCommit = bytes32(BN254_SCALAR_MODULUS);
         bytes4 sig = bytes4(keccak256("InvalidAppExeCommit(bytes32)"));
 
         vm.expectRevert(abi.encodeWithSelector(sig, invalidAppExeCommit));
-        verifier.verify(pvs, _proofData, invalidAppExeCommit, appVmCommit);
+        verifier.verify(0, pvs, _proofData, invalidAppExeCommit, appVmCommit);
     }
 
     function test_RevertWhen_InvalidAppVmCommit() public {
-        publicValuesLength = 32;
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
-        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory pvs = new bytes(publicValueCells * 2);
         bytes memory _proofData = new bytes(55 * 32);
         bytes32 invalidAppVmCommit = bytes32(BN254_SCALAR_MODULUS);
         bytes4 sig = bytes4(keccak256("InvalidAppVmCommit(bytes32)"));
 
         vm.expectRevert(abi.encodeWithSelector(sig, invalidAppVmCommit));
-        verifier.verify(pvs, _proofData, appExeCommit, invalidAppVmCommit);
+        verifier.verify(0, pvs, _proofData, appExeCommit, invalidAppVmCommit);
     }
 
     function test_OnlyVerifySelectorIsExposed() public {
         bytes memory methodIdentifiers = _compiledOpenVmVerifierMethodIdentifiers(32);
-        assertEq(string(methodIdentifiers), "24270d54: verify(bytes,bytes,bytes32,bytes32)");
+        assertEq(string(methodIdentifiers), "5ee4cdd6: verify(uint32,bytes,bytes,bytes32,bytes32)");
     }
 
     function test_RevertWhen_ProofDataPrefixIsNonZero() public {
-        publicValuesLength = 32;
-        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+        publicValueCells = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValueCells);
 
-        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory pvs = new bytes(publicValueCells * 2);
         bytes memory invalidProofData = proofData;
         invalidProofData[0] = bytes1(uint8(1));
 
         vm.expectRevert(stdError.assertionError);
-        verifier.verify(pvs, invalidProofData, appExeCommit, appVmCommit);
+        verifier.verify(0, pvs, invalidProofData, appExeCommit, appVmCommit);
     }
 
     function test_Bn254ScalarModulusMatchesEcmulPrecompile() public view {
@@ -169,11 +189,11 @@ contract TemplateTest is Test {
         assertEq(qPlusOneY, 2, "(q + 1) * G should wrap to G");
     }
 
-    function _compileAndDeployOpenVmVerifier(uint256 _publicValuesLength)
+    function _compileAndDeployOpenVmVerifier(uint256 _publicValueCells)
         private
         returns (IOpenVmHalo2Verifier verifier)
     {
-        string memory inlinedCode = _inlinedOpenVmVerifierCode(_publicValuesLength);
+        string memory inlinedCode = _inlinedOpenVmVerifierCode(_publicValueCells);
 
         // Must use solc 0.8.19
         string[] memory commands = new string[](3);
@@ -194,8 +214,8 @@ contract TemplateTest is Test {
         }
     }
 
-    function _compiledOpenVmVerifierMethodIdentifiers(uint256 _publicValuesLength) private returns (bytes memory) {
-        string memory inlinedCode = _inlinedOpenVmVerifierCode(_publicValuesLength);
+    function _compiledOpenVmVerifierMethodIdentifiers(uint256 _publicValueCells) private returns (bytes memory) {
+        string memory inlinedCode = _inlinedOpenVmVerifierCode(_publicValueCells);
 
         string[] memory commands = new string[](3);
         commands[0] = "sh";
@@ -209,8 +229,8 @@ contract TemplateTest is Test {
         return vm.ffi(commands);
     }
 
-    function _inlinedOpenVmVerifierCode(uint256 _publicValuesLength) private view returns (string memory) {
-        string memory code = LibString.replace(_code, "{PUBLIC_VALUES_LENGTH}", LibString.toString(_publicValuesLength));
+    function _inlinedOpenVmVerifierCode(uint256 _publicValueCells) private view returns (string memory) {
+        string memory code = LibString.replace(_code, "{PUBLIC_VALUE_CELLS}", LibString.toString(_publicValueCells));
 
         // `code` will look like this:
         //

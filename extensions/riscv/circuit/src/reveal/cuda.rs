@@ -19,7 +19,6 @@ use crate::cuda_abi::reveal_cuda;
 #[derive(new)]
 pub struct RevealChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -36,14 +35,13 @@ impl RevealChipGpu {
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-
-        let trace_width = RevealCols::<F>::width();
-        let trace_height = next_power_of_two_or_zero(step_range.len());
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        let height = next_power_of_two_or_zero(step_range.len());
+        let width = RevealCols::<F>::width();
+        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         unsafe {
             reveal_cuda::replay_tracegen(
-                d_trace.buffer(),
-                trace_height,
+                trace.buffer(),
+                height,
                 program.instructions(),
                 program.pc_base(),
                 transcript.program_log(),
@@ -56,12 +54,11 @@ impl RevealChipGpu {
                 transcript.error_ptr(),
                 RevealOpcode::REVEAL.global_opcode().as_usize() as u32,
                 REGISTER_AS,
-                self.pointer_max_bits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )?;
         }
-        Ok(AirProvingContext::simple_no_pis(d_trace))
+        Ok(AirProvingContext::simple_no_pis(trace))
     }
 }

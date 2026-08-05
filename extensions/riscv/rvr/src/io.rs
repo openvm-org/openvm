@@ -4,10 +4,8 @@ use std::{ffi::c_void, ops::Range};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{
-        is_valid_register_pointer, MEMORY_AS, REGISTER_AS, REGISTER_BYTES, REGISTER_NUM_LIMBS,
-    },
-    LocalOpcode, PUBLIC_VALUES_AS,
+    riscv::{is_valid_register_pointer, MEMORY_AS, REGISTER_BYTES, REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_platform::WORD_SIZE;
 use openvm_riscv_transpiler::{HintStoreOpcode, RevealOpcode, MAX_HINT_BUFFER_DWORDS};
@@ -19,7 +17,7 @@ use rvr_openvm_lift::{
     ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
-use crate::instruction::{decode_imm_cg, decode_reg, Reg};
+use crate::instruction::{decode_reg, Reg};
 
 // HINT_BUFFER writes the maximum hint payload as one contiguous range.
 const IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
@@ -148,12 +146,10 @@ impl ExtInstr for HintBufferInstr {
     }
 }
 
-/// Store `src_reg` at `ptr_reg + offset` in the public-values address space.
+/// Append one public value from `src_reg`.
 #[derive(Debug, Clone)]
 pub(crate) struct RevealInstr {
     pub(crate) src_reg: Reg,
-    pub(crate) ptr_reg: Reg,
-    pub(crate) offset: i32,
 }
 
 impl ExtInstr for RevealInstr {
@@ -166,26 +162,10 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_var(self.ptr_reg);
         let src = ctx.read_var(self.src_reg);
-        let addr = match self.offset.cmp(&0) {
-            std::cmp::Ordering::Less => {
-                format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
-            }
-            std::cmp::Ordering::Equal => ptr.clone(),
-            std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
-        };
-        // The callback emits the proof-visible public-values memory events.
-        // Reserve only their logical clock here so compact checkpoint
-        // preflight can preserve the schedule without logging those events.
-        // Full preflight performs the aligned block-write reservation inside the callback.
-        ctx.reserve_preflight_timestamp_slots("1u");
-        ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr]);
-        ctx.trace_page_access(
-            &addr,
-            MemWidth::Double,
-            PageAddressSpace::Other(PUBLIC_VALUES_AS),
-        );
+        // The block-level opcode-to-AIR metering credits the reveal row. This register read is its
+        // complete logical memory schedule.
+        ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -201,7 +181,7 @@ impl ExtInstr for RevealInstr {
     }
 }
 
-/// RVR extension for RV64 IO hint-store and REVEAL instructions.
+/// RVR extension for RV64 IO hint-store and public-value reveal instructions.
 pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
@@ -290,8 +270,7 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
             hint_read_words: host_hint_read_words,
             hint_storew: host_hint_storew,
             hint_buffer: host_hint_buffer,
-            reveal_prepare: host_reveal_prepare,
-            reveal_commit: host_reveal_commit,
+            reveal: host_reveal,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
@@ -301,29 +280,17 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
 fn decode_reveal(insn: &RvrInstruction) -> Option<RevealInstr> {
     let opcode = insn.opcode.as_usize();
     let src_reg_ptr = insn.a;
-    let base_reg_ptr = insn.b;
-    let immediate = insn.c;
-    let src_address_space = insn.d;
-    let dst_address_space = insn.e;
-    let is_enabled = insn.f;
-    let immediate_sign = insn.g;
+    let reserved_operands = [insn.b, insn.c, insn.d, insn.e, insn.f, insn.g];
 
     if opcode != RevealOpcode::REVEAL.global_opcode_usize()
         || !is_valid_register_pointer(src_reg_ptr)
-        || !is_valid_register_pointer(base_reg_ptr)
-        || immediate > u16::MAX as u32
-        || src_address_space != REGISTER_AS
-        || dst_address_space != PUBLIC_VALUES_AS
-        || is_enabled != 1
-        || immediate_sign > 1
+        || reserved_operands != [0; 6]
     {
         return None;
     }
 
     Some(RevealInstr {
         src_reg: decode_reg(src_reg_ptr),
-        ptr_reg: decode_reg(base_reg_ptr),
-        offset: decode_imm_cg(insn) as i32,
     })
 }
 
@@ -336,16 +303,7 @@ struct Rv64IoHostCallbacks {
     hint_read_words: unsafe extern "C" fn(*mut c_void, *mut u64, u32),
     hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
     hint_buffer: extern "C" fn(*mut c_void, u64, u32) -> bool,
-    reveal_prepare: extern "C" fn(*mut c_void, u64, u64, u64, *mut RevealPlan) -> bool,
-    reveal_commit: unsafe extern "C" fn(*mut c_void, *const RevealPlan),
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct RevealPlan {
-    address: u64,
-    previous: u64,
-    post: u64,
+    reveal: extern "C" fn(*mut c_void, u64) -> bool,
 }
 
 fn checked_hint_range(
@@ -421,65 +379,20 @@ extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u32)
     true
 }
 
-/// Validate and materialize one complete pre/post AS3 block without mutation.
-extern "C" fn host_reveal_prepare(
-    ctx: *mut c_void,
-    src_val: u64,
-    base_addr: u64,
-    effective_addr: u64,
-    plan: *mut RevealPlan,
-) -> bool {
+/// Append one public value.
+extern "C" fn host_reveal(ctx: *mut c_void, value: u64) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    if base_addr > u32::MAX as u64 || effective_addr > u32::MAX as u64 || plan.is_null() {
-        return false;
-    }
-    let width = WORD_SIZE;
-    let Some(end) = effective_addr.checked_add(width as u64) else {
-        return false;
-    };
-    if end > io.public_values.len() as u64 {
-        return false;
-    }
-    if !effective_addr.is_multiple_of(WORD_SIZE as u64)
-        || u32::try_from(effective_addr >> 1).is_err()
-    {
-        return false;
-    }
-    let start = effective_addr as usize;
-    let previous = u64::from_le_bytes(io.public_values[start..start + width].try_into().unwrap());
-    unsafe {
-        plan.write(RevealPlan {
-            address: effective_addr,
-            previous,
-            post: src_val,
-        });
-    }
-    true
-}
-
-/// Apply a previously validated AS3 plan. Generated C logs every block first.
-///
-/// # Safety
-///
-/// `plan` must point to a plan produced by [`host_reveal_prepare`] for this IO
-/// context, with no intervening AS3 mutation.
-unsafe extern "C" fn host_reveal_commit(ctx: *mut c_void, plan: *const RevealPlan) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    let plan = unsafe { &*plan };
-    let start = plan.address as usize;
-    io.public_values[start..start + WORD_SIZE].copy_from_slice(&plan.post.to_le_bytes());
+    io.public_values.try_push(value).is_ok()
 }
 
 #[cfg(test)]
 mod tests {
     use std::{collections::VecDeque, ptr::null_mut};
 
-    use openvm_circuit::arch::HintStream;
+    use openvm_circuit::arch::{HintStream, PublicValuesState};
     use openvm_instructions::{instruction::Instruction, SystemOpcode};
-    use openvm_riscv_transpiler::LoadStoreOpcode;
     use p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
-    use test_case::test_case;
 
     use super::*;
     use crate::phantom::host_hint_input;
@@ -600,19 +513,11 @@ mod tests {
     }
 
     #[test]
-    fn rv64io_lifts_reveal_as_a_doubleword_public_values_write() {
+    fn rv64io_lifts_reveal() {
         let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                0,
-            ],
+            [8],
         ));
         let lifted = ext.try_lift(&inst, 0x100).unwrap();
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
@@ -621,108 +526,48 @@ mod tests {
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
-        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(1u);");
-        assert_eq!(
-            ctx.lines[1],
-            "bool tmp1 = openvm_reveal(state, r1, r2, r2);"
-        );
-        assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
-        assert_eq!(
-            ctx.lines[5],
-            format!("trace_page_access(state, r2, 8u, {PUBLIC_VALUES_AS}u);")
-        );
+        assert_eq!(ctx.lines[0], "if (unlikely(!openvm_reveal(r1))) {");
     }
 
-    #[test_case(LoadStoreOpcode::STORED; "dword")]
-    #[test_case(LoadStoreOpcode::STOREW; "word")]
-    #[test_case(LoadStoreOpcode::STOREH; "halfword")]
-    #[test_case(LoadStoreOpcode::STOREB; "byte")]
-    fn rv64io_does_not_treat_load_store_opcodes_as_reveal(opcode: LoadStoreOpcode) {
-        let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
-            opcode.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                0,
-            ],
-        ));
-
-        assert!(ext.try_lift(&inst, 0x100).is_none());
-    }
-
-    #[test_case(PUBLIC_VALUES_AS, PUBLIC_VALUES_AS; "source_domain")]
-    #[test_case(REGISTER_AS, MEMORY_AS; "destination_domain")]
-    fn rv64io_rejects_reveal_with_invalid_address_spaces(d: u32, e: u32) {
+    #[test]
+    fn rv64io_rejects_reveal_with_nonzero_unused_operand() {
         let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
-            [8, 16, 0, d as usize, e as usize, 1, 0],
-        ));
-
-        assert!(ext.try_lift(&inst, 0x100).is_none());
-    }
-
-    #[test_case([7, 16, 0, REGISTER_AS, PUBLIC_VALUES_AS, 1, 0]; "unaligned_source")]
-    #[test_case([u8::MAX as u32 + 1, 16, 0, REGISTER_AS, PUBLIC_VALUES_AS, 1, 0]; "source_out_of_range")]
-    #[test_case([8, 15, 0, REGISTER_AS, PUBLIC_VALUES_AS, 1, 0]; "unaligned_base")]
-    #[test_case([8, u8::MAX as u32 + 1, 0, REGISTER_AS, PUBLIC_VALUES_AS, 1, 0]; "base_out_of_range")]
-    #[test_case([8, 16, u16::MAX as u32 + 1, REGISTER_AS, PUBLIC_VALUES_AS, 1, 0]; "immediate_out_of_range")]
-    #[test_case([8, 16, 0, REGISTER_AS, PUBLIC_VALUES_AS, 0, 0]; "invalid_f")]
-    #[test_case([8, 16, 0, REGISTER_AS, PUBLIC_VALUES_AS, 1, 2]; "invalid_sign")]
-    fn rv64io_rejects_malformed_reveal_operands(operands: [u32; 7]) {
-        let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
-            RevealOpcode::REVEAL.global_opcode(),
-            operands.map(|operand| operand as usize),
+            [8, 1],
         ));
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
 
     #[test]
-    fn rv64io_ignores_non_store_public_values_shaped_instruction() {
+    fn rv64io_ignores_non_reveal_shaped_instruction() {
         let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                0,
-            ],
+            [8],
         ));
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
 
     #[test]
-    fn reveal_accounts_for_the_offset_public_values_page() {
+    fn reveal_uses_only_register_read_timestamps_and_no_page_trace() {
         let mut ctx = TestEmitCtx::default();
         let instr = RevealInstr {
             src_reg: Reg::new(5),
-            ptr_reg: Reg::new(10),
-            offset: 12,
         };
         instr.emit_c(&mut ctx);
 
-        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(1u);");
-        assert_eq!(
-            ctx.lines[1],
-            "bool tmp1 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull));"
-        );
-        assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
-        assert_eq!(
-            ctx.lines[5],
-            format!("trace_page_access(state, (r10 + 0x0000000cull), 8u, {PUBLIC_VALUES_AS}u);")
-        );
+        assert_eq!(ctx.lines[0], "if (unlikely(!openvm_reveal(r5))) {");
+        assert!(!ctx
+            .lines
+            .iter()
+            .any(|line| line.contains("trace_page_access")));
+        assert!(!ctx
+            .lines
+            .iter()
+            .any(|line| line.contains("reserve_preflight_timestamp_slots")));
     }
 
     #[test]
@@ -821,14 +666,14 @@ mod tests {
         assert!(!emitted.contains("for (uint32_t hint_idx"));
     }
 
-    #[test_case(0x1122_3344_5566_7788, 0; "first_dword")]
-    #[test_case(0xaabb_ccdd_eeff_0123, 8; "last_dword")]
-    fn host_reveal_plans_then_commits_doubleword(src_val: u64, addr: u64) {
+    #[test]
+    fn host_reveal_appends_values() {
+        let src_val = 0x1122_3344_5566_7788;
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0u8; 16];
-        let mut public_values = vec![0u8; 16];
+        let mut public_values = PublicValuesState::new(2);
         let mut deferrals = Vec::new();
 
         let mut io = OpenVmIoState {
@@ -844,58 +689,18 @@ mod tests {
         };
 
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
-        let mut plan = RevealPlan::default();
-        assert!(host_reveal_prepare(ctx, src_val, addr, addr, &mut plan));
-        assert!(io.public_values.iter().all(|&byte| byte == 0));
-        unsafe { host_reveal_commit(ctx, &plan) };
-
-        let start = addr as usize;
-        let end = start + WORD_SIZE;
-        assert_eq!(&io.public_values[start..end], &src_val.to_le_bytes());
-        assert!(io.public_values[..start].iter().all(|&byte| byte == 0));
-        assert!(io.public_values[end..].iter().all(|&byte| byte == 0));
-    }
-
-    #[test_case(u64::MAX; "address_overflow")]
-    #[test_case(1; "misaligned")]
-    #[test_case(9; "out_of_bounds")]
-    fn host_reveal_rejects_invalid_range(addr: u64) {
-        let mut input_stream = VecDeque::new();
-        let mut hint_stream = HintStream::default();
-        let mut rng = StdRng::seed_from_u64(0);
-        let mut memory = vec![0u8; 16];
-        let mut public_values = vec![0u8; 16];
-        let mut deferrals = Vec::new();
-        let mut io = OpenVmIoState {
-            input_stream: &mut input_stream,
-            hint_stream: &mut hint_stream,
-            rng: &mut rng,
-            memory_ptr: memory.as_mut_ptr(),
-            public_values: &mut public_values,
-            deferral_memory: null_mut(),
-            deferral_memory_len_bytes: 0,
-            preflight_deferral_dirty_pages: None,
-            deferrals: &mut deferrals,
-        };
-
-        let mut plan = RevealPlan::default();
-        assert!(!host_reveal_prepare(
-            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
-            u64::MAX,
-            addr,
-            addr,
-            &mut plan,
-        ));
-        assert!(io.public_values.iter().all(|&byte| byte == 0));
+        assert!(host_reveal(ctx, src_val));
+        assert!(host_reveal(ctx, 7));
+        assert_eq!(io.public_values.values(), &[src_val, 7]);
     }
 
     #[test]
-    fn host_reveal_rejects_non_u32_base_or_effective_address_without_mutation() {
+    fn host_reveal_rejects_capacity_overflow_without_mutation() {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0u8; 16];
-        let mut public_values = vec![0u8; 16];
+        let mut public_values = PublicValuesState::new(2);
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -908,25 +713,12 @@ mod tests {
             preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
-        let mut plan = RevealPlan::default();
 
-        assert!(!host_reveal_prepare(
-            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
-            1,
-            u64::from(u32::MAX) + 1,
-            0,
-            &mut plan,
-        ));
-        // A positive offset from the largest valid base must not produce an
-        // effective byte address outside the AIR's u32 pointer domain.
-        assert!(!host_reveal_prepare(
-            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
-            1,
-            u64::from(u32::MAX),
-            u64::from(u32::MAX) + 1,
-            &mut plan,
-        ));
-        assert!(io.public_values.iter().all(|&byte| byte == 0));
+        let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
+        assert!(host_reveal(ctx, 0));
+        assert!(host_reveal(ctx, 1));
+        assert!(!host_reveal(ctx, 2));
+        assert_eq!(io.public_values.values(), &[0, 1]);
     }
 
     #[test]
@@ -938,7 +730,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0xa5; 16];
         let original_memory = memory.clone();
-        let mut public_values = vec![];
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -987,7 +779,7 @@ mod tests {
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0xa5; 24];
-        let mut public_values = vec![];
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -1023,7 +815,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0xa5; 16];
         let original_memory = memory.clone();
-        let mut public_values = Vec::new();
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
@@ -1064,7 +856,7 @@ mod tests {
         hint_stream.set_hint(hint.clone());
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0u8; 8];
-        let mut public_values = Vec::new();
+        let mut public_values = PublicValuesState::default();
         let mut deferrals = Vec::new();
         let mut io = OpenVmIoState {
             input_stream: &mut input_stream,

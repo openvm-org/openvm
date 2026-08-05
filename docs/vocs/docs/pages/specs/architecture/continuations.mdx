@@ -14,11 +14,11 @@ This forms an **aggregation tree** with multiple **layers**, where each layer ag
 
 | Layer | Description |
 |-------|-------------|
-| app | Executes a program on the VM, then produces one `Proof` per segment and a Merkle proof of user public values' presence in the final memory state |
+| app | Executes a program on the VM, then produces one `Proof` per segment and a terminal public-value sidecar |
 | leaf | Aggregates up to $N_\mathsf{leaf}$ app segment `Proof`s into a single `Proof` |
 | internal-for-leaf | Aggregates up to $N_\mathsf{internal}$ leaf `Proof`s into a single `Proof` |
 | internal-recursive | Aggregates up to $N_\mathsf{internal}$ internal-for-leaf `Proof`s, or up to $N_\mathsf{internal}$ internal-recursive `Proof`s. Note $N_\mathsf{internal}$ is the same at all internal layers. |
-| root | Wraps a single internal-recursive `Proof` and verifies user public values exist in final memory |
+| root | Wraps a single internal-recursive `Proof` and binds the terminal public-value sidecar to the final accumulator endpoint |
 | static | Re-encodes root `Proof` into a fixed, constant-sized format for on-chain verification |
 
 The first five types each correspond to a unique STARK-based circuit. The **static** layer is handled separately — it re-encodes a root `Proof` for on-chain verification. Because this encoding must be constant-sized, the root `Proof` size must also be fixed.
@@ -38,8 +38,8 @@ There are three **client-facing proof** types:
 
 | Type | Struct | Description |
 |------|--------|-------------|
-| App proof | `ContinuationVmProof` | Non-aggregated segment `Proof`s plus the user public values Merkle proof |
-| STARK proof | `VmStarkProof` | A single aggregated `Proof` plus the user public values Merkle proof |
+| App proof | `ContinuationVmProof` | Non-aggregated segment `Proof`s plus the user public-values proof payload |
+| STARK proof | `VmStarkProof` | A single aggregated `Proof` plus the user public-values proof payload |
 | EVM proof | `EvmProof` | A single, constant-sized aggregated `Proof` formatted for verification by a fixed on-chain verifier |
 
 ### Aggregation Pipelines
@@ -176,10 +176,13 @@ App public values are the public values exposed by the app layer. They are propa
 - `is_terminate: F` — boolean flag indicating whether this segment terminated the program
 - `initial_root: Digest` — Merkle root of the initial memory state
 - `final_root: Digest` — Merkle root of the final memory state
+- `initial_public_values_commit: Digest` — initial ordered public-output accumulator
+- `final_public_values_commit: Digest` — final ordered public-output accumulator
 
 All aggregation subcircuits enforce **segment adjacency** constraints on the app public values. Given several adjacent segments, the aggregation subcircuit constrains that:
 
-1. The `final_pc` and `final_root` of each non-terminal segment equal the `initial_pc` and `initial_root` of the segment immediately following it
+1. The `final_pc`, `final_root`, and `final_public_values_commit` of each non-terminal segment equal
+   the corresponding initial values of the next segment
 2. Non-terminal segments have `is_terminate == 0` and `exit_code == DEFAULT_SUSPEND_EXIT_CODE`
 3. The terminal segment has `is_terminate == 1` and `exit_code == ExitCode::Success`
 
@@ -191,7 +194,9 @@ Layers with a single child `Proof` practically only need to constrain 3.
 
 ### Inner Aggregation Subcircuit
 
-The inner subcircuit takes up to $N$ child `Proof`s and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to either be recursively aggregated or used as the `Proof` component in a `VmStarkProof`.
+The inner subcircuit takes up to $N$ child `Proof`s and propagates, but does **not** decommit, the
+append-only public-output accumulator. Its output `Proof` is meant to either be recursively aggregated or used
+as the `Proof` component in a `VmStarkProof`.
 
 #### Public Values
 
@@ -237,16 +242,21 @@ The `program_commit` should be set at every layer, but the flags and `*_vk_commi
 
 ### Root Aggregation Subcircuit
 
-The root subcircuit takes a single internal-recursive child `Proof` and **does** constrain the user public values' presence in memory. Its output `Proof` is meant to be the static layer input.
+The root subcircuit takes a single internal-recursive child `Proof` and constrains the terminal
+public-value sidecar against the child's final accumulator endpoint. Its output `Proof` is meant to be the
+static layer input.
 
 #### Public Values
 
 The root subcircuit exposes a new set of public values for the static verifier. Segment adjacency public values are no longer needed since adjacency has already been enforced.
 
-- `user_public_values: Vec<F>` — user-defined public values stored in the public values address space during app execution
+- `num_public_values: F` — authenticated number of revealed outputs
+- `user_public_values: Vec<F>` — fixed-capacity cells, four little-endian `u16` limbs per output,
+  zero-padded after the revealed prefix
 - `app_exe_commit: Digest` — hashed combination of:
   - The app-level `ProgramAir` cached trace commit
   - The Merkle root of the starting app memory state (`initial_root`)
+  - The initial public-output accumulator (`initial_public_values_commit`)
   - The initial app program counter (`initial_pc`)
 - `app_vm_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf VK commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
 
@@ -262,9 +272,9 @@ The root subcircuit constrains the child proof's public values:
 
 The root subcircuit also constrains its own public values:
 
-- `user_public_values` were in the final memory state's public values address space, constrained by:
-    - Computing the Merkle root of `user_public_values`, denoted `user_pvs_commit`
-    - Constraining that a Merkle proof (where the path to the root depends on the `MemoryDimensions`) exists between `user_pvs_commit` and `final_root`
+- The valid prefix of `user_public_values` is folded in order from the capacity-specific initial
+  accumulator. The padded suffix is constrained to zero, and the resulting commitment and length
+  equal the child's final public-output endpoint.
 - `app_exe_commit` is computed as specified above
 - `app_vm_commit` is computed from the child proof's `app_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit` (using all 6 `cached_commit` and `vk_pre_hash` components) as specified above
 

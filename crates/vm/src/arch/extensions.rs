@@ -35,7 +35,10 @@ use tracing::info_span;
 
 #[cfg(feature = "cuda")]
 use super::cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript};
-use super::{GenerationError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig};
+use super::{
+    GenerationError, PhantomSubExecutor, Postflight, PostflightError, PublicValuesState,
+    SystemConfig,
+};
 #[cfg(feature = "cuda")]
 use crate::system::cuda::SystemChipInventoryGPU;
 use crate::system::{
@@ -56,6 +59,8 @@ pub const BOUNDARY_AIR_ID: usize = MEMORY_AIRS_START_IDX + BOUNDARY_AIR_OFFSET;
 /// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = MEMORY_AIRS_START_IDX + MERKLE_AIR_OFFSET;
+/// AIR index of the append-only public-output accumulator.
+pub const PUBLIC_VALUES_AIR_ID: usize = MERKLE_AIR_ID + 1;
 
 pub type ExecutorId = u32;
 
@@ -857,10 +862,16 @@ where
     pub(crate) fn generate_proving_ctx_from_postflight(
         &mut self,
         postflight: &Postflight<'_, Val<SC>>,
+        initial_public_values_len: usize,
+        final_public_values: &PublicValuesState,
     ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
         let sys_ctxs = {
             let _span = info_span!("system_trace_gen").entered();
-            self.system.generate_proving_ctx_from_postflight(postflight)
+            self.system.generate_proving_ctx_from_postflight(
+                postflight,
+                initial_public_values_len,
+                final_public_values,
+            )
         };
 
         let mut exec_ctxs = Vec::new();

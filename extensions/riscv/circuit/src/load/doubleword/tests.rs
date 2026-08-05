@@ -13,7 +13,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADD};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -101,7 +101,6 @@ fn rand_load_doubleword_test() {
             None,
             None,
             None,
-            None,
         );
     }
     tester
@@ -128,7 +127,6 @@ fn positive_loadd_pointer_limb_boundary_cross_test() {
         Some([0xf9, 0xff, 0x00, 0x00, 0, 0, 0, 0]),
         Some(0),
         Some(0),
-        Some(MEMORY_AS as usize),
     );
     tester
         .build()
@@ -165,7 +163,6 @@ fn assert_pranked_load_doubleword_fails(
         &mut harness.preflight,
         &mut rng,
         LOADD,
-        None,
         None,
         None,
         None,
@@ -264,7 +261,6 @@ fn test_cuda_rand_load_doubleword_tracegen() {
             None,
             None,
             None,
-            Some(MEMORY_AS as usize),
         );
     }
     tester

@@ -4,11 +4,10 @@ use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{
     circuit::{
         root::{
-            bus::{DeferralAccPathBus, DeferralMerkleRootsBus, MemoryMerkleCommitBus},
+            bus::{DeferralAccPathBus, DeferralMerkleRootsBus, UserPvsCommitBus},
             def_paths::DeferralAccMerklePathsAir,
-            memory::UserPvsInMemoryAir,
         },
-        subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
+        subair::HashSliceSubAir,
         Circuit,
     },
     CommitBytes, VkCommitBytes,
@@ -62,13 +61,11 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
 
-        let merkle_root_bus = MerkleRootBus::new(next_bus_idx);
-        let merkle_tree_internal_bus = MerkleTreeInternalBus::new(next_bus_idx + 1);
-        let memory_merkle_commit_bus = MemoryMerkleCommitBus::new(next_bus_idx + 2);
-        let output_val_bus = OutputValBus::new(next_bus_idx + 3);
-        let output_commit_bus = OutputCommitBus::new(next_bus_idx + 4);
-        let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 5);
-        let memory_merkle_roots_bus = DeferralMerkleRootsBus::new(next_bus_idx + 6);
+        let user_pvs_commit_bus = UserPvsCommitBus::new(next_bus_idx);
+        let output_val_bus = OutputValBus::new(next_bus_idx + 1);
+        let output_commit_bus = OutputCommitBus::new(next_bus_idx + 2);
+        let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 3);
+        let memory_merkle_roots_bus = DeferralMerkleRootsBus::new(next_bus_idx + 4);
 
         let verifier_pvs_air = DeferredVerifyPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
@@ -80,7 +77,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
                 compress_bus: bus_inventory.poseidon2_compress_bus,
                 permute_bus: bus_inventory.poseidon2_permute_bus,
             },
-            memory_merkle_commit_bus,
+            user_pvs_commit_bus,
             output_val_bus,
             output_commit_bus,
             final_state_bus: bus_inventory.final_state_bus,
@@ -89,19 +86,12 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit,
             expected_def_hook_commit: self.def_hook_commit,
             def_idx: self.def_idx,
+            num_user_pvs: self.num_user_pvs,
         };
         let user_pvs_commit_air = UserPvsCommitValuesAir::new(
             bus_inventory.poseidon2_compress_bus,
-            merkle_root_bus,
-            merkle_tree_internal_bus,
+            user_pvs_commit_bus,
             output_val_bus,
-            self.num_user_pvs,
-        );
-        let user_pvs_memory_air = UserPvsInMemoryAir::new(
-            bus_inventory.poseidon2_compress_bus,
-            merkle_root_bus,
-            memory_merkle_commit_bus,
-            self.memory_dimensions,
             self.num_user_pvs,
         );
         let output_commit_air = DeferralOutputCommitAir {
@@ -124,7 +114,6 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         [Arc::new(verifier_pvs_air) as AirRef<SC>]
             .into_iter()
             .chain([Arc::new(user_pvs_commit_air) as AirRef<SC>])
-            .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
             .chain(self.verifier_circuit.airs())
             .chain([Arc::new(output_commit_air) as AirRef<SC>])
             .chain(acc_paths_air)

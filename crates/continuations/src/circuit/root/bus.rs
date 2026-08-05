@@ -4,14 +4,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct MemoryMerkleCommitMessage<T> {
-    pub merkle_root: [T; DIGEST_SIZE],
-}
-
-define_typed_permutation_bus!(MemoryMerkleCommitBus, MemoryMerkleCommitMessage);
-
-#[repr(C)]
-#[derive(AlignedBorrow, Debug, Clone)]
 pub struct DeferralAccPathMessage<T> {
     pub initial_acc_hash: [T; DIGEST_SIZE],
     pub final_acc_hash: [T; DIGEST_SIZE],
@@ -29,3 +21,11 @@ pub struct DeferralMerkleRootsMessage<T> {
 }
 
 define_typed_permutation_bus!(DeferralMerkleRootsBus, DeferralMerkleRootsMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct UserPvsCommitMessage<T> {
+    pub commit: [T; DIGEST_SIZE],
+}
+
+define_typed_permutation_bus!(UserPvsCommitBus, UserPvsCommitMessage);

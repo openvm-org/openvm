@@ -121,6 +121,8 @@ pub struct PreflightTranscript {
 
 /// State and compact transcript returned by preflight.
 pub struct PreflightExecution {
+    /// Number of public outputs committed before this segment.
+    pub initial_public_values_len: usize,
     pub state: VmState<GuestMemory>,
     pub transcript: PreflightTranscript,
     pub endpoint: PreflightEndpoint,
@@ -272,6 +274,7 @@ impl<'a> PreflightInstance<'a> {
         reuse: Option<PreflightTranscript>,
     ) -> Result<PreflightExecution, ExecutionError> {
         let from_state = ExecutionState::new(state.pc(), 1u32);
+        let initial_public_values_len = state.public_values.len();
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Preflight);
         let (transcript, endpoint, final_timestamp, retired) =
@@ -302,6 +305,7 @@ impl<'a> PreflightInstance<'a> {
         }
         let to_state = ExecutionState::new(state.pc(), final_timestamp);
         Ok(PreflightExecution {
+            initial_public_values_len,
             state,
             transcript,
             endpoint,

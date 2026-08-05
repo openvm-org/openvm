@@ -155,6 +155,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             local.child_pvs.final_root,
             next.child_pvs.initial_root,
         );
+        assert_array_eq(
+            &mut when_both_valid,
+            local.child_pvs.final_public_values_commit,
+            next.child_pvs.initial_public_values_commit,
+        );
 
         /*
          * We receive public values from ProofShapeModule to ensure the values being read here
@@ -269,6 +274,47 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             );
         }
 
+        // receive public-values commitment endpoints
+        let cond_public_values_air_id =
+            is_leaf.clone() * AB::Expr::from_usize(PUBLIC_VALUES_AIR_ID) + internal_air_id.clone();
+
+        for (didx, value) in local
+            .child_pvs
+            .initial_public_values_commit
+            .iter()
+            .enumerate()
+        {
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: cond_public_values_air_id.clone(),
+                    pv_idx: is_leaf.clone() * AB::Expr::from_usize(didx) + internal_pp(),
+                    value: (*value).into(),
+                },
+                local.is_valid,
+            );
+        }
+
+        for (didx, value) in local
+            .child_pvs
+            .final_public_values_commit
+            .iter()
+            .enumerate()
+        {
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: cond_public_values_air_id.clone(),
+                    pv_idx: is_leaf.clone() * AB::Expr::from_usize(didx + DIGEST_SIZE)
+                        + internal_pp(),
+                    value: (*value).into(),
+                },
+                local.is_valid,
+            );
+        }
+
         /*
          * At the leaf level, this AIR is responsible for receiving the cached trace commit
          * program_commit.
@@ -311,6 +357,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             is_terminate,
             initial_root,
             final_root,
+            initial_public_values_commit,
+            final_public_values_commit,
         } = builder.public_values().borrow();
 
         // constrain first proof pvs
@@ -322,7 +370,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             local.child_pvs.initial_root,
             initial_root,
         );
-
+        assert_array_eq(
+            &mut builder.when_first_row(),
+            local.child_pvs.initial_public_values_commit,
+            initial_public_values_commit,
+        );
         // constrain last proof pvs
         builder
             .when(local.is_last)
@@ -338,7 +390,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             local.child_pvs.final_root,
             final_root,
         );
-
+        assert_array_eq(
+            &mut builder.when(local.is_last),
+            local.child_pvs.final_public_values_commit,
+            final_public_values_commit,
+        );
         // constrain program_commit
         assert_array_eq(
             &mut builder.when(local.is_valid),

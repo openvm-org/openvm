@@ -1,6 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs};
+use openvm_circuit::system::{
+    connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs, public_values::PublicValuesPvs,
+};
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
@@ -75,6 +77,15 @@ pub fn generate_proving_ctx(
             } = proof.public_values[MERKLE_AIR_ID].as_slice().borrow();
             cols.child_pvs.initial_root = initial_root;
             cols.child_pvs.final_root = final_root;
+
+            let &PublicValuesPvs::<_> {
+                initial_commit,
+                final_commit,
+            } = proof.public_values[PUBLIC_VALUES_AIR_ID]
+                .as_slice()
+                .borrow();
+            cols.child_pvs.initial_public_values_commit = initial_commit;
+            cols.child_pvs.final_public_values_commit = final_commit;
         } else {
             cols.has_verifier_pvs = F::ONE;
             let child_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
@@ -93,11 +104,13 @@ pub fn generate_proving_ctx(
         pvs.program_commit = first_row.child_pvs.program_commit;
         pvs.initial_pc = first_row.child_pvs.initial_pc;
         pvs.initial_root = first_row.child_pvs.initial_root;
+        pvs.initial_public_values_commit = first_row.child_pvs.initial_public_values_commit;
 
         pvs.final_pc = last_row.child_pvs.final_pc;
         pvs.exit_code = last_row.child_pvs.exit_code;
         pvs.is_terminate = last_row.child_pvs.is_terminate;
         pvs.final_root = last_row.child_pvs.final_root;
+        pvs.final_public_values_commit = last_row.child_pvs.final_public_values_commit;
     }
 
     AirProvingContext {

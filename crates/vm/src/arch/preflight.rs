@@ -34,6 +34,7 @@ pub struct PreflightHistory {
 /// the history.
 pub struct PreflightOutput {
     pub history: PreflightHistory,
+    pub initial_public_values_len: usize,
     pub state: VmState<GuestMemory>,
     pub exit_code: Option<u32>,
 }

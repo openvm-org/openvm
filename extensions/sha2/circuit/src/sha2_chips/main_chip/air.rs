@@ -49,6 +49,7 @@ impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
             execution_bus,
             program_bus,
             memory_bridge,
+            ..
         }: SystemPort,
         range_bus: VariableRangeCheckerBus,
         ptr_max_bits: usize,

@@ -99,6 +99,14 @@ pub struct VmPvs<F> {
     pub initial_root: [F; DIGEST_SIZE],
     /// Merkle root commit of the final memory state for this program (or segment).
     pub final_root: [F; DIGEST_SIZE],
+
+    //////////////////////////////////////////////////////////////////////
+    /// PUBLIC VALUES PVS
+    //////////////////////////////////////////////////////////////////////
+    /// Rolling commitment before the public values revealed by this program (or segment).
+    pub initial_public_values_commit: [F; DIGEST_SIZE],
+    /// Rolling commitment after the public values revealed by this program (or segment).
+    pub final_public_values_commit: [F; DIGEST_SIZE],
 }
 
 #[repr(C)]

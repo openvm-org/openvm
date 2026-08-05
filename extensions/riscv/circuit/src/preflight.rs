@@ -315,14 +315,19 @@ impl PreflightReplayProgram {
         drop(offsets);
         let history =
             GpuUnindexedHistory::new(program_log, memory_log, field_values, write_masks, error)?;
-        context.finalize_device_history(
+        let (transcript, mut replay_plan) = context.finalize_device_history(
             history,
             GpuPostflightBoundary::new(
                 execution.from_state,
                 execution.to_state,
                 matches!(execution.endpoint, PreflightEndpoint::Terminated).then_some(0),
             ),
-        )
+        )?;
+        replay_plan.set_public_values_boundary(
+            execution.initial_public_values_len,
+            &execution.state.public_values,
+        )?;
+        Ok((transcript, replay_plan))
     }
 }
 

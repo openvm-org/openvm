@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{
         instructions::exe::VmExe, ContinuationVmProver, VirtualMachine, VmCircuitConfig, VmInstance,
     },
-    system::memory::merkle::public_values::UserPublicValuesProof,
+    system::public_values::proof::PublicValuesOpening,
     utils::test_utils::test_system_config,
 };
 use openvm_riscv_circuit::{Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
@@ -127,7 +127,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
 ) -> Result<(
     Arc<MultiStarkVerifyingKey<SC>>,
     Proof<SC>,
-    UserPublicValuesProof<DIGEST_SIZE, F>,
+    PublicValuesOpening<F>,
 )> {
     let config = test_rv64im_config();
     let elf = Elf::decode(
@@ -161,7 +161,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
     let leaf_vk = leaf_prover.get_vk();
     let engine = Engine::new(leaf_vk.inner.params.clone());
     engine.verify(&leaf_vk, &leaf_proof)?;
-    Ok((leaf_vk, leaf_proof, app_proof.user_public_values))
+    Ok((leaf_vk, leaf_proof, app_proof.public_values_opening))
 }
 
 // Feature-gated because full aggregation is too slow without CUDA. Many tests below
@@ -175,9 +175,9 @@ fn run_full_aggregation(
     Arc<MultiStarkVerifyingKey<SC>>,
     CommittedTraceData<PB>,
     Proof<SC>,
-    UserPublicValuesProof<DIGEST_SIZE, F>,
+    PublicValuesOpening<F>,
 )> {
-    let (leaf_vk, leaf_proof, user_pvs_proof) = run_leaf_aggregation(log_fib_input)?;
+    let (leaf_vk, leaf_proof, public_values_opening) = run_leaf_aggregation(log_fib_input)?;
 
     let internal_for_leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_vk,
@@ -206,7 +206,7 @@ fn run_full_aggregation(
         internal_recursive_prover.get_vk(),
         internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
         internal_recursive_proof,
-        user_pvs_proof,
+        public_values_opening,
     ))
 }
 
@@ -294,7 +294,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         internal_recursive_vk,
         internal_recursive_pcs_data,
         internal_recursive_proof,
-        user_pvs_proof,
+        public_values_opening,
     ) = run_full_aggregation(10, extra_recursive_layers)?;
 
     let system_config = test_rv64im_config().rv64i.system;
@@ -304,14 +304,14 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
+        system_config.num_public_value_cells,
         None,
         None,
     );
     let engine = root_prover.create_engine::<RootEngine>();
     let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
         internal_recursive_proof,
-        &user_pvs_proof,
+        &public_values_opening,
         &engine.device().device_ctx,
     );
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap(), &engine)?;
@@ -329,7 +329,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         internal_recursive_vk,
         internal_recursive_pcs_data,
         internal_recursive_proof,
-        user_pvs_proof,
+        public_values_opening,
     ) = run_full_aggregation(10, 1)?;
 
     let system_config = test_rv64im_config().rv64i.system;
@@ -339,7 +339,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
+        system_config.num_public_value_cells,
         None,
         None,
     );
@@ -348,7 +348,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
     let ctx = root_base_prover
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof.clone(),
-            &user_pvs_proof,
+            &public_values_opening,
             &engine.device().device_ctx,
         )
         .unwrap();
@@ -366,7 +366,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         internal_recursive_pcs_data.commitment.into(),
         root_pk,
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
+        system_config.num_public_value_cells,
         None,
         Some(trace_heights.clone()),
     );
@@ -374,7 +374,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
     let ctx = root_prover
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof,
-            &user_pvs_proof,
+            &public_values_opening,
             &engine2.device().device_ctx,
         )
         .unwrap();

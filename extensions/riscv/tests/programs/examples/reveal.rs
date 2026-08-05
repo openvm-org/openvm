@@ -16,6 +16,6 @@ pub fn main() {
     reveal_bytes32(bytes);
     let x: u64 = core::hint::black_box(123);
     let y: u64 = core::hint::black_box(456);
-    reveal_u64(x, 4);
-    reveal_u64(y, 5);
+    reveal_u64(x);
+    reveal_u64(y);
 }

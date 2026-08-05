@@ -41,6 +41,7 @@ use deferral::DeferralConfig;
 mod preflight;
 #[cfg(feature = "cuda")]
 mod preflight_driver;
+pub use openvm_circuit::arch::SegmentProofOutput;
 #[cfg(feature = "cuda")]
 use preflight_driver::PreparedContinuation;
 #[cfg(feature = "cuda")]

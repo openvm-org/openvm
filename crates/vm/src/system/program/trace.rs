@@ -20,11 +20,12 @@ use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        MemoryConfig,
+        SystemConfig,
     },
     system::{
         memory::{merkle::MerkleTree, AddressMap},
         program::ProgramChip,
+        public_values::public_values_initial_commit,
     },
 };
 
@@ -60,6 +61,7 @@ impl<SC: StarkProtocolConfig> ProgramChip<SC> {
 /// Computes a commitment to a VM executable. This is a Merklelized hash of:
 /// - Program code commitment (commitment of the cached trace)
 /// - Merkle root of the initial memory
+/// - Initial append-only public-output accumulator
 /// - Starting program counter (`pc_start`)
 ///
 /// The program code commitment is itself a commitment (via the proof system PCS) to
@@ -69,21 +71,26 @@ impl<SC: StarkProtocolConfig> ProgramChip<SC> {
 /// and a cryptographic compression function (for internal nodes).
 ///
 /// **Note**: This function recomputes the Merkle tree for the initial memory image.
-pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
+pub fn compute_exe_commit_from_config<F: PrimeField32>(
     program_commitment: &[F; VM_DIGEST_WIDTH],
     exe: &VmExe<F>,
-    memory_config: &MemoryConfig,
+    system_config: &SystemConfig,
 ) -> [F; VM_DIGEST_WIDTH] {
     let hasher = vm_poseidon2_hasher();
+    let memory_config = &system_config.memory_config;
     let memory_dimensions = memory_config.memory_dimensions();
     let mut memory_image = AddressMap::new(memory_config.addr_spaces.clone());
     memory_image.set_from_sparse(&exe.init_memory);
     let init_memory_commit =
         MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
+    let initial_public_values_commit = public_values_initial_commit(
+        system_config.num_public_value_cells / crate::arch::U16_CELLS_PER_PUBLIC_VALUE,
+    );
     compute_exe_commit(
         &hasher,
         program_commitment,
         &init_memory_commit,
+        &initial_public_values_commit,
         F::from_u32(exe.pc_start),
     )
 }
@@ -91,6 +98,7 @@ pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
 /// Computes a Merklelized hash of:
 /// - Program code commitment (commitment of the cached trace)
 /// - Merkle root of the initial memory
+/// - Initial append-only public-output accumulator
 /// - Starting program counter (`pc_start`)
 ///
 /// The Merklelization uses [Poseidon2Hasher] as a cryptographic hash function (for the leaves)
@@ -99,14 +107,22 @@ pub fn compute_exe_commit<F: PrimeField32>(
     hasher: &Poseidon2Hasher<F>,
     program_commit: &[F; VM_DIGEST_WIDTH],
     init_memory_root: &[F; VM_DIGEST_WIDTH],
+    initial_public_values_commit: &[F; VM_DIGEST_WIDTH],
     pc_start: F,
 ) -> [F; VM_DIGEST_WIDTH] {
     let mut padded_pc_start = [F::ZERO; VM_DIGEST_WIDTH];
     padded_pc_start[0] = pc_start;
     let program_hash = hasher.hash(program_commit);
     let memory_hash = hasher.hash(init_memory_root);
+    let public_values_hash = hasher.hash(initial_public_values_commit);
     let pc_hash = hasher.hash(&padded_pc_start);
-    hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
+    hasher.compress(
+        &hasher.compress(
+            &hasher.compress(&program_hash, &memory_hash),
+            &public_values_hash,
+        ),
+        &pc_hash,
+    )
 }
 
 pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorMatrix<F> {

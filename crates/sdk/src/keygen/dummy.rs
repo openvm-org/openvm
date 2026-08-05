@@ -65,7 +65,7 @@ pub(crate) fn compute_root_proof_heights(
     let dummy_exe = dummy_terminate_exe();
 
     let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.num_public_values;
+    let num_user_pvs = system_config.num_public_value_cells;
 
     let mut app_config = AppConfig::riscv64(app_params_with_100_bits_security(
         MAX_APP_LOG_STACKED_HEIGHT,
@@ -112,7 +112,7 @@ pub(crate) fn compute_root_proof_heights(
     let root_proving_ctx: ProvingContext<<CpuRootE as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
-            &agg_proof.user_pvs_proof,
+            &agg_proof.public_values_opening,
             agg_proof.deferral_merkle_proofs.as_ref(),
             engine_device_ctx(&engine),
         )

@@ -21,7 +21,6 @@ static constexpr uint32_t ERROR_BAD_ANCHOR = 307;
 static constexpr uint32_t ERROR_BAD_TERMINATION = 308;
 static constexpr uint32_t ERROR_OUTPUT_BOUNDS = 309;
 static constexpr uint32_t ERROR_BAD_ENDPOINT = 310;
-static constexpr uint32_t ERROR_BAD_REVEAL = 311;
 static constexpr uint8_t FULL_WRITE_MASK = 0xff;
 
 struct RvrCheckpoint {
@@ -362,9 +361,7 @@ struct LoadStoreInstruction {
 };
 
 struct RevealInstruction {
-    uint32_t src;
-    uint32_t base;
-    uint32_t address;
+    uint32_t src_reg;
 };
 
 struct HintStoreInstruction {
@@ -497,34 +494,16 @@ __device__ __forceinline__ bool validate_load_store(
 
 __device__ __forceinline__ bool validate_reveal(
     RvrReplayInstruction const &instruction,
-    uint32_t register_as,
-    uint32_t pointer_max_bits,
-    ReplayState const &state,
     RevealInstruction &decoded
 ) {
-    uint32_t src_ptr = instruction.words[1];
-    uint32_t base_ptr = instruction.words[2];
-    uint32_t imm = instruction.words[3];
-    uint32_t imm_sign = instruction.words[7];
     if (instruction.words[0] != REVEAL_OPCODE_BASE ||
-        instruction.words[4] != register_as ||
-        instruction.words[5] != REVEAL_PUBLIC_VALUES_ADDRESS_SPACE ||
-        instruction.words[6] != 1 || imm > UINT16_MAX || imm_sign > 1 ||
-        !replay_canonical_register_pointer(src_ptr) ||
-        !replay_canonical_register_pointer(base_ptr)) {
+        !decode_register(instruction.words[1], decoded.src_reg) ||
+        instruction.words[2] != 0 || instruction.words[3] != 0 ||
+        instruction.words[4] != 0 || instruction.words[5] != 0 ||
+        instruction.words[6] != 0 || instruction.words[7] != 0) {
         return false;
     }
-    decoded.src = src_ptr / REGISTER_BYTES;
-    decoded.base = base_ptr / REGISTER_BYTES;
-    uint64_t base = state.regs[decoded.base];
-    if ((base >> 32) != 0) return false;
-    int64_t signed_imm = imm_sign ? int64_t(imm) - (int64_t(1) << 16) : int64_t(imm);
-    int64_t effective = int64_t(uint32_t(base)) + signed_imm;
-    if (effective < 0 || effective > UINT32_MAX) return false;
-    decoded.address = uint32_t(effective);
-    if ((decoded.address & (REGISTER_BYTES - 1)) != 0) return false;
-    uint64_t block_end = uint64_t(decoded.address) + REGISTER_BYTES;
-    return pointer_max_bits >= 32 || block_end <= (uint64_t(1) << pointer_max_bits);
+    return true;
 }
 
 __device__ __forceinline__ uint32_t branch_target(uint32_t pc, uint32_t encoded_offset) {
@@ -1192,40 +1171,28 @@ __device__ bool replay_chunk(
             state.timestamp += 3 * decoded.num_words;
         } else if (opcode == REVEAL_OPCODE_BASE) {
             RevealInstruction decoded{};
-            if (!validate_reveal(
-                    *instruction,
-                    register_as,
-                    byte_pointer_max_bits,
-                    state,
-                    decoded
-                )) {
-                preflight_set_error(error, ERROR_BAD_REVEAL);
+            if (!validate_reveal(*instruction, decoded)) {
+                preflight_set_error(error, ERROR_BAD_INSTRUCTION);
                 return false;
             }
-            constexpr uint32_t event_count = 3;
             if (memory != nullptr) {
-                if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {
+                if (uint64_t(memory_start) + emitted + 1 > memory_capacity) {
                     preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
                     return false;
                 }
-                write_event(memory[memory_start + emitted], &write_masks[memory_start + emitted],
-                            state.timestamp, register_as,
-                            instruction->words[2] / U16_CELL_SIZE, false,
-                            state.regs[decoded.base]);
-                uint64_t source = state.regs[decoded.src];
-                write_event(memory[memory_start + emitted + 1],
-                            &write_masks[memory_start + emitted + 1], state.timestamp + 1,
-                            register_as, instruction->words[1] / U16_CELL_SIZE, false, source);
-                write_memory_intent(
-                    memory[memory_start + emitted + 2],
-                    &write_masks[memory_start + emitted + 2], state.timestamp + 2,
-                    REVEAL_PUBLIC_VALUES_ADDRESS_SPACE, decoded.address, source,
-                    FULL_WRITE_MASK
+                write_event(
+                    memory[memory_start + emitted],
+                    &write_masks[memory_start + emitted],
+                    state.timestamp,
+                    register_as,
+                    instruction->words[1] / 2,
+                    false,
+                    state.regs[decoded.src_reg]
                 );
             }
-            emitted += event_count;
+            emitted += 1;
             state.pc += 4;
-            state.timestamp += event_count;
+            state.timestamp += 1;
         } else if (
             opcode >= LOAD_STORE_OPCODE_BASE &&
             opcode < LOAD_STORE_OPCODE_BASE + LOAD_STORE_OPCODE_COUNT

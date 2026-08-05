@@ -13,9 +13,13 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
+use public_values::PublicValuesChipGPU;
 
-use crate::arch::cuda::postflight::{
-    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+use crate::{
+    arch::cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
+    system::public_values::PublicValuesAir,
 };
 
 pub mod boundary;
@@ -26,16 +30,19 @@ pub mod merkle_tree;
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;
+pub mod public_values;
 
 pub struct SystemChipInventoryGPU {
     pub program: ProgramChipGPU,
     pub connector: VmConnectorChipGPU,
     pub memory_inventory: MemoryInventoryGPU,
+    pub public_values: PublicValuesChipGPU,
 }
 
 impl SystemChipInventoryGPU {
     pub fn new(
         config: &SystemConfig,
+        public_values_air: PublicValuesAir,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
         device_ctx: GpuDeviceCtx,
@@ -55,14 +62,17 @@ impl SystemChipInventoryGPU {
 
         let memory_inventory = MemoryInventoryGPU::new(
             config.memory_config.clone(),
-            hasher_chip,
+            hasher_chip.clone(),
             device_ctx.clone(),
         );
+        let public_values =
+            PublicValuesChipGPU::new(public_values_air, hasher_chip.shared_buffer(), device_ctx);
 
         Self {
             program: program_chip,
             connector: connector_chip,
             memory_inventory,
+            public_values,
         }
     }
 
@@ -77,6 +87,9 @@ impl SystemChipInventoryGPU {
         replay_plan: &GpuPostflightPlan,
     ) -> Result<Vec<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         program.ensure_replay_inputs(transcript, replay_plan, &self.program.device_ctx)?;
+        let (initial_public_values_len, public_values) = replay_plan.public_values_boundary()?;
+        self.public_values
+            .validate_boundary(initial_public_values_len, public_values)?;
         let program_ctx = {
             let _span = tracing::info_span!("program_trace_gen").entered();
             self.program.generate_proving_ctx_from_plan(replay_plan)?
@@ -92,10 +105,17 @@ impl SystemChipInventoryGPU {
 
         let memory_ctxs = self
             .memory_inventory
-            .generate_proving_ctxs_from_transcript(transcript)?;
+            .generate_proving_ctxs_from_transcript(
+                transcript,
+                self.public_values.poseidon2_record_count(),
+            )?;
+        let public_values_ctx = self
+            .public_values
+            .generate_proving_ctx(initial_public_values_len, public_values)?;
         Ok([program_ctx, connector_ctx]
             .into_iter()
             .chain(memory_ctxs)
+            .chain([public_values_ctx])
             .collect())
     }
 }

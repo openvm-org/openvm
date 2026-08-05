@@ -6,6 +6,7 @@ use std::{
 };
 
 use eyre::Context;
+use openvm_circuit::arch::U16_CELLS_PER_PUBLIC_VALUE;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
@@ -27,7 +28,7 @@ const EVM_HALO2_VERIFIER_INTERFACE: &str =
 alloy_sol_types::sol! {
     #[allow(missing_docs)]
     interface IOpenVmHalo2Verifier {
-        function verify(bytes calldata publicValues, bytes calldata proofData, bytes32 appExeCommit, bytes32 appVmCommit) external view;
+        function verify(uint32 publicValuesCount, bytes calldata publicValues, bytes calldata proofData, bytes32 appExeCommit, bytes32 appVmCommit) external view;
     }
 }
 
@@ -64,7 +65,8 @@ pub(crate) fn generate_halo2_verifier_solidity_with_version_name(
     //   [0..12]: KZG accumulator
     //   [12]: app_exe_commit
     //   [13]: app_vm_commit
-    //   [14..]: user public values
+    //   [14]: number of revealed u64 values
+    //   [15..]: fixed-capacity user public-value u16 cells
     let num_pvs = halo2_pk
         .wrapper
         .pinning
@@ -72,20 +74,25 @@ pub(crate) fn generate_halo2_verifier_solidity_with_version_name(
         .num_pvs
         .first()
         .expect("Expected at least one instance column");
-    // Subtract 12 (accumulator) + 2 (commits) = 14
-    let pvs_length = num_pvs
-        .checked_sub(crate::types::NUM_BN254_ACCUMULATOR + 2)
+    // Subtract 12 accumulator fields, 2 commits, and 1 terminal count.
+    let public_value_cells = num_pvs
+        .checked_sub(crate::types::NUM_BN254_ACCUMULATOR + 3)
         .expect("Unexpected number of wrapper circuit public values");
 
     assert!(
-        pvs_length <= 8192,
-        "OpenVM Halo2 verifier contract does not support more than 8192 public values"
+        public_value_cells.is_multiple_of(U16_CELLS_PER_PUBLIC_VALUE)
+            && (public_value_cells / U16_CELLS_PER_PUBLIC_VALUE).is_power_of_two(),
+        "OpenVM Halo2 verifier requires four public-value cells times a nonzero power of two"
+    );
+    assert!(
+        public_value_cells <= 8192,
+        "OpenVM Halo2 verifier contract does not support more than 8192 public-value cells"
     );
 
     // PROOF_DATA_LENGTH is now a constant in the template: (12 + 43) * 32
     // Fill out template placeholders
     let openvm_verifier_code = EVM_HALO2_VERIFIER_TEMPLATE
-        .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
+        .replace("{PUBLIC_VALUE_CELLS}", &public_value_cells.to_string())
         .replace("{OPENVM_VERSION}", OPENVM_VERSION);
 
     // Create temp dir
@@ -215,7 +222,8 @@ pub(crate) fn verify_evm_halo2_proof(
     evm_proof: crate::types::EvmProof,
 ) -> Result<u64, SdkError> {
     // Convert EvmProof → RawEvmProof for the static verifier's evm_verify
-    let raw_evm_proof: openvm_static_verifier::keygen::RawEvmProof = evm_proof.into();
+    let raw_evm_proof = openvm_static_verifier::keygen::RawEvmProof::try_from(evm_proof)
+        .map_err(|error| SdkError::Other(error.into()))?;
     let deployment_code = &openvm_verifier.artifact.bytecode;
 
     let gas_cost = openvm_static_verifier::keygen::evm_verify(deployment_code, &raw_evm_proof)

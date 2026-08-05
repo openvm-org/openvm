@@ -65,7 +65,7 @@ pub fn keygen(
     // App memory dimensions and number of public values the verify-stark prover expects.
     let default_config = SdkSystemConfig::default();
     let memory_dimensions = default_config.config.memory_config.memory_dimensions();
-    let num_user_pvs = default_config.config.num_public_values;
+    let num_user_pvs = default_config.config.num_public_value_cells;
 
     // System parameters for VM proof aggregation. Deferral circuit proof aggregation reuses
     // agg_config.

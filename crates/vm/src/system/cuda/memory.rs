@@ -275,17 +275,29 @@ impl MemoryInventoryGPU {
         &mut self,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
+        self.generate_proving_ctxs_with_additional_poseidon2_records(touched_memory, 0)
+    }
+
+    /// Host-history entry point with generic capacity reserved for later shared-Poseidon2
+    /// producers in the same trace-generation session.
+    pub(crate) fn generate_proving_ctxs_with_additional_poseidon2_records(
+        &mut self,
+        touched_memory: TouchedMemory<F>,
+        additional_poseidon2_records: usize,
+    ) -> Vec<AirProvingContext<GpuBackend>> {
         let in_num_records = touched_memory.len();
         if in_num_records == 0 {
             // SAFETY: the exact empty prefix has no backing allocation to keep
             // alive, and the empty path never dereferences the null view.
             return unsafe {
-                self.generate_proving_ctxs_from_device(
+                self.generate_proving_ctxs_from_device_inner(
                     DeviceBufferView {
                         ptr: std::ptr::null(),
                         size: 0,
                     },
                     0,
+                    None,
+                    additional_poseidon2_records,
                 )
             };
         }
@@ -312,6 +324,7 @@ impl MemoryInventoryGPU {
                 d_in_records.view(),
                 in_num_records,
                 Some(&touched_memory),
+                additional_poseidon2_records,
             )
         }
     }
@@ -320,6 +333,7 @@ impl MemoryInventoryGPU {
     pub(super) fn generate_proving_ctxs_from_transcript(
         &mut self,
         transcript: &GpuPostflightTranscript,
+        additional_poseidon2_records: usize,
     ) -> Result<Vec<AirProvingContext<GpuBackend>>, GpuPostflightError> {
         let (touched_memory, in_num_records) = transcript.touched_blocks_on(&self.device_ctx)?;
         // SAFETY: the transcript owns this typed allocation on the context
@@ -329,6 +343,7 @@ impl MemoryInventoryGPU {
                 touched_memory.view(),
                 in_num_records,
                 None,
+                additional_poseidon2_records,
             )
         })
     }
@@ -341,6 +356,7 @@ impl MemoryInventoryGPU {
     ///
     /// `touched_memory` must point to `in_num_records` valid `TouchedBlock<F>`
     /// records on `self.device_ctx` and remain alive until this method returns.
+    #[cfg(test)]
     #[instrument(name = "generate_proving_ctxs_from_device", skip_all)]
     pub(crate) unsafe fn generate_proving_ctxs_from_device(
         &mut self,
@@ -349,7 +365,7 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         // SAFETY: forwarded from this method's caller.
         unsafe {
-            self.generate_proving_ctxs_from_device_inner(touched_memory, in_num_records, None)
+            self.generate_proving_ctxs_from_device_inner(touched_memory, in_num_records, None, 0)
         }
     }
 
@@ -358,6 +374,7 @@ impl MemoryInventoryGPU {
         touched_memory: DeviceBufferView,
         in_num_records: usize,
         host_touched_memory: Option<&[TouchedBlock<F>]>,
+        additional_poseidon2_records: usize,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let expected_bytes = in_num_records
             .checked_mul(std::mem::size_of::<TouchedBlock<F>>())
@@ -430,7 +447,7 @@ impl MemoryInventoryGPU {
             }
             self.boundary
                 .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
-            self.prepare_poseidon2_records(0, 0, merkle_rows);
+            self.prepare_poseidon2_records(0, 0, merkle_rows, additional_poseidon2_records);
             merkle_rows
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
@@ -578,7 +595,12 @@ impl MemoryInventoryGPU {
             ));
             {
                 let _span = tracing::info_span!("poseidon2_prepare").entered();
-                self.prepare_poseidon2_records(out_num_records, num_dirty_leaves, merkle_rows);
+                self.prepare_poseidon2_records(
+                    out_num_records,
+                    num_dirty_leaves,
+                    merkle_rows,
+                    additional_poseidon2_records,
+                );
             }
 
             // Send records to boundary chip
@@ -636,19 +658,22 @@ impl MemoryInventoryGPU {
         ret
     }
 
-    /// Sizes the shared Poseidon2 record buffer to the exact push count: the boundary
-    /// kernel records one initial hash per touched leaf plus one final hash per dirty
-    /// leaf, and every merkle trace row records exactly one compression. These counts
-    /// must stay in lockstep with `boundary.cu` / `merkle_tree.cu`.
+    /// Sizes the shared Poseidon2 record buffer for the maximum session push count. The boundary
+    /// kernel records one initial hash per touched leaf plus one final hash per dirty leaf, every
+    /// Merkle trace row records one compression, and `additional_records` reserves capacity for
+    /// later non-memory producers. The final periphery trace uses the buffer's actual pushed count,
+    /// so later producers may use less than their reservation.
     fn prepare_poseidon2_records(
         &self,
         boundary_records: usize,
         dirty_leaves: usize,
         merkle_rows: usize,
+        additional_records: usize,
     ) {
         let num_records = boundary_records
             .checked_add(dirty_leaves)
             .and_then(|n| n.checked_add(merkle_rows))
+            .and_then(|n| n.checked_add(additional_records))
             .expect("Poseidon2 records count overflow");
         self.hasher_chip.prepare_records(num_records);
     }

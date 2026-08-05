@@ -396,6 +396,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             execution_bus,
             program_bus,
             memory_bridge,
+            ..
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
@@ -1126,6 +1127,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
             execution_bus,
             program_bus,
             memory_bridge,
+            ..
         } = inventory.system().port();
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
 
@@ -1348,6 +1350,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
             execution_bus,
             program_bus,
             memory_bridge,
+            public_values_bus,
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
@@ -1363,7 +1366,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         );
         inventory.add_air(hint_store);
 
-        let reveal = RevealAir::new(exec_bridge, memory_bridge, range_checker, byte_ptr_max_bits);
+        let reveal = RevealAir::new(
+            exec_bridge,
+            memory_bridge,
+            public_values_bus,
+            range_checker,
+            inventory.config().memory_config.timestamp_max_bits,
+        );
         inventory.add_air(reveal);
 
         Ok(())
@@ -1398,7 +1407,7 @@ where
 
         inventory.next_air::<RevealAir>()?;
         let reveal = RevealChip::new(
-            RevealFiller::new(byte_ptr_max_bits, range_checker),
+            RevealFiller::new(range_checker, timestamp_max_bits),
             mem_helper,
         );
         add_executor_chip_with_tracegen!(inventory, reveal, generate_reveal_trace);

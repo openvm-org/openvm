@@ -35,11 +35,11 @@ use crate::{
             program::{air::ProgramDummyAir, ProgramTester},
             ExecutionTester, MemoryTester, TestBuilder, TestChipHarness, TestPreflight,
             TestPreflightExecution, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
-            POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+            POSEIDON2_DIRECT_BUS, PUBLIC_VALUES_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
         to_byte_ptr_bits, vm_poseidon2_config, ExecutionBridge, ExecutionBus, ExecutionState,
-        Executor, MemoryConfig, Postflight, Streams, VmField, VmState, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES, NUM_REGISTERS,
+        Executor, MemoryConfig, Postflight, PublicValuesState, Streams, VmField, VmState,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_REGISTERS, U16_CELLS_PER_PUBLIC_VALUE,
     },
     system::{
         memory::{
@@ -49,6 +49,7 @@ use crate::{
         },
         poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
         program::ProgramBus,
+        public_values::{PublicValuesAir, PublicValuesBus, PublicValuesChip},
         SystemPort,
     },
     utils::test_cpu_engine,
@@ -60,6 +61,8 @@ pub struct VmChipTestBuilder<F: VmField> {
     pub rng: StdRng,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
+    pub public_values: PublicValuesState,
+    public_values_hasher: Arc<Poseidon2PeripheryChip<F>>,
     internal_rng: StdRng,
     default_register: usize,
     default_pointer: usize,
@@ -96,7 +99,13 @@ where
             self.memory.controller.memory_config(),
         ));
         let memory = std::mem::replace(&mut self.memory.memory.data, empty_memory);
-        let mut state = VmState::new_with_defaults(initial_pc, memory, self.streams.clone(), 0);
+        let mut state = VmState::new_with_public_values(
+            initial_pc,
+            memory,
+            self.public_values.clone(),
+            self.streams.clone(),
+            0,
+        );
         state.rng = self.rng.clone();
         let output = execute_test_preflight(
             self.memory.controller.memory_config(),
@@ -113,6 +122,7 @@ where
         let final_state = ExecutionState::new(final_event.pc, final_event.timestamp);
 
         self.memory.memory.data = output.state.memory;
+        self.public_values = output.state.public_values;
         self.streams = output.state.streams;
         self.rng = output.state.rng;
         let postflight = Postflight::new_for_test(
@@ -245,12 +255,19 @@ impl<F: VmField> VmChipTestBuilder<F> {
         internal_rng: StdRng,
     ) -> Self {
         setup_tracing_with_log_level(Level::WARN);
+        let public_values_hasher = controller
+            .hasher_chip
+            .as_ref()
+            .expect("persistent memory controller has a Poseidon2 chip")
+            .clone();
         Self {
             memory: MemoryTester::new(controller, memory),
             streams,
             rng,
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
+            public_values: PublicValuesState::new(32),
+            public_values_hasher,
             internal_rng,
             default_register: 0,
             default_pointer: 0,
@@ -291,6 +308,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
             execution_bus: self.execution.bus,
             program_bus: self.program.bus,
             memory_bridge: self.memory_bridge(),
+            public_values_bus: PublicValuesBus::new(PUBLIC_VALUES_BUS),
         }
     }
 
@@ -327,18 +345,20 @@ pub type TestSC = BabyBearPoseidon2Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
+        let public_values_ctx = self.public_values_air_ctx();
         let tester = VmChipTester {
             memory: Some(self.memory),
-            ..Default::default()
+            air_ctxs: vec![public_values_ctx],
         };
         let tester =
             tester.load_periphery((ExecutionDummyAir::new(self.execution.bus), self.execution));
         tester.load_periphery((ProgramDummyAir::new(self.program.bus), self.program))
     }
     pub fn build_babybear_poseidon2(self) -> VmChipTester<BabyBearPoseidon2Config> {
+        let public_values_ctx = self.public_values_air_ctx();
         let tester = VmChipTester {
             memory: Some(self.memory),
-            ..Default::default()
+            air_ctxs: vec![public_values_ctx],
         };
         let tester =
             tester.load_periphery((ExecutionDummyAir::new(self.execution.bus), self.execution));
@@ -347,6 +367,20 @@ impl VmChipTestBuilder<BabyBear> {
 }
 
 impl<F: VmField> VmChipTestBuilder<F> {
+    fn public_values_air_ctx<SC>(&self) -> (AirRef<SC>, AirProvingContext<CpuBackend<SC>>)
+    where
+        SC: StarkProtocolConfig<F = F>,
+    {
+        let air = PublicValuesAir::new(
+            self.public_values.max_public_values() * U16_CELLS_PER_PUBLIC_VALUE,
+            PublicValuesBus::new(PUBLIC_VALUES_BUS),
+            PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+        );
+        let chip = PublicValuesChip::new(air.clone(), self.public_values_hasher.clone());
+        let ctx = chip.generate_proving_ctx(&self.public_values, 0);
+        (Arc::new(air), ctx)
+    }
+
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
     ) -> (SharedVariableRangeCheckerChip, TracingMemory) {
@@ -369,7 +403,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
             range_checker,
             PermutationCheckBus::new(MEMORY_MERKLE_BUS),
             PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-            hasher_chip,
+            hasher_chip.clone(),
         );
         Self {
             memory: MemoryTester::new(memory_controller, memory),
@@ -377,6 +411,8 @@ impl<F: VmField> VmChipTestBuilder<F> {
             rng: StdRng::seed_from_u64(0),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
+            public_values: PublicValuesState::new(32),
+            public_values_hasher: hasher_chip,
             internal_rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,

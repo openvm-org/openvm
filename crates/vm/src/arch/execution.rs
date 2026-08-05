@@ -11,7 +11,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
+use super::{execution_mode::ExecutionCtxTrait, PublicValuesState, Streams, VmExecState};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "metrics")]
@@ -59,19 +59,8 @@ pub enum ExecutionError {
         num_words: u64,
         max_hint_buffer_words: u64,
     },
-    #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
-    PublicValueIndexOutOfBounds {
-        pc: u32,
-        num_public_values: usize,
-        public_value_index: usize,
-    },
-    #[error("at pc {pc}, tried to publish {new_value} into index {public_value_index} but already had {existing_value}")]
-    PublicValueNotEqual {
-        pc: u32,
-        public_value_index: usize,
-        existing_value: usize,
-        new_value: usize,
-    },
+    #[error("at pc {pc}, tried to reveal more than {max_public_values} public values")]
+    PublicValuesCapacityExceeded { pc: u32, max_public_values: usize },
     #[error("at pc {pc}, phantom sub-instruction not found for discriminant {}", .discriminant.0)]
     PhantomNotFound {
         pc: u32,
@@ -219,6 +208,7 @@ impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 pub struct VmStateMut<'a, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
+    pub public_values: &'a mut PublicValuesState,
     pub streams: &'a mut Streams,
     pub rng: &'a mut StdRng,
     pub ctx: &'a mut CTX,

@@ -7,15 +7,10 @@ mod tests {
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::{execution_mode::Segment, ExecutionOutcome, VmState};
     use openvm_circuit::{
-        arch::{
-            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
-        },
-        system::memory::{
-            merkle::{
-                public_values::{extract_public_values, UserPublicValuesProof},
-                MerkleTree,
-            },
-            online::LinearMemory,
+        arch::{ExecutionError, VirtualMachine, VmExecutor},
+        system::{
+            memory::online::LinearMemory,
+            public_values::proof::{extract_public_values, PublicValuesOpening},
         },
         utils::{air_test, air_test_with_min_segments, test_cpu_engine, test_system_config},
     };
@@ -48,7 +43,7 @@ mod tests {
         openvm_circuit::system::memory::online::{GuestMemory, PAGE_SIZE},
         openvm_instructions::{
             riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
-            SysPhantom, PUBLIC_VALUES_AS,
+            SysPhantom,
         },
         openvm_riscv_transpiler::{BranchEqualOpcode, JalrOpcode, RevealOpcode, Rv64Phantom},
     };
@@ -386,18 +381,10 @@ mod tests {
     }
 
     #[cfg(feature = "rvr")]
-    fn reveal_instruction(src_reg: usize, base_reg: usize, offset: i16) -> Instruction<F> {
+    fn reveal_instruction(src_reg: usize) -> Instruction<F> {
         Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
-            [
-                src_reg * REGISTER_NUM_LIMBS,
-                base_reg * REGISTER_NUM_LIMBS,
-                offset as u16 as usize,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                usize::from(offset.is_negative()),
-            ],
+            [src_reg * REGISTER_NUM_LIMBS],
         )
     }
 
@@ -405,7 +392,6 @@ mod tests {
     fn configure_reveal_state(
         mut state: VmState<GuestMemory>,
         registers: &[(usize, u64)],
-        public_values: &[u8],
     ) -> VmState<GuestMemory> {
         for &(index, value) in registers {
             unsafe {
@@ -416,9 +402,6 @@ mod tests {
                 );
             }
         }
-        let storage = state.memory.memory.mem[PUBLIC_VALUES_AS as usize].as_mut_slice();
-        assert_eq!(storage.len(), public_values.len());
-        storage.copy_from_slice(public_values);
         state
     }
 
@@ -769,24 +752,17 @@ mod tests {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
         let instructions = [
-            reveal_instruction(1, 2, 0),
-            reveal_instruction(3, 4, 0),
+            reveal_instruction(1),
+            reveal_instruction(3),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
         let preflight = executor.preflight_instance(&exe)?;
-        let registers = [
-            (1, 0xa5a4_a3a2_a1a0_9998),
-            (2, 0),
-            (3, 0x1122_3344_5566_7788),
-            (4, 8),
-        ];
-        let initial_public_values = (0u8..16).collect::<Vec<_>>();
+        let registers = [(1, 0xa5a4_a3a2_a1a0_9998), (3, 0x1122_3344_5566_7788)];
         let initial = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
             &registers,
-            &initial_public_values,
         );
 
         let execution = preflight.execute_from_state(
@@ -798,21 +774,16 @@ mod tests {
             execution.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        // Each aligned REVEAL uses two register reads and one full-block write.
-        assert_eq!(execution.to_state.timestamp, 7);
+        // Each REVEAL has one register read, followed by TERMINATE.
+        assert_eq!(execution.to_state.timestamp, 3);
         assert!(execution.transcript.replay_values.is_empty());
 
-        let mut expected = initial_public_values;
+        let mut expected = vec![0; 16];
         expected[..8].copy_from_slice(&0xa5a4_a3a2_a1a0_9998u64.to_le_bytes());
         expected[8..].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
         assert_eq!(
-            extract_public_values(16, &execution.state.memory.memory),
+            extract_public_values(&execution.state.public_values),
             expected
-        );
-        assert_eq!(
-            execution.state.memory.memory.touched_pages[PUBLIC_VALUES_AS as usize]
-                .touched_byte_ranges(16),
-            vec![(0, 16)]
         );
         Ok(())
     }
@@ -1165,12 +1136,12 @@ mod tests {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(PAGE_SIZE);
         let instructions = [
-            reveal_instruction(1, 2, 0),
+            reveal_instruction(1),
             Instruction::<F>::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
-            reveal_instruction(3, 4, 0),
+            reveal_instruction(3),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
@@ -1178,13 +1149,7 @@ mod tests {
         let preflight = executor.preflight_instance(&exe)?;
         let initial = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            &[
-                (1, 0xaabb_ccdd_eeff_0011),
-                (2, 8),
-                (3, 0x2233_4455_6677_8899),
-                (4, 16),
-            ],
-            &vec![0; PAGE_SIZE],
+            &[(1, 0x1122_3344_aabb_ccdd), (3, 0x8877_6655_4433_2211)],
         );
 
         let first = preflight.execute_from_state_for(
@@ -1197,8 +1162,8 @@ mod tests {
         );
         assert!(first.transcript.replay_values.is_empty());
         assert_eq!(
-            &extract_public_values(PAGE_SIZE, &first.state.memory.memory)[8..16],
-            &0xaabb_ccdd_eeff_0011u64.to_le_bytes()
+            &extract_public_values(&first.state.public_values)[..8],
+            &0x1122_3344_aabb_ccddu64.to_le_bytes()
         );
 
         let second = preflight.execute_from_state_for(
@@ -1211,50 +1176,44 @@ mod tests {
         );
         assert!(second.transcript.replay_values.is_empty());
         assert_eq!(
-            &extract_public_values(PAGE_SIZE, &second.state.memory.memory)[8..24],
-            &[
-                0x11, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44,
-                0x33, 0x22,
-            ]
+            &extract_public_values(&second.state.public_values)[8..16],
+            &0x8877_6655_4433_2211u64.to_le_bytes()
         );
         Ok(())
     }
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_reveal_preflight_fails_before_commit() -> Result<()> {
+    fn test_rvr_reveal_preflight_rejects_capacity_overflow() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(8);
         let executor = VmExecutor::new(config)?;
-        // The effective address wraps to zero, but the non-u32 base still
-        // fails closed in both execution modes.
-        let address_exe = VmExe::from(Program::from_instructions(&[
-            reveal_instruction(1, 2, 1),
+        let exe = VmExe::from(Program::from_instructions(&[
+            reveal_instruction(1),
+            reveal_instruction(2),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ]));
-        let preflight = executor.preflight_instance(&address_exe)?;
+        let preflight = executor.preflight_instance(&exe)?;
         let invalid = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            &[(1, 0xff), (2, u64::MAX)],
-            &[0; 16],
+            &[(1, 0xff), (2, 0xaa)],
         );
         let error = match preflight.execute_from_state(
             invalid,
-            openvm_circuit::arch::rvr::PreflightLimits::new(2, 0, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(3, 0, 2),
         ) {
-            Ok(_) => panic!("wrapped REVEAL address unexpectedly succeeded"),
+            Ok(_) => panic!("excess REVEAL unexpectedly succeeded"),
             Err(error) => error,
         };
         assert!(error.to_string().contains("error code: 3"), "{error}");
 
-        let pure = executor.instance(&address_exe)?;
+        let pure = executor.instance(&exe)?;
         let invalid = configure_reveal_state(
             pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            &[(1, 0xff), (2, u64::MAX)],
-            &[0; 16],
+            &[(1, 0xff), (2, 0xaa)],
         );
         let error = match pure.execute_from_state(invalid) {
-            Ok(_) => panic!("wrapped REVEAL address unexpectedly succeeded"),
+            Ok(_) => panic!("excess REVEAL unexpectedly succeeded"),
             Err(error) => error,
         };
         assert!(error.to_string().contains("error code: 3"), "{error}");
@@ -1380,39 +1339,11 @@ mod tests {
     }
 
     #[test_case("rvr_invalid_branch_taken"; "invalid_branch_taken")]
-    #[test_case("out_of_bound_reveal"; "out_of_bound_reveal")]
+    #[test_case("reveal_capacity_overflow"; "reveal_capacity_overflow")]
     #[test_case("rvr_hint_buffer_zero"; "hint_buffer_zero")]
     #[cfg(feature = "rvr")]
     fn test_rvr_example_traps(program_name: &str) {
         assert_rvr_example_traps(program_name);
-    }
-
-    #[test]
-    #[cfg(feature = "rvr")]
-    fn test_rvr_reveal_negative_offset() -> Result<()> {
-        let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
-        let elf = build_example_program_at_path(
-            get_programs_dir!(),
-            "rvr_reveal_negative_offset",
-            &config,
-        )?;
-        let exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
-        )?;
-        let executor = VmExecutor::new(config)?;
-        let state = executor.instance(&exe)?.execute(vec![])?;
-        let public_values = extract_public_values(32, &state.memory.memory);
-
-        assert_eq!(
-            u64::from_le_bytes(public_values[..8].try_into().unwrap()),
-            0x1122_3344_5566_7788
-        );
-        Ok(())
     }
 
     #[test]
@@ -1448,7 +1379,7 @@ mod tests {
                     barrier.wait();
                     for _ in 0..NUM_RUNS {
                         let state = instance.execute(vec![]).unwrap();
-                        let public_values = extract_public_values(64, &state.memory.memory);
+                        let public_values = extract_public_values(&state.public_values);
                         assert_eq!(&public_values[..32], &expected_prefix);
                         assert_eq!(
                             u64::from_le_bytes(public_values[32..40].try_into().unwrap()),
@@ -1729,9 +1660,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "reveal address is not aligned within configured public-values capacity"
-    )]
+    #[should_panic(expected = "tried to reveal more than 4 public values")]
     #[cfg(not(feature = "rvr"))]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();
@@ -1775,38 +1704,31 @@ mod tests {
         let executor = VmExecutor::new(config.clone())?;
         let instance = executor.instance(&exe)?;
         let state = instance.execute(vec![])?;
-        let final_memory = state.memory.memory;
-        let hasher = vm_poseidon2_hasher::<F>();
-        let md = config.as_ref().memory_config.memory_dimensions();
-        let tree = MerkleTree::from_memory(&final_memory, &md, &hasher);
-        let top_tree = tree.top_tree(md.addr_space_height);
-        let pv_proof =
-            UserPublicValuesProof::compute(config.as_ref(), &hasher, &final_memory, &top_tree);
+        let public_values_opening: PublicValuesOpening<F> =
+            PublicValuesOpening::from_state(&state.public_values);
 
-        // `pv_proof.public_values` is the u16-packed merkle leaf representation;
-        // user-facing byte content is read via `extract_public_values`.
+        // `public_values_opening.public_values` is the u16-packed commitment representation;
+        // user-facing byte content comes directly from VM-owned public-value state.
         let mut bytes = [0u8; 32];
         for (i, byte) in bytes.iter_mut().enumerate() {
             *byte = i as u8;
         }
         let expected_bytes = bytes
             .into_iter()
-            .chain(
-                [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
-                    .into_iter()
-                    .flat_map(|x| x.to_le_bytes()),
-            )
+            .chain(123u64.to_le_bytes())
+            .chain(456u64.to_le_bytes())
             .collect::<Vec<_>>();
-        assert_eq!(extract_public_values(64, &final_memory), expected_bytes);
+        assert_eq!(extract_public_values(&state.public_values), expected_bytes);
 
-        // Sanity-check the merkle leaves are the u16 little-endian packing of the
-        // first `num_public_values` u16 cells.
-        let expected_leaves: Vec<F> = expected_bytes
+        // Sanity-check that the commitment leaves use the configured u16 cells in
+        // little-endian order.
+        let mut expected_cells: Vec<F> = expected_bytes
             .chunks_exact(2)
-            .take(pv_proof.public_values.len())
             .map(|c| F::from_u16(u16::from_le_bytes([c[0], c[1]])))
             .collect();
-        assert_eq!(pv_proof.public_values, expected_leaves);
+        expected_cells.resize(public_values_opening.public_values.len(), F::ZERO);
+        assert_eq!(public_values_opening.public_values, expected_cells);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 

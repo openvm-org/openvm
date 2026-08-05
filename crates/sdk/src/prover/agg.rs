@@ -252,7 +252,7 @@ impl AggProver {
         Ok((
             VmStarkProof {
                 inner: internal_proofs.pop().unwrap(),
-                user_pvs_proof: continuation_proof.user_public_values,
+                public_values_opening: continuation_proof.public_values_opening,
                 deferral_merkle_proofs: None,
             },
             InternalLayerMetadata {

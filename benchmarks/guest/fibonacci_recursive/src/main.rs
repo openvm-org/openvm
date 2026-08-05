@@ -15,7 +15,7 @@ const N: u64 = 27;
 pub fn main() {
     let n = black_box(N);
     let result = fibonacci(n);
-    reveal_u64(result, 0);
+    reveal_u64(result);
 }
 
 fn fibonacci(n: u64) -> u64 {

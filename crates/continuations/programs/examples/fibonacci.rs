@@ -17,5 +17,5 @@ pub fn main() {
         a = b;
         b = c;
     }
-    reveal_u64(a, 0);
+    reveal_u64(a);
 }

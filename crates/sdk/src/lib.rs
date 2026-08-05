@@ -29,9 +29,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
         InitFileGenerator, MeteredExecutor, VirtualMachine, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmExecutor, VmState, U16_CELL_SIZE,
+        VmExecutionConfig, VmExecutor, VmState,
     },
-    system::memory::{merkle::public_values::extract_public_values, online::GuestMemory},
+    system::{memory::online::GuestMemory, public_values::proof::extract_public_values},
 };
 use openvm_continuations::CommitBytes;
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
@@ -108,7 +108,7 @@ pub use compiled::{
     PreflightOutput,
 };
 pub use error::SdkError;
-pub use openvm_sdk_config::SegmentProver;
+pub use openvm_sdk_config::{SegmentProofOutput, SegmentProver};
 pub use stdin::*;
 
 pub const OPENVM_VERSION: &str = concat!(
@@ -595,14 +595,10 @@ where
         compiled: &CompiledExePure<'_>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
-        let final_memory = compiled
+        let final_state = compiled
             .execute(inputs)
-            .map_err(VirtualMachineError::from)?
-            .memory;
-        let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
-            &final_memory.memory,
-        );
+            .map_err(VirtualMachineError::from)?;
+        let public_values = extract_public_values(&final_state.public_values);
         Ok(public_values)
     }
 
@@ -755,10 +751,7 @@ where
             .instance
             .execute_metered(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
-        let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
-            &final_state.memory.memory,
-        );
+        let public_values = extract_public_values(&final_state.public_values);
 
         Ok((public_values, segments))
     }
@@ -844,10 +837,7 @@ where
         let instret = ctx.instret;
         let cost = ctx.cost;
 
-        let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
-            &final_state.memory.memory,
-        );
+        let public_values = extract_public_values(&final_state.public_values);
 
         Ok((public_values, (cost, instret)))
     }
@@ -1003,7 +993,7 @@ where
                 .expect("Trace heights did not generate properly");
 
                 let memory_dimensions = system_config.memory_config.memory_dimensions();
-                let num_user_pvs = system_config.num_public_values;
+                let num_user_pvs = system_config.num_public_value_cells;
 
                 Arc::new(RootProver::from_pk(
                     agg_prover.internal_recursive_prover.get_vk(),

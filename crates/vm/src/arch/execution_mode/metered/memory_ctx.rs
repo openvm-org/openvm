@@ -1,13 +1,13 @@
 use std::mem::size_of;
 
+#[cfg(test)]
+use openvm_instructions::riscv::MEMORY_AS;
 use openvm_instructions::{
     exe::SparseMemoryImage,
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::{NUM_REGISTERS, REGISTER_AS, REGISTER_NUM_LIMBS},
     DEFERRAL_AS, VM_DIGEST_WIDTH,
 };
-#[cfg(test)]
-use openvm_instructions::{riscv::MEMORY_AS, PUBLIC_VALUES_AS};
 
 pub use super::memory_tracker::PageTouch;
 use super::memory_tracker::{
@@ -467,12 +467,9 @@ mod tests {
         let system_config = test_system_config();
         let ctx = MemoryCtx::new(&system_config);
         let memory_page = ctx.leaf_id_range(MEMORY_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
-        let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
         let deferral_page = ctx.leaf_id_range(DEFERRAL_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
 
-        assert_ne!(memory_page, public_values_page);
         assert_ne!(memory_page, deferral_page);
-        assert_ne!(public_values_page, deferral_page);
     }
 
     #[test]

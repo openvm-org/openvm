@@ -505,7 +505,6 @@ fn sign_extend_32(value: u32) -> u64 {
 mod tests {
     use openvm_instructions::{
         instruction::Instruction, riscv::REGISTER_NUM_LIMBS, VmOpcode, DEFERRAL_AS,
-        PUBLIC_VALUES_AS,
     };
     use p3_baby_bear::BabyBear;
 
@@ -665,11 +664,9 @@ mod tests {
             let valid = instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, MEMORY_AS));
             assert_eq!(lifted_name(&valid).as_deref(), Some(name));
 
-            for address_space in [DEFERRAL_AS, PUBLIC_VALUES_AS] {
-                let wrong_memory =
-                    instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, address_space));
-                assert!(try_lift(&wrong_memory, 0x100).is_none());
-            }
+            let wrong_memory =
+                instruction_for_opcode(opcode, alu_operands(0, REGISTER_AS, DEFERRAL_AS));
+            assert!(try_lift(&wrong_memory, 0x100).is_none());
             let wrong_destination =
                 instruction_for_opcode(opcode, alu_operands(0, MEMORY_AS, MEMORY_AS));
             assert!(try_lift(&wrong_destination, 0x100).is_none());

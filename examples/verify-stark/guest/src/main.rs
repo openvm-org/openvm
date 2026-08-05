@@ -37,7 +37,10 @@ fn verify_stark_at_def_idx(input_commit: &Commit, def_idx: u32) {
     };
     println(format!("app_exe_commit: {:?}", output.app_exe_commit));
     println(format!("app_vm_commit: {:?}", output.app_vm_commit));
-    println(format!("user_pvs: {:?}", output.user_public_values));
+    println(format!(
+        "user_pvs ({} values): {:?}",
+        output.num_public_values, output.user_public_values
+    ));
 }
 
 pub fn main() {

@@ -18,7 +18,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::Program,
     riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
-    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
     AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
@@ -361,18 +361,6 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
             F::from_u32(0x5678),
             0x1234,
         ),
-        Instruction::from_usize(
-            RevealOpcode::REVEAL.global_opcode(),
-            [
-                reg(2),
-                reg(1),
-                5,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                0,
-            ],
-        ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
@@ -421,6 +409,13 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
     let (gpu_transcript, replay_plan) =
         Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &execution, execution.retired)
             .unwrap();
+    let (initial_public_values_len, final_public_values) =
+        replay_plan.public_values_boundary_for_test().unwrap();
+    assert_eq!(
+        initial_public_values_len,
+        execution.initial_public_values_len
+    );
+    assert_eq!(final_public_values, &execution.state.public_values);
     let tracegen =
         Rv64ImPreflightGpuTracegen::new(gpu_program.program(), &gpu_transcript, &replay_plan)
             .unwrap();
@@ -1491,54 +1486,31 @@ fn preflight_gpu_replay_proves_hint_store() {
 }
 
 #[test]
-fn preflight_gpu_replay_proves_aligned_reveals() {
+fn preflight_gpu_replay_proves_reveal_and_public_values_stream() {
     let values = [0x0123_4567_89ab_cdefu64, 0xfedc_ba98_7654_3210];
     let instructions = [
-        Instruction::<F>::from_usize(
-            RevealOpcode::REVEAL.global_opcode(),
-            [
-                reg(1),
-                reg(2),
-                0,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                0,
-            ],
-        ),
+        Instruction::<F>::from_usize(RevealOpcode::REVEAL.global_opcode(), [reg(1)]),
         Instruction::from_usize(
             AuipcOpcode::AUIPC.global_opcode(),
-            [reg(4), 0, 0, REGISTER_AS as usize, 0, 0, 0],
+            [reg(3), 0, 0, REGISTER_AS as usize, 0, 0, 0],
         ),
-        Instruction::<F>::from_usize(
-            RevealOpcode::REVEAL.global_opcode(),
-            [
-                reg(3),
-                reg(2),
-                REGISTER_NUM_LIMBS,
-                REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
-                1,
-                0,
-            ],
-        ),
+        Instruction::<F>::from_usize(RevealOpcode::REVEAL.global_opcode(), [reg(2)]),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
-    let init_memory = [
-        (1usize, values[0]),
-        (2, REGISTER_NUM_LIMBS as u64),
-        (3, values[1]),
-    ]
-    .into_iter()
-    .flat_map(|(register, value)| {
-        value
-            .to_le_bytes()
-            .into_iter()
-            .enumerate()
-            .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
-    })
-    .collect::<SparseMemoryImage>();
+    let init_memory = values
+        .into_iter()
+        .enumerate()
+        .flat_map(|(register, value)| {
+            value
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(move |(offset, byte)| {
+                    ((REGISTER_AS, (reg(register + 1) + offset) as u32), byte)
+                })
+        })
+        .collect::<SparseMemoryImage>();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
     let config = Rv64IConfig {
         system: test_system_config(),
@@ -1557,14 +1529,8 @@ fn preflight_gpu_replay_proves_aligned_reveals() {
     let execution = checkpoint
         .execute_from_state(state, PreflightLimits::new(instructions.len(), 0, 1))
         .unwrap();
-    let revealed = unsafe {
-        execution
-            .state
-            .memory
-            .read_bytes::<{ 2 * REGISTER_NUM_LIMBS }>(PUBLIC_VALUES_AS, REGISTER_NUM_LIMBS as u32)
-    };
-    assert_eq!(&revealed[..REGISTER_NUM_LIMBS], &values[0].to_le_bytes());
-    assert_eq!(&revealed[REGISTER_NUM_LIMBS..], &values[1].to_le_bytes());
+    assert_eq!(execution.state.public_values.values(), &values);
+    assert_eq!(execution.to_state.timestamp, 4);
 
     let gpu_program = PreflightReplayProgram::upload(
         &program,

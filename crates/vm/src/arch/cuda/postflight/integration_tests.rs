@@ -2,7 +2,7 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{MEMORY_AS, REGISTER_AS},
-    LocalOpcode, SystemOpcode, VmOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -32,7 +32,7 @@ fn field_cells_are_restricted_to_deferral_address_space() {
     let mut config = MemoryConfig::default();
     assert!(validate_field_address_spaces(&config).is_ok());
 
-    config.addr_spaces[PUBLIC_VALUES_AS as usize].layout = MemoryCellType::field32();
+    config.addr_spaces[MEMORY_AS as usize].layout = MemoryCellType::field32();
     assert!(matches!(
         validate_field_address_spaces(&config),
         Err(GpuPostflightError::InvalidMemoryConfig(_))
@@ -52,7 +52,7 @@ fn initial_memory_must_match_every_configured_address_space() {
     ));
 
     let mut byte_lengths = configured_byte_lengths(&config);
-    byte_lengths[PUBLIC_VALUES_AS as usize] -= 1;
+    byte_lengths[MEMORY_AS as usize] -= 1;
     assert!(matches!(
         validate_initial_memory_lengths(&config, &byte_lengths),
         Err(GpuPostflightError::InvalidTranscript(_))

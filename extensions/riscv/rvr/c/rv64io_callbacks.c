@@ -1,6 +1,7 @@
 /*
  * Dispatch table and forwarding stubs for the Rv64Io operations: the
- * hint-store consumers (HINT_STOREW, HINT_BUFFER) and REVEAL.
+ * hint-store consumers (HINT_STOREW, HINT_BUFFER) and append-only public-value
+ * reveal.
  */
 
 /* openvm.h exposes the mode-specific static trace helpers. Clang cannot prove
@@ -35,19 +36,6 @@ bool openvm_hint_buffer(uint64_t dest_addr, uint32_t num_words) {
                                              num_words);
 }
 
-bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
-                   uint64_t effective_addr) {
-  void* ctx = openvm_get_io_ctx();
-  RevealPlan plan;
-  if (unlikely(!g_rv64io_host_callbacks.reveal_prepare(
-          ctx, src_val, base_addr, effective_addr, &plan))) {
-    return false;
-  }
-
-  trace_write_other_block_u64(
-      state, AS_PUBLIC_VALUES, (uint32_t)(plan.address >> 1), plan.post,
-      plan.previous);
-
-  g_rv64io_host_callbacks.reveal_commit(ctx, &plan);
-  return true;
+bool openvm_reveal(uint64_t value) {
+  return g_rv64io_host_callbacks.reveal(openvm_get_io_ctx(), value);
 }

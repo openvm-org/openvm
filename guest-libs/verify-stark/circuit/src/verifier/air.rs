@@ -1,6 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
+use openvm_circuit::{
+    arch::{ExitCode, POSEIDON2_WIDTH, U16_CELLS_PER_PUBLIC_VALUE},
+    system::public_values::public_values_initial_commit,
+};
 use openvm_circuit_primitives::{
     utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
@@ -10,7 +13,7 @@ use openvm_continuations::{
         root::{
             bus::{
                 DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
-                DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
+                DeferralMerkleRootsMessage, UserPvsCommitBus, UserPvsCommitMessage,
             },
             NUM_DIGESTS_IN_VM_COMMIT,
         },
@@ -58,9 +61,11 @@ pub struct DeferredVerifyPvsCols<F> {
 
     pub program_commit_hash: [F; DIGEST_SIZE],
     pub initial_root_hash: [F; DIGEST_SIZE],
+    pub initial_public_values_commit_hash: [F; DIGEST_SIZE],
     pub initial_pc_hash: [F; DIGEST_SIZE],
 
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
+    pub intermediate_public_values_exe_commit: [F; DIGEST_SIZE],
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
 
     pub app_exe_commit: [F; DIGEST_SIZE],
@@ -77,7 +82,7 @@ pub struct DeferredVerifyPvsAir {
     pub range_bus: RangeCheckerBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub hash_slice_subair: HashSliceSubAir,
-    pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
+    pub user_pvs_commit_bus: UserPvsCommitBus,
     pub output_val_bus: OutputValBus,
     pub output_commit_bus: OutputCommitBus,
     pub final_state_bus: FinalTranscriptStateBus,
@@ -89,6 +94,7 @@ pub struct DeferredVerifyPvsAir {
     pub expected_def_hook_commit: Option<CommitBytes>,
 
     pub def_idx: usize,
+    pub num_user_pvs: usize,
 }
 
 impl<F> BaseAir<F> for DeferredVerifyPvsAir {
@@ -157,19 +163,21 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             AB::F::ONE,
         );
 
-        /*
-         * UserPvsCommitValuesAir constrains that the Merkle root of the original app user
-         * public values is some user_pvs_commit. We also need to constrain that those
-         * values were part of the final memory state - we do this in UserPvsInMemoryAir,
-         * which has to receive final_root in order to verify a Merkle proof from
-         * user_pvs_commit to it.
-         */
-        self.memory_merkle_commit_bus.send(
+        self.user_pvs_commit_bus.send(
             builder,
-            MemoryMerkleCommitMessage {
-                merkle_root: local.child_vm_pvs.final_root,
+            UserPvsCommitMessage {
+                commit: local
+                    .child_vm_pvs
+                    .final_public_values_commit
+                    .map(Into::into),
             },
             AB::F::ONE,
+        );
+
+        assert_array_eq(
+            builder,
+            local.child_vm_pvs.initial_public_values_commit,
+            public_values_initial_commit::<AB::F>(self.num_user_pvs / U16_CELLS_PER_PUBLIC_VALUE),
         );
 
         /*
@@ -283,9 +291,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * The app_exe_commit is a commit to the app program, initial memory state, and initial
-         * PC. Child public values program_commit, initial_root, and initial_pc are individually
-         * hashed and then permuted together to produce app_exe_commit.
+         * The app_exe_commit is a commit to the app program, initial memory state, initial
+         * public-output accumulator, and initial PC. These child public values are individually
+         * hashed and then compressed together to produce app_exe_commit.
          */
         self.poseidon2_compress_bus.lookup_key(
             builder,
@@ -307,6 +315,21 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     AB::Expr::ZERO,
                 ),
                 output: local.initial_root_hash.map(Into::into),
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: pad_slice_to_poseidon2_input(
+                    &local
+                        .child_vm_pvs
+                        .initial_public_values_commit
+                        .map(Into::into),
+                    AB::Expr::ZERO,
+                ),
+                output: local.initial_public_values_commit_hash.map(Into::into),
             },
             AB::F::ONE,
         );
@@ -340,6 +363,18 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
                     local.intermediate_exe_commit,
+                    local.initial_public_values_commit_hash,
+                ),
+                output: local.intermediate_public_values_exe_commit,
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: digests_to_poseidon2_input(
+                    local.intermediate_public_values_exe_commit,
                     local.initial_pc_hash,
                 ),
                 output: local.app_exe_commit,

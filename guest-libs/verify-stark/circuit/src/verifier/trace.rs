@@ -28,8 +28,10 @@ use crate::verifier::{DeferredVerifyPvsCols, RecursiveDeferredVerifyCols};
 pub struct DeferredVerifyPvsRecord<F> {
     pub program_commit_hash: [F; DIGEST_SIZE],
     pub initial_root_hash: [F; DIGEST_SIZE],
+    pub initial_public_values_commit_hash: [F; DIGEST_SIZE],
     pub initial_pc_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
+    pub intermediate_public_values_exe_commit: [F; DIGEST_SIZE],
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
     pub app_exe_commit: [F; DIGEST_SIZE],
     pub app_vm_commit: [F; DIGEST_SIZE],
@@ -54,6 +56,8 @@ pub fn generate_record(
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
+    let padded_initial_public_values_commit =
+        pad_slice_to_poseidon2_input(&child_vm_pvs.initial_public_values_commit, F::ZERO);
     let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc], F::ZERO);
 
     let perm = poseidon2_perm();
@@ -63,15 +67,20 @@ pub fn generate_record(
     let initial_root_hash = perm.permute(padded_initial_root)[..DIGEST_SIZE]
         .try_into()
         .unwrap();
+    let initial_public_values_commit_hash = perm.permute(padded_initial_public_values_commit)
+        [..DIGEST_SIZE]
+        .try_into()
+        .unwrap();
     let initial_pc_hash = perm.permute(padded_initial_pc)[..DIGEST_SIZE]
         .try_into()
         .unwrap();
 
-    let mut poseidon2_compress_inputs = Vec::with_capacity(5);
+    let mut poseidon2_compress_inputs = Vec::with_capacity(7);
     let mut poseidon2_permute_inputs = Vec::new();
     poseidon2_compress_inputs.extend_from_slice(&[
         padded_program_commit,
         padded_initial_root,
+        padded_initial_public_values_commit,
         padded_initial_pc,
     ]);
 
@@ -82,6 +91,16 @@ pub fn generate_record(
         initial_root_hash,
     ));
 
+    let intermediate_public_values_exe_commit = poseidon2_compress_with_capacity(
+        intermediate_exe_commit,
+        initial_public_values_commit_hash,
+    )
+    .0;
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        intermediate_exe_commit,
+        initial_public_values_commit_hash,
+    ));
+
     let (intermediate_vk_states_vec, app_vm_commit) = hash_slice_trace(
         &vk_commit_components(child_verifier_pvs),
         Some(&mut poseidon2_permute_inputs),
@@ -90,9 +109,9 @@ pub fn generate_record(
     let intermediate_vk_states = intermediate_vk_states_vec.try_into().unwrap();
 
     let app_exe_commit =
-        poseidon2_compress_with_capacity(intermediate_exe_commit, initial_pc_hash).0;
+        poseidon2_compress_with_capacity(intermediate_public_values_exe_commit, initial_pc_hash).0;
     poseidon2_compress_inputs.push(digests_to_poseidon2_input(
-        intermediate_exe_commit,
+        intermediate_public_values_exe_commit,
         initial_pc_hash,
     ));
 
@@ -100,8 +119,10 @@ pub fn generate_record(
         DeferredVerifyPvsRecord {
             program_commit_hash,
             initial_root_hash,
+            initial_public_values_commit_hash,
             initial_pc_hash,
             intermediate_exe_commit,
+            intermediate_public_values_exe_commit,
             intermediate_vk_states,
             app_exe_commit,
             app_vm_commit,
@@ -144,8 +165,10 @@ pub fn generate_proving_ctx(
     };
     cols.program_commit_hash = record.program_commit_hash;
     cols.initial_root_hash = record.initial_root_hash;
+    cols.initial_public_values_commit_hash = record.initial_public_values_commit_hash;
     cols.initial_pc_hash = record.initial_pc_hash;
     cols.intermediate_exe_commit = record.intermediate_exe_commit;
+    cols.intermediate_public_values_exe_commit = record.intermediate_public_values_exe_commit;
     cols.intermediate_vk_states = record.intermediate_vk_states;
     cols.app_exe_commit = record.app_exe_commit;
     cols.app_vm_commit = record.app_vm_commit;

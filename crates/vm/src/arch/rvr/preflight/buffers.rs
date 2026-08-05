@@ -1,6 +1,6 @@
 use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
-    DEFERRAL_AS, PUBLIC_VALUES_AS,
+    DEFERRAL_AS,
 };
 use rvr_state::{PreflightTranscriptState, RvrCheckpoint, PREFLIGHT_DIRTY_PAGE_BYTES};
 
@@ -22,7 +22,6 @@ pub(crate) struct PreflightBuffers {
 /// [`PreflightTranscript`]: replay does not consume it.
 pub(crate) struct PreflightDirtyPages {
     memory: Box<[u64]>,
-    public_values: Box<[u64]>,
     pub(super) deferral: Box<[u64]>,
 }
 
@@ -30,7 +29,6 @@ impl PreflightDirtyPages {
     pub(crate) fn new(memory: &AddressMap) -> Result<Self, String> {
         Ok(Self {
             memory: zeroed_dirty_page_words(memory.mem[MEMORY_AS as usize].size())?,
-            public_values: zeroed_dirty_page_words(memory.mem[PUBLIC_VALUES_AS as usize].size())?,
             deferral: zeroed_dirty_page_words(memory.mem[DEFERRAL_AS as usize].size())?,
         })
     }
@@ -41,7 +39,6 @@ impl PreflightDirtyPages {
 
     pub(crate) fn merge_into(&self, memory: &mut AddressMap) {
         merge_dirty_page_words(memory, MEMORY_AS, &self.memory);
-        merge_dirty_page_words(memory, PUBLIC_VALUES_AS, &self.public_values);
         merge_dirty_page_words(memory, DEFERRAL_AS, &self.deferral);
 
         // Generated execution keeps registers in RvState and copies them back
@@ -137,9 +134,7 @@ impl PreflightBuffers {
             error: 0,
             instruction_limit: self.limits.max_instructions,
             memory_dirty_pages: dirty_pages.memory.as_mut_ptr(),
-            public_values_dirty_pages: dirty_pages.public_values.as_mut_ptr(),
             memory_dirty_page_words: dirty_pages.memory.len() as u64,
-            public_values_dirty_page_words: dirty_pages.public_values.len() as u64,
             last_memory_dirty_page: u32::MAX,
             padding: 0,
         }
@@ -244,9 +239,7 @@ impl PreflightBuffers {
             return Err("generated preflight logger changed its transcript buffers".to_string());
         }
         if ffi.memory_dirty_pages != dirty_pages.memory.as_ptr().cast_mut()
-            || ffi.public_values_dirty_pages != dirty_pages.public_values.as_ptr().cast_mut()
             || ffi.memory_dirty_page_words != dirty_pages.memory.len() as u64
-            || ffi.public_values_dirty_page_words != dirty_pages.public_values.len() as u64
         {
             return Err("generated preflight logger changed its dirty-page buffers".to_string());
         }

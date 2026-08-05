@@ -1,8 +1,8 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use eyre::Result;
-use openvm_circuit::system::memory::{
-    dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
+use openvm_circuit::system::{
+    memory::dimensions::MemoryDimensions, public_values::proof::PublicValuesOpening,
 };
 #[cfg(debug_assertions)]
 use openvm_continuations::prover::debug_constraints;
@@ -24,9 +24,7 @@ use openvm_stark_backend::{
     prover::{CommittedTraceData, DeviceDataTransporter, ProverBackend, ProverDevice},
     EngineDeviceCtx, StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2CpuEngine, Digest, DIGEST_SIZE, EF, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, Digest, EF, F};
 use openvm_verify_stark_host::VmStarkProof;
 use p3_field::{Field, PrimeField32};
 use serde::{Deserialize, Serialize};
@@ -79,7 +77,7 @@ where
     pub fn prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
     ) -> Result<Proof<SC>>
     where
@@ -93,7 +91,7 @@ where
         let engine = E::new(self.pk.params.clone());
         let ctx = self.generate_proving_ctx(
             proof,
-            user_pvs_proof,
+            public_values_opening,
             deferral_merkle_proofs,
             engine.device().device_ctx(),
         );
@@ -110,13 +108,13 @@ where
     pub fn prove_no_def<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        public_values_opening: &PublicValuesOpening<PB::Val>,
     ) -> Result<Proof<SC>>
     where
         S: AggregationSubCircuit + VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
         T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
     {
-        self.prove::<E>(proof, user_pvs_proof, None)
+        self.prove::<E>(proof, public_values_opening, None)
     }
 
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
@@ -312,7 +310,7 @@ where
         self.prover
             .prove::<E>(
                 vm_proof.inner,
-                &vm_proof.user_pvs_proof,
+                &vm_proof.public_values_opening,
                 vm_proof.deferral_merkle_proofs.as_ref(),
             )
             .expect("DeferredVerifyProver::prove failed")
