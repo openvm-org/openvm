@@ -28,7 +28,9 @@ use tracing::instrument;
 
 use super::{
     boundary::BoundaryChipGPU,
-    merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
+    merkle_tree::{
+        touched_leaf_watermark, MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH,
+    },
     GpuMemoryCellType, Poseidon2PeripheryChipGPU,
 };
 use crate::{
@@ -203,10 +205,12 @@ impl MemoryInventoryGPU {
             self.clear_initial_memory();
         }
         // Only transfer pages that may contain non-zero data; the rest are zero-filled
-        // on-device. The merkle kernel reads the full address-space region, so the device
-        // buffer is full-size and the skipped pages must read as zero. Replacing this allocation
-        // requires sparse-aware CUDA execution and Merkle kernels; the CPU sparse-snapshot path
-        // cannot safely be reused here.
+        // on-device. Execution and boundary kernels index the full address-space region, so the
+        // device buffer is full-size and the skipped pages must read as zero. Replacing this
+        // allocation requires sparse-aware CUDA execution kernels; the CPU sparse-snapshot path
+        // cannot safely be reused here. The Merkle build, however, is truncated at the
+        // touched-pages watermark: leaves above it are all-zero and are covered by precomputed
+        // zero hashes instead of being hashed (see `touched_leaf_watermark`).
         let per_as: Vec<_> = initial_memory
             .get_memory()
             .iter()
@@ -276,8 +280,11 @@ impl MemoryInventoryGPU {
                 }
                 buf
             }));
-            self.merkle_tree
-                .build_async(self.initial_memory[addr_sp].clone(), addr_sp);
+            self.merkle_tree.build_async(
+                self.initial_memory[addr_sp].clone(),
+                addr_sp,
+                touched_leaf_watermark(initial_memory, addr_sp),
+            );
         }
         self.boundary.initial_leaves = self
             .initial_memory

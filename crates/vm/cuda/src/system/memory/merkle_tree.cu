@@ -420,6 +420,13 @@ __device__ void store_virtual_node(
     size_t const label,
     digest_t const *value
 ) {
+    // Non-existent nodes (labels beyond the stored `actual_height` prefix) have no slot:
+    // the heap region has no entry for them and `stored_node_index` would alias the
+    // vertical-path slot of the label-0 node at path levels. Their updated digests still
+    // propagate through the layer records, so the store can be skipped.
+    if (!virtual_node_exists(node_height, actual_height, label)) {
+        return;
+    }
     if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
         return;
     }
