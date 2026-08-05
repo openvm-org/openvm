@@ -1,0 +1,19 @@
+[package]
+name = "openvm-poseidon2-transpiler"
+description = "OpenVM transpiler extension for poseidon2"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+openvm-poseidon2-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+strum = { workspace = true }
