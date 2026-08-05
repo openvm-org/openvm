@@ -122,6 +122,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 /// which the circuit does not constrain. This is the same class of precondition as
                 /// `add_ne_nonidentity`'s requirement that the two x-coordinates differ.
                 ///
+                /// `self` must not be the identity, unless `scalar` is zero. The circuit tracks
+                /// "the accumulator is the identity" as a one-way flag that clears at the scalar's
+                /// leading one bit, rather than re-deriving it from the accumulator's coordinates.
+                /// For an identity base and a nonzero scalar the flag clears while the accumulator
+                /// is still `(0, 0)`, and the next doubling divides by `2·y = 0`, which has no
+                /// witness: such a call cannot be proven.
+                ///
                 /// Not used by `IntrinsicCurve::msm`: the windowed method shares doublings across
                 /// bases, which a single-base intrinsic cannot.
                 pub unsafe fn mul_scalar_le_unchecked(&self, scalar: &[u8; 32]) -> Self {
