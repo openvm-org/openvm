@@ -682,7 +682,8 @@ mod tests {
     }
 
     /// A setup row sets no case flag, so the output selects fall through to the base point, which
-    /// `setup_row_inputs` leaves zero. The GPU postflight registry hardcodes this postimage.
+    /// `setup_row_inputs` leaves zero. Pinned because a setup row's postimage is otherwise easy to
+    /// mistake for the doubling formula's, as `SETUP_EC_DOUBLE`'s is.
     #[test]
     fn ec_mul_setup_postimage_is_zero() {
         for (curve, point_bytes) in [

@@ -338,8 +338,11 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 },
             )?;
 
-            // `EC_MUL` reads a point and a fixed-width scalar and writes a point. The scalar is
-            // read on setup rows too, so both schedules share the read spans.
+            // `EC_MUL` reads a point and a fixed-width scalar and writes a point. Setup uses the
+            // same schedule: it reads the scalar too, and `EcMulInstr` appends the result words as
+            // replay values on every instruction, setup included, so the write must consume them.
+            // Registering a static write here instead would leave those words unconsumed and drift
+            // the replay-value cursor for every later instruction.
             let mul_spans = [
                 PostflightAccessSpan::read_fixed(
                     openvm_instructions::riscv::MEMORY_AS,
@@ -364,28 +367,9 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 memory_as_operand: 5,
                 spans: &mul_spans,
             };
-            registry.register(opcode(WeierstrassOpcode::EC_MUL)?, mul_schedule)?;
-
-            // A setup row sets no case flag, so the output selects fall through to the base point,
-            // which the setup inputs leave zero. `ec_mul_setup_postimage_is_zero` in the rvr FFI
-            // crate pins this for every curve.
-            let setup_mul_words = vec![0u64; blocks];
-            let setup_mul_spans = [
-                mul_spans[0],
-                mul_spans[1],
-                registry.write_fixed_from_static(
-                    openvm_instructions::riscv::MEMORY_AS,
-                    2,
-                    &setup_mul_words,
-                )?,
-            ];
-            registry.register(
-                opcode(WeierstrassOpcode::SETUP_EC_MUL)?,
-                PostflightAccessSchedule {
-                    spans: &setup_mul_spans,
-                    ..mul_schedule
-                },
-            )?;
+            for local in [WeierstrassOpcode::EC_MUL, WeierstrassOpcode::SETUP_EC_MUL] {
+                registry.register(opcode(local)?, mul_schedule)?;
+            }
         }
         Ok(())
     }
