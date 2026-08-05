@@ -3,25 +3,25 @@ use std::{
     mem::size_of,
 };
 
-use openvm_bigint_transpiler::Rv64BaseAlu256Opcode;
+use openvm_bigint_transpiler::BaseAlu256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    Rv64AddSub256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    AddSub256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
-impl Rv64AddSub256Executor {
+impl AddSub256Executor {
     pub fn new() -> Self {
         Self
     }
@@ -39,16 +39,16 @@ macro_rules! dispatch {
         Ok(match $local_opcode {
             BaseAluOpcode::ADD => $execute_impl::<_, AddOp>,
             BaseAluOpcode::SUB => $execute_impl::<_, SubOp>,
-            _ => unreachable!("Rv64AddSub256Executor received non-ADD/SUB opcode"),
+            _ => unreachable!("AddSub256Executor received non-ADD/SUB opcode"),
         })
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for AddSub256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            BaseAluOpcode::from_usize(opcode - Rv64BaseAlu256Opcode::CLASS_OFFSET)
+            BaseAluOpcode::from_usize(opcode - BaseAlu256Opcode::CLASS_OFFSET)
         )
     }
 
@@ -89,7 +89,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64AddSub256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for AddSub256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AddSubPreCompute>>()
     }
@@ -135,16 +135,13 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &AddSubPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let rs1_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr))?;
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr))?;
+    let rs1_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs2_ptr))?;
     let rd = <OP as AluOp>::compute(rs1, rs2);
-    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd)?;
+    write_int256(exec_state, MEMORY_AS, bytes_to_u32(rd_ptr), &rd)?;
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
     Ok(())
@@ -176,7 +173,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state)
 }
 
-impl Rv64AddSub256Executor {
+impl AddSub256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -193,7 +190,7 @@ impl Rv64AddSub256Executor {
             ..
         } = inst;
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddSubPreCompute {
@@ -202,7 +199,7 @@ impl Rv64AddSub256Executor {
             c: c.as_canonical_u32() as u8,
         };
         let local_opcode =
-            BaseAluOpcode::from_usize(opcode.local_opcode_idx(Rv64BaseAlu256Opcode::CLASS_OFFSET));
+            BaseAluOpcode::from_usize(opcode.local_opcode_idx(BaseAlu256Opcode::CLASS_OFFSET));
         Ok(local_opcode)
     }
 }

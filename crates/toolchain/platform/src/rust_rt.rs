@@ -6,7 +6,7 @@
 //! * It includes an allocator.
 
 /// WARNING: the [SYSTEM_OPCODE] here should be equal to `SYSTEM_OPCODE` in
-/// `extensions_rv64im_guest` Can't import `openvm_riscv_guest` here because would create a
+/// `extensions/riscv/guest`. Can't import `openvm_riscv_guest` here because would create a
 /// circular dependency
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 /// This is custom-0 defined in RISC-V spec document

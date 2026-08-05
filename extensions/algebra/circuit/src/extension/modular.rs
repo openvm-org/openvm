@@ -2,7 +2,7 @@ use std::array;
 
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
-use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{ModularArithmeticOpcode, ModularPhantom};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_circuit::{
     self,
@@ -18,7 +18,7 @@ use openvm_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_riscv_adapters::Rv64IsEqualModU16AdapterAir;
+use openvm_riscv_adapters::IsEqualModU16AdapterAir;
 use openvm_riscv_circuit::adapters::U16_BITS;
 use openvm_stark_backend::{
     p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
@@ -77,13 +77,13 @@ impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    ModularAddSubRv64_32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularAddSub
-    ModularMulDivRv64_32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularMulDiv
-    ModularIsEqualRv64_32(VmModularIsEqualU16Executor<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>), /* ModularIsEqual */
+    ModularAddSub32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularAddSub
+    ModularMulDiv32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularMulDiv
+    ModularIsEqual32(VmModularIsEqualU16Executor<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>), /* ModularIsEqual */
     // 48 limbs prime
-    ModularAddSubRv64_48(ModularExecutor<MODULAR_BLOCKS_48>), // ModularAddSub
-    ModularMulDivRv64_48(ModularExecutor<MODULAR_BLOCKS_48>), // ModularMulDiv
-    ModularIsEqualRv64_48(VmModularIsEqualU16Executor<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>), /* ModularIsEqual */
+    ModularAddSub48(ModularExecutor<MODULAR_BLOCKS_48>), // ModularAddSub
+    ModularMulDiv48(ModularExecutor<MODULAR_BLOCKS_48>), // ModularMulDiv
+    ModularIsEqual48(VmModularIsEqualU16Executor<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>), /* ModularIsEqual */
 }
 
 impl VmExecutionExtension for ModularExtension {
@@ -97,7 +97,7 @@ impl VmExecutionExtension for ModularExtension {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
+                ModularArithmeticOpcode::CLASS_OFFSET + i * ModularArithmeticOpcode::COUNT;
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, U16_BITS);
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -112,9 +112,9 @@ impl VmExecutionExtension for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv64_32(addsub),
-                    ((Rv64ModularArithmeticOpcode::ADD as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                    ModularExtensionExecutor::ModularAddSub32(addsub),
+                    ((ModularArithmeticOpcode::ADD as usize)
+                        ..=(ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -125,9 +125,9 @@ impl VmExecutionExtension for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularMulDivRv64_32(muldiv),
-                    ((Rv64ModularArithmeticOpcode::MUL as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize))
+                    ModularExtensionExecutor::ModularMulDiv32(muldiv),
+                    ((ModularArithmeticOpcode::MUL as usize)
+                        ..=(ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -142,9 +142,9 @@ impl VmExecutionExtension for ModularExtension {
                 let is_eq = VmModularIsEqualU16Executor::new(start_offset, modulus_limbs);
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularIsEqualRv64_32(is_eq),
-                    ((Rv64ModularArithmeticOpcode::IS_EQ as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize))
+                    ModularExtensionExecutor::ModularIsEqual32(is_eq),
+                    ((ModularArithmeticOpcode::IS_EQ as usize)
+                        ..=(ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
@@ -160,9 +160,9 @@ impl VmExecutionExtension for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv64_48(addsub),
-                    ((Rv64ModularArithmeticOpcode::ADD as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                    ModularExtensionExecutor::ModularAddSub48(addsub),
+                    ((ModularArithmeticOpcode::ADD as usize)
+                        ..=(ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -173,9 +173,9 @@ impl VmExecutionExtension for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularMulDivRv64_48(muldiv),
-                    ((Rv64ModularArithmeticOpcode::MUL as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize))
+                    ModularExtensionExecutor::ModularMulDiv48(muldiv),
+                    ((ModularArithmeticOpcode::MUL as usize)
+                        ..=(ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -190,9 +190,9 @@ impl VmExecutionExtension for ModularExtension {
                 let is_eq = VmModularIsEqualU16Executor::new(start_offset, modulus_limbs);
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularIsEqualRv64_48(is_eq),
-                    ((Rv64ModularArithmeticOpcode::IS_EQ as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize))
+                    ModularExtensionExecutor::ModularIsEqual48(is_eq),
+                    ((ModularArithmeticOpcode::IS_EQ as usize)
+                        ..=(ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
@@ -231,7 +231,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
+                ModularArithmeticOpcode::CLASS_OFFSET + i * ModularArithmeticOpcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -261,7 +261,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 inventory.add_air(muldiv);
 
                 let is_eq = ModularIsEqualU16Air::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
-                    Rv64IsEqualModU16AdapterAir::new(
+                    IsEqualModU16AdapterAir::new(
                         exec_bridge,
                         memory_bridge,
                         range_checker_bus,
@@ -298,7 +298,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 inventory.add_air(muldiv);
 
                 let is_eq = ModularIsEqualU16Air::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
-                    Rv64IsEqualModU16AdapterAir::new(
+                    IsEqualModU16AdapterAir::new(
                         exec_bridge,
                         memory_bridge,
                         range_checker_bus,
@@ -338,7 +338,7 @@ where
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
+                ModularArithmeticOpcode::CLASS_OFFSET + i * ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, U16_BITS);
 
@@ -488,10 +488,10 @@ pub(crate) mod phantom {
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
-    use openvm_riscv_circuit::adapters::read_rv64_register_as_u32;
+    use openvm_riscv_circuit::adapters::read_register_as_u32;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::{find_non_qr, mod_sqrt, NQR_RNG_SEED};
@@ -538,14 +538,14 @@ pub(crate) mod phantom {
                 bail!("Modulus too large")
             };
 
-            let rs1: u32 = read_rv64_register_as_u32(memory, a);
+            let rs1: u32 = read_register_as_u32(memory, a);
             // SAFETY:
             // - MEMORY_AS consists of `u8`s
             // - MEMORY_AS is in bounds
             let x_limbs: Vec<u8> = unsafe {
                 memory
                     .memory
-                    .get_u8_slice(RV64_MEMORY_AS, rs1 as usize, num_limbs)
+                    .get_u8_slice(MEMORY_AS, rs1 as usize, num_limbs)
             }
             .to_vec();
             let x = BigUint::from_bytes_le(&x_limbs);
@@ -565,7 +565,7 @@ pub(crate) mod phantom {
 
             let hint_bytes = once(u8::from(success))
                 .chain(repeat(0u8))
-                .take(RV64_REGISTER_NUM_LIMBS)
+                .take(REGISTER_NUM_LIMBS)
                 .chain(
                     sqrt.to_bytes_le()
                         .into_iter()

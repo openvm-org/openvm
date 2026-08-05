@@ -3,7 +3,7 @@
 use std::{ffi::c_void, io::Write, iter::repeat_with};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
-use openvm_instructions::{riscv::RV64_REGISTER_BYTES, LocalOpcode, SystemOpcode};
+use openvm_instructions::{riscv::REGISTER_BYTES, LocalOpcode, SystemOpcode};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::Rv64Phantom;
 use rand::Rng;
@@ -240,7 +240,7 @@ extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u64) -> bool {
 
 fn hint_random_byte_len(num_words: u64) -> Result<usize, &'static str> {
     let num_bytes = num_words
-        .checked_mul(RV64_REGISTER_BYTES)
+        .checked_mul(REGISTER_BYTES)
         .ok_or("byte count overflow")?;
     if num_bytes > MEM_SIZE as u64 {
         return Err("byte count exceeds resource limit");
@@ -532,7 +532,7 @@ mod tests {
 
     #[test_case(u64::from(u32::MAX) + 1; "nonzero_upper_bits")]
     #[test_case(u64::MAX; "byte_count_overflow")]
-    fn hint_random_rejects_invalid_full_rv64_count(num_words: u64) {
+    fn hint_random_rejects_invalid_full_register_count(num_words: u64) {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         hint_stream.set_hint(vec![0xa5]);

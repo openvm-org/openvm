@@ -11,7 +11,7 @@
 using namespace riscv;
 using namespace program;
 
-constexpr uint16_t SIGN_BYTE = 1 << (RV64_BYTE_BITS - 1);
+constexpr uint16_t SIGN_BYTE = 1 << (BYTE_BITS - 1);
 constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
 
 template <typename T, size_t WIDTH_BYTES> struct LoadSignExtendWidthCoreCols {
@@ -28,7 +28,7 @@ static __device__ __forceinline__ uint16_t load_sign_extend_byte_from_cell(
     uint16_t cell,
     uint8_t byte_idx
 ) {
-    return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
+    return (cell >> (BYTE_BITS * byte_idx)) & BYTE_MASK;
 }
 
 // Shared tracegen for the halfword/word signed load cores.
@@ -78,7 +78,7 @@ template <size_t WIDTH_BYTES> struct LoadSignExtendWidthCore {
             // value into the high byte so odd and even shifts use the same 15-bit range check.
             uint16_t sign_byte = overlap_lo_bytes[NUM_OVERLAP_CELLS - 1];
             sign_bit = sign_byte & SIGN_BYTE;
-            range_checker.add_count((sign_byte - sign_bit) << RV64_BYTE_BITS, U16_BITS - 1);
+            range_checker.add_count((sign_byte - sign_bit) << BYTE_BITS, U16_BITS - 1);
         } else {
             // The top loaded byte is the high byte of the top cell.
             uint16_t sign_cell =

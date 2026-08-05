@@ -20,7 +20,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
@@ -60,7 +60,7 @@ const MAX_TRACE_ROWS: usize = 4096;
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
@@ -87,14 +87,12 @@ fn create_test_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, chip) = create_harness_fields(
         tester.execution_bridge(),
@@ -160,7 +158,7 @@ fn set_and_execute<E: Executor<F> + Clone>(
     let mut rand_input_arr = [0u8; MAX_LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
-    let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
+    let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
     let num_blocks = buffer_length / MEMORY_BLOCK_BYTES;
     let (buffer_ptr, input_ptr) = xorin_test_pointers(rng, buffer_length, input_ptr_offset);
@@ -177,7 +175,7 @@ fn set_and_execute<E: Executor<F> + Clone>(
             buffer_chunk[j] = v;
         }
         tester.write_bytes(
-            RV64_MEMORY_AS as usize,
+            MEMORY_AS as usize,
             buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
         );
@@ -191,24 +189,24 @@ fn set_and_execute<E: Executor<F> + Clone>(
             input_chunk[j] = v;
         }
         tester.write_bytes(
-            RV64_MEMORY_AS as usize,
+            MEMORY_AS as usize,
             input_ptr + MEMORY_BLOCK_BYTES * i,
             input_chunk,
         );
     }
 
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rd,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rs1,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rs2,
         (buffer_length as u64).to_le_bytes().map(F::from_u8),
     );
@@ -217,13 +215,7 @@ fn set_and_execute<E: Executor<F> + Clone>(
         preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [
-                rd,
-                rs1,
-                rs2,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
+            [rd, rs1, rs2, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 
@@ -247,7 +239,7 @@ fn set_and_execute<E: Executor<F> + Clone>(
 
     for i in 0..num_blocks {
         let output_chunk: [F; MEMORY_BLOCK_BYTES] =
-            tester.read_bytes(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
+            tester.read_bytes(MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
         let start = MEMORY_BLOCK_BYTES * i;
         let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
         output_buffer[start..end].copy_from_slice(&output_chunk[..end - start]);
@@ -402,36 +394,26 @@ fn xorin_postflight_fixture() -> Harness {
     let (mut harness, _) = create_test_harness(&mut tester);
     let instruction = Instruction::from_usize(
         XorinOpcode::XORIN.global_opcode(),
-        [
-            8,
-            16,
-            24,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-        ],
+        [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
     );
     let block = |bytes: [u8; MEMORY_BLOCK_BYTES]| {
         std::array::from_fn(|index| u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]]))
     };
     unsafe {
         let memory = &mut tester.memory.memory.data;
-        memory.write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
-        memory.write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 8, block((0x200u64).to_le_bytes()));
-        memory.write::<u16, BLOCK_FE_WIDTH>(
-            RV64_REGISTER_AS,
-            12,
-            block((LEN as u64).to_le_bytes()),
-        );
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 8, block((0x200u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 12, block((LEN as u64).to_le_bytes()));
         for index in 0..LEN / MEMORY_BLOCK_BYTES {
             memory.write::<u16, BLOCK_FE_WIDTH>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 0x80 + (index * BLOCK_FE_WIDTH) as u32,
                 block(std::array::from_fn(|byte| {
                     (index * MEMORY_BLOCK_BYTES + byte) as u8
                 })),
             );
             memory.write::<u16, BLOCK_FE_WIDTH>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 0x100 + (index * BLOCK_FE_WIDTH) as u32,
                 block(std::array::from_fn(|byte| {
                     (0xa0 + index * MEMORY_BLOCK_BYTES + byte) as u8
@@ -493,9 +475,7 @@ type GpuHarness =
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let dummy_range_checker_chip = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -538,8 +518,7 @@ fn cuda_set_and_execute(
 ) {
     let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
 
-    let [buffer_reg, input_reg, len_reg] =
-        gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
+    let [buffer_reg, input_reg, len_reg] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
     let (buffer_ptr, input_ptr) = xorin_test_pointers(rng, len, input_ptr_offset);
 
@@ -682,8 +661,8 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
             buffer_reg,
             input_reg,
             len_reg,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
         ],
     );
     let instructions = [
@@ -700,19 +679,19 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
     let mut memory_log = vec![
         PreflightMemoryEvent {
             timestamp: 1,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: buffer_reg as u32 / 2,
             value: register_block(buffer_ptr as u64),
         },
         PreflightMemoryEvent {
             timestamp: 2,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: input_reg as u32 / 2,
             value: register_block(input_ptr as u64),
         },
         PreflightMemoryEvent {
             timestamp: 3,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: len_reg as u32 / 2,
             value: register_block(len as u64),
         },
@@ -725,7 +704,7 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
     for i in 0..num_blocks {
         memory_log.push(PreflightMemoryEvent {
             timestamp: 4 + i as u32,
-            address_space_and_kind: RV64_MEMORY_AS,
+            address_space_and_kind: MEMORY_AS,
             pointer: buffer_ptr / 2 + (i * 4) as u32,
             value: block(&buffer_bytes[i * 8..][..8]),
         });
@@ -733,7 +712,7 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
     for i in 0..num_blocks {
         memory_log.push(PreflightMemoryEvent {
             timestamp: 4 + num_blocks as u32 + i as u32,
-            address_space_and_kind: RV64_MEMORY_AS,
+            address_space_and_kind: MEMORY_AS,
             pointer: input_ptr / 2 + (i * 4) as u32,
             value: block(&input_bytes[i * 8..][..8]),
         });
@@ -743,7 +722,7 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
             std::array::from_fn::<_, 8, _>(|j| buffer_bytes[i * 8 + j] ^ input_bytes[i * 8 + j]);
         memory_log.push(PreflightMemoryEvent {
             timestamp: 4 + 2 * num_blocks as u32 + i as u32,
-            address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
+            address_space_and_kind: MEMORY_AS | PREFLIGHT_WRITE_BIT,
             pointer: buffer_ptr / 2 + (i * 4) as u32,
             value: block(&output),
         });

@@ -4,18 +4,16 @@ use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
-use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_riscv_transpiler::DivRemOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{run_divrem, DivRemCoreCols, Rv64DivRemChip};
-use crate::adapters::{
-    ReplayComputation, Rv64MultAdapterCols, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-};
+use super::{run_divrem, DivRemChip, DivRemCoreCols};
+use crate::adapters::{MultAdapterCols, MultAdapterFiller, ReplayComputation, BYTE_BITS};
 
 /// Generates the RV64 DIV/DIVU/REM/REMU trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64DivRemChip<F>,
+    chip: &DivRemChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
@@ -28,9 +26,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64MultAdapterCols::<F>::width();
-    let width =
-        adapter_width + DivRemCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
+    let adapter_width = MultAdapterCols::<F>::width();
+    let width = adapter_width + DivRemCoreCols::<F, REGISTER_NUM_LIMBS, BYTE_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
@@ -39,17 +36,17 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let core_row: &mut DivRemCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+            let core_row: &mut DivRemCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
                 core_row.borrow_mut();
             let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
             let is_div = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::DIVU;
-            let replay = Rv64MultAdapterFiller::replay(
+            let replay = MultAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
                 adapter_row.borrow_mut(),
                 |[b, c]| {
-                    let computed = run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
+                    let computed = run_divrem::<REGISTER_NUM_LIMBS, BYTE_BITS>(
                         is_signed,
                         &b.map(u32::from),
                         &c.map(u32::from),

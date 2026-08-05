@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -26,9 +26,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value, checked_register_pointer,
-    expand_to_rv64_block, is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    rv64_address_add_imm, sign_extend_imm16, RV64_PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value,
+    checked_register_pointer, expand_to_block, is_multi_byte_access_width, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct LoadInstruction<T> {
@@ -42,9 +42,9 @@ pub struct LoadInstruction<T> {
     pub load_cross: T,
 }
 
-pub struct Rv64LoadMultiByteAdapterAirInterface;
+pub struct LoadMultiByteAdapterAirInterface;
 
-impl<T> VmAdapterInterface<T> for Rv64LoadMultiByteAdapterAirInterface {
+impl<T> VmAdapterInterface<T> for LoadMultiByteAdapterAirInterface {
     /// The memory block containing the effective address, followed by the second block, which is
     /// read only when the access crosses a block boundary.
     type Reads = [[T; BLOCK_FE_WIDTH]; 2];
@@ -54,11 +54,11 @@ impl<T> VmAdapterInterface<T> for Rv64LoadMultiByteAdapterAirInterface {
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64LoadMultiByteAdapterCols<T> {
+pub struct LoadMultiByteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     /// Low 32 bits of the rs1 register, packed as two u16 cells.
-    pub rs1_data: [T; RV64_PTR_U16_LIMBS],
+    pub rs1_data: [T; PTR_U16_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     /// Destination register pointer.
     pub rd_ptr: T,
@@ -76,22 +76,22 @@ pub struct Rv64LoadMultiByteAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64LoadMultiByteAdapterCols<u8>)]
-pub struct Rv64LoadMultiByteAdapterAir {
+#[columns_via(LoadMultiByteAdapterCols<u8>)]
+pub struct LoadMultiByteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
     pub range_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv64LoadMultiByteAdapterAir {
+impl<F: Field> BaseAir<F> for LoadMultiByteAdapterAir {
     fn width(&self) -> usize {
-        Rv64LoadMultiByteAdapterCols::<F>::width()
+        LoadMultiByteAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
-    type Interface = Rv64LoadMultiByteAdapterAirInterface;
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadMultiByteAdapterAir {
+    type Interface = LoadMultiByteAdapterAirInterface;
 
     fn eval(
         &self,
@@ -99,7 +99,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64LoadMultiByteAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &LoadMultiByteAdapterCols<AB::Var> = local.borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -122,11 +122,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
             .assert_zero(local_cols.rd_ptr);
 
         // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
-        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
+        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&local_cols.rs1_data);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
                 ),
                 rs1_data,
@@ -180,7 +180,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_MEMORY_AS),
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone() - shift_amount.clone()),
                 ),
                 read_data0,
@@ -194,7 +194,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_MEMORY_AS),
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(
                         mem_ptr - shift_amount + AB::F::from_u32(MEMORY_BLOCK_BYTES as u32),
                     ),
@@ -209,7 +209,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
                 ),
                 ctx.writes[0].clone(),
@@ -228,8 +228,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_MEMORY_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(MEMORY_AS),
                     local_cols.needs_write.into(),
                     local_cols.imm_sign.into(),
                 ],
@@ -243,26 +243,26 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let local_cols: &Rv64LoadMultiByteAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &LoadMultiByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64LoadMultiByteAdapterFiller {
+pub struct LoadMultiByteAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 type LoadMultiReplay = ([[u16; BLOCK_FE_WIDTH]; 2], usize, [u16; BLOCK_FE_WIDTH]);
 
-impl Rv64LoadMultiByteAdapterFiller {
+impl LoadMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const LOAD_WIDTH: usize>(
         &self,
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64LoadMultiByteAdapterCols<F>,
+        adapter_row: &mut LoadMultiByteAdapterCols<F>,
         compute: impl FnOnce([[u16; BLOCK_FE_WIDTH]; 2], usize) -> [u16; BLOCK_FE_WIDTH],
     ) -> Result<LoadMultiReplay, PostflightError> {
         if !is_multi_byte_access_width(LOAD_WIDTH) {
@@ -271,8 +271,8 @@ impl Rv64LoadMultiByteAdapterFiller {
             ));
         }
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+        if instruction.d.as_canonical_u32() != REGISTER_AS
+            || instruction.e.as_canonical_u32() != MEMORY_AS
         {
             return Err(PostflightError::new(
                 "multi-byte load has invalid address spaces",
@@ -316,21 +316,14 @@ impl Rv64LoadMultiByteAdapterFiller {
         }
 
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(
-            RV64_REGISTER_AS,
-            checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?,
-        )?;
-        if rs1.value[RV64_PTR_U16_LIMBS..]
-            .iter()
-            .any(|&cell| cell != 0)
-        {
+        let rs1 = replay.read_u16(REGISTER_AS, checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?)?;
+        if rs1.value[PTR_U16_LIMBS..].iter().any(|&cell| cell != 0) {
             return Err(PostflightError::new(
                 "multi-byte load base register exceeds the pointer domain",
             ));
         }
         let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
-        let effective_ptr =
-            rv64_address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
+        let effective_ptr = address_add_imm(rs1_val, sign_extend_imm16(imm, u32::from(imm_sign)));
         let pointer_limit = 1u64
             .checked_shl(self.pointer_max_bits as u32)
             .unwrap_or(u64::MAX);
@@ -349,13 +342,10 @@ impl Rv64LoadMultiByteAdapterFiller {
             ));
         }
 
-        let block0 = replay.read_u16(
-            RV64_MEMORY_AS,
-            checked_byte_ptr_to_u16_ptr_value(aligned_ptr)?,
-        )?;
+        let block0 = replay.read_u16(MEMORY_AS, checked_byte_ptr_to_u16_ptr_value(aligned_ptr)?)?;
         let block1 = if crosses {
             Some(replay.read_u16(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 checked_byte_ptr_to_u16_ptr_value(aligned_ptr + MEMORY_BLOCK_BYTES as u32)?,
             )?)
         } else {
@@ -369,7 +359,7 @@ impl Rv64LoadMultiByteAdapterFiller {
         let output = compute(read_data, shift);
         let write = if needs_write {
             Some(replay.write_u16(
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 checked_byte_ptr_to_u16_ptr_value(rd_ptr)?,
                 output,
             )?)

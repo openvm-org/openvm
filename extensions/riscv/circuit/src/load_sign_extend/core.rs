@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -18,15 +18,15 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         is_signed_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
-        Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH,
-        HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
-        RV64_U16_SIGN_BIT, U16_BITS, WORD_ACCESS_WIDTH,
+        LoadMultiByteAdapterCols, LoadMultiByteAdapterFiller, BYTE_BITS, BYTE_SHIFT_SELECTOR_WIDTH,
+        BYTE_SIGN_BIT, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, U16_BITS, U16_SIGN_BIT,
+        WORD_ACCESS_WIDTH,
     },
     load_sign_extend::common::load_sign_extend_write_data,
 };
 
 /// The single opcode handled by the signed load chip of the given width.
-pub(crate) fn load_sign_extend_opcode<const LOAD_WIDTH: usize>() -> Rv64LoadStoreOpcode {
+pub(crate) fn load_sign_extend_opcode<const LOAD_WIDTH: usize>() -> LoadStoreOpcode {
     match LOAD_WIDTH {
         WORD_ACCESS_WIDTH => LOADW,
         HALFWORD_ACCESS_WIDTH => LOADH,
@@ -148,7 +148,7 @@ where
 
         // odd_cells[j] = overlap_lo_bytes[j] + 2^8 * overlap_hi_bytes[j].
         // Both sides are zero on even shifts.
-        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let inv_2_pow_8 = AB::F::from_u32(1 << BYTE_BITS).inverse();
         let overlap_hi_bytes: [AB::Expr; NUM_OVERLAP_CELLS] = std::array::from_fn(|j| {
             (odd_cells[j].clone() - cols.overlap_lo_bytes[j]) * inv_2_pow_8
         });
@@ -168,11 +168,10 @@ where
             });
         // sign_cell = even_sign_cell + 2^8 * overlap_lo_bytes[last].
         let sign_cell = even_sign_cell
-            + cols.overlap_lo_bytes[NUM_OVERLAP_CELLS - 1]
-                * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
+            + cols.overlap_lo_bytes[NUM_OVERLAP_CELLS - 1] * AB::Expr::from_u32(1 << BYTE_BITS);
         self.range_bus
             .range_check(
-                sign_cell - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_U16_SIGN_BIT as u32),
+                sign_cell - cols.data_most_sig_bit * AB::Expr::from_u32(U16_SIGN_BIT as u32),
                 U16_BITS - 1,
             )
             .eval(builder, is_valid.clone());
@@ -206,7 +205,7 @@ where
             //             + 2^8 * overlap_lo_bytes[i + 1].
             even_term
                 + overlap_hi_bytes[i].clone()
-                + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
+                + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << BYTE_BITS)
         });
         AdapterAirContext {
             to_pc: None,
@@ -229,14 +228,14 @@ where
 
 #[derive(Clone)]
 pub struct LoadSignExtendFiller<
-    A = Rv64LoadMultiByteAdapterFiller,
+    A = LoadMultiByteAdapterFiller,
     const LOAD_WIDTH: usize = WORD_ACCESS_WIDTH,
     const NUM_OVERLAP_CELLS: usize = 3,
 > {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -246,7 +245,7 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     pub fn new(
         adapter: A,
         offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         const {
@@ -264,7 +263,7 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
 }
 
 impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
-    LoadSignExtendFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
+    LoadSignExtendFiller<LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
     /// Re-executes one signed load from immutable preflight history and fills its final trace row.
     pub(crate) fn replay<F: PrimeField32>(
@@ -275,7 +274,7 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
         row_slice: &mut [F],
     ) -> Result<(), PostflightError> {
         let (adapter_row, core_row) =
-            row_slice.split_at_mut(Rv64LoadMultiByteAdapterCols::<F>::width());
+            row_slice.split_at_mut(LoadMultiByteAdapterCols::<F>::width());
         let opcode = load_sign_extend_opcode::<LOAD_WIDTH>();
         let (read_data, shift, _) = self.adapter.replay::<F, LOAD_WIDTH>(
             postflight,
@@ -317,15 +316,15 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
 
         let sign_bit = if shift.is_multiple_of(2) {
             let sign_cell = read_full[shift / 2 + width - 1];
-            let bit = sign_cell & RV64_U16_SIGN_BIT;
+            let bit = sign_cell & U16_SIGN_BIT;
             self.range_checker_chip
                 .add_count((sign_cell - bit) as u32, U16_BITS - 1);
             bit != 0
         } else {
             let sign_byte = overlap_lo_bytes[NUM_OVERLAP_CELLS - 1];
-            let bit = sign_byte & RV64_BYTE_SIGN_BIT;
+            let bit = sign_byte & BYTE_SIGN_BIT;
             self.range_checker_chip
-                .add_count(((sign_byte - bit) as u32) << RV64_BYTE_BITS, U16_BITS - 1);
+                .add_count(((sign_byte - bit) as u32) << BYTE_BITS, U16_BITS - 1);
             bit != 0
         };
 

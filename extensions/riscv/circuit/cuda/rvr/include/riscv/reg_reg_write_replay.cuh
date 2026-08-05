@@ -3,7 +3,7 @@
 #include "riscv/adapters/mul.cuh"
 #include "arch/rvr/replay.cuh"
 
-struct Rv64RegRegWriteReplay {
+struct RegRegWriteReplay {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
@@ -36,7 +36,7 @@ static __device__ bool replay_reg_reg_write(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<PreflightInitialWrite> seeds,
     DeviceBufferConstView<uint32_t> predecessors,
-    Rv64RegRegWriteReplay &out,
+    RegRegWriteReplay &out,
     uint32_t *error,
     uint32_t error_base
 ) {
@@ -115,10 +115,10 @@ static __device__ bool replay_reg_reg_write(
     return true;
 }
 
-static __device__ __forceinline__ Rv64MultAdapterRecord replay_mult_adapter_record(
-    Rv64RegRegWriteReplay const &replay
+static __device__ __forceinline__ MultAdapterRecord replay_mult_adapter_record(
+    RegRegWriteReplay const &replay
 ) {
-    Rv64MultAdapterRecord record{};
+    MultAdapterRecord record{};
     record.from_pc = replay.from_pc;
     record.from_timestamp = replay.from_timestamp;
     record.rd_ptr = replay.rd_ptr;

@@ -164,11 +164,11 @@ static __device__ __forceinline__ void deferral_call_block_bytes(
 }
 
 static __device__ __forceinline__ void deferral_call_pointer_bytes(
-    uint16_t const (&value)[BLOCK_FE_WIDTH], uint8_t (&out)[RV64_WORD_NUM_LIMBS]
+    uint16_t const (&value)[BLOCK_FE_WIDTH], uint8_t (&out)[WORD_NUM_LIMBS]
 ) {
-    static_assert(RV64_WORD_NUM_LIMBS % sizeof(uint16_t) == 0);
+    static_assert(WORD_NUM_LIMBS % sizeof(uint16_t) == 0);
 #pragma unroll
-    for (size_t lane = 0; lane < RV64_WORD_NUM_LIMBS / sizeof(uint16_t); lane++) {
+    for (size_t lane = 0; lane < WORD_NUM_LIMBS / sizeof(uint16_t); lane++) {
         out[2 * lane] = uint8_t(value[lane]);
         out[2 * lane + 1] = uint8_t(value[lane] >> 8);
     }

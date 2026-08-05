@@ -17,7 +17,7 @@ use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 #[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
 use {
-    openvm_algebra_transpiler::Rv64ModularArithmeticOpcode,
+    openvm_algebra_transpiler::ModularArithmeticOpcode,
     openvm_instructions::{program::Program, LocalOpcode},
     openvm_stark_backend::p3_field::PrimeField32,
     strum::EnumCount,
@@ -56,8 +56,8 @@ pub(crate) fn modular_is_eq_x0_destination<F: PrimeField32>(
     program: &Program<F>,
     num_moduli: usize,
 ) -> Option<usize> {
-    let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
-    let opcode_count = Rv64ModularArithmeticOpcode::COUNT;
+    let opcode_base = ModularArithmeticOpcode::CLASS_OFFSET;
+    let opcode_count = ModularArithmeticOpcode::COUNT;
     program
         .instructions_and_debug_infos
         .iter()
@@ -68,8 +68,8 @@ pub(crate) fn modular_is_eq_x0_destination<F: PrimeField32>(
             let local = relative % opcode_count;
             (relative / opcode_count < num_moduli
                 && matches!(
-                    Rv64ModularArithmeticOpcode::from_usize(local),
-                    Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
+                    ModularArithmeticOpcode::from_usize(local),
+                    ModularArithmeticOpcode::IS_EQ | ModularArithmeticOpcode::SETUP_ISEQ
                 )
                 && instruction.a.as_canonical_u32() == 0)
                 .then_some(slot)

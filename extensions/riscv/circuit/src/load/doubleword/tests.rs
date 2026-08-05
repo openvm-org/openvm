@@ -13,8 +13,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADD};
+use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADD};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -29,54 +29,47 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller,
-        RV64_BYTE_BITS,
+        bytes_to_u16_block, LoadMultiByteAdapterAir, LoadMultiByteAdapterFiller, BYTE_BITS,
     },
     load::{
-        common::load_write_data, core::LoadCoreCols, LoadDoublewordCoreAir, LoadDoublewordFiller,
-        Rv64LoadDoublewordAir, Rv64LoadDoublewordChip, Rv64LoadDoublewordExecutor,
+        common::load_write_data, core::LoadCoreCols, LoadDoublewordAir, LoadDoublewordChip,
+        LoadDoublewordCoreAir, LoadDoublewordExecutor, LoadDoublewordFiller,
         LOAD_DOUBLEWORD_OVERLAP_CELLS,
     },
     test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::{load::Rv64LoadDoublewordChipGpu, test_utils::memory::dummy_range_checker};
+use crate::{load::LoadDoublewordChipGpu, test_utils::memory::dummy_range_checker};
 
-type DoublewordHarness = TestChipHarness<
-    F,
-    Rv64LoadDoublewordExecutor,
-    Rv64LoadDoublewordAir,
-    Rv64LoadDoublewordChip<F>,
->;
+type DoublewordHarness =
+    TestChipHarness<F, LoadDoublewordExecutor, LoadDoublewordAir, LoadDoublewordChip<F>>;
 
 fn create_doubleword_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     DoublewordHarness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-    let air = Rv64LoadDoublewordAir::new(
-        Rv64LoadMultiByteAdapterAir::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let air = LoadDoublewordAir::new(
+        LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
+        LoadDoublewordCoreAir::new(LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64LoadDoublewordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let chip = Rv64LoadDoublewordChip::<F>::new(
+    let executor = LoadDoublewordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let chip = LoadDoublewordChip::<F>::new(
         LoadDoublewordFiller::new(
-            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
         ),
         tester.memory_helper(),
@@ -135,7 +128,7 @@ fn positive_loadd_pointer_limb_boundary_cross_test() {
         Some([0xf9, 0xff, 0x00, 0x00, 0, 0, 0, 0]),
         Some(0),
         Some(0),
-        Some(RV64_MEMORY_AS as usize),
+        Some(MEMORY_AS as usize),
     );
     tester
         .build()
@@ -149,14 +142,14 @@ fn positive_loadd_pointer_limb_boundary_cross_test() {
 #[test]
 fn run_loadd_sanity_test() {
     let read_data = [
-        rv64_bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]),
-        rv64_bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
+        bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]),
+        bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
     ];
     assert_eq!(load_write_data(LOADD, read_data, 0), read_data[0]);
     // Every nonzero doubleword shift crosses the block boundary.
     assert_eq!(
         load_write_data(LOADD, read_data, 5),
-        rv64_bytes_to_u16_block([74, 186, 29, 61, 92, 17, 203, 44])
+        bytes_to_u16_block([74, 186, 29, 61, 92, 17, 203, 44])
     );
 }
 
@@ -207,37 +200,37 @@ fn negative_split_opcode_role_test() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuDoublewordHarness = GpuTestChipHarness<
     F,
-    Rv64LoadDoublewordExecutor,
-    Rv64LoadDoublewordAir,
-    Rv64LoadDoublewordChipGpu,
-    Rv64LoadDoublewordChip<F>,
+    LoadDoublewordExecutor,
+    LoadDoublewordAir,
+    LoadDoublewordChipGpu,
+    LoadDoublewordChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordHarness {
     let range_checker = dummy_range_checker();
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
         default_bitwise_lookup_bus(),
     ));
-    let air = Rv64LoadDoublewordAir::new(
-        Rv64LoadMultiByteAdapterAir::new(
+    let air = LoadDoublewordAir::new(
+        LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
+        LoadDoublewordCoreAir::new(LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
-    let executor = Rv64LoadDoublewordExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let cpu_chip = Rv64LoadDoublewordChip::<F>::new(
+    let executor = LoadDoublewordExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let cpu_chip = LoadDoublewordChip::<F>::new(
         LoadDoublewordFiller::new(
-            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
         ),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LoadDoublewordChipGpu::new(
+    let gpu_chip = LoadDoublewordChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),
@@ -271,7 +264,7 @@ fn test_cuda_rand_load_doubleword_tracegen() {
             None,
             None,
             None,
-            Some(RV64_MEMORY_AS as usize),
+            Some(MEMORY_AS as usize),
         );
     }
     tester

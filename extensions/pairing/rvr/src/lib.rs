@@ -4,7 +4,7 @@
 //! `PairingExtension` for lifting and executing it via FFI.
 
 use openvm_instructions::{
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode, SystemOpcode,
 };
 use openvm_pairing_transpiler::PairingPhantom;
@@ -12,7 +12,7 @@ use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Varia
 use rvr_openvm_lift::{decode_variable, RvrExtension, RvrInstruction};
 
 fn decode_reg(value: u32) -> Variable {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 #[derive(Debug, Clone, Copy)]

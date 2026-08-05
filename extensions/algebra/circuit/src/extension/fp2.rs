@@ -85,11 +85,11 @@ impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
-    Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32>), // Fp2AddSub
-    Fp2MulDivRv64_32(Fp2Executor<FP2_BLOCKS_32>), // Fp2MulDiv
+    Fp2AddSub32(Fp2Executor<FP2_BLOCKS_32>), // Fp2AddSub
+    Fp2MulDiv32(Fp2Executor<FP2_BLOCKS_32>), // Fp2MulDiv
     // 48 limbs prime
-    Fp2AddSubRv64_48(Fp2Executor<FP2_BLOCKS_48>), // Fp2AddSub
-    Fp2MulDivRv64_48(Fp2Executor<FP2_BLOCKS_48>), // Fp2MulDiv
+    Fp2AddSub48(Fp2Executor<FP2_BLOCKS_48>), // Fp2AddSub
+    Fp2MulDiv48(Fp2Executor<FP2_BLOCKS_48>), // Fp2MulDiv
 }
 
 impl VmExecutionExtension for Fp2Extension {
@@ -113,7 +113,7 @@ impl VmExecutionExtension for Fp2Extension {
                 let addsub = get_fp2_addsub_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2AddSubRv64_32(addsub),
+                    Fp2ExtensionExecutor::Fp2AddSub32(addsub),
                     ((Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
@@ -121,7 +121,7 @@ impl VmExecutionExtension for Fp2Extension {
                 let muldiv = get_fp2_muldiv_executor(config, U16_BITS, start_offset);
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2MulDivRv64_32(muldiv),
+                    Fp2ExtensionExecutor::Fp2MulDiv32(muldiv),
                     ((Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
@@ -134,7 +134,7 @@ impl VmExecutionExtension for Fp2Extension {
                 let addsub = get_fp2_addsub_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2AddSubRv64_48(addsub),
+                    Fp2ExtensionExecutor::Fp2AddSub48(addsub),
                     ((Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
@@ -142,7 +142,7 @@ impl VmExecutionExtension for Fp2Extension {
                 let muldiv = get_fp2_muldiv_executor(config, U16_BITS, start_offset);
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2MulDivRv64_48(muldiv),
+                    Fp2ExtensionExecutor::Fp2MulDiv48(muldiv),
                     ((Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;

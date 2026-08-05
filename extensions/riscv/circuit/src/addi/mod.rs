@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use super::adapters::{
-    Rv64BaseAluImmU16AdapterAir, Rv64BaseAluWImmU16AdapterAir, RV64_WORD_U16_LIMBS, U16_BITS,
+    BaseAluImmU16AdapterAir, BaseAluWImmU16AdapterAir, U16_BITS, WORD_U16_LIMBS,
 };
 
 mod core;
@@ -18,14 +18,14 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type AddIWCoreAir = AddICoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;
+pub type AddIWCoreAir = AddICoreAir<WORD_U16_LIMBS, U16_BITS, false>;
 pub type AddIWFiller = AddIFiller;
 
-pub type Rv64AddIAir =
-    VmAirWrapper<Rv64BaseAluImmU16AdapterAir, AddICoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
-pub type Rv64AddIExecutor = AddIExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64AddIChip<F> = VmChipWrapper<F, AddIFiller>;
+pub type AddIAir =
+    VmAirWrapper<BaseAluImmU16AdapterAir, AddICoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
+pub type AddIExecutor = AddICoreExecutor<BLOCK_FE_WIDTH, U16_BITS>;
+pub type AddIChip<F> = VmChipWrapper<F, AddIFiller>;
 
-pub type Rv64AddIWAir = VmAirWrapper<Rv64BaseAluWImmU16AdapterAir, AddIWCoreAir>;
-pub type Rv64AddIWExecutor = AddIExecutor<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type Rv64AddIWChip<F> = VmChipWrapper<F, AddIWFiller>;
+pub type AddIWAir = VmAirWrapper<BaseAluWImmU16AdapterAir, AddIWCoreAir>;
+pub type AddIWExecutor = AddICoreExecutor<WORD_U16_LIMBS, U16_BITS>;
+pub type AddIWChip<F> = VmChipWrapper<F, AddIWFiller>;

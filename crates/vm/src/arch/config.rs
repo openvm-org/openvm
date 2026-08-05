@@ -8,7 +8,7 @@ use std::{
 use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
@@ -83,7 +83,7 @@ pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
 }
 
 /// Number of registers in the RV64 register file.
-pub const NUM_RV64_REGISTERS: usize = 32;
+pub const NUM_REGISTERS: usize = 32;
 
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
@@ -227,9 +227,9 @@ impl Default for MemoryConfig {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         // RV64 register, memory, and public-values address spaces use u16 storage cells.
-        addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-            NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
+        addr_spaces[REGISTER_AS as usize].num_cells =
+            NUM_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
+        addr_spaces[MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, DEFAULT_POINTER_MAX_BITS, 29, 17)
@@ -241,11 +241,10 @@ impl MemoryConfig {
         // By default only address spaces 1..=4 have non-empty cell counts.
         let mut addr_spaces =
             vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
-        addr_spaces[RV64_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
-        addr_spaces[RV64_REGISTER_AS as usize] =
-            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
+        addr_spaces[IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        addr_spaces[REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
-        addr_spaces[RV64_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
+        addr_spaces[MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
         addr_spaces[PUBLIC_VALUES_AS as usize] =
             AddressSpaceHostConfig::new(0, MemoryCellType::U16);

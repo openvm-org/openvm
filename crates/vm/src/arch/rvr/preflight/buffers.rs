@@ -1,5 +1,5 @@
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use rvr_state::{PreflightTranscriptState, RvrCheckpoint, PREFLIGHT_DIRTY_PAGE_BYTES};
@@ -29,7 +29,7 @@ pub(crate) struct PreflightDirtyPages {
 impl PreflightDirtyPages {
     pub(crate) fn new(memory: &AddressMap) -> Result<Self, String> {
         Ok(Self {
-            memory: zeroed_dirty_page_words(memory.mem[RV64_MEMORY_AS as usize].size())?,
+            memory: zeroed_dirty_page_words(memory.mem[MEMORY_AS as usize].size())?,
             public_values: zeroed_dirty_page_words(memory.mem[PUBLIC_VALUES_AS as usize].size())?,
             deferral: zeroed_dirty_page_words(memory.mem[DEFERRAL_AS as usize].size())?,
         })
@@ -40,15 +40,15 @@ impl PreflightDirtyPages {
     }
 
     pub(crate) fn merge_into(&self, memory: &mut AddressMap) {
-        merge_dirty_page_words(memory, RV64_MEMORY_AS, &self.memory);
+        merge_dirty_page_words(memory, MEMORY_AS, &self.memory);
         merge_dirty_page_words(memory, PUBLIC_VALUES_AS, &self.public_values);
         merge_dirty_page_words(memory, DEFERRAL_AS, &self.deferral);
 
         // Generated execution keeps registers in RvState and copies them back
         // only after a successful execution boundary. Mark their single page
         // when preflight finalizes successfully.
-        if memory.mem[RV64_REGISTER_AS as usize].size() != 0 {
-            memory.touched_pages[RV64_REGISTER_AS as usize].mark_byte_range(0, 1);
+        if memory.mem[REGISTER_AS as usize].size() != 0 {
+            memory.touched_pages[REGISTER_AS as usize].mark_byte_range(0, 1);
         }
     }
 }

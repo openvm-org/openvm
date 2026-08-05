@@ -25,7 +25,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
@@ -94,17 +94,15 @@ fn create_harness_fields(
 struct TestHarness {
     harness: Harness,
     bitwise: (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
     perm: (KeccakfPermAir, KeccakfPermChip),
 }
 
 fn create_test_harness(tester: &mut VmChipTestBuilder<F>) -> TestHarness {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (op_air, executor, op_chip) = create_harness_fields(
         tester.execution_bridge(),
@@ -152,10 +150,10 @@ fn set_and_execute_single_perm<E: Executor<F> + Clone>(
     let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         rd,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
@@ -167,7 +165,7 @@ fn set_and_execute_single_perm<E: Executor<F> + Clone>(
             .try_into()
             .expect("slice has correct length");
         tester.write_bytes(
-            RV64_MEMORY_AS as usize,
+            MEMORY_AS as usize,
             buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
         );
@@ -178,7 +176,7 @@ fn set_and_execute_single_perm<E: Executor<F> + Clone>(
         preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [rd, 0, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [rd, 0, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 
@@ -186,7 +184,7 @@ fn set_and_execute_single_perm<E: Executor<F> + Clone>(
 
     for i in 0..(MAX_LEN / MEMORY_BLOCK_BYTES) {
         let output_chunk: [F; MEMORY_BLOCK_BYTES] =
-            tester.read_bytes(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
+            tester.read_bytes(MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
         output_buffer[MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
             .copy_from_slice(&output_chunk);
@@ -244,7 +242,7 @@ fn keccakf_postflight_fixture() -> TestHarness {
     let mut test_harness = create_test_harness(&mut tester);
     let instruction = Instruction::from_usize(
         KeccakfOpcode::KECCAKF.global_opcode(),
-        [8, 0, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        [8, 0, 0, REGISTER_AS as usize, MEMORY_AS as usize],
     );
     let sentinel = instruction.clone();
     let block = |bytes: [u8; MEMORY_BLOCK_BYTES]| {
@@ -252,10 +250,10 @@ fn keccakf_postflight_fixture() -> TestHarness {
     };
     unsafe {
         let memory = &mut tester.memory.memory.data;
-        memory.write::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
         for word_index in 0..KECCAK_WIDTH_BYTES / MEMORY_BLOCK_BYTES {
             memory.write::<u16, BLOCK_FE_WIDTH>(
-                RV64_MEMORY_AS,
+                MEMORY_AS,
                 0x80 + (word_index * BLOCK_FE_WIDTH) as u32,
                 block(std::array::from_fn(|byte| {
                     (word_index * MEMORY_BLOCK_BYTES + byte) as u8
@@ -420,7 +418,7 @@ fn cuda_set_and_execute(
 ) {
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
     tester.write_bytes(
@@ -506,7 +504,7 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
     tester.write_bytes(
@@ -547,13 +545,7 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
     let buffer_ptr = 0x100u32;
     let keccakf_instruction = Instruction::<F>::from_usize(
         KeccakfOpcode::KECCAKF.global_opcode(),
-        [
-            buffer_reg,
-            0,
-            0,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-        ],
+        [buffer_reg, 0, 0, REGISTER_AS as usize, MEMORY_AS as usize],
     );
     let instructions = [
         keccakf_instruction,
@@ -577,7 +569,7 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
         .collect::<Vec<_>>();
     let mut memory_log = vec![PreflightMemoryEvent {
         timestamp: 1,
-        address_space_and_kind: RV64_REGISTER_AS,
+        address_space_and_kind: REGISTER_AS,
         pointer: buffer_reg as u32 / 2,
         value: block(&(buffer_ptr as u64).to_le_bytes()),
     }];
@@ -586,13 +578,13 @@ fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption
         let pointer = buffer_ptr / 2 + (i * 4) as u32;
         let initial_value = block(&initial_bytes[i * 8..][..8]);
         initial_write_log.push(PreflightInitialWrite {
-            address_space: RV64_MEMORY_AS,
+            address_space: MEMORY_AS,
             pointer,
             initial_value,
         });
         memory_log.push(PreflightMemoryEvent {
             timestamp: 2 + i as u32,
-            address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
+            address_space_and_kind: MEMORY_AS | PREFLIGHT_WRITE_BIT,
             pointer,
             value: block(&postimage[i * 8..][..8]),
         });

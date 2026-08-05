@@ -17,11 +17,11 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -37,11 +37,11 @@ use openvm_stark_backend::{
 /// * No writes are performed (branch operations only compare values).
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv64VecHeapBranchAdapterCols<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
+pub struct VecHeapBranchAdapterCols<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
-    pub rs_val: [[T; RV64_PTR_U16_LIMBS]; NUM_READS],
+    pub rs_val: [[T; PTR_U16_LIMBS]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
@@ -49,8 +49,8 @@ pub struct Rv64VecHeapBranchAdapterCols<T, const NUM_READS: usize, const BLOCKS_
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64VecHeapBranchAdapterCols<u8, NUM_READS, BLOCKS_PER_READ>)]
-pub struct Rv64VecHeapBranchAdapterAir<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
+#[columns_via(VecHeapBranchAdapterCols<u8, NUM_READS, BLOCKS_PER_READ>)]
+pub struct VecHeapBranchAdapterAir<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
@@ -59,15 +59,15 @@ pub struct Rv64VecHeapBranchAdapterAir<const NUM_READS: usize, const BLOCKS_PER_
 }
 
 impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize> BaseAir<F>
-    for Rv64VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ>
+    for VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ>
 {
     fn width(&self) -> usize {
-        Rv64VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ>::width()
+        VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ>::width()
     }
 }
 
 impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usize> VmAdapterAir<AB>
-    for Rv64VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ>
+    for VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ>
 {
     type Interface =
         VecHeapBranchAdapterInterface<AB::Expr, NUM_READS, BLOCKS_PER_READ, MEMORY_BLOCK_BYTES>;
@@ -78,7 +78,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv64VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
+        let cols: &VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -91,10 +91,10 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        AB::F::from_u32(RV64_REGISTER_AS),
+                        AB::F::from_u32(REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    expand_to_rv64_block(&val),
+                    expand_to_block(&val),
                     timestamp_pp(),
                     aux,
                 )
@@ -115,7 +115,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
         // Compose the two u16 cells into low 32-bit heap pointers.
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
-        let e = AB::F::from_u32(RV64_MEMORY_AS);
+        let e = AB::F::from_u32(MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -148,7 +148,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
                     ctx.instruction.immediate,
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -159,7 +159,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
+        let cols: &VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }
 }

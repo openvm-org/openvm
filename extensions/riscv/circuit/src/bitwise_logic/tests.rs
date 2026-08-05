@@ -27,44 +27,39 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64BitwiseLogicChipGpu,
+    crate::BitwiseLogicChipGpu,
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
 use super::{
-    core::run_bitwise_logic, trace::generate_trace_from_postflight, BitwiseLogicCoreAir,
-    Rv64BitwiseLogicChip, Rv64BitwiseLogicExecutor,
+    core::run_bitwise_logic, trace::generate_trace_from_postflight, BitwiseLogicChip,
+    BitwiseLogicCoreAir, BitwiseLogicExecutor,
 };
 use crate::{
-    adapters::{Rv64BaseAluRegAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
+    adapters::{BaseAluRegAdapterAir, BYTE_BITS, REGISTER_NUM_LIMBS},
     bitwise_logic::BitwiseLogicCoreCols,
-    test_utils::rv64_rand_write_register_or_imm,
-    BitwiseLogicFiller, Rv64BitwiseLogicAir,
+    test_utils::rand_write_register_or_imm,
+    BitwiseLogicAir, BitwiseLogicFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness =
-    TestChipHarness<F, Rv64BitwiseLogicExecutor, Rv64BitwiseLogicAir, Rv64BitwiseLogicChip<F>>;
+type Harness = TestChipHarness<F, BitwiseLogicExecutor, BitwiseLogicAir, BitwiseLogicChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (
-    Rv64BitwiseLogicAir,
-    Rv64BitwiseLogicExecutor,
-    Rv64BitwiseLogicChip<F>,
-) {
-    let air = Rv64BitwiseLogicAir::new(
-        Rv64BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
+) -> (BitwiseLogicAir, BitwiseLogicExecutor, BitwiseLogicChip<F>) {
+    let air = BitwiseLogicAir::new(
+        BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
         BitwiseLogicCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BitwiseLogicExecutor::new(BaseAluOpcode::CLASS_OFFSET);
-    let chip = Rv64BitwiseLogicChip::new(BitwiseLogicFiller::new(bitwise_chip), memory_helper);
+    let executor = BitwiseLogicExecutor::new(BaseAluOpcode::CLASS_OFFSET);
+    let chip = BitwiseLogicChip::new(BitwiseLogicFiller::new(bitwise_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -73,14 +68,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -106,19 +99,18 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
-    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    b: Option<[u8; REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (instruction, rd) =
-        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
+        rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, preflight, &instruction);
 
-    let a = run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c)
-        .map(F::from_u8);
-    assert_eq!(a, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
+    let a = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(opcode, &b, &c).map(F::from_u8);
+    assert_eq!(a, tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -131,7 +123,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 #[test_case(XOR, 100)]
 #[test_case(OR, 100)]
 #[test_case(AND, 100)]
-fn rand_rv64_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
+fn rand_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
@@ -175,9 +167,9 @@ fn rand_rv64_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_bitwise_logic_test(
     opcode: BaseAluOpcode,
-    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
-    c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_a: [u32; REGISTER_NUM_LIMBS],
+    b: [u8; REGISTER_NUM_LIMBS],
+    c: [u8; REGISTER_NUM_LIMBS],
     prank_opcode_flags: Option<[bool; 3]>,
     _interaction_error: bool,
 ) {
@@ -198,7 +190,7 @@ fn run_negative_bitwise_logic_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut BitwiseLogicCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut BitwiseLogicCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_opcode_flags) = prank_opcode_flags {
@@ -221,7 +213,7 @@ fn run_negative_bitwise_logic_test(
 }
 
 #[test]
-fn rv64_bitwise_logic_xor_wrong_negative_test() {
+fn bitwise_logic_xor_wrong_negative_test() {
     run_negative_bitwise_logic_test(
         XOR,
         [255, 255, 255, 255, 255, 255, 255, 255],
@@ -233,7 +225,7 @@ fn rv64_bitwise_logic_xor_wrong_negative_test() {
 }
 
 #[test]
-fn rv64_bitwise_logic_or_wrong_negative_test() {
+fn bitwise_logic_or_wrong_negative_test() {
     run_negative_bitwise_logic_test(
         OR,
         [255, 255, 255, 255, 255, 255, 255, 255],
@@ -245,7 +237,7 @@ fn rv64_bitwise_logic_or_wrong_negative_test() {
 }
 
 #[test]
-fn rv64_bitwise_logic_and_wrong_negative_test() {
+fn bitwise_logic_and_wrong_negative_test() {
     run_negative_bitwise_logic_test(
         AND,
         [255, 255, 255, 255, 255, 255, 255, 255],
@@ -264,33 +256,33 @@ fn rv64_bitwise_logic_and_wrong_negative_test() {
 
 #[test]
 fn run_xor_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [215, 138, 49, 173, 216, 1, 0, 3];
-    let result = run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(XOR, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [215, 138, 49, 173, 216, 1, 0, 3];
+    let result = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(XOR, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_or_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [247, 171, 61, 239, 217, 35, 25, 207];
-    let result = run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(OR, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [247, 171, 61, 239, 217, 35, 25, 207];
+    let result = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(OR, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_and_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [32, 33, 12, 66, 1, 34, 25, 204];
-    let result = run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(AND, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [32, 33, 12, 66, 1, 34, 25, 204];
+    let result = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(AND, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
@@ -304,18 +296,16 @@ fn run_and_sanity_test() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64BitwiseLogicExecutor,
-    Rv64BitwiseLogicAir,
-    Rv64BitwiseLogicChipGpu,
-    Rv64BitwiseLogicChip<F>,
+    BitwiseLogicExecutor,
+    BitwiseLogicAir,
+    BitwiseLogicChipGpu,
+    BitwiseLogicChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
@@ -323,7 +313,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BitwiseLogicChipGpu::new(
+    let gpu_chip = BitwiseLogicChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),

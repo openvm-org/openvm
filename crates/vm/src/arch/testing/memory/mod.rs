@@ -4,7 +4,7 @@ use air::{MemoryDummyAir, MemoryDummyChip};
 use rand::Rng;
 
 use crate::{
-    arch::{MemoryCellType, VmField, BLOCK_FE_WIDTH, NUM_RV64_REGISTERS, U16_CELL_SIZE},
+    arch::{MemoryCellType, VmField, BLOCK_FE_WIDTH, NUM_REGISTERS, U16_CELL_SIZE},
     system::memory::{
         offline_checker::pack_u8_block_value, online::TracingMemory, MemoryController,
     },
@@ -174,7 +174,7 @@ pub fn gen_register_pointer<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,
 {
-    let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
+    let num_aligned_regions = NUM_REGISTERS * size_of::<u64>() / len;
     rng.random_range(0..num_aligned_regions) * len
 }
 
@@ -182,7 +182,7 @@ pub fn gen_distinct_register_pointers<R, const N: usize>(rng: &mut R, len: usize
 where
     R: Rng + ?Sized,
 {
-    let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
+    let num_aligned_regions = NUM_REGISTERS * size_of::<u64>() / len;
     assert!(N <= num_aligned_regions);
 
     let mut pointers = [0; N];
@@ -202,7 +202,7 @@ pub fn gen_nonzero_register_pointer<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,
 {
-    let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
+    let num_aligned_regions = NUM_REGISTERS * size_of::<u64>() / len;
     let first_nonzero_region = size_of::<u64>().div_ceil(len);
     rng.random_range(first_nonzero_region..num_aligned_regions) * len
 }

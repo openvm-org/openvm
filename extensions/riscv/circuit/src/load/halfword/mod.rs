@@ -1,9 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
-    adapters::{
-        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH,
-    },
+    adapters::{LoadMultiByteAdapterAir, LoadMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH},
     load::{
         common::LoadExecutor,
         core::{LoadCoreAir, LoadFiller},
@@ -15,11 +13,11 @@ pub const LOAD_HALFWORD_OVERLAP_CELLS: usize = HALFWORD_ACCESS_WIDTH / U16_CELL_
 
 pub type LoadHalfwordCoreAir = LoadCoreAir<HALFWORD_ACCESS_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS>;
 pub type LoadHalfwordFiller =
-    LoadFiller<Rv64LoadMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS>;
+    LoadFiller<LoadMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS>;
 
-pub type Rv64LoadHalfwordAir = VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadHalfwordCoreAir>;
-pub type Rv64LoadHalfwordExecutor = LoadExecutor<HALFWORD_ACCESS_WIDTH>;
-pub type Rv64LoadHalfwordChip<F> = VmChipWrapper<F, LoadHalfwordFiller>;
+pub type LoadHalfwordAir = VmAirWrapper<LoadMultiByteAdapterAir, LoadHalfwordCoreAir>;
+pub type LoadHalfwordExecutor = LoadExecutor<HALFWORD_ACCESS_WIDTH>;
+pub type LoadHalfwordChip<F> = VmChipWrapper<F, LoadHalfwordFiller>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

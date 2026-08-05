@@ -27,7 +27,7 @@ __global__ void shift_w_logical_imm_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64ShiftWLogicalImmCols<uint8_t>));
+    row.fill_zero(0, sizeof(ShiftWLogicalImmCols<uint8_t>));
     size_t total_steps = num_slliw_steps + num_srliw_steps;
     if (idx >= total_steps) return;
 
@@ -60,7 +60,7 @@ __global__ void shift_w_logical_imm_replay_tracegen(
     if (instruction.words[0] != expected_opcode ||
         instruction.words[4] != register_address_space ||
         instruction.words[5] != immediate_address_space || rd_ptr == 0 || !replay_canonical_register_pointer(rd_ptr) ||
-        !replay_canonical_register_pointer(rs1_ptr) || shamt >= RV64_WORD_U16_LIMBS * U16_BITS) {
+        !replay_canonical_register_pointer(rs1_ptr) || shamt >= WORD_U16_LIMBS * U16_BITS) {
         preflight_set_error(error, 74);
         return;
     }
@@ -86,22 +86,22 @@ __global__ void shift_w_logical_imm_replay_tracegen(
     uint16_t logged_result[BLOCK_FE_WIDTH];
     replay_u16_block(read.value, source);
     replay_u16_block(write.value, logged_result);
-    uint16_t source_word[RV64_WORD_U16_LIMBS] = {source[0], source[1]};
-    uint16_t shamt_limbs[RV64_WORD_U16_LIMBS] = {static_cast<uint16_t>(shamt), 0};
-    uint16_t expected_word[RV64_WORD_U16_LIMBS];
+    uint16_t source_word[WORD_U16_LIMBS] = {source[0], source[1]};
+    uint16_t shamt_limbs[WORD_U16_LIMBS] = {static_cast<uint16_t>(shamt), 0};
+    uint16_t expected_word[WORD_U16_LIMBS];
     size_t limb_shift = 0;
     size_t bit_shift = 0;
     if (is_slliw) {
-        run_shift_left<RV64_WORD_U16_LIMBS, U16_BITS>(
+        run_shift_left<WORD_U16_LIMBS, U16_BITS>(
             source_word, shamt_limbs, expected_word, limb_shift, bit_shift
         );
     } else {
-        run_shift_right_logical<RV64_WORD_U16_LIMBS, U16_BITS>(
+        run_shift_right_logical<WORD_U16_LIMBS, U16_BITS>(
             source_word, shamt_limbs, expected_word, limb_shift, bit_shift
         );
     }
     uint16_t sign_extension =
-        expected_word[RV64_WORD_U16_LIMBS - 1] >> (U16_BITS - 1) ? UINT16_MAX : 0;
+        expected_word[WORD_U16_LIMBS - 1] >> (U16_BITS - 1) ? UINT16_MAX : 0;
     if (logged_result[0] != expected_word[0] || logged_result[1] != expected_word[1] ||
         logged_result[2] != sign_extension || logged_result[3] != sign_extension) {
         preflight_set_error(error, 78);
@@ -120,9 +120,9 @@ __global__ void shift_w_logical_imm_replay_tracegen(
         return;
     }
 
-    uint16_t source_high[RV64_WORD_U16_LIMBS] = {source[2], source[3]};
+    uint16_t source_high[WORD_U16_LIMBS] = {source[2], source[3]};
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    auto adapter = Rv64BaseAluWImmU16Adapter(checker, timestamp_max_bits);
+    auto adapter = BaseAluWImmU16Adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -130,14 +130,14 @@ __global__ void shift_w_logical_imm_replay_tracegen(
         rd_ptr,
         rs1_ptr,
         source_high,
-        expected_word[RV64_WORD_U16_LIMBS - 1],
+        expected_word[WORD_U16_LIMBS - 1],
         read_previous.timestamp,
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64ShiftWLogicalImmCore(checker);
+    auto core = ShiftWLogicalImmCore(checker);
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64ShiftWLogicalImmCols, core)),
+        row.slice_from(COL_INDEX(ShiftWLogicalImmCols, core)),
         source_word,
         static_cast<uint8_t>(shamt),
         local_opcode
@@ -171,7 +171,7 @@ extern "C" int _shift_w_logical_imm_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64ShiftWLogicalImmCols<uint8_t>));
+    assert(width == sizeof(ShiftWLogicalImmCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(slliw_step_start <= steps.len());
     assert(num_slliw_steps <= steps.len() - slliw_step_start);
@@ -179,7 +179,7 @@ extern "C" int _shift_w_logical_imm_replay_tracegen(
     assert(num_srliw_steps <= steps.len() - srliw_step_start);
     assert(num_slliw_steps <= SIZE_MAX - num_srliw_steps);
     assert(height >= num_slliw_steps + num_srliw_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     shift_w_logical_imm_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

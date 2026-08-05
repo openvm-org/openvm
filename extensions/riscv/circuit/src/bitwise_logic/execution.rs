@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::BitwiseLogicExecutor;
+use crate::BitwiseLogicCoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -24,7 +24,7 @@ pub(super) struct BitwiseLogicPreCompute {
     b: u8,
 }
 
-impl<const LIMB_BITS: usize> BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> BitwiseLogicCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -33,7 +33,7 @@ impl<const LIMB_BITS: usize> BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, L
         data: &mut BitwiseLogicPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BitwiseLogicPreCompute {
@@ -52,14 +52,14 @@ macro_rules! dispatch {
                 BaseAluOpcode::XOR => $execute_impl::<_, XorOp>,
                 BaseAluOpcode::OR => $execute_impl::<_, OrOp>,
                 BaseAluOpcode::AND => $execute_impl::<_, AndOp>,
-                _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
+                _ => unreachable!("BitwiseLogicCoreExecutor received non-XOR/OR/AND opcode"),
             },
         )
     };
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BitwiseLogicCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -104,7 +104,7 @@ where
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for BitwiseLogicExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BitwiseLogicCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -153,19 +153,14 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &BitwiseLogicPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1 =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = exec_state
-        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
+    let rs1 = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2 =
+        exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.rs2_ptr as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = <OP as AluOp>::compute(rs1, rs2);
     let rd = rd.to_le_bytes();
-    exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
-        RV64_REGISTER_AS,
-        pre_compute.a as u32,
-        &rd,
-    );
+    exec_state.vm_write_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

@@ -9,13 +9,13 @@
 using namespace riscv;
 
 // Concrete type aliases for the 32-bit word variant on RV64.
-using Rv64MulWCoreRecord = MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS>;
-using Rv64MulWCore = MultiplicationCore<RV64_WORD_NUM_LIMBS>;
-template <typename T> using Rv64MulWCoreCols = MultiplicationCoreCols<T, RV64_WORD_NUM_LIMBS>;
+using MulWCoreRecord = MultiplicationCoreRecord<WORD_NUM_LIMBS>;
+using MulWCore = MultiplicationCore<WORD_NUM_LIMBS>;
+template <typename T> using MulWCoreCols = MultiplicationCoreCols<T, WORD_NUM_LIMBS>;
 
-template <typename T> struct Rv64MulWCols {
-    Rv64MultWAdapterCols<T> adapter;
-    Rv64MulWCoreCols<T> core;
+template <typename T> struct MulWCols {
+    MultWAdapterCols<T> adapter;
+    MulWCoreCols<T> core;
 };
 
 #include "../rvr/src/mul_w.inc.cuh"

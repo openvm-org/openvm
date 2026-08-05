@@ -9,10 +9,10 @@ typedef struct {
   uint64_t post[2];
   uint8_t crosses;
   uint8_t _padding[7];
-} Rv64RevealPlan;
+} RevealPlan;
 
-static_assert(sizeof(Rv64RevealPlan) == 48);
-static_assert(alignof(Rv64RevealPlan) == 8);
+static_assert(sizeof(RevealPlan) == 48);
+static_assert(alignof(RevealPlan) == 8);
 
 typedef struct {
   bool (*hint_prepare)(void* ctx, uint64_t dest_addr, uint32_t num_words);
@@ -21,8 +21,8 @@ typedef struct {
   bool (*hint_buffer)(void* ctx, uint64_t dest_addr, uint32_t num_words);
   bool (*reveal_prepare)(void* ctx, uint64_t src_val, uint64_t base_addr,
                          uint64_t effective_addr, uint8_t width,
-                         Rv64RevealPlan* plan);
-  void (*reveal_commit)(void* ctx, const Rv64RevealPlan* plan);
+                         RevealPlan* plan);
+  void (*reveal_commit)(void* ctx, const RevealPlan* plan);
 } Rv64IoHostCallbacks;
 
 /* Callbacks and forwarding stubs return false for invalid guest operands. */

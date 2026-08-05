@@ -445,11 +445,11 @@ __global__ void deferral_output_replay_tracegen(
 
     if (is_first) {
         count_buffer.add_count(deferral_idx);
-        uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
+        uint32_t limb_shift_bits = BYTE_BITS * WORD_NUM_LIMBS - address_bits;
         bitwise_buffer.add_range(static_cast<uint32_t>(rd_bytes[3]) << limb_shift_bits,
                                  static_cast<uint32_t>(rs_bytes[3]) << limb_shift_bits);
 #pragma unroll
-        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+        for (size_t i = 0; i < WORD_NUM_LIMBS; i += 2) {
             bitwise_buffer.add_range(rd_bytes[i], rd_bytes[i + 1]);
             bitwise_buffer.add_range(rs_bytes[i], rs_bytes[i + 1]);
         }

@@ -19,10 +19,10 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_register};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -238,8 +238,8 @@ pub struct DeferralCallAdapterCols<T> {
     pub rs_ptr: T,
 
     // Heap pointers and aux columns
-    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
-    pub rs_val: [T; RV64_WORD_NUM_LIMBS],
+    pub rd_val: [T; WORD_NUM_LIMBS],
+    pub rs_val: [T; WORD_NUM_LIMBS],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
@@ -290,12 +290,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         // Operands a and b are register pointers. Their values are read first
         // to get heap pointers for output write and input commit read respectively.
-        let d = AB::Expr::from_u32(RV64_REGISTER_AS);
-        let e = AB::Expr::from_u32(RV64_MEMORY_AS);
+        let d = AB::Expr::from_u32(REGISTER_AS);
+        let e = AB::Expr::from_u32(MEMORY_AS);
 
         // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let rd_full = expand_to_rv64_register(&cols.rd_val);
-        let rs_full = expand_to_rv64_register(&cols.rs_val);
+        let rd_full = expand_to_register(&cols.rd_val);
+        let rs_full = expand_to_register(&cols.rs_val);
 
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
@@ -320,14 +320,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // access is in [0, 2^address_bits). The memory merkle argument ensures
         // that each read/write pointer is less than 2^addr_bits, and this range
         // check ensures the accesses don't wrap around P.
-        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+        debug_assert!(BYTE_BITS * WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift = AB::F::from_usize(1 << (BYTE_BITS * WORD_NUM_LIMBS - self.address_bits));
 
         self.bitwise_bus
             .send_range(
-                cols.rd_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
-                cols.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
+                cols.rd_val[WORD_NUM_LIMBS - 1] * limb_shift,
+                cols.rs_val[WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
         for val in [&cols.rd_val, &cols.rs_val] {

@@ -10,7 +10,7 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, *};
+use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -19,8 +19,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, rv64_u32_to_u16_block, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS,
-    RV_J_TYPE_IMM_BITS, U16_BITS,
+    ptr_to_u16_limbs, u32_to_u16_block, PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS,
+    U16_BITS,
 };
 
 pub(super) const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
@@ -28,10 +28,10 @@ pub(super) const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64JalLuiCoreCols<T> {
+pub struct JalLuiCoreCols<T> {
     pub imm: T,
     // Low 32 bits of rd as u16 cells. Upper register cells are sign extension.
-    pub rd_data: [T; RV64_PTR_U16_LIMBS],
+    pub rd_data: [T; PTR_U16_LIMBS],
     pub imm_low_4: T,
     pub is_jal: T,
     pub is_lui: T,
@@ -39,20 +39,20 @@ pub struct Rv64JalLuiCoreCols<T> {
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64JalLuiCoreCols<u8>)]
-pub struct Rv64JalLuiCoreAir {
+#[columns_via(JalLuiCoreCols<u8>)]
+pub struct JalLuiCoreAir {
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64JalLuiCoreAir {
+impl<F: Field> BaseAir<F> for JalLuiCoreAir {
     fn width(&self) -> usize {
-        Rv64JalLuiCoreCols::<F>::width()
+        JalLuiCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64JalLuiCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for JalLuiCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for Rv64JalLuiCoreAir
+impl<AB, I> VmCoreAir<AB, I> for JalLuiCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -66,8 +66,8 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv64JalLuiCoreCols<AB::Var> = (*local_core).borrow();
-        let Rv64JalLuiCoreCols::<AB::Var> {
+        let cols: &JalLuiCoreCols<AB::Var> = (*local_core).borrow();
+        let JalLuiCoreCols::<AB::Var> {
             imm,
             rd_data: rd,
             imm_low_4,
@@ -156,15 +156,15 @@ where
     }
 
     fn start_offset(&self) -> usize {
-        Rv64JalLuiOpcode::CLASS_OFFSET
+        JalLuiOpcode::CLASS_OFFSET
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalLuiExecutor;
+pub struct JalLuiExecutor;
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64JalLuiFiller {
+pub struct JalLuiFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -192,7 +192,7 @@ pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_
         let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
         let next_pc = pc as i32 + imm;
         debug_assert!(next_pc >= 0);
-        (next_pc as u32, rv64_u32_to_u16_block(rd_low))
+        (next_pc as u32, u32_to_u16_block(rd_low))
     } else {
         let imm = imm as u32;
         let rd_low = imm << RV_IS_TYPE_IMM_BITS;

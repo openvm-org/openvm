@@ -1,15 +1,15 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
-    adapters::{Rv64MultWAdapterAir, Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS},
-    divrem::{DivRemCoreAir, DivRemExecutor, DivRemFiller},
+    adapters::{MultWAdapterAir, MultWAdapterFiller, BYTE_BITS, WORD_NUM_LIMBS},
+    divrem::{DivRemCoreAir, DivRemCoreExecutor, DivRemFiller},
 };
 
 mod execution;
 
-pub type DivRemWCoreAir = DivRemCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type DivRemWExecutor = DivRemExecutor<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type DivRemWFiller<A> = DivRemFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type DivRemWCoreAir = DivRemCoreAir<WORD_NUM_LIMBS, BYTE_BITS>;
+pub type DivRemWCoreExecutor = DivRemCoreExecutor<WORD_NUM_LIMBS, BYTE_BITS>;
+pub type DivRemWFiller<A> = DivRemFiller<A, WORD_NUM_LIMBS, BYTE_BITS>;
 
 pub(crate) mod trace;
 
@@ -21,6 +21,6 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64DivRemWAir = VmAirWrapper<Rv64MultWAdapterAir, DivRemWCoreAir>;
-pub type Rv64DivRemWExecutor = DivRemWExecutor;
-pub type Rv64DivRemWChip<F> = VmChipWrapper<F, DivRemWFiller<Rv64MultWAdapterFiller>>;
+pub type DivRemWAir = VmAirWrapper<MultWAdapterAir, DivRemWCoreAir>;
+pub type DivRemWExecutor = DivRemWCoreExecutor;
+pub type DivRemWChip<F> = VmChipWrapper<F, DivRemWFiller<MultWAdapterFiller>>;

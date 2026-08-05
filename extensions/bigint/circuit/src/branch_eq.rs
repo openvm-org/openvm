@@ -1,24 +1,24 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_bigint_transpiler::Rv64BranchEqual256Opcode;
+use openvm_bigint_transpiler::BranchEqual256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256},
-    Rv64BranchEqual256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    BranchEqual256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
-impl Rv64BranchEqual256Executor {
+impl BranchEqual256Executor {
     pub fn new() -> Self {
         Self
     }
@@ -41,11 +41,11 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchEqual256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for BranchEqual256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            BranchEqualOpcode::from_usize(opcode - Rv64BranchEqual256Opcode::CLASS_OFFSET)
+            BranchEqualOpcode::from_usize(opcode - BranchEqual256Opcode::CLASS_OFFSET)
         )
     }
 
@@ -84,7 +84,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchEqual256Executor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchEqual256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BranchEqual256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqPreCompute>>()
     }
@@ -130,12 +130,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let mut pc = exec_state.pc();
-    let rs1_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs2_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr))?;
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr))?;
+    let rs1_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32);
+    let rs2_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs1 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs2_ptr))?;
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
         pc = (pc as isize + pre_compute.imm) as u32;
@@ -172,7 +170,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     execute_e12_impl::<CTX, IS_NE>(&pre_compute.data, exec_state)
 }
 
-impl Rv64BranchEqual256Executor {
+impl BranchEqual256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -195,7 +193,7 @@ impl Rv64BranchEqual256Executor {
             c as isize
         };
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchEqPreCompute {
@@ -204,7 +202,7 @@ impl Rv64BranchEqual256Executor {
             b: b.as_canonical_u32() as u8,
         };
         let local_opcode = BranchEqualOpcode::from_usize(
-            opcode.local_opcode_idx(Rv64BranchEqual256Opcode::CLASS_OFFSET),
+            opcode.local_opcode_idx(BranchEqual256Opcode::CLASS_OFFSET),
         );
         Ok(local_opcode)
     }

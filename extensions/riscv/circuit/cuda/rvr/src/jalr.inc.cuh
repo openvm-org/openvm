@@ -23,7 +23,7 @@ __global__ void jalr_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64JalrCols<uint8_t>));
+    row.fill_zero(0, sizeof(JalrCols<uint8_t>));
     if (idx >= num_steps) return;
 
     auto const &step = steps[step_start + idx];
@@ -154,7 +154,7 @@ __global__ void jalr_replay_tracegen(
     }
 
     auto checker = VariableRangeChecker(range_checker, range_checker_num_bins);
-    Rv64JalrAdapter adapter(checker, timestamp_max_bits);
+    JalrAdapter adapter(checker, timestamp_max_bits);
     adapter.fill_trace_row(
         row,
         from.pc,
@@ -166,9 +166,9 @@ __global__ void jalr_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    Rv64JalrCore core(checker);
+    JalrCore core(checker);
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64JalrCols, core)),
+        row.slice_from(COL_INDEX(JalrCols, core)),
         from.pc,
         rs1_val,
         static_cast<uint16_t>(imm),
@@ -199,13 +199,13 @@ extern "C" int _jalr_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64JalrCols<uint8_t>));
+    assert(width == sizeof(JalrCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
 
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     jalr_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

@@ -166,7 +166,7 @@ __global__ void keccakf_op_replay_tracegen(
     KECCAKF_OP_WRITE(is_valid, 1);
     KECCAKF_OP_WRITE(timestamp, from.timestamp);
     KECCAKF_OP_WRITE(rd_ptr, rd_ptr);
-    uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
+    uint16_t buffer_ptr_limbs[PTR_U16_LIMBS];
     ptr_to_u16_limbs(buffer_ptr_limbs, buffer_ptr);
     KECCAKF_OP_WRITE_ARRAY(buffer_ptr_limbs, buffer_ptr_limbs);
     KECCAKF_OP_WRITE_ARRAY(preimage, reinterpret_cast<uint16_t const *>(state));
@@ -180,7 +180,7 @@ __global__ void keccakf_op_replay_tracegen(
         );
     }
     range_checker.add_count(
-        ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+        ptr_bound_from_high_u16(buffer_ptr_limbs[PTR_U16_LIMBS - 1], pointer_max_bits),
         U16_BITS
     );
 }

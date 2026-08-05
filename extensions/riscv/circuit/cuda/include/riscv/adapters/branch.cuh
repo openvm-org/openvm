@@ -7,7 +7,7 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64BranchAdapterCols {
+template <typename T> struct BranchAdapterCols {
     ExecutionState<T> from_state; // { pc, timestamp }
     T rs1_ptr;
     T rs2_ptr;
@@ -15,7 +15,7 @@ template <typename T> struct Rv64BranchAdapterCols {
     MemoryReadAuxCols<T> reads_aux_1;
 };
 
-struct Rv64BranchAdapterRecord {
+struct BranchAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rs1_ptr;
@@ -23,10 +23,10 @@ struct Rv64BranchAdapterRecord {
     MemoryReadAuxRecord reads_aux[2];
 };
 
-struct Rv64BranchAdapter {
+struct BranchAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64BranchAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+    __device__ BranchAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(
@@ -39,22 +39,22 @@ struct Rv64BranchAdapter {
         uint32_t rs2_prev_timestamp
     ) {
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BranchAdapterCols, reads_aux_1)),
+            row.slice_from(COL_INDEX(BranchAdapterCols, reads_aux_1)),
             rs2_prev_timestamp,
             from_timestamp + 1
         );
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BranchAdapterCols, reads_aux_0)),
+            row.slice_from(COL_INDEX(BranchAdapterCols, reads_aux_0)),
             rs1_prev_timestamp,
             from_timestamp
         );
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, from_state.pc, from_pc);
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, from_state.timestamp, from_timestamp);
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, rs1_ptr, rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, rs2_ptr, rs2_ptr);
+        COL_WRITE_VALUE(row, BranchAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, BranchAdapterCols, from_state.timestamp, from_timestamp);
+        COL_WRITE_VALUE(row, BranchAdapterCols, rs1_ptr, rs1_ptr);
+        COL_WRITE_VALUE(row, BranchAdapterCols, rs2_ptr, rs2_ptr);
     }
 
-    __device__ void fill_trace_row(RowSlice row, Rv64BranchAdapterRecord rec) {
+    __device__ void fill_trace_row(RowSlice row, BranchAdapterRecord rec) {
         fill_trace_row(
             row,
             rec.from_pc,

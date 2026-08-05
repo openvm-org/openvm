@@ -511,7 +511,7 @@ mod tests {
         stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
     use openvm_instructions::{
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        riscv::{MEMORY_AS, REGISTER_AS},
         DEFERRAL_AS, VM_DIGEST_WIDTH,
     };
     use openvm_stark_backend::{interaction::PermutationCheckBus, prover::MatrixDimensions};
@@ -611,10 +611,9 @@ mod tests {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
             let max_ptr_bits = 16;
             let max_cells = 1 << max_ptr_bits;
-            // RV64_REGISTER_AS uses u16 storage cells.
-            addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-                32 * size_of::<u64>() / U16_CELL_SIZE;
-            addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
+            // REGISTER_AS uses u16 storage cells.
+            addr_spaces[REGISTER_AS as usize].num_cells = 32 * size_of::<u64>() / U16_CELL_SIZE;
+            addr_spaces[MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
             MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
         };
@@ -682,11 +681,11 @@ mod tests {
             gpu_merkle_tree.build_async(mem_slice.clone(), i);
         }
         assert_eq!(
-            gpu_merkle_tree.subtrees[RV64_REGISTER_AS as usize - 1].layout,
+            gpu_merkle_tree.subtrees[REGISTER_AS as usize - 1].layout,
             MemoryMerkleSubTreeLayout::OmitBottomLevels
         );
         assert_eq!(
-            gpu_merkle_tree.subtrees[RV64_MEMORY_AS as usize - 1].layout,
+            gpu_merkle_tree.subtrees[MEMORY_AS as usize - 1].layout,
             MemoryMerkleSubTreeLayout::OmitBottomLevels
         );
         assert_eq!(
@@ -821,10 +820,9 @@ mod tests {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
             let max_ptr_bits = 16;
             let max_cells = 1 << max_ptr_bits;
-            // RV64_REGISTER_AS uses u16 storage cells.
-            addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-                32 * size_of::<u64>() / U16_CELL_SIZE;
-            addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
+            // REGISTER_AS uses u16 storage cells.
+            addr_spaces[REGISTER_AS as usize].num_cells = 32 * size_of::<u64>() / U16_CELL_SIZE;
+            addr_spaces[MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
             MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
         };

@@ -12,19 +12,19 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use crate::{adapters::Rv64BranchAdapterCols, cuda_abi::beq_cuda, BranchEqualCoreCols};
+use crate::{adapters::BranchAdapterCols, cuda_abi::beq_cuda, BranchEqualCoreCols};
 
 #[derive(new)]
-pub struct Rv64BranchEqualChipGpu {
+pub struct BranchEqualChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64BranchEqualChipGpu {
+impl BranchEqualChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -48,7 +48,7 @@ impl Rv64BranchEqualChipGpu {
         }
 
         let trace_width =
-            Rv64BranchAdapterCols::<F>::width() + BranchEqualCoreCols::<F, BLOCK_FE_WIDTH>::width();
+            BranchAdapterCols::<F>::width() + BranchEqualCoreCols::<F, BLOCK_FE_WIDTH>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
@@ -69,7 +69,7 @@ impl Rv64BranchEqualChipGpu {
                 transcript.error_ptr(),
                 BranchEqualOpcode::BEQ.global_opcode().as_usize() as u32,
                 BranchEqualOpcode::BNE.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

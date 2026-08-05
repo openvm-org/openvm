@@ -24,7 +24,7 @@ use openvm_riscv_circuit::{
     Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
-use openvm_sha2_transpiler::Rv64Sha2Opcode;
+use openvm_sha2_transpiler::Sha2Opcode;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
@@ -139,12 +139,12 @@ impl VmExecutionExtension for Sha2 {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let sha256_executor =
-            Sha2VmExecutor::<Sha256Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
-        inventory.add_executor(sha256_executor, [Rv64Sha2Opcode::SHA256.global_opcode()])?;
+            Sha2VmExecutor::<Sha256Config>::new(Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
+        inventory.add_executor(sha256_executor, [Sha2Opcode::SHA256.global_opcode()])?;
 
         let sha512_executor =
-            Sha2VmExecutor::<Sha512Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
-        inventory.add_executor(sha512_executor, [Rv64Sha2Opcode::SHA512.global_opcode()])?;
+            Sha2VmExecutor::<Sha512Config>::new(Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
+        inventory.add_executor(sha512_executor, [Sha2Opcode::SHA512.global_opcode()])?;
 
         Ok(())
     }
@@ -186,7 +186,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             range_bus,
             to_byte_ptr_bits(inventory.pointer_max_bits()),
             sha2_bus_index,
-            Rv64Sha2Opcode::CLASS_OFFSET,
+            Sha2Opcode::CLASS_OFFSET,
         );
         inventory.add_air(sha256_main_air);
 
@@ -204,7 +204,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             range_bus,
             to_byte_ptr_bits(inventory.pointer_max_bits()),
             sha2_bus_index,
-            Rv64Sha2Opcode::CLASS_OFFSET,
+            Sha2Opcode::CLASS_OFFSET,
         );
         inventory.add_air(sha512_main_air);
 

@@ -11,13 +11,10 @@ using namespace riscv;
 using namespace program;
 
 // SLL/SRL use u16 limbs (4 limbs of 16 bits) and the u16 ALU adapter.
-using Rv64ShiftLogicalCore = ShiftLogicalCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64ShiftLogicalCoreCols = ShiftLogicalCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftLogicalCols {
-    Rv64BaseAluRegU16AdapterCols<T> adapter;
-    Rv64ShiftLogicalCoreCols<T> core;
+    BaseAluRegU16AdapterCols<T> adapter;
+    ShiftLogicalCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/shift_logical.inc.cuh"

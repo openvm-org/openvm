@@ -3,7 +3,7 @@ use openvm_circuit::arch::{
     BLOCK_FE_WIDTH,
 };
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
     DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -490,9 +490,7 @@ fn validate_span_address_space(span: &PostflightAccessSpan) -> Result<(), GpuPos
                 "field spans must describe one fixed deferral digest",
             ));
         }
-    } else if span.address_space != RV64_MEMORY_AS
-        || span.base_source != RVR_REPLAY_SPAN_BASE_REGISTER
-    {
+    } else if span.address_space != MEMORY_AS || span.base_source != RVR_REPLAY_SPAN_BASE_REGISTER {
         return Err(invalid_access_schedule(
             "u16 spans must use register-based RV64 main-memory addresses",
         ));
@@ -546,8 +544,7 @@ fn validate_access_span(
 
 fn is_canonical_register_pointer(pointer: u32) -> bool {
     let pointer = u64::from(pointer);
-    pointer < RV64_NUM_REGISTERS as u64 * RV64_REGISTER_BYTES
-        && pointer.is_multiple_of(RV64_REGISTER_BYTES)
+    pointer < NUM_REGISTERS as u64 * REGISTER_BYTES && pointer.is_multiple_of(REGISTER_BYTES)
 }
 
 fn instruction_operands_match(
@@ -555,8 +552,8 @@ fn instruction_operands_match(
     schedule: &RvrReplayAccessSchedule,
     layout: &RvrReplayInstructionLayout,
 ) -> bool {
-    instruction.words[layout.register_as_operand as usize] == RV64_REGISTER_AS
-        && instruction.words[layout.memory_as_operand as usize] == RV64_MEMORY_AS
+    instruction.words[layout.register_as_operand as usize] == REGISTER_AS
+        && instruction.words[layout.memory_as_operand as usize] == MEMORY_AS
         && !(1..POSTFLIGHT_INSTRUCTION_FIELDS)
             .any(|word| layout.zero_operand_mask & (1 << word) != 0 && instruction.words[word] != 0)
         && schedule

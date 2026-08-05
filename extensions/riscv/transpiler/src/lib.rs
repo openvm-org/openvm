@@ -5,13 +5,12 @@ use openvm_decoder::{
     process_instruction,
 };
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
+    instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
     SystemOpcode,
 };
 use openvm_riscv_guest::{
-    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STORED_IMM,
-    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, RV64_ALU_OPCODE, RV64_ALU_OP_32, SYSTEM_OPCODE,
-    TERMINATE_FUNCT3,
+    PhantomImm, ALU_OPCODE, ALU_OP_32, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3,
+    HINT_STORED_IMM, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -80,19 +79,19 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                     ),
                     PhantomImm::HintRandom => Instruction::phantom(
                         PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
-                        F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+                        F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
                         F::ZERO,
                         0,
                     ),
                     PhantomImm::PrintStr => Instruction::phantom(
                         PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
-                        F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
-                        F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                        F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
+                        F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
                         0,
                     ),
                 })
             }
-            (RV64_ALU_OPCODE | RV64_ALU_OP_32, _) => {
+            (ALU_OPCODE | ALU_OP_32, _) => {
                 // Exclude RV64M instructions from this transpiler extension
                 let dec_insn = RType::new(instruction_u32);
                 let funct7 = dec_insn.funct7 as u8;
@@ -116,7 +115,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64MTranspilerExtension {
         let instruction_u32 = instruction_stream[0];
 
         let opcode = (instruction_u32 & 0x7f) as u8;
-        if opcode != RV64_ALU_OPCODE && opcode != RV64_ALU_OP_32 {
+        if opcode != ALU_OPCODE && opcode != ALU_OP_32 {
             return None;
         }
 
@@ -155,17 +154,17 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 match imm_u16 {
                     HINT_STORED_IMM => Some(Instruction::from_isize(
-                        Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+                        HintStoreOpcode::HINT_STORED.global_opcode(),
                         0,
-                        (RV64_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                        (REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                         0,
                         1,
                         2,
                     )),
                     HINT_BUFFER_IMM => Some(Instruction::from_isize(
-                        Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
-                        (RV64_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
-                        (RV64_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                        HintStoreOpcode::HINT_BUFFER.global_opcode(),
+                        (REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                        (REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                         0,
                         1,
                         2,
@@ -178,9 +177,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 // REVEAL_RV64 is a pseudo-instruction for STORED_RV64 a,b,c,1,3
                 Some(Instruction::large_from_isize(
-                    Rv64LoadStoreOpcode::STORED.global_opcode(),
-                    (RV64_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
-                    (RV64_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    LoadStoreOpcode::STORED.global_opcode(),
+                    (REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                    (REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,
                     1,
                     3,

@@ -7,23 +7,23 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64RdWriteAdapterCols {
+template <typename T> struct RdWriteAdapterCols {
     ExecutionState<T> from_state; // { pub pc: T, pub timestamp: T}
     T rd_ptr;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> rd_aux_cols;
 };
 
-struct Rv64RdWriteAdapterRecord {
+struct RdWriteAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> rd_aux_record;
 };
 
-struct Rv64RdWriteAdapter {
+struct RdWriteAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64RdWriteAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+    __device__ RdWriteAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
         : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ inline void fill_trace_row(
@@ -34,21 +34,21 @@ struct Rv64RdWriteAdapter {
         uint32_t prev_timestamp,
         uint16_t const (&prev_data)[BLOCK_FE_WIDTH]
     ) {
-        COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, from_state.pc, from_pc);
-        COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, from_state.timestamp, from_timestamp);
-        COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, rd_ptr, rd_ptr);
+        COL_WRITE_VALUE(row, RdWriteAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, RdWriteAdapterCols, from_state.timestamp, from_timestamp);
+        COL_WRITE_VALUE(row, RdWriteAdapterCols, rd_ptr, rd_ptr);
 
         Fp prev[BLOCK_FE_WIDTH];
         copy_u16_cells(prev, prev_data);
-        COL_WRITE_ARRAY(row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, prev);
+        COL_WRITE_ARRAY(row, RdWriteAdapterCols, rd_aux_cols.prev_data, prev);
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64RdWriteAdapterCols, rd_aux_cols.base)),
+            row.slice_from(COL_INDEX(RdWriteAdapterCols, rd_aux_cols.base)),
             prev_timestamp,
             from_timestamp
         );
     }
 
-    __device__ inline void fill_trace_row(RowSlice row, Rv64RdWriteAdapterRecord record) {
+    __device__ inline void fill_trace_row(RowSlice row, RdWriteAdapterRecord record) {
         fill_trace_row(
             row,
             record.from_pc,
@@ -60,16 +60,16 @@ struct Rv64RdWriteAdapter {
     }
 };
 
-template <typename T> struct Rv64CondRdWriteAdapterCols {
-    Rv64RdWriteAdapterCols<T> inner;
+template <typename T> struct CondRdWriteAdapterCols {
+    RdWriteAdapterCols<T> inner;
     T needs_write;
 };
 
-struct Rv64CondRdWriteAdapter {
+struct CondRdWriteAdapter {
     MemoryAuxColsFactory mem_helper;
     uint32_t timestamp_max_bits;
 
-    __device__ Rv64CondRdWriteAdapter(
+    __device__ CondRdWriteAdapter(
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
     )
@@ -84,23 +84,23 @@ struct Rv64CondRdWriteAdapter {
         uint32_t prev_timestamp,
         uint16_t const (&prev_data)[BLOCK_FE_WIDTH]
     ) {
-        COL_WRITE_VALUE(row, Rv64CondRdWriteAdapterCols, needs_write, do_write);
+        COL_WRITE_VALUE(row, CondRdWriteAdapterCols, needs_write, do_write);
 
-        RowSlice inner = row.slice_from(COL_INDEX(Rv64CondRdWriteAdapterCols, inner));
+        RowSlice inner = row.slice_from(COL_INDEX(CondRdWriteAdapterCols, inner));
 
         if (do_write) {
-            Rv64RdWriteAdapter adapter(mem_helper.range_checker, timestamp_max_bits);
+            RdWriteAdapter adapter(mem_helper.range_checker, timestamp_max_bits);
             adapter.fill_trace_row(
                 inner, from_pc, from_timestamp, rd_ptr, prev_timestamp, prev_data
             );
         } else {
-            inner.fill_zero(0, sizeof(Rv64RdWriteAdapterCols<uint8_t>));
-            COL_WRITE_VALUE(inner, Rv64RdWriteAdapterCols, from_state.timestamp, from_timestamp);
-            COL_WRITE_VALUE(inner, Rv64RdWriteAdapterCols, from_state.pc, from_pc);
+            inner.fill_zero(0, sizeof(RdWriteAdapterCols<uint8_t>));
+            COL_WRITE_VALUE(inner, RdWriteAdapterCols, from_state.timestamp, from_timestamp);
+            COL_WRITE_VALUE(inner, RdWriteAdapterCols, from_state.pc, from_pc);
         }
     }
 
-    __device__ inline void fill_trace_row(RowSlice row, Rv64RdWriteAdapterRecord record) {
+    __device__ inline void fill_trace_row(RowSlice row, RdWriteAdapterRecord record) {
         bool do_write = (record.rd_ptr != UINT32_MAX);
         if (do_write) {
             fill_trace_row(

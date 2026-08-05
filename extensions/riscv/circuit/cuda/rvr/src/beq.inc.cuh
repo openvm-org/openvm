@@ -125,7 +125,7 @@ __global__ void beq_replay_tracegen(
         return;
     }
 
-    Rv64BranchAdapter adapter(
+    BranchAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(
@@ -137,7 +137,7 @@ __global__ void beq_replay_tracegen(
         first_previous.timestamp,
         second_previous.timestamp
     );
-    Rv64BranchEqualCoreRecord core_record{};
+    BranchEqualCoreRecord<BLOCK_FE_WIDTH> core_record{};
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
         core_record.a[i] = rs1[i];
@@ -145,7 +145,7 @@ __global__ void beq_replay_tracegen(
     }
     core_record.imm = encoded_imm;
     core_record.local_opcode = local_opcode;
-    Rv64BranchEqualCore core;
+    BranchEqualCore<BLOCK_FE_WIDTH> core;
     core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqualCols, core)), core_record);
 }
 
@@ -183,7 +183,7 @@ extern "C" int _beq_replay_tracegen(
     assert(num_bne_steps <= d_steps.len() - bne_step_start);
     assert(num_beq_steps <= SIZE_MAX - num_bne_steps);
     assert(height >= num_beq_steps + num_bne_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     beq_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

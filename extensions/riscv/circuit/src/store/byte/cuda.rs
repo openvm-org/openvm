@@ -12,27 +12,27 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
+use openvm_riscv_transpiler::LoadStoreOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use super::StoreByteCoreCols;
 use crate::{
-    adapters::{Rv64StoreByteAdapterCols, RV64_BYTE_BITS},
+    adapters::{StoreByteAdapterCols, BYTE_BITS},
     cuda_abi::store_byte_cuda,
 };
 
 #[derive(new)]
-pub struct Rv64StoreByteChipGpu {
+pub struct StoreByteChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64StoreByteChipGpu {
+impl StoreByteChipGpu {
     /// Replays RV64I main-memory and RV64IO public-values STOREB rows.
     pub fn generate_proving_ctx_from_postflight(
         &self,
@@ -42,12 +42,12 @@ impl Rv64StoreByteChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let step_range = replay_plan.opcode_range(Rv64LoadStoreOpcode::STOREB.global_opcode());
+        let step_range = replay_plan.opcode_range(LoadStoreOpcode::STOREB.global_opcode());
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64StoreByteAdapterCols::<F>::width() + StoreByteCoreCols::<F>::width();
+        let trace_width = StoreByteAdapterCols::<F>::width() + StoreByteCoreCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
@@ -64,9 +64,9 @@ impl Rv64StoreByteChipGpu {
                 step_range.start,
                 step_range.len(),
                 transcript.error_ptr(),
-                Rv64LoadStoreOpcode::STOREB.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                LoadStoreOpcode::STOREB.global_opcode().as_usize() as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 PUBLIC_VALUES_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,

@@ -5,10 +5,10 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{Sha2Config, Sha2VmExecutor, SHA2_READ_SIZE};
@@ -107,39 +107,42 @@ unsafe fn execute_e12_impl<C: Sha2Config, CTX: ExecutionCtxTrait, const IS_E1: b
     pre_compute: &Sha2PreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> u32 {
-    let dst: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32);
-    let state: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
-    let input: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32);
+    let dst: [u8; REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32);
+    let state: [u8; REGISTER_NUM_LIMBS] =
+        exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32);
+    let input: [u8; REGISTER_NUM_LIMBS] =
+        exec_state.vm_read_bytes(REGISTER_AS, pre_compute.c as u32);
     // Pointers are 32-bit-addressable; upper 4 bytes of each register must be zero.
-    let dst_u32 = rv64_bytes_to_u32(dst);
-    let state_u32 = rv64_bytes_to_u32(state);
-    let input_u32 = rv64_bytes_to_u32(input);
+    let dst_u32 = bytes_to_u32(dst);
+    let state_u32 = bytes_to_u32(state);
+    let input_u32 = bytes_to_u32(input);
 
     let mut input_block = Vec::with_capacity(C::BLOCK_BYTES);
     for i in 0..C::BLOCK_READS {
-        input_block.extend_from_slice(&exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
-            RV64_MEMORY_AS,
-            input_u32 + (i * SHA2_READ_SIZE) as u32,
-        ));
+        input_block.extend_from_slice(
+            &exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
+                MEMORY_AS,
+                input_u32 + (i * SHA2_READ_SIZE) as u32,
+            ),
+        );
     }
     // State is in 4-byte little-endian words. Input reads precede state reads to match the
     // timestamp schedule constrained by Sha2MainAir.
     let mut state_data = Vec::with_capacity(C::STATE_BYTES);
     for i in 0..C::STATE_READS {
-        state_data.extend_from_slice(&exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
-            RV64_MEMORY_AS,
-            state_u32 + (i * SHA2_READ_SIZE) as u32,
-        ));
+        state_data.extend_from_slice(
+            &exec_state.vm_read_bytes::<SHA2_READ_SIZE>(
+                MEMORY_AS,
+                state_u32 + (i * SHA2_READ_SIZE) as u32,
+            ),
+        );
     }
 
     C::compress(&mut state_data, &input_block);
 
     for i in 0..C::STATE_WRITES {
         exec_state.vm_write_bytes::<SHA2_WRITE_SIZE>(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             dst_u32 + (i * SHA2_WRITE_SIZE) as u32,
             &state_data[i * SHA2_WRITE_SIZE..(i + 1) * SHA2_WRITE_SIZE]
                 .try_into()
@@ -207,7 +210,7 @@ impl<C: Sha2Config> Sha2VmExecutor<C> {
             ..
         } = inst;
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = Sha2PreCompute {

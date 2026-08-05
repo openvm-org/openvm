@@ -12,25 +12,25 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::MulWOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64MultWAdapterCols, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS},
+    adapters::{MultWAdapterCols, BYTE_BITS, WORD_NUM_LIMBS},
     cuda_abi::{mul_w_cuda, UInt2},
     MultiplicationCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64MulWChipGpu {
+pub struct MulWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64MulWChipGpu {
+impl MulWChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -43,8 +43,8 @@ impl Rv64MulWChipGpu {
         if range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-        let width = MultiplicationCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64MultWAdapterCols::<F>::width();
+        let width = MultiplicationCoreCols::<F, WORD_NUM_LIMBS, BYTE_BITS>::width()
+            + MultWAdapterCols::<F>::width();
         let height = next_power_of_two_or_zero(range.len());
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         let sizes = self.range_tuple_checker.sizes;
@@ -63,7 +63,7 @@ impl Rv64MulWChipGpu {
                 range.len(),
                 transcript.error_ptr(),
                 MulWOpcode::MULW.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 &self.range_tuple_checker.count,

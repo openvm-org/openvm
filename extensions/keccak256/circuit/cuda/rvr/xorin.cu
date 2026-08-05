@@ -258,8 +258,8 @@ __global__ void xorin_replay_tracegen(
     XORIN_WRITE(instruction.input_reg_ptr, input_reg_ptr);
     XORIN_WRITE(instruction.len_reg_ptr, len_reg_ptr);
     XORIN_WRITE(instruction.start_timestamp, from.timestamp);
-    uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
-    uint16_t input_ptr_limbs[RV64_PTR_U16_LIMBS];
+    uint16_t buffer_ptr_limbs[PTR_U16_LIMBS];
+    uint16_t input_ptr_limbs[PTR_U16_LIMBS];
     ptr_to_u16_limbs(buffer_ptr_limbs, buffer_ptr);
     ptr_to_u16_limbs(input_ptr_limbs, input_ptr);
     XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
@@ -301,11 +301,11 @@ __global__ void xorin_replay_tracegen(
         );
     }
     range_checker.add_count(
-        ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+        ptr_bound_from_high_u16(buffer_ptr_limbs[PTR_U16_LIMBS - 1], pointer_max_bits),
         U16_BITS
     );
     range_checker.add_count(
-        ptr_bound_from_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+        ptr_bound_from_high_u16(input_ptr_limbs[PTR_U16_LIMBS - 1], pointer_max_bits),
         U16_BITS
     );
 }

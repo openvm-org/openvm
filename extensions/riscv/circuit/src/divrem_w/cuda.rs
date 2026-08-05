@@ -13,28 +13,28 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
-    riscv::{RV64_BYTE_BITS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{BYTE_BITS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::DivRemWOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::Rv64MultWAdapterCols,
+    adapters::MultWAdapterCols,
     cuda_abi::{divrem_w_cuda, UInt2},
     DivRemCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64DivRemWChipGpu {
+pub struct DivRemWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64DivRemWChipGpu {
+impl DivRemWChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -56,8 +56,8 @@ impl Rv64DivRemWChipGpu {
         if rows == 0 {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-        let width = DivRemCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64MultWAdapterCols::<F>::width();
+        let width = DivRemCoreCols::<F, WORD_NUM_LIMBS, BYTE_BITS>::width()
+            + MultWAdapterCols::<F>::width();
         let height = next_power_of_two_or_zero(rows);
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         let sizes = self.range_tuple_checker.sizes;
@@ -85,7 +85,7 @@ impl Rv64DivRemWChipGpu {
                 DivRemWOpcode::DIVUW.global_opcode().as_usize() as u32,
                 DivRemWOpcode::REMW.global_opcode().as_usize() as u32,
                 DivRemWOpcode::REMUW.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 &self.range_tuple_checker.count,

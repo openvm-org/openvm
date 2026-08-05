@@ -4,11 +4,11 @@
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
 use openvm_instructions::{
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha512Config};
-use openvm_sha2_transpiler::Rv64Sha2Opcode;
+use openvm_sha2_transpiler::Sha2Opcode;
 use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
@@ -22,7 +22,7 @@ const SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(128);
 
 fn decode_reg(value: u32) -> Variable {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 const fn rows_to_u32(rows: usize) -> u32 {
@@ -150,12 +150,12 @@ pub struct Sha2Extension {
 
 impl Sha2Extension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let sha256_main_chip_idx = opcode_air_idx(ctx, Rv64Sha2Opcode::SHA256)?;
+        let sha256_main_chip_idx = opcode_air_idx(ctx, Sha2Opcode::SHA256)?;
         // The SHA-256 block hasher is registered adjacent to the main chip and
         // assigned the next AIR index (main_air_idx + 1) due to reverse registration order.
         let sha256_block_hasher_chip_idx = sha256_main_chip_idx.map(AirIndex::next);
 
-        let sha512_main_chip_idx = opcode_air_idx(ctx, Rv64Sha2Opcode::SHA512)?;
+        let sha512_main_chip_idx = opcode_air_idx(ctx, Sha2Opcode::SHA512)?;
         let sha512_block_hasher_chip_idx = sha512_main_chip_idx.map(AirIndex::next);
 
         Ok(Self {
@@ -169,7 +169,7 @@ impl RvrExtension for Sha2Extension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
-        if opcode == Rv64Sha2Opcode::SHA256.global_opcode_usize() {
+        if opcode == Sha2Opcode::SHA256.global_opcode_usize() {
             let dst_ptr_reg = decode_reg(insn.a);
             let state_ptr_reg = decode_reg(insn.b);
             let input_ptr_reg = decode_reg(insn.c);
@@ -185,7 +185,7 @@ impl RvrExtension for Sha2Extension {
             }));
         }
 
-        if opcode == Rv64Sha2Opcode::SHA512.global_opcode_usize() {
+        if opcode == Sha2Opcode::SHA512.global_opcode_usize() {
             let dst_ptr_reg = decode_reg(insn.a);
             let state_ptr_reg = decode_reg(insn.b);
             let input_ptr_reg = decode_reg(insn.c);

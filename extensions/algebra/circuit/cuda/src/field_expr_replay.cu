@@ -5,7 +5,7 @@
 // The core-column interpreter is validated bit-exact against
 // FieldExpressionFiller::fill_trace_row (rows and range-checker histograms) on
 // EcAddNe, MulDiv (flags/Select/Div-under-Select/setup rows) and IntMul/IntAdd
-// expressions. Adapter columns use the shared Rv64VecHeapAdapter device fill.
+// expressions. Adapter columns use the shared VecHeapAdapter device fill.
 #include "algebra/vec_heap_replay.cuh"
 #include "launcher.cuh"
 #include "primitives/histogram.cuh"
@@ -837,7 +837,7 @@ static __global__ void validate_field_expr_replay(
         return;
     }
     constexpr size_t ADAPTER_WIDTH =
-        sizeof(Rv64VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
+        sizeof(VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
     constexpr size_t INPUT_BYTES = NUM_READS * BLOCKS * MEMORY_BLOCK_BYTES;
     constexpr size_t OUTPUT_BYTES = BLOCKS * MEMORY_BLOCK_BYTES;
     if (s.k != K || width != ADAPTER_WIDTH + s.width ||
@@ -868,7 +868,7 @@ static __global__ void field_expr_replay_tracegen(
 ) {
     constexpr uint32_t K = BLOCKS <= 6 ? 2 * BLOCKS : BLOCKS;
     constexpr size_t ADAPTER_WIDTH =
-        sizeof(Rv64VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
+        sizeof(VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
     __shared__ FieldExprProg shared_program;
     if (threadIdx.x == 0) load_prog(blob, shared_program);
     __syncthreads();

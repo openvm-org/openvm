@@ -6,7 +6,7 @@ use halo2curves_axiom::{
     bn256::{Fq as BnFq, Fq2 as BnFq2, Fr as BnFr, G1Affine as BnG1, G2Affine as BnG2},
 };
 use openvm_algebra_transpiler::{
-    Fp2Opcode, Fp2TranspilerExtension, ModularTranspilerExtension, Rv64ModularArithmeticOpcode,
+    Fp2Opcode, Fp2TranspilerExtension, ModularArithmeticOpcode, ModularTranspilerExtension,
 };
 use openvm_circuit::{
     arch::{
@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_ecc_circuit::WeierstrassPreflightGpuTracegen;
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use openvm_ecc_transpiler::{EccTranspilerExtension, Rv64WeierstrassOpcode};
+use openvm_ecc_transpiler::{EccTranspilerExtension, WeierstrassOpcode};
 use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode,
 };
@@ -27,8 +27,7 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::{PairingPhantom, PairingTranspilerExtension};
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
-    Rv64MTranspilerExtension,
+    HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_sdk::{
     openvm_stark_backend::{p3_field::PrimeField32, StarkEngine},
@@ -210,16 +209,14 @@ fn prove_pairing_checkpoint(
             if is_pairing_phantom {
                 saw_pairing_phantom = true;
             } else if saw_pairing_phantom
-                && (opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode_usize()
-                    || opcode == Rv64HintStoreOpcode::HINT_BUFFER.global_opcode_usize())
+                && (opcode == HintStoreOpcode::HINT_STORED.global_opcode_usize()
+                    || opcode == HintStoreOpcode::HINT_BUFFER.global_opcode_usize())
             {
                 saw_pairing_hint_store = true;
             }
-            saw_modular |= (Rv64ModularArithmeticOpcode::CLASS_OFFSET
-                ..Rv64WeierstrassOpcode::CLASS_OFFSET)
+            saw_modular |= (ModularArithmeticOpcode::CLASS_OFFSET..WeierstrassOpcode::CLASS_OFFSET)
                 .contains(&opcode);
-            saw_ecc |=
-                (Rv64WeierstrassOpcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET).contains(&opcode);
+            saw_ecc |= (WeierstrassOpcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET).contains(&opcode);
             saw_fp2 |= (Fp2Opcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET + 0x100).contains(&opcode);
         }
         if segment_index == 0 {

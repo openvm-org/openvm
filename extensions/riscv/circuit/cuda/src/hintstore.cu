@@ -14,7 +14,7 @@ using hintstore::MAX_HINT_BUFFER_DWORDS_BITS;
 static_assert(MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS, "rem_words must fit in one u16 cell");
 constexpr uint32_t REM_WORDS_SHIFT = U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
-template <typename T> struct Rv64HintStoreCols {
+template <typename T> struct HintStoreCols {
     // common
     T is_single;
     T is_buffer;
@@ -27,7 +27,7 @@ template <typename T> struct Rv64HintStoreCols {
     T mem_ptr_ptr;
     // Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`; the upper 4 bytes are
     // known to be zero and are hardcoded in the memory bus interaction.
-    T mem_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T mem_ptr_limbs[PTR_U16_LIMBS];
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
@@ -41,7 +41,7 @@ template <typename T> struct Rv64HintStoreCols {
 };
 
 // This is the part of the record that we keep only once per instruction
-struct Rv64HintStoreRecordHeader {
+struct HintStoreRecordHeader {
     uint32_t num_words;
 
     uint32_t from_pc;
@@ -57,17 +57,17 @@ struct Rv64HintStoreRecordHeader {
 };
 
 // This is the part of the record that we keep `num_words` times per instruction
-struct Rv64HintStoreVars {
-    MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> write_aux;
-    uint8_t data[RV64_REGISTER_NUM_LIMBS];
+struct HintStoreVars {
+    MemoryWriteBytesAuxRecord<REGISTER_NUM_LIMBS> write_aux;
+    uint8_t data[REGISTER_NUM_LIMBS];
 };
 
-struct Rv64HintStore {
+struct HintStore {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64HintStore(
+    __device__ HintStore(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
@@ -77,24 +77,24 @@ struct Rv64HintStore {
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv64HintStoreRecordHeader &record,
-        Rv64HintStoreVars &write,
+        HintStoreRecordHeader &record,
+        HintStoreVars &write,
         uint32_t local_idx
     ) {
         bool is_single = record.num_words_ptr == UINT32_MAX;
         uint32_t timestamp = record.timestamp + local_idx * 3;
         uint32_t rem_words = record.num_words - local_idx;
-        uint32_t mem_ptr = record.mem_ptr + local_idx * (uint32_t)RV64_REGISTER_NUM_LIMBS;
-        uint32_t mem_ptr_limbs[RV64_PTR_U16_LIMBS];
+        uint32_t mem_ptr = record.mem_ptr + local_idx * (uint32_t)REGISTER_NUM_LIMBS;
+        uint32_t mem_ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(mem_ptr_limbs, mem_ptr);
 
-        COL_WRITE_VALUE(row, Rv64HintStoreCols, is_single, is_single);
-        COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer, !is_single);
-        COL_WRITE_VALUE(row, Rv64HintStoreCols, rem_words, rem_words);
-        COL_WRITE_VALUE(row, Rv64HintStoreCols, from_state.pc, record.from_pc);
-        COL_WRITE_VALUE(row, Rv64HintStoreCols, from_state.timestamp, timestamp);
-        COL_WRITE_VALUE(row, Rv64HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
-        COL_WRITE_ARRAY(row, Rv64HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
+        COL_WRITE_VALUE(row, HintStoreCols, is_single, is_single);
+        COL_WRITE_VALUE(row, HintStoreCols, is_buffer, !is_single);
+        COL_WRITE_VALUE(row, HintStoreCols, rem_words, rem_words);
+        COL_WRITE_VALUE(row, HintStoreCols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, HintStoreCols, from_state.timestamp, timestamp);
+        COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
+        COL_WRITE_ARRAY(row, HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
 #ifdef CUDA_DEBUG
@@ -105,7 +105,7 @@ struct Rv64HintStore {
 #endif
 
             // Range check for mem_ptr (using pointer_max_bits).
-            uint32_t mem_ptr_shift = RV64_PTR_BITS - (uint32_t)pointer_max_bits;
+            uint32_t mem_ptr_shift = PTR_BITS - (uint32_t)pointer_max_bits;
             uint32_t mem_ptr_high_u16 = record.mem_ptr >> U16_BITS;
             range_checker.add_count(mem_ptr_high_u16 << mem_ptr_shift, U16_BITS);
 
@@ -113,40 +113,40 @@ struct Rv64HintStore {
             range_checker.add_count(record.num_words << REM_WORDS_SHIFT, U16_BITS);
 
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)),
+                row.slice_from(COL_INDEX(HintStoreCols, mem_ptr_aux_cols)),
                 record.mem_ptr_aux_record.prev_timestamp,
                 timestamp
             );
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)));
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(HintStoreCols, mem_ptr_aux_cols)));
         }
 
         if (local_idx == 0 && !is_single) {
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64HintStoreCols, num_words_aux_cols)),
+                row.slice_from(COL_INDEX(HintStoreCols, num_words_aux_cols)),
                 record.num_words_read.prev_timestamp,
                 timestamp + 1
             );
-            COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer_start, 1);
-            COL_WRITE_VALUE(row, Rv64HintStoreCols, num_words_ptr, record.num_words_ptr);
+            COL_WRITE_VALUE(row, HintStoreCols, is_buffer_start, 1);
+            COL_WRITE_VALUE(row, HintStoreCols, num_words_ptr, record.num_words_ptr);
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64HintStoreCols, num_words_aux_cols)));
-            COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer_start, 0);
-            COL_WRITE_VALUE(row, Rv64HintStoreCols, num_words_ptr, 0);
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(HintStoreCols, num_words_aux_cols)));
+            COL_WRITE_VALUE(row, HintStoreCols, is_buffer_start, 0);
+            COL_WRITE_VALUE(row, HintStoreCols, num_words_ptr, 0);
         }
 
         Fp packed_prev[BLOCK_FE_WIDTH];
         pack_u8_block_bytes(packed_prev, write.write_aux.prev_data);
-        COL_WRITE_ARRAY(row, Rv64HintStoreCols, write_aux.prev_data, packed_prev);
+        COL_WRITE_ARRAY(row, HintStoreCols, write_aux.prev_data, packed_prev);
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64HintStoreCols, write_aux)),
+            row.slice_from(COL_INDEX(HintStoreCols, write_aux)),
             write.write_aux.prev_timestamp,
             timestamp + 2
         );
 
         Fp packed_data[BLOCK_FE_WIDTH];
         pack_u8_block_bytes(packed_data, write.data);
-        COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, packed_data);
+        COL_WRITE_ARRAY(row, HintStoreCols, data, packed_data);
     }
 };
 

@@ -48,8 +48,8 @@ template <typename T> struct DeferralOutputCols {
     T deferral_idx;
 
     // Heap pointers + auxiliary read columns
-    T rd_val[RV64_WORD_NUM_LIMBS];
-    T rs_val[RV64_WORD_NUM_LIMBS];
+    T rd_val[WORD_NUM_LIMBS];
+    T rs_val[WORD_NUM_LIMBS];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 

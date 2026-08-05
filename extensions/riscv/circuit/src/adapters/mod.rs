@@ -10,7 +10,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     PUBLIC_VALUES_AS,
 };
 use openvm_platform::memory::MEM_SIZE;
@@ -44,23 +44,21 @@ pub use jalr::*;
 pub use load::*;
 pub use mul::*;
 pub use mul_w::*;
-pub use openvm_instructions::riscv::{
-    RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-};
+pub use openvm_instructions::riscv::{BYTE_BITS, REGISTER_NUM_LIMBS, WORD_NUM_LIMBS};
 pub use rdwrite::*;
 pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
-pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
-/// Bit width covered by [`RV64_PTR_U16_LIMBS`].
-pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
+pub const PTR_U16_LIMBS: usize = WORD_NUM_LIMBS / 2;
+/// Bit width covered by [`PTR_U16_LIMBS`].
+pub const PTR_BITS: usize = U16_BITS * PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
-/// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
-pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+/// register). Numerically equal to [`PTR_U16_LIMBS`], but named for arithmetic-word use.
+pub const WORD_U16_LIMBS: usize = WORD_NUM_LIMBS / 2;
 
 #[inline(always)]
 pub(crate) fn checked_register_pointer(pointer: u32) -> Result<u8, PostflightError> {
-    if pointer > u8::MAX as u32 || !pointer.is_multiple_of(RV64_REGISTER_NUM_LIMBS as u32) {
+    if pointer > u8::MAX as u32 || !pointer.is_multiple_of(REGISTER_NUM_LIMBS as u32) {
         return Err(PostflightError::new(
             "RV64 register pointer is outside the register domain",
         ));
@@ -132,7 +130,7 @@ pub(crate) fn shift_encoder() -> Encoder {
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]
 pub fn pack_u8_pair<T: PrimeCharacteristicRing>(lo: T, hi: T) -> T {
-    lo + hi * T::from_u32(1 << RV64_BYTE_BITS)
+    lo + hi * T::from_u32(1 << BYTE_BITS)
 }
 
 #[inline(always)]
@@ -141,9 +139,9 @@ pub fn pack_u8_pair_u32<T: PrimeCharacteristicRing>(lo: u32, hi: u32) -> T {
 }
 
 #[inline(always)]
-pub fn pack_rv64_u16_block<L, H, T>(
-    low_word: &[L; RV64_WORD_NUM_LIMBS],
-    high: &[H; RV64_PTR_U16_LIMBS],
+pub fn pack_u16_block<L, H, T>(
+    low_word: &[L; WORD_NUM_LIMBS],
+    high: &[H; PTR_U16_LIMBS],
 ) -> [T; BLOCK_FE_WIDTH]
 where
     L: Clone + Into<T>,
@@ -159,11 +157,11 @@ where
 }
 
 /// Concatenates the low-word u16 limbs with the upper u16 limbs into a full RV64 register block.
-/// Unlike [`pack_rv64_u16_block`], the low word is already u16-celled, so no byte packing occurs.
+/// Unlike [`pack_u16_block`], the low word is already u16-celled, so no byte packing occurs.
 #[inline(always)]
-pub fn concat_rv64_u16_block<L, H, T>(
-    low_word: &[L; RV64_WORD_U16_LIMBS],
-    high: &[H; RV64_WORD_U16_LIMBS],
+pub fn concat_u16_block<L, H, T>(
+    low_word: &[L; WORD_U16_LIMBS],
+    high: &[H; WORD_U16_LIMBS],
 ) -> [T; BLOCK_FE_WIDTH]
 where
     L: Clone + Into<T>,
@@ -171,18 +169,18 @@ where
     T: PrimeCharacteristicRing,
 {
     std::array::from_fn(|i| {
-        if i < RV64_WORD_U16_LIMBS {
+        if i < WORD_U16_LIMBS {
             low_word[i].clone().into()
         } else {
-            high[i - RV64_WORD_U16_LIMBS].clone().into()
+            high[i - WORD_U16_LIMBS].clone().into()
         }
     })
 }
 
 #[inline(always)]
 pub(crate) fn pack_high_u16<T, B>(
-    bytes: &[B; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-) -> [T; RV64_PTR_U16_LIMBS]
+    bytes: &[B; REGISTER_NUM_LIMBS - WORD_NUM_LIMBS],
+) -> [T; PTR_U16_LIMBS]
 where
     T: PrimeCharacteristicRing,
     B: Copy + Into<u32>,
@@ -211,18 +209,18 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 /// Composes an RV64 register byte-limb array into a `u64`.
-pub fn rv64_limbs_to_u64<F: PrimeField32>(limbs: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
+pub fn limbs_to_u64<F: PrimeField32>(limbs: [F; REGISTER_NUM_LIMBS]) -> u64 {
     let mut val: u64 = 0;
     for (i, limb) in limbs.map(|x| x.as_canonical_u32()).iter().enumerate() {
-        val += (*limb as u64) << (i * RV64_BYTE_BITS);
+        val += (*limb as u64) << (i * BYTE_BITS);
     }
     val
 }
 
 /// Decomposes a `u64` into RV64 register byte limbs.
-pub fn u64_to_rv64_limbs<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
+pub fn u64_to_limbs<F: PrimeField32>(value: u64) -> [F; REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_u32(((value >> (RV64_BYTE_BITS * i)) & ((1 << RV64_BYTE_BITS) - 1)) as u32)
+        F::from_u32(((value >> (BYTE_BITS * i)) & ((1 << BYTE_BITS) - 1)) as u32)
     })
 }
 
@@ -230,7 +228,7 @@ pub fn u64_to_rv64_limbs<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_L
 /// The immediate is a 12-bit signed value encoded into 24 bits with byte 2
 /// carrying the sign.
 #[inline(always)]
-pub fn imm_to_rv64_bytes(imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+pub fn imm_to_bytes(imm: u32) -> [u8; REGISTER_NUM_LIMBS] {
     debug_assert_eq!(imm >> 24, 0);
     let mut imm_le = (imm as u64).to_le_bytes();
     // Sign-extend: byte 2 carries the sign, replicate to bytes 3-7
@@ -246,7 +244,7 @@ pub fn imm_to_rv64_bytes(imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
 /// The immediate is a 12-bit signed value that was encoded into 24 bits with byte 2
 /// carrying the sign.
 #[inline(always)]
-pub fn imm_to_rv64_u64(imm: u32) -> u64 {
+pub fn imm_to_u64(imm: u32) -> u64 {
     debug_assert_eq!(imm >> 24, 0);
     // The immediate is 12-bit sign-extended to 24 bits.
     // Sign-extend from 24 bits to 64 bits:
@@ -294,31 +292,31 @@ pub fn u64_to_u32_checked(value: u64) -> u32 {
 
 /// Converts RV64 register bytes to a `u32`, requiring the upper 4 bytes to be zero.
 #[inline(always)]
-pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+pub fn bytes_to_u32(bytes: [u8; REGISTER_NUM_LIMBS]) -> u32 {
     u64_to_u32_checked(u64::from_le_bytes(bytes))
 }
 
 /// Attempts to convert RV64 register bytes to a `u32`, requiring the upper 4 bytes to be zero.
 #[inline(always)]
-pub fn try_rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> Option<u32> {
+pub fn try_bytes_to_u32(bytes: [u8; REGISTER_NUM_LIMBS]) -> Option<u32> {
     u32::try_from(u64::from_le_bytes(bytes)).ok()
 }
 
 /// Adds an already-sign-extended 16-bit RV64 immediate to an implemented low-32-bit address.
 #[inline(always)]
-pub fn rv64_address_add_imm(base: u32, imm_extended: u32) -> u64 {
+pub fn address_add_imm(base: u32, imm_extended: u32) -> u64 {
     u64::from(base).wrapping_add(sext32_to_u64(imm_extended))
 }
 
 #[inline(always)]
-pub(crate) fn checked_rv64_memory_address(
+pub(crate) fn checked_memory_address(
     pc: u32,
     base: u32,
     imm_extended: u32,
     access_width: usize,
 ) -> Result<u32, ExecutionError> {
     debug_assert!(access_width <= MEM_SIZE);
-    let address = rv64_address_add_imm(base, imm_extended);
+    let address = address_add_imm(base, imm_extended);
     if address > (MEM_SIZE - access_width) as u64 {
         return Err(ExecutionError::Fail {
             pc,
@@ -329,12 +327,12 @@ pub(crate) fn checked_rv64_memory_address(
 }
 
 #[inline(always)]
-pub fn rv64_bytes_to_u16_block(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
+pub fn bytes_to_u16_block(bytes: [u8; REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
     std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
 }
 
-pub(crate) const RV64_BYTE_SIGN_BIT: u16 = 1 << (RV64_BYTE_BITS - 1);
-pub(crate) const RV64_U16_SIGN_BIT: u16 = 1 << (U16_BITS - 1);
+pub(crate) const BYTE_SIGN_BIT: u16 = 1 << (BYTE_BITS - 1);
+pub(crate) const U16_SIGN_BIT: u16 = 1 << (U16_BITS - 1);
 
 #[inline(always)]
 pub(crate) fn u16_cell_byte(cell: u16, byte_idx: usize) -> u16 {
@@ -343,9 +341,9 @@ pub(crate) fn u16_cell_byte(cell: u16, byte_idx: usize) -> u16 {
 
 /// Converts a low-32-bit value to one zero-extended RV64 u16 block.
 #[inline(always)]
-pub fn rv64_u32_to_u16_block(value: u32) -> [u16; BLOCK_FE_WIDTH] {
+pub fn u32_to_u16_block(value: u32) -> [u16; BLOCK_FE_WIDTH] {
     std::array::from_fn(|i| {
-        if i < RV64_PTR_U16_LIMBS {
+        if i < PTR_U16_LIMBS {
             (value >> (U16_BITS * i)) as u16
         } else {
             0
@@ -355,19 +353,19 @@ pub fn rv64_u32_to_u16_block(value: u32) -> [u16; BLOCK_FE_WIDTH] {
 
 /// Splits a 32-bit RV64 pointer into low-to-high u16 limbs.
 #[inline(always)]
-pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; RV64_PTR_U16_LIMBS] {
+pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; PTR_U16_LIMBS] {
     std::array::from_fn(|i| (ptr >> (U16_BITS * i)) as u16)
 }
 
 /// Field-element form of [`ptr_to_u16_limbs`].
 #[inline(always)]
-pub fn ptr_to_field_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; RV64_PTR_U16_LIMBS] {
+pub fn ptr_to_field_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; PTR_U16_LIMBS] {
     ptr_to_u16_limbs(value).map(F::from_u16)
 }
 
 #[inline(always)]
-pub fn rv64_u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
+pub fn u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; REGISTER_NUM_LIMBS] {
+    let mut out = [0u8; REGISTER_NUM_LIMBS];
     for (i, cell) in block.into_iter().enumerate() {
         let [lo, hi] = cell.to_le_bytes();
         out[2 * i] = lo;
@@ -380,10 +378,10 @@ pub fn rv64_u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGIST
 #[inline(always)]
 pub fn ptr_max_bits_shift(ptr_max_bits: usize) -> usize {
     assert!(
-        (U16_BITS..=RV64_PTR_BITS).contains(&ptr_max_bits),
-        "ptr_max_bits must be in [U16_BITS, RV64_PTR_BITS]"
+        (U16_BITS..=PTR_BITS).contains(&ptr_max_bits),
+        "ptr_max_bits must be in [U16_BITS, PTR_BITS]"
     );
-    RV64_PTR_BITS - ptr_max_bits
+    PTR_BITS - ptr_max_bits
 }
 
 /// Range-check value for a high u16 pointer limb.
@@ -395,7 +393,7 @@ pub fn ptr_bound_from_high_u16(high_u16: u16, ptr_max_bits: usize) -> u32 {
 /// Range-check value for the high u16 limb of a low-32-bit pointer.
 #[inline(always)]
 pub fn ptr_bound_from_ptr(ptr: u32, ptr_max_bits: usize) -> u32 {
-    let high_u16 = ptr_to_u16_limbs(ptr)[RV64_PTR_U16_LIMBS - 1];
+    let high_u16 = ptr_to_u16_limbs(ptr)[PTR_U16_LIMBS - 1];
     ptr_bound_from_high_u16(high_u16, ptr_max_bits)
 }
 
@@ -411,7 +409,7 @@ where
 
 /// Composes low-to-high u16 pointer limbs into one field expression/value.
 #[inline(always)]
-pub fn u16_limbs_to_ptr<T, V>(limbs: &[V; RV64_PTR_U16_LIMBS]) -> T
+pub fn u16_limbs_to_ptr<T, V>(limbs: &[V; PTR_U16_LIMBS]) -> T
 where
     T: PrimeCharacteristicRing,
     V: Copy + Into<T>,
@@ -421,12 +419,12 @@ where
     })
 }
 
-/// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
+/// Expand `N` limbs to `REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
 /// register bus reads where the register holds a value in fewer than 8 bytes.
-pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
+pub fn expand_to_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
     limbs: &[V; N],
-) -> [T; RV64_REGISTER_NUM_LIMBS] {
-    const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
+) -> [T; REGISTER_NUM_LIMBS] {
+    const { assert!(N <= REGISTER_NUM_LIMBS) }
     std::array::from_fn(|i| {
         if i < N {
             limbs[i].clone().into()
@@ -437,7 +435,7 @@ pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, c
 }
 
 /// Expand `N` u16 limbs to one RV64 register bus block by zero-padding.
-pub fn expand_to_rv64_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
+pub fn expand_to_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
 where
     V: Clone + Into<T>,
     T: PrimeCharacteristicRing,
@@ -458,15 +456,15 @@ pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const
     data.into_iter()
         .enumerate()
         .fold(T::ZERO, |acc, (i, limb)| {
-            acc + limb * T::from_u64(1u64 << (i * RV64_BYTE_BITS))
+            acc + limb * T::from_u64(1u64 << (i * BYTE_BITS))
         })
 }
 
 #[inline(always)]
 pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
     debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
+        address_space == REGISTER_AS
+            || address_space == MEMORY_AS
             || address_space == PUBLIC_VALUES_AS,
     );
 
@@ -482,8 +480,8 @@ pub fn memory_write<const N: usize>(
     data: [u8; N],
 ) {
     debug_assert!(
-        address_space == RV64_REGISTER_AS
-            || address_space == RV64_MEMORY_AS
+        address_space == REGISTER_AS
+            || address_space == MEMORY_AS
             || address_space == PUBLIC_VALUES_AS
     );
 
@@ -520,23 +518,23 @@ pub fn memory_write_from_state<Ctx, const N: usize>(
 }
 
 #[inline(always)]
-pub fn read_rv64_register_from_state<Ctx>(state: &mut VmStateMut<GuestMemory, Ctx>, ptr: u32) -> u64
+pub fn read_register_from_state<Ctx>(state: &mut VmStateMut<GuestMemory, Ctx>, ptr: u32) -> u64
 where
     Ctx: ExecutionCtxTrait,
 {
-    u64::from_le_bytes(memory_read_from_state(state, RV64_REGISTER_AS, ptr))
+    u64::from_le_bytes(memory_read_from_state(state, REGISTER_AS, ptr))
 }
 
 #[inline(always)]
-pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
-    u64::from_le_bytes(memory_read(memory, RV64_REGISTER_AS, ptr))
+pub fn read_register(memory: &GuestMemory, ptr: u32) -> u64 {
+    u64::from_le_bytes(memory_read(memory, REGISTER_AS, ptr))
 }
 
 /// Read an RV64 register and return its value as u32, asserting (in debug) that the upper
 /// 32 bits are zero.
 #[inline(always)]
-pub fn read_rv64_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
-    u64_to_u32_checked(read_rv64_register(memory, ptr))
+pub fn read_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
+    u64_to_u32_checked(read_register(memory, ptr))
 }
 
 #[cfg(test)]
@@ -558,7 +556,7 @@ mod pointer_tests {
     }
 
     #[test]
-    fn register_pointer_uses_the_rv64_register_domain() {
+    fn register_pointer_uses_the_register_domain() {
         assert_eq!(checked_register_u16_pointer(0).unwrap(), 0);
         assert_eq!(checked_register_u16_pointer(31 * 8).unwrap(), 31 * 4);
 

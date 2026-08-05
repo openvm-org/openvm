@@ -12,7 +12,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADB};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -25,14 +25,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::utils::create_seeded_rng;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use crate::load_sign_extend::{test_utils::dummy_range_checker, Rv64LoadSignExtendByteChipGpu};
+use crate::load_sign_extend::{test_utils::dummy_range_checker, LoadSignExtendByteChipGpu};
 use crate::{
-    adapters::{Rv64LoadByteAdapterAir, Rv64LoadByteAdapterFiller, RV64_BYTE_BITS},
+    adapters::{LoadByteAdapterAir, LoadByteAdapterFiller, BYTE_BITS},
     load_sign_extend::{
         byte::{
-            trace::generate_trace_from_postflight, LoadSignExtendByteCoreAir,
-            LoadSignExtendByteCoreCols, LoadSignExtendByteFiller, Rv64LoadSignExtendByteAir,
-            Rv64LoadSignExtendByteChip, Rv64LoadSignExtendByteExecutor,
+            trace::generate_trace_from_postflight, LoadSignExtendByteAir, LoadSignExtendByteChip,
+            LoadSignExtendByteCoreAir, LoadSignExtendByteCoreCols, LoadSignExtendByteExecutor,
+            LoadSignExtendByteFiller,
         },
         test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
     },
@@ -40,9 +40,9 @@ use crate::{
 
 type ByteHarness = TestChipHarness<
     F,
-    Rv64LoadSignExtendByteExecutor,
-    Rv64LoadSignExtendByteAir,
-    Rv64LoadSignExtendByteChip<F>,
+    LoadSignExtendByteExecutor,
+    LoadSignExtendByteAir,
+    LoadSignExtendByteChip<F>,
 >;
 
 fn create_byte_harness(
@@ -50,33 +50,31 @@ fn create_byte_harness(
 ) -> (
     ByteHarness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-    let air = Rv64LoadSignExtendByteAir::new(
-        Rv64LoadByteAdapterAir::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let air = LoadSignExtendByteAir::new(
+        LoadByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
         LoadSignExtendByteCoreAir::new(
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.bus(),
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendByteExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let chip = Rv64LoadSignExtendByteChip::<F>::new(
+    let executor = LoadSignExtendByteExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let chip = LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
-            Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,
         ),
@@ -180,42 +178,42 @@ fn negative_split_signed_load_test() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuByteHarness = GpuTestChipHarness<
     F,
-    Rv64LoadSignExtendByteExecutor,
-    Rv64LoadSignExtendByteAir,
-    Rv64LoadSignExtendByteChipGpu,
-    Rv64LoadSignExtendByteChip<F>,
+    LoadSignExtendByteExecutor,
+    LoadSignExtendByteAir,
+    LoadSignExtendByteChipGpu,
+    LoadSignExtendByteChip<F>,
 >;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
     let range_checker = dummy_range_checker();
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(
         default_bitwise_lookup_bus(),
     ));
-    let air = Rv64LoadSignExtendByteAir::new(
-        Rv64LoadByteAdapterAir::new(
+    let air = LoadSignExtendByteAir::new(
+        LoadByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
         LoadSignExtendByteCoreAir::new(
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.bus(),
             range_checker.bus(),
         ),
     );
-    let executor = Rv64LoadSignExtendByteExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
-    let cpu_chip = Rv64LoadSignExtendByteChip::<F>::new(
+    let executor = LoadSignExtendByteExecutor::new(LoadStoreOpcode::CLASS_OFFSET);
+    let cpu_chip = LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
-            Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
             range_checker,
         ),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LoadSignExtendByteChipGpu::new(
+    let gpu_chip = LoadSignExtendByteChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),

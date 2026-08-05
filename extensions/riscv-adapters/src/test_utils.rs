@@ -3,7 +3,7 @@ use openvm_circuit::arch::{
     BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
-use openvm_riscv_circuit::adapters::{RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
+use openvm_riscv_circuit::adapters::{REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
@@ -17,13 +17,13 @@ pub fn write_ptr_reg(
     tester.write_bytes(ptr_as, reg_addr, value.to_le_bytes().map(BabyBear::from_u8));
 }
 
-pub fn rv64_write_heap_default<const NUM_LIMBS: usize>(
+pub fn write_heap_default<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(RV64_REGISTER_NUM_LIMBS);
+    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(128);
     write_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
@@ -46,13 +46,13 @@ pub fn rv64_write_heap_default<const NUM_LIMBS: usize>(
     )
 }
 
-pub fn rv64_write_u16_heap_default<const NUM_LIMBS: usize>(
+pub fn write_u16_heap_default<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(RV64_REGISTER_NUM_LIMBS);
+    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(128);
     write_u16_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
@@ -75,14 +75,14 @@ pub fn rv64_write_u16_heap_default<const NUM_LIMBS: usize>(
     )
 }
 
-pub fn rv64_write_heap_default_with_increment<const NUM_LIMBS: usize>(
+pub fn write_heap_default_with_increment<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     pointer_increment: usize,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(RV64_REGISTER_NUM_LIMBS);
+    let [reg1, reg2, reg3] = tester.get_default_registers::<3>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(pointer_increment);
     write_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
@@ -146,14 +146,14 @@ fn write_u16_heap<const NUM_LIMBS: usize>(
     }
 }
 
-pub fn rv64_heap_branch_default<const NUM_LIMBS: usize>(
+pub fn heap_branch_default<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     imm: isize,
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
-    let [reg1, reg2] = tester.get_default_registers::<2>(RV64_REGISTER_NUM_LIMBS);
+    let [reg1, reg2] = tester.get_default_registers::<2>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(128);
     write_heap(tester, reg1, pointer1, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
@@ -175,7 +175,7 @@ pub fn rv64_heap_branch_default<const NUM_LIMBS: usize>(
 }
 
 // Returns (instruction, rd)
-pub fn rv64_rand_write_register_or_imm<const NUM_LIMBS: usize>(
+pub fn rand_write_register_or_imm<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     rs1_writes: [u32; NUM_LIMBS],
     rs2_writes: [u32; NUM_LIMBS],
@@ -203,9 +203,7 @@ pub fn rv64_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     )
 }
 
-pub fn generate_rv64_is_type_immediate(
-    rng: &mut StdRng,
-) -> (usize, [u32; RV64_REGISTER_NUM_LIMBS]) {
+pub fn generate_is_type_immediate(rng: &mut StdRng) -> (usize, [u32; REGISTER_NUM_LIMBS]) {
     let mut imm: u32 = rng.random_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF

@@ -10,13 +10,10 @@
 using namespace riscv;
 
 // SLTI/SLTIU use u16 limbs and the single-read immediate adapter.
-using Rv64LessThanImmCore = LessThanImmCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64LessThanImmCoreCols = LessThanImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct LessThanImmCols {
-    Rv64BaseAluImmU16AdapterCols<T> adapter;
-    Rv64LessThanImmCoreCols<T> core;
+    BaseAluImmU16AdapterCols<T> adapter;
+    LessThanImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/less_than_imm.inc.cuh"

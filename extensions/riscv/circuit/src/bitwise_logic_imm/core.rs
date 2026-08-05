@@ -135,7 +135,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BitwiseLogicImmExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BitwiseLogicImmCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 

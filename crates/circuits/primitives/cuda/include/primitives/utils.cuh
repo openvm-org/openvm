@@ -45,7 +45,7 @@ __device__ __host__ __forceinline__ uint32_t ptr_bound_from_high_u16(
     uint16_t high_u16,
     uint32_t ptr_max_bits
 ) {
-    return uint32_t(high_u16) << (riscv::RV64_PTR_BITS - ptr_max_bits);
+    return uint32_t(high_u16) << (riscv::PTR_BITS - ptr_max_bits);
 }
 
 // Convert 4 bytes to a u32 in big endian order
