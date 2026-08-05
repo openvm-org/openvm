@@ -14,7 +14,6 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
-use strum::IntoEnumIterator;
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -23,8 +22,9 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub c: [T; NUM_LIMBS],
     pub cmp_result: T,
 
-    pub opcode_slt_flag: T,
-    pub opcode_sltu_flag: T,
+    /// Packs the opcode flags into one column:
+    /// 0 = padding, 1 = SLTU (unsigned), 2 = SLT (signed).
+    pub opcode_mode: T,
 
     // Most significant limb of b and c respectively as a field element, will be range
     // checked to be within [-2^(LIMB_BITS - 1), 2^(LIMB_BITS - 1)) if signed,
@@ -73,13 +73,18 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        let flags = [cols.opcode_slt_flag, cols.opcode_sltu_flag];
 
-        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
-            builder.assert_bool(flag);
-            acc + flag.into()
-        });
-        builder.assert_bool(is_valid.clone());
+        // opcode_mode is 0 (padding), 1 (SLTU) or 2 (SLT).
+        let mode = cols.opcode_mode;
+        builder.assert_zero(mode * (mode - AB::Expr::ONE) * (mode - AB::Expr::TWO));
+
+        // mode * (3 - mode) / 2 evaluates to 0, 1, 1 at mode = 0, 1, 2.
+        let half = AB::Expr::from(AB::F::TWO.inverse());
+        let is_valid = mode * (AB::Expr::from_u32(3) - mode) * half.clone();
+        // mode * (mode - 1) / 2 evaluates to 0, 0, 1 at mode = 0, 1, 2.
+        let is_signed = mode * (mode - AB::Expr::ONE) * half;
+        let is_unsigned = is_valid.clone() - is_signed.clone();
+
         builder.assert_bool(cols.cmp_result);
 
         let b = &cols.b;
@@ -115,7 +120,7 @@ where
 
         // Check if b_msb_f and c_msb_f are in
         // [-2^(LIMB_BITS - 1), 2^(LIMB_BITS - 1)) if signed, [0, 2^LIMB_BITS) if unsigned.
-        let sign_shift = AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag;
+        let sign_shift = AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * is_signed.clone();
         self.range_bus
             .range_check(cols.b_msb_f + sign_shift.clone(), LIMB_BITS)
             .eval(builder, is_valid.clone());
@@ -128,12 +133,8 @@ where
             .range_check(cols.diff_val - AB::Expr::ONE, LIMB_BITS)
             .eval(builder, prefix_sum);
 
-        let expected_opcode = flags
-            .iter()
-            .zip(LessThanOpcode::iter())
-            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
-            })
+        let expected_opcode = is_signed * AB::Expr::from_u8(LessThanOpcode::SLT as u8)
+            + is_unsigned * AB::Expr::from_u8(LessThanOpcode::SLTU as u8)
             + AB::Expr::from_usize(self.offset);
         let mut a: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();

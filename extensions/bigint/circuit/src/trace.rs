@@ -648,8 +648,8 @@ fn fill_less_than<F: PrimeField32>(
     }
     core.b_msb_f = b_msb_f;
     core.c_msb_f = c_msb_f;
-    core.opcode_slt_flag = F::from_bool(signed);
-    core.opcode_sltu_flag = F::from_bool(!signed);
+    // 1 = unsigned, 2 = signed; 0 is reserved for padding rows.
+    core.opcode_mode = if signed { F::TWO } else { F::ONE };
     core.cmp_result = F::from_bool(cmp_result);
     core.b = b.map(F::from_u16);
     core.c = c.map(F::from_u16);
