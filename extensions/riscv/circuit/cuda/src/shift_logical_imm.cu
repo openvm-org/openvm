@@ -12,13 +12,10 @@ using namespace program;
 
 // SLLI/SRLI use u16 limbs (4 limbs of 16 bits) and the immediate u16 ALU adapter. The
 // immediate operand is reconstructed from the core's marker columns.
-using Rv64ShiftLogicalImmCore = ShiftLogicalImmCore<BLOCK_FE_WIDTH, U16_BITS>;
-template <typename T>
-using Rv64ShiftLogicalImmCoreCols = ShiftLogicalImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftLogicalImmCols {
-    Rv64BaseAluImmU16AdapterCols<T> adapter;
-    Rv64ShiftLogicalImmCoreCols<T> core;
+    BaseAluImmU16AdapterCols<T> adapter;
+    ShiftLogicalImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS> core;
 };
 
 #include "../rvr/src/shift_logical_imm.inc.cuh"

@@ -117,7 +117,7 @@ __global__ void modular_addsub_replay_tracegen(
 ) {
     constexpr size_t BYTES = BLOCKS * MEMORY_BLOCK_BYTES;
     constexpr size_t ADAPTER_WIDTH =
-        sizeof(Rv64VecHeapAdapterCols<uint8_t, 2, BLOCKS, BLOCKS>);
+        sizeof(VecHeapAdapterCols<uint8_t, 2, BLOCKS, BLOCKS>);
     constexpr size_t CORE_WIDTH = 4 * BYTES + 4;
     size_t row_index = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (row_index >= height) return;

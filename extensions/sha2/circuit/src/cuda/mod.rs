@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha512Config};
@@ -73,8 +73,8 @@ impl<C: Sha2Config> Sha2MainChipGpu<C> {
                     step_range.start,
                     step_range.len(),
                     C::OPCODE.global_opcode().as_usize() as u32,
-                    RV64_REGISTER_AS,
-                    RV64_MEMORY_AS,
+                    REGISTER_AS,
+                    MEMORY_AS,
                     self.pointer_max_bits,
                     &self.range_checker.count,
                     self.timestamp_max_bits,
@@ -95,8 +95,8 @@ impl<C: Sha2Config> Sha2MainChipGpu<C> {
                         step_range.start,
                         step_range.len(),
                         C::OPCODE.global_opcode().as_usize() as u32,
-                        RV64_REGISTER_AS,
-                        RV64_MEMORY_AS,
+                        REGISTER_AS,
+                        MEMORY_AS,
                         self.pointer_max_bits,
                         &self.range_checker.count,
                         self.timestamp_max_bits,
@@ -194,8 +194,8 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
                         step_range.start,
                         step_range.len(),
                         C::OPCODE.global_opcode().as_usize() as u32,
-                        RV64_REGISTER_AS,
-                        RV64_MEMORY_AS,
+                        REGISTER_AS,
+                        MEMORY_AS,
                         self.pointer_max_bits,
                         &prev_hashes,
                         &self.bitwise_lookup.count,
@@ -237,8 +237,8 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
                         step_range.start,
                         step_range.len(),
                         C::OPCODE.global_opcode().as_usize() as u32,
-                        RV64_REGISTER_AS,
-                        RV64_MEMORY_AS,
+                        REGISTER_AS,
+                        MEMORY_AS,
                         self.pointer_max_bits,
                         &prev_hashes,
                         &self.bitwise_lookup.count,

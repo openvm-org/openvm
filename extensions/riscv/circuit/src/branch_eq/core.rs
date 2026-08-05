@@ -128,7 +128,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BranchEqualExecutor<const NUM_LIMBS: usize> {
+pub struct BranchEqualCoreExecutor<const NUM_LIMBS: usize> {
     pub offset: usize,
     pub pc_step: u32,
 }

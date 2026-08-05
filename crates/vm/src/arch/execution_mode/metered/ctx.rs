@@ -2,7 +2,7 @@ use itertools::Itertools;
 use openvm_instructions::{
     exe::SparseMemoryImage,
     metering::SEGMENT_CHECK_INSNS,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, REGISTER_AS},
 };
 use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
 use serde::{Deserialize, Serialize};
@@ -240,7 +240,7 @@ impl ExecutionCtxTrait for MeteredCtx {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
-            address_space != RV64_IMM_AS,
+            address_space != IMM_AS,
             "address space must not be immediate"
         );
         debug_assert!(size > 0, "size must be greater than 0, got {size}");
@@ -250,7 +250,7 @@ impl ExecutionCtxTrait for MeteredCtx {
         );
 
         // Handle merkle tree updates
-        if address_space != RV64_REGISTER_AS {
+        if address_space != REGISTER_AS {
             self.memory_ctx
                 .update_boundary_merkle_heights(address_space, ptr, size);
         }

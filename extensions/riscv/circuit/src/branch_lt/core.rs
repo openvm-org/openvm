@@ -183,7 +183,7 @@ where
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BranchLessThanExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BranchLessThanCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 

@@ -7,15 +7,15 @@ static __device__ void replay_divrem_values(
     uint8_t const (&b)[8], uint8_t const (&c)[8], DivRemOpcode opcode,
     uint8_t (&quotient)[NUM_LIMBS], uint8_t (&remainder)[NUM_LIMBS]
 ) {
-    constexpr size_t TOTAL_BITS = NUM_LIMBS * RV64_BYTE_BITS;
+    constexpr size_t TOTAL_BITS = NUM_LIMBS * BYTE_BITS;
     constexpr uint64_t MASK = TOTAL_BITS == 64 ? ~uint64_t(0) : ((uint64_t(1) << TOTAL_BITS) - 1);
     constexpr uint64_t SIGN = uint64_t(1) << (TOTAL_BITS - 1);
     uint64_t b_value = 0;
     uint64_t c_value = 0;
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
-        b_value |= uint64_t(b[i]) << (i * RV64_BYTE_BITS);
-        c_value |= uint64_t(c[i]) << (i * RV64_BYTE_BITS);
+        b_value |= uint64_t(b[i]) << (i * BYTE_BITS);
+        c_value |= uint64_t(c[i]) << (i * BYTE_BITS);
     }
     bool is_signed = opcode == DIV || opcode == REM;
     bool b_negative = is_signed && (b_value & SIGN) != 0;
@@ -38,7 +38,7 @@ static __device__ void replay_divrem_values(
     }
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
-        quotient[i] = static_cast<uint8_t>(q_value >> (i * RV64_BYTE_BITS));
-        remainder[i] = static_cast<uint8_t>(r_value >> (i * RV64_BYTE_BITS));
+        quotient[i] = static_cast<uint8_t>(q_value >> (i * BYTE_BITS));
+        remainder[i] = static_cast<uint8_t>(r_value >> (i * BYTE_BITS));
     }
 }

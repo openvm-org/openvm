@@ -5,8 +5,8 @@ use openvm_circuit::{
 use openvm_riscv_circuit::adapters::validate_memory_block_byte_ptr;
 
 use crate::{
-    INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U32_LIMBS, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
-    RV64_BYTE_BITS,
+    BYTE_BITS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U32_LIMBS, INT256_NUM_U64_LIMBS,
+    INT256_NUM_U8_LIMBS,
 };
 
 /// Read a 256-bit integer as 4 separate 8-byte block reads.
@@ -84,8 +84,8 @@ pub(crate) fn u256_lt(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LI
 #[inline(always)]
 pub(crate) fn i256_lt(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool {
     // true for negative. false for positive
-    let rs1_sign = rs1[INT256_NUM_U8_LIMBS - 1] >> (RV64_BYTE_BITS - 1) == 1;
-    let rs2_sign = rs2[INT256_NUM_U8_LIMBS - 1] >> (RV64_BYTE_BITS - 1) == 1;
+    let rs1_sign = rs1[INT256_NUM_U8_LIMBS - 1] >> (BYTE_BITS - 1) == 1;
+    let rs2_sign = rs2[INT256_NUM_U8_LIMBS - 1] >> (BYTE_BITS - 1) == 1;
     let rs1_u64 = bytes_to_u64_array(rs1);
     let rs2_u64 = bytes_to_u64_array(rs2);
     for i in (0..INT256_NUM_U64_LIMBS).rev() {

@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
-use crate::adapters::Rv64MultAdapterAir;
+use super::adapters::{BYTE_BITS, REGISTER_NUM_LIMBS};
+use crate::adapters::MultAdapterAir;
 
 mod core;
 mod execution;
@@ -19,7 +19,6 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64MulHAir =
-    VmAirWrapper<Rv64MultAdapterAir, MulHCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
-pub type Rv64MulHExecutor = MulHExecutor<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64MulHChip<F> = VmChipWrapper<F, MulHFiller<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
+pub type MulHAir = VmAirWrapper<MultAdapterAir, MulHCoreAir<REGISTER_NUM_LIMBS, BYTE_BITS>>;
+pub type MulHExecutor = MulHCoreExecutor<REGISTER_NUM_LIMBS, BYTE_BITS>;
+pub type MulHChip<F> = VmChipWrapper<F, MulHFiller<REGISTER_NUM_LIMBS, BYTE_BITS>>;

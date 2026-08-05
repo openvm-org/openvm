@@ -9,7 +9,7 @@ use openvm_circuit::arch::{
         GpuPostflightBoundary, GpuPostflightContext, GpuPostflightError, GpuPostflightPlan,
         GpuPostflightProgram, GpuPostflightTranscript, GpuUnindexedHistory,
     },
-    rvr::{bridge::read_rv64_registers, PreflightEndpoint, PreflightExecution},
+    rvr::{bridge::read_registers, PreflightEndpoint, PreflightExecution},
     to_byte_ptr_bits, MemoryConfig, PreflightFieldBlock, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
 };
 use openvm_cuda_common::{
@@ -19,7 +19,7 @@ use openvm_cuda_common::{
 };
 use openvm_instructions::{
     program::Program,
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
     DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -201,10 +201,10 @@ impl PreflightReplayProgram {
         num_insns: u32,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let program = self.program();
-        let initial_registers = context.memory_image(RV64_REGISTER_AS)?;
-        let initial_memory = context.memory_image(RV64_MEMORY_AS)?;
+        let initial_registers = context.memory_image(REGISTER_AS)?;
+        let initial_memory = context.memory_image(MEMORY_AS)?;
         let boundary = self.validate_execution(execution, num_insns)?;
-        let final_registers = read_rv64_registers(&execution.state);
+        let final_registers = read_registers(&execution.state);
         let mut final_anchor = RvrCheckpoint {
             pc: execution.to_state.pc,
             timestamp: execution.to_state.timestamp,
@@ -220,7 +220,7 @@ impl PreflightReplayProgram {
         let error = [0u32].to_device_on(program.device_ctx())?;
         let event_counts = gpu_buffer::<PostflightEventCount>(anchors.len(), program.device_ctx());
         event_counts.fill_zero_on(program.device_ctx())?;
-        let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS, DEFERRAL_AS];
+        let address_spaces = [REGISTER_AS, MEMORY_AS, IMM_AS, DEFERRAL_AS];
         let count_span = tracing::info_span!("postflight_replay_count").entered();
         unsafe {
             rvr_checkpoint_replay::count(

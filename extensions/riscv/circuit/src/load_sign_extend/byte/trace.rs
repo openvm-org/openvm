@@ -5,25 +5,24 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADB;
+use openvm_riscv_transpiler::LoadStoreOpcode::LOADB;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{LoadSignExtendByteCoreCols, Rv64LoadSignExtendByteChip};
+use super::{LoadSignExtendByteChip, LoadSignExtendByteCoreCols};
 use crate::{
     adapters::{
-        u16_cell_byte, Rv64LoadByteAdapterCols, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
-        RV64_BYTE_SIGN_BIT,
+        u16_cell_byte, LoadByteAdapterCols, BYTE_BITS, BYTE_SHIFT_SELECTOR_WIDTH, BYTE_SIGN_BIT,
     },
     load_sign_extend::common::load_sign_extend_write_data,
 };
 
 /// Generates the signed byte-load trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64LoadSignExtendByteChip<F>,
+    chip: &LoadSignExtendByteChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(LOADB.global_opcode());
-    let adapter_width = Rv64LoadByteAdapterCols::<F>::width();
+    let adapter_width = LoadByteAdapterCols::<F>::width();
     let width = adapter_width + LoadSignExtendByteCoreCols::<F>::width();
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -49,10 +48,10 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         core_row.read_cell_lo_byte = F::from_u16(read_cell_bytes[0]);
 
         let byte = read_cell_bytes[shift % 2];
-        let sign_bit = byte & RV64_BYTE_SIGN_BIT;
+        let sign_bit = byte & BYTE_SIGN_BIT;
         chip.inner
             .range_checker_chip
-            .add_count((byte - sign_bit) as u32, RV64_BYTE_BITS - 1);
+            .add_count((byte - sign_bit) as u32, BYTE_BITS - 1);
         core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
         core_row.read_data = read_data.map(F::from_u16);
         let selector: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] =

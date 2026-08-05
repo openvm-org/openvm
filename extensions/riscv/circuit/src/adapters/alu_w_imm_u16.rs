@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, REGISTER_AS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -26,8 +26,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, checked_register_u16_pointer, concat_rv64_u16_block, is_canonical_i12,
-    RV64_WORD_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, checked_register_u16_pointer, concat_u16_block, is_canonical_i12,
+    U16_BITS, WORD_U16_LIMBS,
 };
 
 /// Adapter columns for RV64 word instructions with an immediate operand.
@@ -37,40 +37,40 @@ use super::{
 /// rebuilt by sign-extending the core result.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
-pub struct Rv64BaseAluWImmU16AdapterCols<T> {
+pub struct BaseAluWImmU16AdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
-    pub rs1_high: [T; RV64_WORD_U16_LIMBS],
+    pub rs1_high: [T; WORD_U16_LIMBS],
     pub result_sign: T,
     pub reads_aux: MemoryReadAuxCols<T>,
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
-const _: () = assert!(size_of::<Rv64BaseAluWImmU16AdapterCols<u8>>() == 15);
+const _: () = assert!(size_of::<BaseAluWImmU16AdapterCols<u8>>() == 15);
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64BaseAluWImmU16AdapterCols<u8>)]
-pub struct Rv64BaseAluWImmU16AdapterAir {
+#[columns_via(BaseAluWImmU16AdapterCols<u8>)]
+pub struct BaseAluWImmU16AdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64BaseAluWImmU16AdapterAir {
+impl<F: Field> BaseAir<F> for BaseAluWImmU16AdapterAir {
     fn width(&self) -> usize {
-        Rv64BaseAluWImmU16AdapterCols::<F>::width()
+        BaseAluWImmU16AdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWImmU16AdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         ImmInstruction<AB::Expr>,
         1,
         1,
-        RV64_WORD_U16_LIMBS,
-        RV64_WORD_U16_LIMBS,
+        WORD_U16_LIMBS,
+        WORD_U16_LIMBS,
     >;
 
     fn eval(
@@ -79,7 +79,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv64BaseAluWImmU16AdapterCols<_> = local.borrow();
+        let local: &BaseAluWImmU16AdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
@@ -87,12 +87,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] =
-            concat_rv64_u16_block(&ctx.reads[0], &local.rs1_high);
+        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = concat_u16_block(&ctx.reads[0], &local.rs1_high);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
                 ),
                 rs1_data,
@@ -104,7 +103,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
         // Recover the sign of the 32-bit result from its top u16 limb. This simultaneously proves
         // that the top result limb is a canonical u16 value.
         builder.assert_bool(local.result_sign);
-        let result_high = ctx.writes[0][RV64_WORD_U16_LIMBS - 1].clone();
+        let result_high = ctx.writes[0][WORD_U16_LIMBS - 1].clone();
         self.range_bus
             .range_check(
                 result_high - local.result_sign * AB::Expr::from_u32(1 << (U16_BITS - 1)),
@@ -113,14 +112,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         let sign_extend = local.result_sign * AB::Expr::from_u32(u16::MAX as u32);
-        let sign_extend_limbs: [AB::Expr; RV64_WORD_U16_LIMBS] =
-            array::from_fn(|_| sign_extend.clone());
+        let sign_extend_limbs: [AB::Expr; WORD_U16_LIMBS] = array::from_fn(|_| sign_extend.clone());
         let write_data: [AB::Expr; BLOCK_FE_WIDTH] =
-            concat_rv64_u16_block(&ctx.writes[0], &sign_extend_limbs);
+            concat_u16_block(&ctx.writes[0], &sign_extend_limbs);
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
                 ),
                 write_data,
@@ -136,8 +134,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_u32(RV64_IMM_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(IMM_AS),
                 ],
                 local.from_state,
                 AB::F::from_usize(timestamp_delta),
@@ -147,28 +145,28 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWImmU16AdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let local: &Rv64BaseAluWImmU16AdapterCols<_> = local.borrow();
+        let local: &BaseAluWImmU16AdapterCols<_> = local.borrow();
         local.from_state.pc
     }
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64BaseAluWImmU16AdapterFiller {
+pub struct BaseAluWImmU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl Rv64BaseAluWImmU16AdapterFiller {
+impl BaseAluWImmU16AdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         &self,
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64BaseAluWImmU16AdapterCols<F>,
-        compute: impl FnOnce([u16; RV64_WORD_U16_LIMBS], u32) -> [u16; RV64_WORD_U16_LIMBS],
-    ) -> Result<([u16; RV64_WORD_U16_LIMBS], [u16; RV64_WORD_U16_LIMBS]), PostflightError> {
+        adapter_row: &mut BaseAluWImmU16AdapterCols<F>,
+        compute: impl FnOnce([u16; WORD_U16_LIMBS], u32) -> [u16; WORD_U16_LIMBS],
+    ) -> Result<([u16; WORD_U16_LIMBS], [u16; WORD_U16_LIMBS]), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-            || instruction.e.as_canonical_u32() != RV64_IMM_AS
+        if instruction.d.as_canonical_u32() != REGISTER_AS
+            || instruction.e.as_canonical_u32() != IMM_AS
         {
             return Err(PostflightError::new(
                 "word register-immediate ALU instruction has invalid address spaces",
@@ -187,20 +185,20 @@ impl Rv64BaseAluWImmU16AdapterFiller {
         let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let rs1 = replay.read_u16(REGISTER_AS, rs1_u16_ptr)?;
         let input = array::from_fn(|i| rs1.value[i]);
         let output = compute(input, immediate);
-        let result_high = output[RV64_WORD_U16_LIMBS - 1];
+        let result_high = output[WORD_U16_LIMBS - 1];
         let result_sign = result_high >> (U16_BITS - 1);
         let sign_extend_limb = if result_sign != 0 { u16::MAX } else { 0 };
         let write_value = array::from_fn(|i| {
-            if i < RV64_WORD_U16_LIMBS {
+            if i < WORD_U16_LIMBS {
                 output[i]
             } else {
                 sign_extend_limb
             }
         });
-        let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, write_value)?;
+        let write = replay.write_u16(REGISTER_AS, rd_u16_ptr, write_value)?;
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         self.range_checker_chip.add_count(
@@ -221,7 +219,7 @@ impl Rv64BaseAluWImmU16AdapterFiller {
             adapter_row.reads_aux.as_mut(),
         );
         adapter_row.result_sign = F::from_u16(result_sign);
-        adapter_row.rs1_high = array::from_fn(|i| F::from_u16(rs1.value[RV64_WORD_U16_LIMBS + i]));
+        adapter_row.rs1_high = array::from_fn(|i| F::from_u16(rs1.value[WORD_U16_LIMBS + i]));
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(rd_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);

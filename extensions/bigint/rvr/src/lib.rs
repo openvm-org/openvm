@@ -5,12 +5,12 @@
 //! via double FFI.
 
 use openvm_bigint_transpiler::{
-    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+    BaseAlu256Opcode, BranchEqual256Opcode, BranchLessThan256Opcode, LessThan256Opcode,
+    Mul256Opcode, Shift256Opcode,
 };
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -29,14 +29,14 @@ const INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(32);
 
 fn decode_reg(value: u32) -> Variable {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 fn emit_pointer_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
     let pointers = pointers.join(" | ");
     ctx.write_line(&format!(
         "if (unlikely((({pointers}) & {}ull) != 0ull)) {{",
-        RV64_REGISTER_BYTES - 1
+        REGISTER_BYTES - 1
     ));
     ctx.emit_trap();
     ctx.write_line("}");
@@ -305,7 +305,7 @@ impl RvrExtension for Int256Extension {
         // ── ALU body instructions ───────────────────────────────────────
 
         // BaseAlu256: ADD(0), SUB(1), XOR(2), OR(3), AND(4)
-        let base_alu_start = Rv64BaseAlu256Opcode::CLASS_OFFSET;
+        let base_alu_start = BaseAlu256Opcode::CLASS_OFFSET;
         if opcode >= base_alu_start && opcode < base_alu_start + BaseAluOpcode::COUNT {
             let op = match opcode - base_alu_start {
                 0 => Int256AluOp::Add,
@@ -319,7 +319,7 @@ impl RvrExtension for Int256Extension {
         }
 
         // Shift256: SLL(0), SRL(1), SRA(2)
-        let shift_start = Rv64Shift256Opcode::CLASS_OFFSET;
+        let shift_start = Shift256Opcode::CLASS_OFFSET;
         if opcode >= shift_start && opcode < shift_start + ShiftOpcode::COUNT {
             let op = match opcode - shift_start {
                 0 => Int256AluOp::Sll,
@@ -331,7 +331,7 @@ impl RvrExtension for Int256Extension {
         }
 
         // LessThan256: SLT(0), SLTU(1)
-        let lt_start = Rv64LessThan256Opcode::CLASS_OFFSET;
+        let lt_start = LessThan256Opcode::CLASS_OFFSET;
         if opcode >= lt_start && opcode < lt_start + LessThanOpcode::COUNT {
             let op = match opcode - lt_start {
                 0 => Int256AluOp::Slt,
@@ -342,7 +342,7 @@ impl RvrExtension for Int256Extension {
         }
 
         // Mul256: MUL(0)
-        let mul_start = Rv64Mul256Opcode::CLASS_OFFSET;
+        let mul_start = Mul256Opcode::CLASS_OFFSET;
         if opcode >= mul_start && opcode < mul_start + MulOpcode::COUNT {
             return Some(self.lift_alu(insn, pc, Int256AluOp::Mul));
         }
@@ -350,7 +350,7 @@ impl RvrExtension for Int256Extension {
         // ── Branch terminator instructions ──────────────────────────────
 
         // BranchEqual256: BEQ(0), BNE(1)
-        let beq_start = Rv64BranchEqual256Opcode::CLASS_OFFSET;
+        let beq_start = BranchEqual256Opcode::CLASS_OFFSET;
         if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {
             let is_ne = opcode - beq_start == 1;
             let rs1_reg = decode_reg(insn.a);
@@ -372,7 +372,7 @@ impl RvrExtension for Int256Extension {
         }
 
         // BranchLessThan256: BLT(0), BLTU(1), BGE(2), BGEU(3)
-        let blt_start = Rv64BranchLessThan256Opcode::CLASS_OFFSET;
+        let blt_start = BranchLessThan256Opcode::CLASS_OFFSET;
         if opcode >= blt_start && opcode < blt_start + BranchLessThanOpcode::COUNT {
             let op = match opcode - blt_start {
                 0 => Int256BranchLtOp::Blt,
@@ -620,11 +620,8 @@ mod tests {
         let ext = Int256Extension::new();
 
         for insn in [
-            instruction(Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ), 101 - 12),
-            instruction(
-                Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT),
-                101 - 12,
-            ),
+            instruction(BranchEqual256Opcode(BranchEqualOpcode::BEQ), 101 - 12),
+            instruction(BranchLessThan256Opcode(BranchLessThanOpcode::BLT), 101 - 12),
         ] {
             let lifted = ext.try_lift(&insn, pc).unwrap();
             let LiftedInstr::Term { terminator, .. } = lifted else {

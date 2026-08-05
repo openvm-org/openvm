@@ -1,7 +1,7 @@
 #include "riscv/reg_reg_write_replay.cuh"
 
 
-__global__ void rv64_mul_w_replay_tracegen(
+__global__ void mul_w_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -26,7 +26,7 @@ __global__ void rv64_mul_w_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64MulWCols<uint8_t>));
+    row.fill_zero(0, sizeof(MulWCols<uint8_t>));
     if (idx >= num_steps) return;
     auto const &step = steps[step_start + idx];
     ReplayProgramTransition transition;
@@ -43,66 +43,66 @@ __global__ void rv64_mul_w_replay_tracegen(
         )) {
         return;
     }
-    Rv64RegRegWriteReplay replay;
+    RegRegWriteReplay replay;
     if (!replay_reg_reg_write(
             transition, opcode, register_address_space, step,
             memory, seeds, predecessors, replay, error, 624
         )) return;
 
-    uint8_t expected_low[RV64_WORD_NUM_LIMBS];
-    uint32_t carry[RV64_WORD_NUM_LIMBS];
-    run_mul<RV64_WORD_NUM_LIMBS>(replay.rs1, replay.rs2, expected_low, carry);
-    uint8_t sign = expected_low[RV64_WORD_NUM_LIMBS - 1] >> 7;
+    uint8_t expected_low[WORD_NUM_LIMBS];
+    uint32_t carry[WORD_NUM_LIMBS];
+    run_mul<WORD_NUM_LIMBS>(replay.rs1, replay.rs2, expected_low, carry);
+    uint8_t sign = expected_low[WORD_NUM_LIMBS - 1] >> 7;
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
-        uint8_t expected = i < RV64_WORD_NUM_LIMBS ? expected_low[i] : (sign ? 0xff : 0);
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
+        uint8_t expected = i < WORD_NUM_LIMBS ? expected_low[i] : (sign ? 0xff : 0);
         if (replay.result[i] != expected) {
             preflight_set_error(error, 629);
             return;
         }
     }
 
-    Rv64MultWAdapterRecord adapter_record{};
+    MultWAdapterRecord adapter_record{};
     adapter_record.from_pc = replay.from_pc;
     adapter_record.from_timestamp = replay.from_timestamp;
     adapter_record.rd_ptr = replay.rd_ptr;
     adapter_record.rs1_ptr = replay.rs1_ptr;
     adapter_record.rs2_ptr = replay.rs2_ptr;
     adapter_record.result_sign = sign;
-    adapter_record.result_word_msl = expected_low[RV64_WORD_NUM_LIMBS - 1];
+    adapter_record.result_word_msl = expected_low[WORD_NUM_LIMBS - 1];
     adapter_record.reads_aux[0].prev_timestamp = replay.rs1_previous_timestamp;
     adapter_record.reads_aux[1].prev_timestamp = replay.rs2_previous_timestamp;
     adapter_record.writes_aux.prev_timestamp = replay.result_previous_timestamp;
 #pragma unroll
-    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i++) {
-        adapter_record.rs1_high[i] = replay.rs1[RV64_WORD_NUM_LIMBS + i];
-        adapter_record.rs2_high[i] = replay.rs2[RV64_WORD_NUM_LIMBS + i];
+    for (size_t i = 0; i < WORD_NUM_LIMBS; i++) {
+        adapter_record.rs1_high[i] = replay.rs1[WORD_NUM_LIMBS + i];
+        adapter_record.rs2_high[i] = replay.rs2[WORD_NUM_LIMBS + i];
     }
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++)
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++)
         adapter_record.writes_aux.prev_data[i] = replay.previous_result[i];
-    Rv64MulWCoreRecord core_record{};
+    MulWCoreRecord core_record{};
 #pragma unroll
-    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < WORD_NUM_LIMBS; i++) {
         core_record.b[i] = replay.rs1[i];
         core_record.c[i] = replay.rs2[i];
     }
     auto bitwise = BitwiseOperationLookup(bitwise_lookup);
-    Rv64MultWAdapter adapter(
+    MultWAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_bins), bitwise, timestamp_max_bits
     );
     adapter.fill_trace_row(row, adapter_record);
-    Rv64MulWCore core(
+    MulWCore core(
         RangeTupleChecker<2>(
             range_tuple, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         ), bitwise
     );
-    core.fill_trace_row(row.slice_from(COL_INDEX(Rv64MulWCols, core)), core_record);
+    core.fill_trace_row(row.slice_from(COL_INDEX(MulWCols, core)), core_record);
 }
 
 
 
-extern "C" int _rv64_mul_w_replay_tracegen(
+extern "C" int _mul_w_replay_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -126,13 +126,13 @@ extern "C" int _rv64_mul_w_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64MulWCols<uint8_t>));
+    assert(width == sizeof(MulWCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(step_start <= steps.len());
     assert(num_steps <= steps.len() - step_start);
     assert(height >= num_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_mul_w_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    mul_w_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         step_start, num_steps, error, opcode, register_address_space, range_checker,
         range_checker_bins, bitwise_lookup, range_tuple, range_tuple_sizes, timestamp_max_bits

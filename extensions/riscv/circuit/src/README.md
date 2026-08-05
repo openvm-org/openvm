@@ -198,7 +198,7 @@ This circuit proves that:
 
 Given:
 
-- `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `opcode_beq_flag` and `opcode_bne_flag` indicate if the instruction is `beq` or `bne`
 - `imm` is the immediate value
 - `to_pc` is the destination program address
@@ -212,7 +212,7 @@ This circuit proves that:
 
 Given:
 
-- `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - Flags indicating if the instruction is one of `blt`, `bltu`, `bge`, `bgeu`
 - `imm` is the immediate value
 - `to_pc` is the destination program address
@@ -228,7 +228,7 @@ This circuit proves that:
 
 Given:
 
-- `b` and `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `b` and `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `q` is the decomposition of the quotient
 - `r` is the decomposition of the remainder
 - `a` is the decomposition of the result
@@ -239,7 +239,7 @@ This circuit proves that:
 - `compose(b) = compose(c) * compose(q) + compose(r)`
 - `0 <= |compose(r)| < |compose(c)|`
 - If `compose(c) == 0`, then `compose(q) == -1` for signed operations and `compose(q) == 2^64 - 1` for unsigned operations
-- Each limb of `q` and `r` is in the range `[0, 2^RV64_BYTE_BITS)`
+- Each limb of `q` and `r` is in the range `[0, 2^BYTE_BITS)`
 - `a = q` if the instruction is `div` or `divu`
 - `a = r` if the instruction is `rem` or `remu`
 
@@ -254,11 +254,11 @@ Given:
 
 This circuit proves that:
 
-- Each limb of `rd` is in the range `[0, 2^RV64_BYTE_BITS)`
+- Each limb of `rd` is in the range `[0, 2^BYTE_BITS)`
 - If `opcode` is `jal`, then
   - `to_pc == pc + imm`
   - `compose(rd) == pc + 4`
-  - The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1))`
+  - The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - BYTE_BITS * (WORD_NUM_LIMBS - 1))`
 - If `opcode` is `lui`, then
   - `to_pc == pc + 4`
   - `compose(rd) == imm * 2^12`
@@ -267,7 +267,7 @@ This circuit proves that:
 
 Given:
 
-- `rs1` is the decomposition of the operand, with its limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `rs1` is the decomposition of the operand, with its limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `rd` is the decomposition of the result
 - `imm` is the immediate value
 - `to_pc_least_sig_bit` is the least significant bit of `compose(rs1) + imm`
@@ -278,8 +278,8 @@ This circuit proves that:
 - `to_pc_least_sig_bit + 2 * compose(to_pc_limbs) == compose(rs1) + imm`
 - The destination program address is `2 * compose(to_pc_limbs)`, so the least significant bit is cleared as required by `jalr`
 - `compose(rd) == pc + 4`
-- Each limb of `rd` is in the range `[0, 2^RV64_BYTE_BITS)`
-- The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1))`
+- Each limb of `rd` is in the range `[0, 2^BYTE_BITS)`
+- The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - BYTE_BITS * (WORD_NUM_LIMBS - 1))`
 - `to_pc_limbs[0]` is in the range `[0, 2^15)`
 - `to_pc_limbs[1]` is in the range `[0, 2^(PC_BITS - 16))`
 
@@ -295,8 +295,8 @@ This circuit proves that:
 
 - `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^8`
 - `compose(pc_limbs) == pc`
-- Each limb of `rd`, `imm_limbs`, and `pc_limbs` is in the range `[0, 2^RV64_BYTE_BITS)`
-- The most significant limb of `pc_limbs` is in the range `[0, 2^(PC_BITS - RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1))`
+- Each limb of `rd`, `imm_limbs`, and `pc_limbs` is in the range `[0, 2^BYTE_BITS)`
+- The most significant limb of `pc_limbs` is in the range `[0, 2^(PC_BITS - BYTE_BITS * (WORD_NUM_LIMBS - 1))`
 
 #### 9. Less Than
 
@@ -369,20 +369,20 @@ These circuits prove that:
 
 Given:
 
-- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `a` is the decomposition of the lower 64 bits of the result
 - `opcode` indicates the operation to be performed
 
 This circuit proves that:
 
 - `compose(a) == (compose(b) * compose(c)) % 2^64`
-- Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
+- Each limb of `a` is in the range `[0, 2^BYTE_BITS)`
 
 #### 14. [MULH](./mulh/core.rs)
 
 Given:
 
-- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `a` is the decomposition of the upper 64 bits of the result
 - `opcode` indicates the operation to be performed
 
@@ -392,7 +392,7 @@ This circuit proves that:
 - If `opcode` is `mulh`, then `compose(a) = floor((i64(b) * i64(c) mod 2^128) / 2^64)`.
 - If `opcode` is `mulhsu`, then `compose(a) = floor((i64(b) * u64(c) mod 2^128) / 2^64)`.
 - If `opcode` is `mulhu`, then `compose(a) = floor((u64(b) * u64(c)) / 2^64)`.
-- Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
+- Each limb of `a` is in the range `[0, 2^BYTE_BITS)`
 
 #### 15. Shift Logical
 

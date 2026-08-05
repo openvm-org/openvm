@@ -10,7 +10,7 @@ use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
+    riscv::{IMM_AS, MEMORY_AS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
@@ -32,13 +32,13 @@ use crate::Keccak256Rv64Config;
 type F = BabyBear;
 
 fn reg(index: usize) -> usize {
-    index * RV64_REGISTER_BYTES as usize
+    index * REGISTER_BYTES as usize
 }
 
 #[test]
 fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     let opcode = KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32;
-    let span = PostflightAccessSpan::write_fixed_from_replay_values(RV64_MEMORY_AS, 0, 25);
+    let span = PostflightAccessSpan::write_fixed_from_replay_values(MEMORY_AS, 0, 25);
     let schedule = PostflightAccessSchedule {
         register_operands: &[1],
         zero_operand_mask: 0,
@@ -51,7 +51,7 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     let duplicate = registry.register(opcode, schedule).unwrap_err();
     assert!(duplicate.to_string().contains("duplicate"), "{duplicate}");
 
-    let invalid_span = PostflightAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 1);
+    let invalid_span = PostflightAccessSpan::read_fixed(MEMORY_AS, 1, 1);
     let invalid = PostflightAccessRegistry::default()
         .register(
             opcode,
@@ -111,13 +111,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
     let instructions = [
         Instruction::<F>::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
-            [
-                reg(4),
-                reg(0),
-                7,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-            ],
+            [reg(4), reg(0), 7, REGISTER_AS as usize, IMM_AS as usize],
         ),
         Instruction::<F>::from_usize(
             XorinOpcode::XORIN.global_opcode(),
@@ -125,19 +119,13 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 reg(1),
                 reg(2),
                 reg(3),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(
             KeccakfOpcode::KECCAKF.global_opcode(),
-            [
-                reg(1),
-                0,
-                0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
-            ],
+            [reg(1), 0, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -154,20 +142,18 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(move |(offset, byte)| {
-                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
-                })
+                .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
         })
         .collect();
     init_memory.extend((0..200u32).map(|offset| {
         (
-            (RV64_MEMORY_AS, buffer_ptr as u32 + offset),
+            (MEMORY_AS, buffer_ptr as u32 + offset),
             offset.wrapping_mul(17) as u8,
         )
     }));
     init_memory.extend((0..xorin_len as u32).map(|offset| {
         (
-            (RV64_MEMORY_AS, input_ptr as u32 + offset),
+            (MEMORY_AS, input_ptr as u32 + offset),
             offset.wrapping_mul(29).wrapping_add(3) as u8,
         )
     }));
@@ -202,8 +188,8 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 reg(1) + 1,
                 reg(2),
                 reg(3),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -305,7 +291,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
     unsafe {
         invalid_state
             .memory
-            .write_bytes(RV64_REGISTER_AS, reg(3) as u32, 7u64.to_le_bytes());
+            .write_bytes(REGISTER_AS, reg(3) as u32, 7u64.to_le_bytes());
     }
     let invalid = checkpoint.execute_from_state(
         invalid_state,
@@ -323,8 +309,8 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 reg(1),
                 reg(2),
                 reg(3),
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         ),
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
@@ -336,9 +322,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 .to_le_bytes()
                 .into_iter()
                 .enumerate()
-                .map(move |(offset, byte)| {
-                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
-                })
+                .map(move |(offset, byte)| ((REGISTER_AS, (reg(register) + offset) as u32), byte))
         })
         .collect();
     let zero_exe = VmExe::new(zero_program.clone()).with_init_memory(zero_memory);

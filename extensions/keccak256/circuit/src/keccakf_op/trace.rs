@@ -15,13 +15,13 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_bytes_to_u16_block,
-    rv64_u16_block_to_bytes, try_rv64_bytes_to_u32,
+    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, ptr_bound_from_ptr, ptr_to_field_u16_limbs,
+    try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
@@ -165,8 +165,8 @@ fn replay_step<F: PrimeField32>(
     let instruction = postflight.instruction(step);
     if instruction.b != F::ZERO
         || instruction.c != F::ZERO
-        || instruction.d.as_canonical_u32() != RV64_REGISTER_AS
-        || instruction.e.as_canonical_u32() != RV64_MEMORY_AS
+        || instruction.d.as_canonical_u32() != REGISTER_AS
+        || instruction.e.as_canonical_u32() != MEMORY_AS
     {
         return Err(PostflightError::new(
             "KECCAKF instruction has invalid operands",
@@ -182,8 +182,8 @@ fn replay_step<F: PrimeField32>(
         ));
     }
     let mut replay = postflight.replay(step);
-    let rd = replay.read_u16(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr))?;
-    let buffer_ptr = try_rv64_bytes_to_u32(rv64_u16_block_to_bytes(rd.value))
+    let rd = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr))?;
+    let buffer_ptr = try_bytes_to_u32(u16_block_to_bytes(rd.value))
         .ok_or_else(|| PostflightError::new("KECCAKF buffer pointer exceeds 32 bits"))?;
     if buffer_ptr & 1 != 0 {
         return Err(PostflightError::new(
@@ -204,22 +204,22 @@ fn replay_step<F: PrimeField32>(
     let mut preimage_buffer_bytes = [0u8; KECCAK_WIDTH_BYTES];
     for word_index in 0..KECCAK_WIDTH_MEM_OPS {
         let pointer = byte_ptr_to_u16_ptr_value(buffer_ptr) + (word_index * BLOCK_FE_WIDTH) as u32;
-        let previous = replay.peek_u16(RV64_MEMORY_AS, pointer)?;
+        let previous = replay.peek_u16(MEMORY_AS, pointer)?;
         preimage_buffer_bytes
             [word_index * MEMORY_BLOCK_BYTES..(word_index + 1) * MEMORY_BLOCK_BYTES]
-            .copy_from_slice(&rv64_u16_block_to_bytes(previous));
+            .copy_from_slice(&u16_block_to_bytes(previous));
     }
     let postimage = keccakf_postimage_bytes(&preimage_buffer_bytes);
     let mut buffer_prev_timestamps = [0; KECCAK_WIDTH_MEM_OPS];
     for (word_index, bytes) in postimage.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
         let pointer = byte_ptr_to_u16_ptr_value(buffer_ptr) + (word_index * BLOCK_FE_WIDTH) as u32;
         let access = replay.write_u16(
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             pointer,
-            rv64_bytes_to_u16_block(bytes.try_into().expect("chunk length is fixed")),
+            bytes_to_u16_block(bytes.try_into().expect("chunk length is fixed")),
         )?;
         buffer_prev_timestamps[word_index] = access.previous_timestamp;
-        let previous_bytes = rv64_u16_block_to_bytes(access.previous_value);
+        let previous_bytes = u16_block_to_bytes(access.previous_value);
         if previous_bytes.as_slice()
             != &preimage_buffer_bytes
                 [word_index * MEMORY_BLOCK_BYTES..(word_index + 1) * MEMORY_BLOCK_BYTES]

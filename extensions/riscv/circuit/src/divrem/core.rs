@@ -364,7 +364,7 @@ pub(crate) type DivRemResult<const NUM_LIMBS: usize> = (
 );
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct DivRemExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct DivRemCoreExecutor<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 

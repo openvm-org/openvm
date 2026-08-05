@@ -57,9 +57,9 @@ static __device__ __forceinline__ void sha2_main_replay_row_body(
     SHA2_MAIN_WRITE_INSTR(V, row, state_reg_ptr, input.state_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, input_reg_ptr, input.input_reg_ptr);
 
-    uint16_t dst_ptr_u16s[RV64_PTR_U16_LIMBS];
-    uint16_t state_ptr_u16s[RV64_PTR_U16_LIMBS];
-    uint16_t input_ptr_u16s[RV64_PTR_U16_LIMBS];
+    uint16_t dst_ptr_u16s[PTR_U16_LIMBS];
+    uint16_t state_ptr_u16s[PTR_U16_LIMBS];
+    uint16_t input_ptr_u16s[PTR_U16_LIMBS];
     ptr_to_u16_limbs(dst_ptr_u16s, input.dst_ptr);
     ptr_to_u16_limbs(state_ptr_u16s, input.state_ptr);
     ptr_to_u16_limbs(input_ptr_u16s, input.input_ptr);
@@ -67,13 +67,13 @@ static __device__ __forceinline__ void sha2_main_replay_row_body(
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_u16s);
     range_checker.add_count(
-        ptr_bound_from_high_u16(dst_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
+        ptr_bound_from_high_u16(dst_ptr_u16s[PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
     );
     range_checker.add_count(
-        ptr_bound_from_high_u16(state_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
+        ptr_bound_from_high_u16(state_ptr_u16s[PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
     );
     range_checker.add_count(
-        ptr_bound_from_high_u16(input_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
+        ptr_bound_from_high_u16(input_ptr_u16s[PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
     );
 
 #pragma unroll

@@ -1,24 +1,24 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_bigint_transpiler::Rv64Mul256Opcode;
+use openvm_bigint_transpiler::Mul256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u32_array, read_int256, u32_array_to_bytes, write_int256},
-    Rv64Multiplication256Executor, INT256_NUM_U32_LIMBS, INT256_NUM_U8_LIMBS,
+    Multiplication256Executor, INT256_NUM_U32_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
-impl Rv64Multiplication256Executor {
+impl Multiplication256Executor {
     pub fn new() -> Self {
         Self
     }
@@ -32,11 +32,11 @@ struct MultPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv64Multiplication256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Multiplication256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            MulOpcode::from_usize(opcode - Rv64Mul256Opcode::CLASS_OFFSET)
+            MulOpcode::from_usize(opcode - Mul256Opcode::CLASS_OFFSET)
         )
     }
 
@@ -75,7 +75,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64Multiplication256Executor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64Multiplication256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Multiplication256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultPreCompute>>()
     }
@@ -120,16 +120,13 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &MultPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let rs1_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr))?;
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr))?;
+    let rs1_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs2_ptr))?;
     let rd = u256_mul(rs1, rs2);
-    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd)?;
+    write_int256(exec_state, MEMORY_AS, bytes_to_u32(rd_ptr), &rd)?;
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -161,7 +158,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     execute_e12_impl(&pre_compute.data, exec_state)
 }
 
-impl Rv64Multiplication256Executor {
+impl Multiplication256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -178,11 +175,11 @@ impl Rv64Multiplication256Executor {
             ..
         } = inst;
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode =
-            MulOpcode::from_usize(opcode.local_opcode_idx(Rv64Mul256Opcode::CLASS_OFFSET));
+            MulOpcode::from_usize(opcode.local_opcode_idx(Mul256Opcode::CLASS_OFFSET));
         if local_opcode != MulOpcode::MUL {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }

@@ -18,11 +18,11 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode::{self, *},
+    HintStoreOpcode::{self, *},
     MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS,
 };
 use openvm_stark_backend::{
@@ -37,23 +37,23 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64HintStoreChipGpu,
+    crate::HintStoreChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
 use super::{
-    trace::generate_trace_from_postflight, Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols,
-    Rv64HintStoreExecutor,
+    trace::generate_trace_from_postflight, HintStoreAir, HintStoreChip, HintStoreCols,
+    HintStoreExecutor,
 };
 use crate::{
-    adapters::{u64_to_rv64_limbs, RV64_PTR_U16_LIMBS, U16_BITS},
-    Rv64HintStoreFiller,
+    adapters::{u64_to_limbs, PTR_U16_LIMBS, U16_BITS},
+    HintStoreFiller,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
-type Harness = TestChipHarness<F, Rv64HintStoreExecutor, Rv64HintStoreAir, Rv64HintStoreChip<F>>;
+type Harness = TestChipHarness<F, HintStoreExecutor, HintStoreAir, HintStoreChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -61,21 +61,17 @@ fn create_harness_fields(
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
-) -> (
-    Rv64HintStoreAir,
-    Rv64HintStoreExecutor,
-    Rv64HintStoreChip<F>,
-) {
-    let air = Rv64HintStoreAir::new(
+) -> (HintStoreAir, HintStoreExecutor, HintStoreChip<F>) {
+    let air = HintStoreAir::new(
         execution_bridge,
         memory_bridge,
         range_checker_chip.bus(),
-        Rv64HintStoreOpcode::CLASS_OFFSET,
+        HintStoreOpcode::CLASS_OFFSET,
         address_bits,
     );
-    let executor = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);
-    let chip = Rv64HintStoreChip::<F>::new(
-        Rv64HintStoreFiller::new(address_bits, range_checker_chip),
+    let executor = HintStoreExecutor::new(HintStoreOpcode::CLASS_OFFSET);
+    let chip = HintStoreChip::<F>::new(
+        HintStoreFiller::new(address_bits, range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -110,7 +106,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    opcode: Rv64HintStoreOpcode,
+    opcode: HintStoreOpcode,
 ) {
     let num_words = match opcode {
         HINT_STORED => 1,
@@ -118,29 +114,21 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     } as u32;
 
     let a = if opcode == HINT_BUFFER {
-        let a = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        tester.write_bytes(
-            RV64_REGISTER_AS as usize,
-            a,
-            u64_to_rv64_limbs(num_words.into()),
-        );
+        let a = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
+        tester.write_bytes(REGISTER_AS as usize, a, u64_to_limbs(num_words.into()));
         a
     } else {
         0
     };
 
-    let mem_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let mut b = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let mem_ptr = gen_pointer(rng, REGISTER_NUM_LIMBS) as u32;
+    let mut b = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
     while opcode == HINT_BUFFER && b == a {
-        b = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        b = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
     }
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        b,
-        u64_to_rv64_limbs(mem_ptr.into()),
-    );
+    tester.write_bytes(REGISTER_AS as usize, b, u64_to_limbs(mem_ptr.into()));
 
-    let num_bytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
+    let num_bytes = num_words as usize * REGISTER_NUM_LIMBS;
     let mut input = Vec::with_capacity(num_bytes);
     let mut hint_bytes = Vec::with_capacity(num_bytes);
     for _ in 0..num_words {
@@ -157,18 +145,18 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         preflight,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [a, b, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 
     for idx in 0..num_words as usize {
-        let data = tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(
-            RV64_MEMORY_AS as usize,
-            mem_ptr as usize + idx * RV64_REGISTER_NUM_LIMBS,
+        let data = tester.read_bytes::<REGISTER_NUM_LIMBS>(
+            MEMORY_AS as usize,
+            mem_ptr as usize + idx * REGISTER_NUM_LIMBS,
         );
 
-        let expected: [F; RV64_REGISTER_NUM_LIMBS] = input
-            [idx * RV64_REGISTER_NUM_LIMBS..(idx + 1) * RV64_REGISTER_NUM_LIMBS]
+        let expected: [F; REGISTER_NUM_LIMBS] = input
+            [idx * REGISTER_NUM_LIMBS..(idx + 1) * REGISTER_NUM_LIMBS]
             .try_into()
             .unwrap();
         assert_eq!(data, expected);
@@ -225,20 +213,12 @@ fn test_hint_buffer_exceeds_max_words() {
 
     let num_words = (MAX_HINT_BUFFER_DWORDS + 1) as u32;
 
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        a,
-        u64_to_rv64_limbs(num_words.into()),
-    );
+    let a = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, a, u64_to_limbs(num_words.into()));
 
-    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        b,
-        u64_to_rv64_limbs(mem_ptr.into()),
-    );
+    let mem_ptr = gen_pointer(&mut rng, REGISTER_NUM_LIMBS) as u32;
+    let b = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, b, u64_to_limbs(mem_ptr.into()));
 
     let hint_bytes = (0..num_words)
         .flat_map(|_| rng.next_u64().to_le_bytes())
@@ -251,7 +231,7 @@ fn test_hint_buffer_exceeds_max_words() {
         &mut harness.preflight,
         &Instruction::from_usize(
             HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [a, b, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 }
@@ -264,7 +244,7 @@ fn test_hint_buffer_rejects_zero_words() {
 
 #[test]
 #[should_panic(expected = "num_words: 4294967297, max_hint_buffer_words: 1023")]
-fn test_hint_buffer_checks_full_rv64_count() {
+fn test_hint_buffer_checks_full_register_count() {
     // The low 32 bits encode one word, so truncating before validation would accept this.
     execute_invalid_hint_buffer((1u64 << 32) | 1, true);
 }
@@ -274,20 +254,20 @@ fn execute_invalid_hint_buffer(num_words: u64, provide_one_word: bool) {
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&mut tester);
 
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, a, u64_to_rv64_limbs(num_words));
+    let a = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, a, u64_to_limbs(num_words));
 
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let b = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
     tester.write_bytes(
-        RV64_REGISTER_AS as usize,
+        REGISTER_AS as usize,
         b,
-        u64_to_rv64_limbs(gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u64),
+        u64_to_limbs(gen_pointer(&mut rng, REGISTER_NUM_LIMBS) as u64),
     );
     if provide_one_word {
         tester
             .streams_mut()
             .hint_stream
-            .set_hint_from_iter([0; RV64_REGISTER_NUM_LIMBS]);
+            .set_hint_from_iter([0; REGISTER_NUM_LIMBS]);
     }
 
     tester.execute(
@@ -295,7 +275,7 @@ fn execute_invalid_hint_buffer(num_words: u64, provide_one_word: bool) {
         &mut harness.preflight,
         &Instruction::from_usize(
             HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [a, b, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 }
@@ -308,20 +288,12 @@ fn test_hint_buffer_rem_words_range_check() {
     let mut harness = create_harness(&mut tester);
 
     let num_words: u32 = 1;
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        a,
-        u64_to_rv64_limbs(num_words.into()),
-    );
+    let a = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, a, u64_to_limbs(num_words.into()));
 
-    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        b,
-        u64_to_rv64_limbs(mem_ptr.into()),
-    );
+    let mem_ptr = gen_pointer(&mut rng, REGISTER_NUM_LIMBS) as u32;
+    let b = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, b, u64_to_limbs(mem_ptr.into()));
 
     let hint_bytes = (0..num_words)
         .flat_map(|_| rng.next_u64().to_le_bytes())
@@ -334,14 +306,14 @@ fn test_hint_buffer_rem_words_range_check() {
         &mut harness.preflight,
         &Instruction::from_usize(
             HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [a, b, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 
     let invalid_rem_words = 1 << MAX_HINT_BUFFER_DWORDS_BITS;
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Set `rem_words` to the first value outside the allowed range.
         cols.rem_words = F::from_u32(invalid_rem_words);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -366,20 +338,12 @@ fn test_hint_buffer_mem_ptr_range_check() {
     let mut harness = create_harness(&mut tester);
 
     let num_words: u32 = 1;
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        a,
-        u64_to_rv64_limbs(num_words.into()),
-    );
+    let a = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, a, u64_to_limbs(num_words.into()));
 
-    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        b,
-        u64_to_rv64_limbs(mem_ptr.into()),
-    );
+    let mem_ptr = gen_pointer(&mut rng, REGISTER_NUM_LIMBS) as u32;
+    let b = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    tester.write_bytes(REGISTER_AS as usize, b, u64_to_limbs(mem_ptr.into()));
 
     let hint_bytes = (0..num_words)
         .flat_map(|_| rng.next_u64().to_le_bytes())
@@ -392,16 +356,16 @@ fn test_hint_buffer_mem_ptr_range_check() {
         &mut harness.preflight,
         &Instruction::from_usize(
             HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [a, b, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 
     let invalid_high_u16 = 1 << (tester.address_bits() - U16_BITS);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Set the high u16 pointer cell to the first value outside the configured bound.
-        cols.mem_ptr_limbs[RV64_PTR_U16_LIMBS - 1] = F::from_u32(invalid_high_u16);
+        cols.mem_ptr_limbs[PTR_U16_LIMBS - 1] = F::from_u32(invalid_high_u16);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -426,10 +390,10 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
 
     // Write b with a non-zero byte in the upper half; `mem_ptr_u64 >> 32` is then non-zero,
     // so the preflight executor must panic before it reaches the data write.
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    let mut mem_ptr_limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+    let b = gen_register_pointer(&mut rng, REGISTER_NUM_LIMBS);
+    let mut mem_ptr_limbs = [F::ZERO; REGISTER_NUM_LIMBS];
     mem_ptr_limbs[4] = F::from_u8(1);
-    tester.write_bytes(RV64_REGISTER_AS as usize, b, mem_ptr_limbs);
+    tester.write_bytes(REGISTER_AS as usize, b, mem_ptr_limbs);
 
     let data = rng.next_u64().to_le_bytes();
     let streams = tester.streams_mut();
@@ -440,14 +404,14 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
         &mut harness.preflight,
         &Instruction::from_usize(
             HINT_STORED.global_opcode(),
-            [0, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+            [0, b, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
     );
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
-    opcode: Rv64HintStoreOpcode,
+    opcode: HintStoreOpcode,
     prank_data: Option<[F; BLOCK_FE_WIDTH]>,
     _interaction_error: bool,
 ) {
@@ -465,7 +429,7 @@ fn run_negative_hintstore_test(
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = prank_data {
             cols.data = data;
         }
@@ -524,13 +488,8 @@ fn execute_roundtrip_sanity_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuHarness = GpuTestChipHarness<
-    F,
-    Rv64HintStoreExecutor,
-    Rv64HintStoreAir,
-    Rv64HintStoreChipGpu,
-    Rv64HintStoreChip<F>,
->;
+type GpuHarness =
+    GpuTestChipHarness<F, HintStoreExecutor, HintStoreAir, HintStoreChipGpu, HintStoreChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -545,7 +504,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = Rv64HintStoreChipGpu::new(
+    let gpu_chip = HintStoreChipGpu::new(
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),

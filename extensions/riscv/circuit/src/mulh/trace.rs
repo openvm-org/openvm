@@ -10,16 +10,15 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{
     core::{fill_core_row_with_result, run_mulh},
-    MulHCoreCols, Rv64MulHChip,
+    MulHChip, MulHCoreCols,
 };
 use crate::adapters::{
-    ReplayComputation, Rv64MultAdapterCols, Rv64MultAdapterFiller, RV64_BYTE_BITS,
-    RV64_REGISTER_NUM_LIMBS,
+    MultAdapterCols, MultAdapterFiller, ReplayComputation, BYTE_BITS, REGISTER_NUM_LIMBS,
 };
 
 /// Generates the RV64 multiply-high trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64MulHChip<F>,
+    chip: &MulHChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [MulHOpcode::MULH, MulHOpcode::MULHSU, MulHOpcode::MULHU];
@@ -27,8 +26,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64MultAdapterCols::<F>::width();
-    let width = adapter_width + MulHCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
+    let adapter_width = MultAdapterCols::<F>::width();
+    let width = adapter_width + MulHCoreCols::<F, REGISTER_NUM_LIMBS, BYTE_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
@@ -37,13 +36,13 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let replay = Rv64MultAdapterFiller::replay(
+            let replay = MultAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
                 adapter_row.borrow_mut(),
                 |[b, c]| {
-                    let computed = run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
+                    let computed = run_mulh::<REGISTER_NUM_LIMBS, BYTE_BITS>(
                         opcode,
                         &b.map(u32::from),
                         &c.map(u32::from),
@@ -56,7 +55,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 },
             )?;
             let [b, c] = replay.inputs;
-            let core_row: &mut MulHCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+            let core_row: &mut MulHCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
                 core_row.borrow_mut();
             fill_core_row_with_result(
                 &chip.inner.range_tuple_chip,

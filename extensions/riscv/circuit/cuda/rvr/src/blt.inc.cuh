@@ -151,7 +151,7 @@ __global__ void blt_replay_tracegen(
         return;
     }
 
-    Rv64BranchAdapter adapter(
+    BranchAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(
@@ -163,7 +163,7 @@ __global__ void blt_replay_tracegen(
         first_previous.timestamp,
         second_previous.timestamp
     );
-    Rv64BranchLessThanCoreRecord core_record{};
+    BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS> core_record{};
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
         core_record.a[i] = rs1[i];
@@ -171,7 +171,7 @@ __global__ void blt_replay_tracegen(
     }
     core_record.imm = encoded_imm;
     core_record.local_opcode = local_opcode;
-    Rv64BranchLessThanCore core{VariableRangeChecker(range_checker, range_checker_num_bins)};
+    BranchLessThanCore<BLOCK_FE_WIDTH, U16_BITS> core{VariableRangeChecker(range_checker, range_checker_num_bins)};
     core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThanCols, core)), core_record);
 }
 
@@ -224,7 +224,7 @@ extern "C" int _blt_replay_tracegen(
     assert(total_steps <= SIZE_MAX - num_bgeu_steps);
     total_steps += num_bgeu_steps;
     assert(height >= total_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     blt_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

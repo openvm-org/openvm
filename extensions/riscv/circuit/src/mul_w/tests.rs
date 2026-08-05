@@ -35,40 +35,34 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64MulWChipGpu,
+    crate::MulWChipGpu,
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
-use super::{trace::generate_trace_from_postflight, MulWCoreAir, MulWFiller, Rv64MulWChip};
+use super::{trace::generate_trace_from_postflight, MulWChip, MulWCoreAir, MulWFiller};
 use crate::{
     adapters::{
-        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_high_u16, MultWAdapterAir, MultWAdapterCols, BYTE_BITS, REGISTER_NUM_LIMBS,
+        WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
-    test_utils::rv64_rand_write_register_or_imm,
-    Rv64MulWAir, Rv64MulWExecutor,
+    test_utils::rand_write_register_or_imm,
+    MulWAir, MulWExecutor,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
-const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1u32 << RV64_BYTE_BITS),
-    (MAX_NUM_LIMBS * (1u32 << RV64_BYTE_BITS)),
-];
+const TUPLE_CHECKER_SIZES: [u32; 2] = [(1u32 << BYTE_BITS), (MAX_NUM_LIMBS * (1u32 << BYTE_BITS))];
 
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChip<F>>;
-type MulWCoreCols<T> = MultiplicationCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+type Harness = TestChipHarness<F, MulWExecutor, MulWAir, MulWChip<F>>;
+type MulWCoreCols<T> = MultiplicationCoreCols<T, WORD_NUM_LIMBS, BYTE_BITS>;
 
 #[inline(always)]
-fn run_mulw(
-    x: &[u8; RV64_WORD_NUM_LIMBS],
-    y: &[u8; RV64_WORD_NUM_LIMBS],
-) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+fn run_mulw(x: &[u8; WORD_NUM_LIMBS], y: &[u8; WORD_NUM_LIMBS]) -> [u8; REGISTER_NUM_LIMBS] {
     let rs1 = u32::from_le_bytes(*x);
     let rs2 = u32::from_le_bytes(*y);
     let rd_word = rs1.wrapping_mul(rs2);
@@ -78,20 +72,20 @@ fn run_mulw(
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64MulWAir, Rv64MulWExecutor, Rv64MulWChip<F>) {
-    let air = Rv64MulWAir::new(
-        Rv64MultWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+) -> (MulWAir, MulWExecutor, MulWChip<F>) {
+    let air = MulWAir::new(
+        MultWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
         MulWCoreAir::new(
             *range_tuple_chip.bus(),
             bitwise_chip.bus(),
             MulWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64MulWExecutor::new(MulWOpcode::CLASS_OFFSET);
-    let chip = Rv64MulWChip::<F>::new(
+    let executor = MulWExecutor::new(MulWOpcode::CLASS_OFFSET);
+    let chip = MulWChip::<F>::new(
         MulWFiller::new(range_tuple_chip, bitwise_chip),
         memory_helper,
     );
@@ -103,15 +97,13 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
@@ -144,23 +136,23 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    b: Option<[u8; REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; REGISTER_NUM_LIMBS]>,
+) -> [u8; REGISTER_NUM_LIMBS] {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
-        rv64_rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
+        rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
     instruction.e = F::ZERO;
     tester.execute(executor, preflight, &instruction);
 
-    let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-    let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let b_word: [u8; WORD_NUM_LIMBS] = b[..WORD_NUM_LIMBS].try_into().unwrap();
+    let c_word: [u8; WORD_NUM_LIMBS] = c[..WORD_NUM_LIMBS].try_into().unwrap();
     let expected = run_mulw(&b_word, &c_word);
     assert_eq!(
         expected.map(F::from_u8),
-        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd)
     );
     expected
 }
@@ -173,7 +165,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_rv64_mulw_rand_test() {
+fn run_mulw_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
@@ -208,11 +200,11 @@ fn run_rv64_mulw_rand_test() {
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_mulw_test(
-    prank_a: [u32; RV64_WORD_NUM_LIMBS],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
-    c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_a: [u32; WORD_NUM_LIMBS],
+    b: [u8; REGISTER_NUM_LIMBS],
+    c: [u8; REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; REGISTER_NUM_LIMBS]>,
     prank_is_valid: bool,
     prank_result_sign: Option<u32>,
     _interaction_error: bool,
@@ -231,29 +223,27 @@ fn run_negative_mulw_test(
     );
 
     let default_result_sign =
-        prank_result_sign.unwrap_or((prank_a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1)) & 1);
+        prank_result_sign.unwrap_or((prank_a[WORD_NUM_LIMBS - 1] >> (BYTE_BITS - 1)) & 1);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut MultWAdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut MulWCoreCols<F> = core_row.borrow_mut();
 
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
-            let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
-                prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-            let prank_b_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
-                prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            let prank_b_word: [u32; WORD_NUM_LIMBS] = prank_b[..WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_b_high: [u32; REGISTER_NUM_LIMBS - WORD_NUM_LIMBS] =
+                prank_b[WORD_NUM_LIMBS..].try_into().unwrap();
             cols.b = prank_b_word.map(F::from_u32);
             adapter_cols.rs1_high = pack_high_u16(&prank_b_high);
         }
         if let Some(prank_c) = prank_c {
-            let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
-                prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-            let prank_c_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
-                prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            let prank_c_word: [u32; WORD_NUM_LIMBS] = prank_c[..WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_c_high: [u32; REGISTER_NUM_LIMBS - WORD_NUM_LIMBS] =
+                prank_c[WORD_NUM_LIMBS..].try_into().unwrap();
             cols.c = prank_c_word.map(F::from_u32);
             adapter_cols.rs2_high = pack_high_u16(&prank_c_high);
         }
@@ -275,7 +265,7 @@ fn run_negative_mulw_test(
 }
 
 #[test]
-fn rv64_mulw_wrong_negative_test() {
+fn mulw_wrong_negative_test() {
     run_negative_mulw_test(
         [63, 247, 125, 234],
         [51, 109, 78, 142, 0, 0, 0, 0],
@@ -289,7 +279,7 @@ fn rv64_mulw_wrong_negative_test() {
 }
 
 #[test]
-fn rv64_mulw_is_valid_false_negative_test() {
+fn mulw_is_valid_false_negative_test() {
     run_negative_mulw_test(
         [63, 247, 125, 234],
         [51, 109, 78, 142, 0, 0, 0, 0],
@@ -303,7 +293,7 @@ fn rv64_mulw_is_valid_false_negative_test() {
 }
 
 #[test]
-fn rv64_mulw_adapter_wrong_rs1_upper_negative_test() {
+fn mulw_adapter_wrong_rs1_upper_negative_test() {
     run_negative_mulw_test(
         [2, 0, 0, 0],
         [1, 0, 0, 0, 13, 14, 15, 16],
@@ -317,7 +307,7 @@ fn rv64_mulw_adapter_wrong_rs1_upper_negative_test() {
 }
 
 #[test]
-fn rv64_mulw_adapter_wrong_rs2_upper_negative_test() {
+fn mulw_adapter_wrong_rs2_upper_negative_test() {
     run_negative_mulw_test(
         [2, 0, 0, 0],
         [1, 0, 0, 0, 13, 14, 15, 16],
@@ -331,7 +321,7 @@ fn rv64_mulw_adapter_wrong_rs2_upper_negative_test() {
 }
 
 #[test]
-fn rv64_mulw_wrong_upper_sign_extension_negative_test() {
+fn mulw_wrong_upper_sign_extension_negative_test() {
     // 1 * 2 = 2 (positive), so result_sign must be 0.
     run_negative_mulw_test(
         [2, 0, 0, 0],
@@ -346,7 +336,7 @@ fn rv64_mulw_wrong_upper_sign_extension_negative_test() {
 }
 
 #[test]
-fn rv64_mulw_wrong_upper_sign_extension_negative_to_zero_test() {
+fn mulw_wrong_upper_sign_extension_negative_to_zero_test() {
     // 0x80000000 * 1 = 0x80000000 (negative), so result_sign must be 1.
     run_negative_mulw_test(
         [0, 0, 0, 128],
@@ -368,12 +358,12 @@ fn rv64_mulw_wrong_upper_sign_extension_negative_to_zero_test() {
 
 #[test]
 fn run_mulw_sanity_test() {
-    let x: [u8; RV64_WORD_NUM_LIMBS] = [197, 85, 150, 32];
-    let y: [u8; RV64_WORD_NUM_LIMBS] = [51, 109, 78, 142];
-    let z: [u8; RV64_WORD_NUM_LIMBS] = [63, 247, 125, 232];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [39, 100, 126, 205];
-    let (result, carry) = crate::mul::run_mul::<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>(&x, &y);
-    for i in 0..RV64_WORD_NUM_LIMBS {
+    let x: [u8; WORD_NUM_LIMBS] = [197, 85, 150, 32];
+    let y: [u8; WORD_NUM_LIMBS] = [51, 109, 78, 142];
+    let z: [u8; WORD_NUM_LIMBS] = [63, 247, 125, 232];
+    let c: [u32; WORD_NUM_LIMBS] = [39, 100, 126, 205];
+    let (result, carry) = crate::mul::run_mul::<WORD_NUM_LIMBS, BYTE_BITS>(&x, &y);
+    for i in 0..WORD_NUM_LIMBS {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
     }
@@ -400,15 +390,12 @@ fn run_mulw_sign_extension_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuHarness =
-    GpuTestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChipGpu, Rv64MulWChip<F>>;
+type GpuHarness = GpuTestChipHarness<F, MulWExecutor, MulWAir, MulWChipGpu, MulWChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
@@ -419,7 +406,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64MulWChipGpu::new(
+    let gpu_chip = MulWChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),

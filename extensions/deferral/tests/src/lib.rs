@@ -30,12 +30,12 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, SystemOpcode,
     };
     use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
     #[cfg(feature = "rvr")]
-    use openvm_riscv_transpiler::Rv64JalLuiOpcode;
+    use openvm_riscv_transpiler::JalLuiOpcode;
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
@@ -159,25 +159,25 @@ mod tests {
             Instruction::<F>::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::<F>::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
             Instruction::<F>::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -187,25 +187,19 @@ mod tests {
         let mut exe = VmExe::from(Program::from_instructions(&instructions));
         for (offset, byte) in output_ptr.to_le_bytes().into_iter().enumerate() {
             exe.init_memory.insert(
-                (
-                    RV64_REGISTER_AS,
-                    RV64_REGISTER_NUM_LIMBS as u32 + offset as u32,
-                ),
+                (REGISTER_AS, REGISTER_NUM_LIMBS as u32 + offset as u32),
                 byte,
             );
         }
         for (offset, byte) in input_ptr.to_le_bytes().into_iter().enumerate() {
             exe.init_memory.insert(
-                (
-                    RV64_REGISTER_AS,
-                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
-                ),
+                (REGISTER_AS, (2 * REGISTER_NUM_LIMBS) as u32 + offset as u32),
                 byte,
             );
         }
         for (offset, byte) in INPUT_COMMIT_0.into_iter().enumerate() {
             exe.init_memory
-                .insert((RV64_MEMORY_AS, input_ptr as u32 + offset as u32), byte);
+                .insert((MEMORY_AS, input_ptr as u32 + offset as u32), byte);
         }
         for (offset, byte) in config.deferral.def_circuit_commits[0]
             .into_iter()
@@ -258,11 +252,11 @@ mod tests {
             Instruction::<F>::from_usize(
                 DeferralOpcode::OUTPUT.global_opcode(),
                 [
-                    RV64_REGISTER_NUM_LIMBS,
-                    2 * RV64_REGISTER_NUM_LIMBS,
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
                     0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
                 ],
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -270,10 +264,7 @@ mod tests {
         let mut exe = VmExe::from(Program::from_instructions(&instructions));
         for (offset, byte) in u64::MAX.to_le_bytes().into_iter().enumerate() {
             exe.init_memory.insert(
-                (
-                    RV64_REGISTER_AS,
-                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
-                ),
+                (REGISTER_AS, (2 * REGISTER_NUM_LIMBS) as u32 + offset as u32),
                 byte,
             );
         }

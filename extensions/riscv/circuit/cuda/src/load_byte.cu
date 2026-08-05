@@ -6,8 +6,8 @@ template <typename T> struct LoadByteCoreCols {
     T read_data[BLOCK_FE_WIDTH];
 };
 
-template <typename T> struct Rv64LoadByteCols {
-    Rv64LoadByteAdapterCols<T> adapter;
+template <typename T> struct LoadByteCols {
+    LoadByteAdapterCols<T> adapter;
     LoadByteCoreCols<T> core;
 };
 

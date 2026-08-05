@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -21,13 +21,12 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     is_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
-    Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH,
-    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
-    WORD_ACCESS_WIDTH,
+    LoadMultiByteAdapterCols, LoadMultiByteAdapterFiller, BYTE_BITS, BYTE_SHIFT_SELECTOR_WIDTH,
+    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, WORD_ACCESS_WIDTH,
 };
 
 /// The single opcode handled by the load chip of the given width.
-pub(crate) fn load_opcode<const LOAD_WIDTH: usize>() -> Rv64LoadStoreOpcode {
+pub(crate) fn load_opcode<const LOAD_WIDTH: usize>() -> LoadStoreOpcode {
     match LOAD_WIDTH {
         DOUBLEWORD_ACCESS_WIDTH => LOADD,
         WORD_ACCESS_WIDTH => LOADWU,
@@ -141,7 +140,7 @@ where
 
         // odd_cells[j] = overlap_lo_bytes[j] + 2^8 * overlap_hi_bytes[j].
         // Both sides are zero on even shifts.
-        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let inv_2_pow_8 = AB::F::from_u32(1 << BYTE_BITS).inverse();
         let overlap_hi_bytes: [AB::Expr; NUM_OVERLAP_CELLS] = std::array::from_fn(|j| {
             (odd_cells[j].clone() - cols.overlap_lo_bytes[j]) * inv_2_pow_8
         });
@@ -179,7 +178,7 @@ where
             //             + 2^8 * overlap_lo_bytes[i + 1].
             even_term
                 + overlap_hi_bytes[i].clone()
-                + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
+                + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << BYTE_BITS)
         });
         AdapterAirContext {
             to_pc: None,
@@ -202,14 +201,14 @@ where
 
 #[derive(Clone)]
 pub struct LoadFiller<
-    A = Rv64LoadMultiByteAdapterFiller,
+    A = LoadMultiByteAdapterFiller,
     const LOAD_WIDTH: usize = WORD_ACCESS_WIDTH,
     const NUM_OVERLAP_CELLS: usize = 3,
 > {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
 }
 
 impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
@@ -218,7 +217,7 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     pub fn new(
         adapter: A,
         offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ) -> Self {
         const {
             assert!(is_multi_byte_access_width(LOAD_WIDTH));
@@ -234,7 +233,7 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
 }
 
 impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
-    LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
+    LoadFiller<LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
     fn fill_core_row<F: PrimeField32>(
         &self,
@@ -274,14 +273,11 @@ pub(crate) fn generate_trace_from_postflight<
     const LOAD_WIDTH: usize,
     const NUM_OVERLAP_CELLS: usize,
 >(
-    chip: &VmChipWrapper<
-        F,
-        LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>,
-    >,
+    chip: &VmChipWrapper<F, LoadFiller<LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(load_opcode::<LOAD_WIDTH>().global_opcode());
-    let adapter_width = Rv64LoadMultiByteAdapterCols::<F>::width();
+    let adapter_width = LoadMultiByteAdapterCols::<F>::width();
     let width = adapter_width + LoadCoreCols::<F, NUM_OVERLAP_CELLS>::width();
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);

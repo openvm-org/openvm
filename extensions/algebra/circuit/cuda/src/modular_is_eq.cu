@@ -13,10 +13,10 @@ using namespace program;
 using openvm::U16_BITS;
 
 template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv64IsEqualModU16AdapterCols {
+struct IsEqualModU16AdapterCols {
     ExecutionState<T> from_state;
     T rs_ptr[NUM_READS];
-    T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
+    T rs_val[NUM_READS][PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
     T rd_ptr;
@@ -121,7 +121,7 @@ __global__ void modular_is_eq_replay_tracegen(
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
-    using AdapterCols = Rv64IsEqualModU16AdapterCols<uint8_t, 2, BLOCKS>;
+    using AdapterCols = IsEqualModU16AdapterCols<uint8_t, 2, BLOCKS>;
     using CoreCols = ModularIsEqualCoreCols<uint8_t, LIMBS>;
     using WriteAuxCols = MemoryWriteAuxCols<uint8_t, BLOCK_FE_WIDTH>;
     constexpr size_t ADAPTER_WIDTH = sizeof(AdapterCols);
@@ -293,9 +293,9 @@ __global__ void modular_is_eq_replay_tracegen(
         Fp(from.timestamp);
     for (size_t read = 0; read < 2; read++) {
         row[offsetof(AdapterCols, rs_ptr) + read] = Fp(rs_ptr[read]);
-        row[offsetof(AdapterCols, rs_val) + read * RV64_PTR_U16_LIMBS] =
+        row[offsetof(AdapterCols, rs_val) + read * PTR_U16_LIMBS] =
             Fp(static_cast<uint16_t>(rs_val[read]));
-        row[offsetof(AdapterCols, rs_val) + read * RV64_PTR_U16_LIMBS + 1] =
+        row[offsetof(AdapterCols, rs_val) + read * PTR_U16_LIMBS + 1] =
             Fp(static_cast<uint16_t>(rs_val[read] >> U16_BITS));
         memory_aux.fill(
             row.slice_from(offsetof(AdapterCols, rs_read_aux) +
@@ -396,7 +396,7 @@ static int launch_modular_is_eq_replay(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    using AdapterCols = Rv64IsEqualModU16AdapterCols<uint8_t, 2, BLOCKS>;
+    using AdapterCols = IsEqualModU16AdapterCols<uint8_t, 2, BLOCKS>;
     using CoreCols = ModularIsEqualCoreCols<uint8_t, LIMBS>;
     if (width != sizeof(AdapterCols) + sizeof(CoreCols)) return 1;
     auto [grid, block] = kernel_launch_params(height, 256);

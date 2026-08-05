@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use derive_new::new;
 use openvm_bigint_transpiler::{
-    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
-    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+    BaseAlu256Opcode, BranchEqual256Opcode, BranchLessThan256Opcode, LessThan256Opcode,
+    Mul256Opcode, Shift256Opcode,
 };
 use openvm_circuit::{
     arch::cuda::postflight::{
@@ -17,14 +17,14 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_adapters::{
-    Rv64VecHeapAdapterCols, Rv64VecHeapBranchU16AdapterCols, Rv64VecHeapU16AdapterCols,
+    VecHeapAdapterCols, VecHeapBranchU16AdapterCols, VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
-    adapters::{RV64_BYTE_BITS, U16_BITS},
+    adapters::{BYTE_BITS, U16_BITS},
     AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
     LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
@@ -53,7 +53,7 @@ pub struct AddSub256ChipGpu {
 #[derive(new)]
 pub struct BitwiseLogic256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
@@ -111,7 +111,7 @@ pub struct ShiftRightArithmetic256ChipGpu {
 #[derive(new)]
 pub struct Multiplication256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
@@ -174,15 +174,15 @@ impl AddSub256ChipGpu {
         let range = int256_family_range(
             replay_plan,
             [
-                Rv64BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
-                Rv64BaseAlu256Opcode(BaseAluOpcode::SUB).global_opcode(),
+                BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
+                BaseAlu256Opcode(BaseAluOpcode::SUB).global_opcode(),
             ],
         )?;
         if range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
         let width = AddSubCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
-            + Rv64VecHeapU16AdapterCols::<
+            + VecHeapU16AdapterCols::<
                 F,
                 NUM_READS,
                 INT256_NUM_MEMORY_BLOCKS,
@@ -205,9 +205,9 @@ impl AddSub256ChipGpu {
                 args.7,
                 args.8,
                 args.9,
-                Rv64BaseAlu256Opcode::CLASS_OFFSET as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                BaseAlu256Opcode::CLASS_OFFSET as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 &self.range_checker.count,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
@@ -230,21 +230,22 @@ impl BitwiseLogic256ChipGpu {
         let range = int256_family_range(
             replay_plan,
             [
-                Rv64BaseAlu256Opcode(BaseAluOpcode::XOR).global_opcode(),
-                Rv64BaseAlu256Opcode(BaseAluOpcode::OR).global_opcode(),
-                Rv64BaseAlu256Opcode(BaseAluOpcode::AND).global_opcode(),
+                BaseAlu256Opcode(BaseAluOpcode::XOR).global_opcode(),
+                BaseAlu256Opcode(BaseAluOpcode::OR).global_opcode(),
+                BaseAlu256Opcode(BaseAluOpcode::AND).global_opcode(),
             ],
         )?;
         if range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-        let width = BitwiseLogicCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64VecHeapAdapterCols::<
-                F,
-                NUM_READS,
-                INT256_NUM_MEMORY_BLOCKS,
-                INT256_NUM_MEMORY_BLOCKS,
-            >::width();
+        let width =
+            BitwiseLogicCoreCols::<F, INT256_NUM_U8_LIMBS, BYTE_BITS>::width()
+                + VecHeapAdapterCols::<
+                    F,
+                    NUM_READS,
+                    INT256_NUM_MEMORY_BLOCKS,
+                    INT256_NUM_MEMORY_BLOCKS,
+                >::width();
         let height = next_power_of_two_or_zero(range.len());
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         let args = int256_replay_common_args!(program, transcript, replay_plan, range);
@@ -262,9 +263,9 @@ impl BitwiseLogic256ChipGpu {
                 args.7,
                 args.8,
                 args.9,
-                Rv64BaseAlu256Opcode::CLASS_OFFSET as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                BaseAlu256Opcode::CLASS_OFFSET as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 self.pointer_max_bits as u32,
@@ -310,8 +311,8 @@ macro_rules! impl_int256_u16_replay {
                         args.8,
                         args.9,
                         $base as u32,
-                        RV64_REGISTER_AS,
-                        RV64_MEMORY_AS,
+                        REGISTER_AS,
+                        MEMORY_AS,
                         &self.range_checker.count,
                         self.pointer_max_bits as u32,
                         self.timestamp_max_bits as u32,
@@ -328,74 +329,74 @@ macro_rules! impl_int256_u16_replay {
 impl_int256_u16_replay!(
     LessThan256ChipGpu,
     LessThanCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
-        + Rv64VecHeapU16AdapterCols::<
+        + VecHeapU16AdapterCols::<
             F,
             NUM_READS,
             INT256_NUM_MEMORY_BLOCKS,
             INT256_NUM_MEMORY_BLOCKS,
         >::width(),
     [
-        Rv64LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
-        Rv64LessThan256Opcode(LessThanOpcode::SLTU).global_opcode(),
+        LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
+        LessThan256Opcode(LessThanOpcode::SLTU).global_opcode(),
     ],
-    Rv64LessThan256Opcode::CLASS_OFFSET,
+    LessThan256Opcode::CLASS_OFFSET,
     cuda_abi::replay::U16Kind::LessThan
 );
 
 impl_int256_u16_replay!(
     ShiftLogical256ChipGpu,
     ShiftLogicalCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
-        + Rv64VecHeapU16AdapterCols::<
+        + VecHeapU16AdapterCols::<
             F,
             NUM_READS,
             INT256_NUM_MEMORY_BLOCKS,
             INT256_NUM_MEMORY_BLOCKS,
         >::width(),
     [
-        Rv64Shift256Opcode(ShiftOpcode::SLL).global_opcode(),
-        Rv64Shift256Opcode(ShiftOpcode::SRL).global_opcode(),
+        Shift256Opcode(ShiftOpcode::SLL).global_opcode(),
+        Shift256Opcode(ShiftOpcode::SRL).global_opcode(),
     ],
-    Rv64Shift256Opcode::CLASS_OFFSET,
+    Shift256Opcode::CLASS_OFFSET,
     cuda_abi::replay::U16Kind::ShiftLogical
 );
 
 impl_int256_u16_replay!(
     ShiftRightArithmetic256ChipGpu,
     ShiftRightArithmeticCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
-        + Rv64VecHeapU16AdapterCols::<
+        + VecHeapU16AdapterCols::<
             F,
             NUM_READS,
             INT256_NUM_MEMORY_BLOCKS,
             INT256_NUM_MEMORY_BLOCKS,
         >::width(),
-    [Rv64Shift256Opcode(ShiftOpcode::SRA).global_opcode()],
-    Rv64Shift256Opcode::CLASS_OFFSET,
+    [Shift256Opcode(ShiftOpcode::SRA).global_opcode()],
+    Shift256Opcode::CLASS_OFFSET,
     cuda_abi::replay::U16Kind::ShiftRightArithmetic
 );
 
 impl_int256_u16_replay!(
     BranchEqual256ChipGpu,
     BranchEqualCoreCols::<F, INT256_NUM_U16_LIMBS>::width()
-        + Rv64VecHeapBranchU16AdapterCols::<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>::width(),
+        + VecHeapBranchU16AdapterCols::<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>::width(),
     [
-        Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
-        Rv64BranchEqual256Opcode(BranchEqualOpcode::BNE).global_opcode(),
+        BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+        BranchEqual256Opcode(BranchEqualOpcode::BNE).global_opcode(),
     ],
-    Rv64BranchEqual256Opcode::CLASS_OFFSET,
+    BranchEqual256Opcode::CLASS_OFFSET,
     cuda_abi::replay::U16Kind::BranchEqual
 );
 
 impl_int256_u16_replay!(
     BranchLessThan256ChipGpu,
     BranchLessThanCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
-        + Rv64VecHeapBranchU16AdapterCols::<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>::width(),
+        + VecHeapBranchU16AdapterCols::<F, NUM_READS, INT256_NUM_MEMORY_BLOCKS>::width(),
     [
-        Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
-        Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLTU).global_opcode(),
-        Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BGE).global_opcode(),
-        Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BGEU).global_opcode(),
+        BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
+        BranchLessThan256Opcode(BranchLessThanOpcode::BLTU).global_opcode(),
+        BranchLessThan256Opcode(BranchLessThanOpcode::BGE).global_opcode(),
+        BranchLessThan256Opcode(BranchLessThanOpcode::BGEU).global_opcode(),
     ],
-    Rv64BranchLessThan256Opcode::CLASS_OFFSET,
+    BranchLessThan256Opcode::CLASS_OFFSET,
     cuda_abi::replay::U16Kind::BranchLessThan
 );
 
@@ -408,20 +409,19 @@ impl Multiplication256ChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let range = int256_family_range(
-            replay_plan,
-            [Rv64Mul256Opcode(MulOpcode::MUL).global_opcode()],
-        )?;
+        let range =
+            int256_family_range(replay_plan, [Mul256Opcode(MulOpcode::MUL).global_opcode()])?;
         if range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-        let width = MultiplicationCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64VecHeapAdapterCols::<
-                F,
-                NUM_READS,
-                INT256_NUM_MEMORY_BLOCKS,
-                INT256_NUM_MEMORY_BLOCKS,
-            >::width();
+        let width =
+            MultiplicationCoreCols::<F, INT256_NUM_U8_LIMBS, BYTE_BITS>::width()
+                + VecHeapAdapterCols::<
+                    F,
+                    NUM_READS,
+                    INT256_NUM_MEMORY_BLOCKS,
+                    INT256_NUM_MEMORY_BLOCKS,
+                >::width();
         let height = next_power_of_two_or_zero(range.len());
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         let args = int256_replay_common_args!(program, transcript, replay_plan, range);
@@ -440,9 +440,9 @@ impl Multiplication256ChipGpu {
                 args.7,
                 args.8,
                 args.9,
-                Rv64Mul256Opcode::CLASS_OFFSET as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                Mul256Opcode::CLASS_OFFSET as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 &self.range_tuple_checker.count,

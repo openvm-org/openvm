@@ -1,6 +1,6 @@
 //! Shared RV64 instruction decoding and IR helpers.
 
-use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES};
+use openvm_instructions::riscv::{NUM_REGISTERS, REGISTER_BYTES};
 use rvr_openvm_ir::{CfgOperand, Variable};
 use rvr_openvm_lift::{decode_variable, RvrInstruction};
 
@@ -14,7 +14,7 @@ pub(crate) const SP: Reg = Reg::new(2);
 
 /// Decode an OpenVM RV64 register operand into its architectural register.
 pub(crate) fn decode_reg(value: u32) -> Reg {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 /// Decode the immediate from the `(c, g)` field pair used by JALR, loads, and stores.

@@ -9,9 +9,7 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
-use openvm_instructions::{
-    instruction::Instruction, program::Program, riscv::RV64_REGISTER_NUM_LIMBS,
-};
+use openvm_instructions::{instruction::Instruction, program::Program, riscv::REGISTER_NUM_LIMBS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -41,7 +39,7 @@ use crate::{
         },
         to_byte_ptr_bits, vm_poseidon2_config, ExecutionBridge, ExecutionBus, ExecutionState,
         Executor, MemoryConfig, Postflight, Streams, VmField, VmState, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
+        MEMORY_BLOCK_BYTES, NUM_REGISTERS,
     },
     system::{
         memory::{
@@ -191,7 +189,7 @@ where
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {
-        let register_file_bytes = NUM_RV64_REGISTERS * RV64_REGISTER_NUM_LIMBS;
+        let register_file_bytes = NUM_REGISTERS * REGISTER_NUM_LIMBS;
         assert!(increment <= register_file_bytes);
         if self.default_register + increment > register_file_bytes {
             self.default_register = 0;
@@ -215,7 +213,7 @@ where
         let pointer = self.get_default_pointer(pointer_increment);
         // Store the heap pointer as a 64-bit RV64 register value.
         let ptr_bytes = (pointer as u64).to_le_bytes();
-        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+        for i in (0..REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
             let chunk: [u8; MEMORY_BLOCK_BYTES] =
                 ptr_bytes[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap();
             self.write_bytes::<MEMORY_BLOCK_BYTES>(1, register + i, chunk.map(F::from_u8));
@@ -271,7 +269,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     ) {
         // Store the heap pointer as a 64-bit RV64 register value.
         let ptr_bytes = (pointer as u64).to_le_bytes();
-        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+        for i in (0..REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
             let chunk: [u8; MEMORY_BLOCK_BYTES] =
                 ptr_bytes[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap();
             self.write_bytes::<MEMORY_BLOCK_BYTES>(1usize, register + i, chunk.map(F::from_u8));

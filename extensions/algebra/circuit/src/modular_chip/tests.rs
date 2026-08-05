@@ -4,7 +4,7 @@ use std::{borrow::BorrowMut, str::FromStr};
 
 use num_bigint::BigUint;
 use num_traits::Zero;
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{
@@ -17,7 +17,7 @@ use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_
 use openvm_cuda_common::copy::MemCopyD2H;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -26,8 +26,8 @@ use openvm_mod_circuit_builder::{
     ExprBuilderConfig,
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
-use openvm_riscv_adapters::{rv64_write_u16_heap_default, write_ptr_reg};
-use openvm_riscv_circuit::adapters::RV64_REGISTER_NUM_LIMBS;
+use openvm_riscv_adapters::{write_ptr_reg, write_u16_heap_default};
+use openvm_riscv_circuit::adapters::REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -64,7 +64,7 @@ mod addsub_tests {
     use super::*;
     use crate::trace::generate_field_expression_trace_from_postflight;
 
-    const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
+    const ADD_LOCAL: usize = ModularArithmeticOpcode::ADD as usize;
 
     type Harness<const BLOCKS: usize> =
         TestChipHarness<F, ModularExecutor<BLOCKS>, ModularAir<BLOCKS>, ModularChip<F, BLOCKS>>;
@@ -214,12 +214,12 @@ mod addsub_tests {
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
-        let ptr_as = RV64_REGISTER_AS as usize;
+        let ptr_as = REGISTER_AS as usize;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
-        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr2 = 3 * REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * REGISTER_NUM_LIMBS;
 
-        let data_as = RV64_MEMORY_AS as usize;
+        let data_as = MEMORY_AS as usize;
         let address1 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
         let address2 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
         let address3 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
@@ -282,7 +282,7 @@ mod addsub_tests {
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -337,7 +337,7 @@ mod addsub_tests {
         const BLOCKS: usize = MODULAR_BLOCKS_32;
         let mut tester = VmChipTestBuilder::default();
         let modulus = secp256k1_coord_prime();
-        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let offset = ModularArithmeticOpcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {
             modulus,
             num_limbs: NUM_LIMBS_32,
@@ -358,7 +358,7 @@ mod addsub_tests {
         ] {
             unsafe {
                 tester.memory.memory.data.write_bytes(
-                    RV64_REGISTER_AS,
+                    REGISTER_AS,
                     register as u32,
                     u64::from(pointer).to_le_bytes(),
                 );
@@ -372,7 +372,7 @@ mod addsub_tests {
             for byte_offset in (0..NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
                 unsafe {
                     tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
-                        RV64_MEMORY_AS,
+                        MEMORY_AS,
                         pointer + byte_offset as u32,
                         std::array::from_fn(|index| limbs[byte_offset + index]),
                     );
@@ -380,23 +380,23 @@ mod addsub_tests {
             }
         }
         let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(offset + Rv64ModularArithmeticOpcode::ADD as usize),
+            VmOpcode::from_usize(offset + ModularArithmeticOpcode::ADD as usize),
             [
                 rd_register,
                 lhs_register,
                 rhs_register,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         let sentinel = Instruction::from_usize(
-            VmOpcode::from_usize(offset + Rv64ModularArithmeticOpcode::SUB as usize),
+            VmOpcode::from_usize(offset + ModularArithmeticOpcode::SUB as usize),
             [
                 rd_register,
                 lhs_register,
                 rhs_register,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         tester.execute_with_pc(
@@ -441,7 +441,7 @@ mod addsub_tests {
 
         let mut tester = GpuChipTestBuilder::default();
 
-        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -506,7 +506,7 @@ mod muldiv_tests {
     use super::*;
     use crate::trace::generate_field_expression_trace_from_postflight;
 
-    const MUL_LOCAL: usize = Rv64ModularArithmeticOpcode::MUL as usize;
+    const MUL_LOCAL: usize = ModularArithmeticOpcode::MUL as usize;
     type Harness<const BLOCKS: usize> =
         TestChipHarness<F, ModularExecutor<BLOCKS>, ModularAir<BLOCKS>, ModularChip<F, BLOCKS>>;
 
@@ -654,12 +654,12 @@ mod muldiv_tests {
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
-        let ptr_as = RV64_REGISTER_AS as usize;
+        let ptr_as = REGISTER_AS as usize;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
-        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr2 = 3 * REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * REGISTER_NUM_LIMBS;
 
-        let data_as = RV64_MEMORY_AS as usize;
+        let data_as = MEMORY_AS as usize;
         let address1 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
         let address2 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
         let address3 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
@@ -727,7 +727,7 @@ mod muldiv_tests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
-        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
 
         let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
 
@@ -782,7 +782,7 @@ mod muldiv_tests {
 
         let mut tester = GpuChipTestBuilder::default();
 
-        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -847,7 +847,7 @@ mod is_equal_tests {
     use openvm_circuit::arch::{MemoryConfig, Postflight};
     use openvm_instructions::program::Program;
     use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
-    use openvm_riscv_adapters::Rv64IsEqualModU16AdapterAir;
+    use openvm_riscv_adapters::IsEqualModU16AdapterAir;
     use openvm_riscv_circuit::adapters::U16_BITS;
     use openvm_stark_backend::{
         p3_air::BaseAir,
@@ -885,7 +885,7 @@ mod is_equal_tests {
         offset: usize,
     ) -> Harness<NUM_LANES, TOTAL_LIMBS> {
         let air = ModularIsEqualU16Air::new(
-            Rv64IsEqualModU16AdapterAir::new(
+            IsEqualModU16AdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 tester.range_checker().bus(),
@@ -932,7 +932,7 @@ mod is_equal_tests {
             (
                 modulus_limbs,
                 [F::ZERO; TOTAL_LIMBS],
-                offset + Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize,
+                offset + ModularArithmeticOpcode::SETUP_ISEQ as usize,
             )
         } else {
             let b = b.unwrap_or(
@@ -944,11 +944,10 @@ mod is_equal_tests {
                 generate_field_element::<TOTAL_LIMBS, U16_BITS>(modulus, rng).map(F::from_u32)
             });
 
-            (b, c, offset + Rv64ModularArithmeticOpcode::IS_EQ as usize)
+            (b, c, offset + ModularArithmeticOpcode::IS_EQ as usize)
         };
 
-        let instruction =
-            rv64_write_u16_heap_default::<TOTAL_LIMBS>(tester, vec![b], vec![c], opcode);
+        let instruction = write_u16_heap_default::<TOTAL_LIMBS>(tester, vec![b], vec![c], opcode);
 
         tester.execute(executor, preflight, &instruction);
     }
@@ -1031,7 +1030,7 @@ mod is_equal_tests {
         const LIMBS: usize = NUM_LIMBS_32_U16;
         let mut tester = VmChipTestBuilder::default();
         let modulus = secp256k1_coord_prime();
-        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let offset = ModularArithmeticOpcode::CLASS_OFFSET;
         let modulus_limbs =
             biguint_to_limbs::<LIMBS>(modulus.clone(), U16_BITS).map(|limb| limb as u16);
         let mut harness =
@@ -1044,7 +1043,7 @@ mod is_equal_tests {
         for (register, pointer) in [(lhs_register, lhs_pointer), (rhs_register, rhs_pointer)] {
             unsafe {
                 tester.memory.memory.data.write_bytes(
-                    RV64_REGISTER_AS,
+                    REGISTER_AS,
                     register,
                     u64::from(pointer).to_le_bytes(),
                 );
@@ -1055,7 +1054,7 @@ mod is_equal_tests {
             for block in 0..BLOCKS {
                 unsafe {
                     tester.memory.memory.data.write::<u16, 4>(
-                        RV64_MEMORY_AS,
+                        MEMORY_AS,
                         pointer / 2 + (block * BLOCK_FE_WIDTH) as u32,
                         std::array::from_fn(|lane| value[block * BLOCK_FE_WIDTH + lane]),
                     );
@@ -1063,13 +1062,13 @@ mod is_equal_tests {
             }
         }
         let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(offset + Rv64ModularArithmeticOpcode::IS_EQ as usize),
+            VmOpcode::from_usize(offset + ModularArithmeticOpcode::IS_EQ as usize),
             [
                 rd_register as usize,
                 lhs_register as usize,
                 rhs_register as usize,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         let sentinel = instruction.clone();
@@ -1125,7 +1124,7 @@ mod is_equal_tests {
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let air = ModularIsEqualU16Air::new(
-            Rv64IsEqualModU16AdapterAir::new(
+            IsEqualModU16AdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 range_bus,
@@ -1240,7 +1239,7 @@ mod is_equal_tests {
     fn run_preflight_replay_is_equal_test<const BLOCKS: usize, const LIMBS: usize>(
         modulus: BigUint,
     ) {
-        let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let opcode_base = ModularArithmeticOpcode::CLASS_OFFSET;
         let modulus_limbs =
             biguint_to_limbs::<LIMBS>(modulus.clone(), U16_BITS).map(|limb| limb as u16);
         let value_limbs: [u16; LIMBS] = std::array::from_fn(|index| if index == 0 { 5 } else { 0 });
@@ -1255,23 +1254,23 @@ mod is_equal_tests {
         let c_ptr = 0x300u32;
 
         let setup: Instruction<F> = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize),
+            VmOpcode::from_usize(opcode_base + ModularArithmeticOpcode::SETUP_ISEQ as usize),
             [
                 setup_rd,
                 modulus_reg,
                 0,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         let is_eq: Instruction<F> = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + Rv64ModularArithmeticOpcode::IS_EQ as usize),
+            VmOpcode::from_usize(opcode_base + ModularArithmeticOpcode::IS_EQ as usize),
             [
                 is_eq_rd,
                 b_reg,
                 c_reg,
-                RV64_REGISTER_AS as usize,
-                RV64_MEMORY_AS as usize,
+                REGISTER_AS as usize,
+                MEMORY_AS as usize,
             ],
         );
         let program = Program::from_instructions(&[
@@ -1288,20 +1287,20 @@ mod is_equal_tests {
         let mut memory_log = Vec::with_capacity(2 * (2 + 2 * BLOCKS + 1));
         memory_log.push(PreflightMemoryEvent {
             timestamp: 1,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: modulus_reg as u32 / 2,
             value: register_block(modulus_ptr),
         });
         memory_log.push(PreflightMemoryEvent {
             timestamp: 2,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: 0,
             value: [0; 4],
         });
         for block in 0..BLOCKS {
             memory_log.push(PreflightMemoryEvent {
                 timestamp: 3 + block as u32,
-                address_space_and_kind: RV64_MEMORY_AS,
+                address_space_and_kind: MEMORY_AS,
                 pointer: modulus_ptr / 2 + (block * 4) as u32,
                 value: std::array::from_fn(|limb| modulus_limbs[block * 4 + limb]),
             });
@@ -1309,7 +1308,7 @@ mod is_equal_tests {
         for block in 0..BLOCKS {
             memory_log.push(PreflightMemoryEvent {
                 timestamp: 3 + BLOCKS as u32 + block as u32,
-                address_space_and_kind: RV64_MEMORY_AS,
+                address_space_and_kind: MEMORY_AS,
                 pointer: (block * 4) as u32,
                 value: [0; 4],
             });
@@ -1317,19 +1316,19 @@ mod is_equal_tests {
         let first_delta = (2 + 2 * BLOCKS + 1) as u32;
         memory_log.push(PreflightMemoryEvent {
             timestamp: first_delta,
-            address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+            address_space_and_kind: REGISTER_AS | PREFLIGHT_WRITE_BIT,
             pointer: setup_rd as u32 / 2,
             value: [0; 4],
         });
         memory_log.push(PreflightMemoryEvent {
             timestamp: 1 + first_delta,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: b_reg as u32 / 2,
             value: register_block(b_ptr),
         });
         memory_log.push(PreflightMemoryEvent {
             timestamp: 2 + first_delta,
-            address_space_and_kind: RV64_REGISTER_AS,
+            address_space_and_kind: REGISTER_AS,
             pointer: c_reg as u32 / 2,
             value: register_block(c_ptr),
         });
@@ -1338,7 +1337,7 @@ mod is_equal_tests {
             for block in 0..BLOCKS {
                 memory_log.push(PreflightMemoryEvent {
                     timestamp: 3 + first_delta + (read * BLOCKS + block) as u32,
-                    address_space_and_kind: RV64_MEMORY_AS,
+                    address_space_and_kind: MEMORY_AS,
                     pointer: pointer / 2 + (block * 4) as u32,
                     value: std::array::from_fn(|limb| value_limbs[block * 4 + limb]),
                 });
@@ -1347,7 +1346,7 @@ mod is_equal_tests {
         let final_timestamp = 1 + 2 * first_delta;
         memory_log.push(PreflightMemoryEvent {
             timestamp: final_timestamp - 1,
-            address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+            address_space_and_kind: REGISTER_AS | PREFLIGHT_WRITE_BIT,
             pointer: is_eq_rd as u32 / 2,
             value: [1, 0, 0, 0],
         });
@@ -1374,12 +1373,12 @@ mod is_equal_tests {
                 accesses: memory_log,
                 initial_writes: vec![
                     PreflightInitialWrite {
-                        address_space: RV64_REGISTER_AS,
+                        address_space: REGISTER_AS,
                         pointer: setup_rd as u32 / 2,
                         initial_value: [0; 4],
                     },
                     PreflightInitialWrite {
-                        address_space: RV64_REGISTER_AS,
+                        address_space: REGISTER_AS,
                         pointer: is_eq_rd as u32 / 2,
                         initial_value: [0; 4],
                     },

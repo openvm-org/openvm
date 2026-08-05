@@ -1,15 +1,15 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
-    adapters::{Rv64MultWAdapterAir, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS},
-    mul::{MultiplicationCoreAir, MultiplicationExecutor, MultiplicationFiller},
+    adapters::{MultWAdapterAir, BYTE_BITS, WORD_NUM_LIMBS},
+    mul::{MultiplicationCoreAir, MultiplicationCoreExecutor, MultiplicationFiller},
 };
 
 mod execution;
 
-pub type MulWCoreAir = MultiplicationCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type MulWExecutor = MultiplicationExecutor<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type MulWFiller = MultiplicationFiller<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type MulWCoreAir = MultiplicationCoreAir<WORD_NUM_LIMBS, BYTE_BITS>;
+pub type MulWCoreExecutor = MultiplicationCoreExecutor<WORD_NUM_LIMBS, BYTE_BITS>;
+pub type MulWFiller = MultiplicationFiller<WORD_NUM_LIMBS, BYTE_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -20,6 +20,6 @@ pub use cuda::*;
 mod tests;
 pub(crate) mod trace;
 
-pub type Rv64MulWAir = VmAirWrapper<Rv64MultWAdapterAir, MulWCoreAir>;
-pub type Rv64MulWExecutor = MulWExecutor;
-pub type Rv64MulWChip<F> = VmChipWrapper<F, MulWFiller>;
+pub type MulWAir = VmAirWrapper<MultWAdapterAir, MulWCoreAir>;
+pub type MulWExecutor = MulWCoreExecutor;
+pub type MulWChip<F> = VmChipWrapper<F, MulWFiller>;

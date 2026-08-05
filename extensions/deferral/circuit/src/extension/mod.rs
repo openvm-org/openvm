@@ -255,7 +255,7 @@ where
     }
 }
 
-// =================================== VM Rv64 Config and Builder =================================
+// ====================================== VM Config and Builder ==================================
 
 #[derive(Clone, VmConfig, Serialize, Deserialize)]
 pub struct Rv64DeferralConfig {

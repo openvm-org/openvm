@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use super::adapters::{Rv64BaseAluRegU16AdapterAir, U16_BITS};
+use super::adapters::{BaseAluRegU16AdapterAir, U16_BITS};
 
 mod core;
 mod execution;
@@ -15,7 +15,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64AddSubAir =
-    VmAirWrapper<Rv64BaseAluRegU16AdapterAir, AddSubCoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
-pub type Rv64AddSubExecutor = AddSubExecutor<BLOCK_FE_WIDTH, U16_BITS>;
-pub type Rv64AddSubChip<F> = VmChipWrapper<F, AddSubFiller>;
+pub type AddSubAir =
+    VmAirWrapper<BaseAluRegU16AdapterAir, AddSubCoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
+pub type AddSubExecutor = AddSubCoreExecutor<BLOCK_FE_WIDTH, U16_BITS>;
+pub type AddSubChip<F> = VmChipWrapper<F, AddSubFiller>;

@@ -5,13 +5,11 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS,
-};
-use openvm_riscv_transpiler::Rv64AuipcOpcode::AUIPC;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
+use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{run_auipc, Rv64AuipcExecutor};
+use super::{run_auipc, AuipcExecutor};
 use crate::adapters::byte_ptr_to_u16_ptr_value;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -20,7 +18,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl Rv64AuipcExecutor {
+impl AuipcExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -28,7 +26,7 @@ impl Rv64AuipcExecutor {
         data: &mut AuiPcPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, c: imm, d, .. } = inst;
-        if d.as_canonical_u32() != RV64_REGISTER_AS {
+        if d.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let imm = imm.as_canonical_u32();
@@ -41,7 +39,7 @@ impl Rv64AuipcExecutor {
     }
 }
 
-impl<F> InterpreterExecutor<F> for Rv64AuipcExecutor
+impl<F> InterpreterExecutor<F> for AuipcExecutor
 where
     F: PrimeField32,
 {
@@ -83,7 +81,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor
+impl<F> InterpreterMeteredExecutor<F> for AuipcExecutor
 where
     F: PrimeField32,
 {
@@ -134,7 +132,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     let pc = exec_state.pc();
     let rd = run_auipc(pc, pre_compute.imm);
     exec_state.vm_write(
-        RV64_REGISTER_AS,
+        REGISTER_AS,
         byte_ptr_to_u16_ptr_value(pre_compute.a as u32),
         &rd,
     );

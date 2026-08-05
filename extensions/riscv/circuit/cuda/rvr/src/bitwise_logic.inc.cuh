@@ -30,7 +30,7 @@ __global__ void bitwise_logic_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64BitwiseLogicCols<uint8_t>));
+    row.fill_zero(0, sizeof(BitwiseLogicCols<uint8_t>));
     size_t total_steps = num_xor_steps + num_or_steps + num_and_steps;
     if (idx >= total_steps) return;
 
@@ -108,9 +108,9 @@ __global__ void bitwise_logic_replay_tracegen(
     replay_u16_block(rs1.value, rs1_cells);
     replay_u16_block(rs2.value, rs2_cells);
     replay_u16_block(write.value, logged_result_cells);
-    uint8_t b[RV64_REGISTER_NUM_LIMBS];
-    uint8_t c[RV64_REGISTER_NUM_LIMBS];
-    uint8_t logged_result[RV64_REGISTER_NUM_LIMBS];
+    uint8_t b[REGISTER_NUM_LIMBS];
+    uint8_t c[REGISTER_NUM_LIMBS];
+    uint8_t logged_result[REGISTER_NUM_LIMBS];
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
         b[2 * i] = static_cast<uint8_t>(rs1_cells[i]);
@@ -120,16 +120,16 @@ __global__ void bitwise_logic_replay_tracegen(
         logged_result[2 * i] = static_cast<uint8_t>(logged_result_cells[i]);
         logged_result[2 * i + 1] = static_cast<uint8_t>(logged_result_cells[i] >> 8);
     }
-    uint8_t expected_result[RV64_REGISTER_NUM_LIMBS];
+    uint8_t expected_result[REGISTER_NUM_LIMBS];
     if (local_opcode == 2) {
-        run_xor<RV64_REGISTER_NUM_LIMBS>(b, c, expected_result);
+        run_xor<REGISTER_NUM_LIMBS>(b, c, expected_result);
     } else if (local_opcode == 3) {
-        run_or<RV64_REGISTER_NUM_LIMBS>(b, c, expected_result);
+        run_or<REGISTER_NUM_LIMBS>(b, c, expected_result);
     } else {
-        run_and<RV64_REGISTER_NUM_LIMBS>(b, c, expected_result);
+        run_and<REGISTER_NUM_LIMBS>(b, c, expected_result);
     }
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         if (logged_result[i] != expected_result[i]) {
             preflight_set_error(error, 138);
             return;
@@ -152,7 +152,7 @@ __global__ void bitwise_logic_replay_tracegen(
         return;
     }
 
-    auto adapter = Rv64BaseAluRegAdapter(
+    auto adapter = BaseAluRegAdapter(
         VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(
@@ -167,9 +167,9 @@ __global__ void bitwise_logic_replay_tracegen(
         write_previous.timestamp,
         write_previous.value
     );
-    auto core = Rv64BitwiseLogicCore(BitwiseOperationLookup(bitwise_lookup));
+    auto core = BitwiseLogicCore<REGISTER_NUM_LIMBS>(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
-        row.slice_from(COL_INDEX(Rv64BitwiseLogicCols, core)), b, c, local_opcode
+        row.slice_from(COL_INDEX(BitwiseLogicCols, core)), b, c, local_opcode
     );
 }
 
@@ -203,7 +203,7 @@ extern "C" int _bitwise_logic_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64BitwiseLogicCols<uint8_t>));
+    assert(width == sizeof(BitwiseLogicCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(xor_step_start <= steps.len());
     assert(num_xor_steps <= steps.len() - xor_step_start);
@@ -214,7 +214,7 @@ extern "C" int _bitwise_logic_replay_tracegen(
     assert(num_xor_steps <= SIZE_MAX - num_or_steps);
     assert(num_xor_steps + num_or_steps <= SIZE_MAX - num_and_steps);
     assert(height >= num_xor_steps + num_or_steps + num_and_steps);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     bitwise_logic_replay_tracegen<<<grid, block, 0, stream>>>(
         trace,
         height,

@@ -8,14 +8,14 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64JalrOpcode;
+use openvm_riscv_transpiler::JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::Rv64JalrExecutor;
-use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32};
+use super::core::JalrExecutor;
+use crate::adapters::{address_add_imm, bytes_to_u32};
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct JalrPreCompute {
@@ -24,7 +24,7 @@ struct JalrPreCompute {
     b: u8,
 }
 
-impl Rv64JalrExecutor {
+impl JalrExecutor {
     /// Return true if enabled.
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -33,7 +33,7 @@ impl Rv64JalrExecutor {
         data: &mut JalrPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
-        if inst.d.as_canonical_u32() != RV64_REGISTER_AS {
+        if inst.d.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = JalrPreCompute {
@@ -56,14 +56,14 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for Rv64JalrExecutor
+impl<F> InterpreterExecutor<F> for JalrExecutor
 where
     F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv64JalrOpcode::from_usize(opcode - Rv64JalrOpcode::CLASS_OFFSET)
+            JalrOpcode::from_usize(opcode - JalrOpcode::CLASS_OFFSET)
         )
     }
 
@@ -100,7 +100,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for Rv64JalrExecutor
+impl<F> InterpreterMeteredExecutor<F> for JalrExecutor
 where
     F: PrimeField32,
 {
@@ -149,19 +149,18 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pc = exec_state.pc();
-    let rs1 =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = rv64_bytes_to_u32(rs1);
-    let unaligned_to_pc = rv64_address_add_imm(rs1, pre_compute.imm_extended);
+    let rs1 = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs1 = bytes_to_u32(rs1);
+    let unaligned_to_pc = address_add_imm(rs1, pre_compute.imm_extended);
     // JALR clears bit 0 before jumping.
     let to_pc = unaligned_to_pc & !1;
     debug_assert!(to_pc <= u64::from(MAX_ALLOWED_PC));
     let to_pc = to_pc as u32;
-    let mut rd = [0u8; RV64_REGISTER_NUM_LIMBS];
+    let mut rd = [0u8; REGISTER_NUM_LIMBS];
     rd[..4].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
 
     if ENABLED {
-        exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+        exec_state.vm_write_bytes(REGISTER_AS, pre_compute.a as u32, &rd);
     } else {
         exec_state.ctx.advance_timestamp(1);
     }

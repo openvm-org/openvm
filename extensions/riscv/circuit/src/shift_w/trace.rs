@@ -8,19 +8,16 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::{ShiftOpcode, ShiftWOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{Rv64ShiftWLogicalChip, Rv64ShiftWRightArithmeticChip};
+use super::{ShiftWLogicalChip, ShiftWRightArithmeticChip};
 use crate::{
-    adapters::{
-        Rv64BaseAluWRegU16AdapterCols, Rv64BaseAluWRegU16AdapterFiller, RV64_WORD_U16_LIMBS,
-        U16_BITS,
-    },
+    adapters::{BaseAluWRegU16AdapterCols, BaseAluWRegU16AdapterFiller, U16_BITS, WORD_U16_LIMBS},
     shift_logical::{run_shift_logical, ShiftLogicalCoreCols},
     shift_right_arithmetic::{run_shift_right_arithmetic, ShiftRightArithmeticCoreCols},
 };
 
 /// Generates the SLLW/SRLW trace directly from immutable preflight history.
 pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64ShiftWLogicalChip<F>,
+    chip: &ShiftWLogicalChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftWOpcode::SLLW, ShiftWOpcode::SRLW];
@@ -28,11 +25,11 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64BaseAluWRegU16AdapterCols::<F>::width();
-    let width = adapter_width + ShiftLogicalCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+    let adapter_width = BaseAluWRegU16AdapterCols::<F>::width();
+    let width = adapter_width + ShiftLogicalCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
-    let adapter = Rv64BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
+    let adapter = BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 
     let mut row_index = 0;
     for local_opcode in opcodes {
@@ -52,14 +49,14 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
                 adapter_row.borrow_mut(),
                 |[rs1, rs2]| {
                     let (output, limb_shift, bit_shift) =
-                        run_shift_logical::<RV64_WORD_U16_LIMBS, U16_BITS>(core_opcode, &rs1, &rs2);
+                        run_shift_logical::<WORD_U16_LIMBS, U16_BITS>(core_opcode, &rs1, &rs2);
                     shifts = (limb_shift, bit_shift);
                     output
                 },
             )?;
 
             let (limb_shift, bit_shift) = shifts;
-            let num_bits_log = (RV64_WORD_U16_LIMBS * U16_BITS).ilog2();
+            let num_bits_log = (WORD_U16_LIMBS * U16_BITS).ilog2();
             chip.inner.range_checker_chip.add_count(
                 ((rs2[0] as usize - bit_shift - limb_shift * U16_BITS) >> num_bits_log) as u32,
                 U16_BITS - num_bits_log as usize,
@@ -67,8 +64,8 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
 
             let is_sll = local_opcode == ShiftWOpcode::SLLW;
             let aux_bits = U16_BITS - bit_shift;
-            let mut bit_shift_carry = [F::ZERO; RV64_WORD_U16_LIMBS];
-            let mut bit_shift_aux = [F::ZERO; RV64_WORD_U16_LIMBS];
+            let mut bit_shift_carry = [F::ZERO; WORD_U16_LIMBS];
+            let mut bit_shift_aux = [F::ZERO; WORD_U16_LIMBS];
             for (limb, (carry_cell, aux_cell)) in rs1
                 .iter()
                 .zip(bit_shift_carry.iter_mut().zip(&mut bit_shift_aux))
@@ -85,7 +82,7 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
                 *aux_cell = F::from_u32(aux);
             }
 
-            let core_row: &mut ShiftLogicalCoreCols<F, RV64_WORD_U16_LIMBS, U16_BITS> =
+            let core_row: &mut ShiftLogicalCoreCols<F, WORD_U16_LIMBS, U16_BITS> =
                 core_row.borrow_mut();
             core_row.limb_shift_marker[limb_shift] = F::ONE;
             core_row.bit_shift_marker[bit_shift] = F::ONE;
@@ -115,17 +112,17 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
 
 /// Generates the SRAW trace directly from immutable preflight history.
 pub fn generate_right_arithmetic_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64ShiftWRightArithmeticChip<F>,
+    chip: &ShiftWRightArithmeticChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = ShiftWOpcode::SRAW.global_opcode();
     let rows_used = postflight.steps(opcode).len();
-    let adapter_width = Rv64BaseAluWRegU16AdapterCols::<F>::width();
+    let adapter_width = BaseAluWRegU16AdapterCols::<F>::width();
     let width =
-        adapter_width + ShiftRightArithmeticCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        adapter_width + ShiftRightArithmeticCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
-    let adapter = Rv64BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
+    let adapter = BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
@@ -137,19 +134,19 @@ pub fn generate_right_arithmetic_trace_from_postflight<F: PrimeField32>(
             adapter_row.borrow_mut(),
             |[rs1, rs2]| {
                 let (output, limb_shift, bit_shift) =
-                    run_shift_right_arithmetic::<RV64_WORD_U16_LIMBS, U16_BITS>(&rs1, &rs2);
+                    run_shift_right_arithmetic::<WORD_U16_LIMBS, U16_BITS>(&rs1, &rs2);
                 shifts = (limb_shift, bit_shift);
                 output
             },
         )?;
         let (limb_shift, bit_shift) = shifts;
-        let num_bits_log = (RV64_WORD_U16_LIMBS * U16_BITS).ilog2();
+        let num_bits_log = (WORD_U16_LIMBS * U16_BITS).ilog2();
         chip.inner.range_checker_chip.add_count(
             ((rs2[0] as usize - bit_shift - limb_shift * U16_BITS) >> num_bits_log) as u32,
             U16_BITS - num_bits_log as usize,
         );
 
-        let core_row: &mut ShiftRightArithmeticCoreCols<F, RV64_WORD_U16_LIMBS, U16_BITS> =
+        let core_row: &mut ShiftRightArithmeticCoreCols<F, WORD_U16_LIMBS, U16_BITS> =
             core_row.borrow_mut();
         let aux_bits = U16_BITS - bit_shift;
         for (limb, (carry_col, aux_col)) in rs1.iter().copied().zip(
@@ -169,9 +166,9 @@ pub fn generate_right_arithmetic_trace_from_postflight<F: PrimeField32>(
 
         core_row.limb_shift_marker[limb_shift] = F::ONE;
         core_row.bit_shift_marker[bit_shift] = F::ONE;
-        let b_sign = rs1[RV64_WORD_U16_LIMBS - 1] >> (U16_BITS - 1);
+        let b_sign = rs1[WORD_U16_LIMBS - 1] >> (U16_BITS - 1);
         chip.inner.range_checker_chip.add_count(
-            (rs1[RV64_WORD_U16_LIMBS - 1] as u32) - ((b_sign as u32) << (U16_BITS - 1)),
+            (rs1[WORD_U16_LIMBS - 1] as u32) - ((b_sign as u32) << (U16_BITS - 1)),
             U16_BITS - 1,
         );
         core_row.b_sign = F::from_u16(b_sign);

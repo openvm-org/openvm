@@ -12,7 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS};
+use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -23,7 +23,7 @@ use crate::adapters::{byte_ptr_to_u16_ptr, checked_register_u16_pointer};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64JalrAdapterCols<T> {
+pub struct JalrAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
@@ -35,19 +35,19 @@ pub struct Rv64JalrAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64JalrAdapterCols<u8>)]
-pub struct Rv64JalrAdapterAir {
+#[columns_via(JalrAdapterCols<u8>)]
+pub struct JalrAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv64JalrAdapterAir {
+impl<F: Field> BaseAir<F> for JalrAdapterAir {
     fn width(&self) -> usize {
-        Rv64JalrAdapterCols::<F>::width()
+        JalrAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalrAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         SignedImmInstruction<AB::Expr>,
@@ -63,7 +63,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64JalrAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &JalrAdapterCols<AB::Var> = local.borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -82,7 +82,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
                 ),
                 ctx.reads[0].clone(),
@@ -94,7 +94,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
                 ),
                 ctx.writes[0].clone(),
@@ -115,7 +115,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
                     AB::Expr::ZERO,
                     write_count.into(),
                     ctx.instruction.imm_sign,
@@ -130,20 +130,20 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64JalrAdapterCols<_> = local.borrow();
+        let cols: &JalrAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrAdapterFiller;
+pub struct JalrAdapterFiller;
 
-impl Rv64JalrAdapterFiller {
+impl JalrAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
         postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
-        adapter_row: &mut Rv64JalrAdapterCols<F>,
+        adapter_row: &mut JalrAdapterCols<F>,
         compute: impl FnOnce(
             u32,
             [u16; BLOCK_FE_WIDTH],
@@ -152,7 +152,7 @@ impl Rv64JalrAdapterFiller {
         ) -> Result<(u32, [u16; BLOCK_FE_WIDTH]), PostflightError>,
     ) -> Result<([u16; BLOCK_FE_WIDTH], u32, [u16; BLOCK_FE_WIDTH]), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != RV64_REGISTER_AS || !instruction.e.is_zero() {
+        if instruction.d.as_canonical_u32() != REGISTER_AS || !instruction.e.is_zero() {
             return Err(PostflightError::new(
                 "JALR instruction has invalid address spaces",
             ));
@@ -190,12 +190,12 @@ impl Rv64JalrAdapterFiller {
         let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
-        let rs1 = replay.read_u16(RV64_REGISTER_AS, rs1_u16_ptr)?;
+        let rs1 = replay.read_u16(REGISTER_AS, rs1_u16_ptr)?;
         let (to_pc, rd_data) = compute(from_pc, rs1.value, immediate as u16, imm_sign)?;
 
         adapter_row.needs_write = F::from_bool(needs_write);
         if needs_write {
-            let write = replay.write_u16(RV64_REGISTER_AS, rd_u16_ptr, rd_data)?;
+            let write = replay.write_u16(REGISTER_AS, rd_u16_ptr, rd_data)?;
             adapter_row
                 .rd_aux_cols
                 .set_prev_data(write.previous_value.map(F::from_u16));

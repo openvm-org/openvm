@@ -5,11 +5,11 @@
 //!
 //! Modular arithmetic opcodes are handled separately by the algebra extension.
 
-use openvm_ecc_transpiler::Rv64WeierstrassOpcode::{
+use openvm_ecc_transpiler::WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
 use openvm_instructions::{
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode,
 };
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
@@ -23,14 +23,14 @@ const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(96);
 
 fn decode_reg(value: u32) -> Variable {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 fn emit_pointer_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
     let pointers = pointers.join(" | ");
     ctx.write_line(&format!(
         "if (unlikely((({pointers}) & {}ull) != 0ull)) {{",
-        RV64_REGISTER_BYTES - 1
+        REGISTER_BYTES - 1
     ));
     ctx.emit_trap();
     ctx.write_line("}");
@@ -240,8 +240,8 @@ impl RvrExtension for EccExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
-        let ecc_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
-        let ecc_count = Rv64WeierstrassOpcode::COUNT;
+        let ecc_base = WeierstrassOpcode::CLASS_OFFSET;
+        let ecc_count = WeierstrassOpcode::COUNT;
 
         if opcode < ecc_base {
             return None;
@@ -255,7 +255,7 @@ impl RvrExtension for EccExtension {
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
 
-        let local_opcode = Rv64WeierstrassOpcode::from_repr(local_op)?;
+        let local_opcode = WeierstrassOpcode::from_repr(local_op)?;
         let instr: Box<dyn ExtInstr> = match local_opcode {
             EC_ADD_NE | SETUP_EC_ADD_NE => {
                 let rs2_reg = decode_reg(insn.c);
@@ -449,9 +449,8 @@ mod tests {
     #[test]
     fn ignores_opcodes_outside_configured_curves() {
         let extension = EccExtension::new(vec![0]);
-        let opcode = VmOpcode::from_usize(
-            Rv64WeierstrassOpcode::CLASS_OFFSET + Rv64WeierstrassOpcode::COUNT,
-        );
+        let opcode =
+            VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + WeierstrassOpcode::COUNT);
         let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
 
         assert!(extension.try_lift(&insn, 0x100).is_none());

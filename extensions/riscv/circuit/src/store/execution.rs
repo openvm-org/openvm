@@ -18,15 +18,15 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{store_width_for_opcode, StoreExecutor};
 use crate::adapters::{
-    checked_rv64_memory_address, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    bytes_to_u32, checked_memory_address, sign_extend_imm16, BYTE_ACCESS_WIDTH,
     DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
@@ -45,7 +45,7 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut StorePreCompute,
-    ) -> Result<Rv64LoadStoreOpcode, StaticProgramError> {
+    ) -> Result<LoadStoreOpcode, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -63,15 +63,13 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
         }
 
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS
-            || (e_u32 != RV64_MEMORY_AS && e_u32 != PUBLIC_VALUES_AS)
+        if d.as_canonical_u32() != REGISTER_AS || (e_u32 != MEMORY_AS && e_u32 != PUBLIC_VALUES_AS)
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        let local_opcode = Rv64LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
-        );
+        let local_opcode =
+            LoadStoreOpcode::from_usize(opcode.local_opcode_idx(LoadStoreOpcode::CLASS_OFFSET));
         match local_opcode {
             STORED | STOREW | STOREH | STOREB
                 if store_width_for_opcode(local_opcode) == STORE_WIDTH => {}
@@ -107,10 +105,7 @@ where
     F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
-        )
+        format!("{:?}", LoadStoreOpcode::from_usize(opcode - self.offset))
     }
 
     #[inline(always)]
@@ -196,10 +191,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
-    let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1_val = rv64_bytes_to_u32(rs1_bytes);
-    let ptr_val = checked_rv64_memory_address(pc, rs1_val, pre_compute.imm_extended, OP::WIDTH)?;
+    let rs1_bytes: [u8; REGISTER_NUM_LIMBS] =
+        exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32);
+    let rs1_val = bytes_to_u32(rs1_bytes);
+    let ptr_val = checked_memory_address(pc, rs1_val, pre_compute.imm_extended, OP::WIDTH)?;
     OP::write(
         exec_state,
         pre_compute.e as u32,
@@ -269,7 +264,7 @@ impl StoreOp for StoreDOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
@@ -284,7 +279,7 @@ impl StoreOp for StoreWOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
@@ -299,7 +294,7 @@ impl StoreOp for StoreHOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
@@ -314,7 +309,7 @@ impl StoreOp for StoreBOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }

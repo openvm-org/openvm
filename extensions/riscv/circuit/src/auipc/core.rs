@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{program::PC_BITS, LocalOpcode};
-use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
+use openvm_riscv_transpiler::AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -15,13 +15,11 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::adapters::{
-    ptr_to_u16_limbs, sext32_to_u64, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
-};
+use crate::adapters::{ptr_to_u16_limbs, sext32_to_u64, BYTE_BITS, PTR_U16_LIMBS, U16_BITS};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64AuipcCoreCols<T> {
+pub struct AuipcCoreCols<T> {
     pub is_valid: T,
     pub is_sign_extend: T,
     // The immediate is split around the byte shift in AUIPC's `imm << 8`.
@@ -29,24 +27,24 @@ pub struct Rv64AuipcCoreCols<T> {
     pub imm_high_16: T,
     // High u16 limb of `from_pc`; the low limb is derived from `from_pc`.
     pub pc_high: T,
-    pub rd_data: [T; RV64_PTR_U16_LIMBS],
+    pub rd_data: [T; PTR_U16_LIMBS],
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64AuipcCoreCols<u8>)]
-pub struct Rv64AuipcCoreAir {
+#[columns_via(AuipcCoreCols<u8>)]
+pub struct AuipcCoreAir {
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64AuipcCoreAir {
+impl<F: Field> BaseAir<F> for AuipcCoreAir {
     fn width(&self) -> usize {
-        Rv64AuipcCoreCols::<F>::width()
+        AuipcCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64AuipcCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for AuipcCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for Rv64AuipcCoreAir
+impl<AB, I> VmCoreAir<AB, I> for AuipcCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -60,9 +58,9 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv64AuipcCoreCols<AB::Var> = (*local_core).borrow();
+        let cols: &AuipcCoreCols<AB::Var> = (*local_core).borrow();
 
-        let Rv64AuipcCoreCols {
+        let AuipcCoreCols {
             is_valid,
             is_sign_extend,
             imm_low_8,
@@ -73,12 +71,12 @@ where
         builder.assert_bool(is_valid);
         builder.assert_bool(is_sign_extend);
 
-        // We want to constrain rd = from_pc + (imm << RV64_BYTE_BITS) where:
+        // We want to constrain rd = from_pc + (imm << BYTE_BITS) where:
         // - rd_data represents the low 32 bits of rd as u16 cells
         // - imm_low_8 and imm_high_16 decompose the 24-bit instruction immediate
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
-        let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
+        let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << BYTE_BITS);
         let pc_low = from_pc - pc_high * limb_base;
 
         // `from_pc` is bounded to `PC_BITS` by the program bus.
@@ -90,7 +88,7 @@ where
             .eval(builder, is_valid);
 
         let carry_low =
-            (pc_low + imm_low_8 * AB::F::from_u32(1 << RV64_BYTE_BITS) - rd_data[0]) * carry_divide;
+            (pc_low + imm_low_8 * AB::F::from_u32(1 << BYTE_BITS) - rd_data[0]) * carry_divide;
         builder.when(is_valid).assert_bool(carry_low.clone());
 
         let carry_top = (pc_high + imm_high_16 + carry_low - rd_data[1]) * carry_divide;
@@ -113,7 +111,7 @@ where
             .range_check(rd_data[1], U16_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(imm_low_8, RV64_BYTE_BITS)
+            .range_check(imm_low_8, BYTE_BITS)
             .eval(builder, is_valid);
         self.range_bus
             .range_check(imm_high_16, U16_BITS)
@@ -141,22 +139,22 @@ where
     }
 
     fn start_offset(&self) -> usize {
-        Rv64AuipcOpcode::CLASS_OFFSET
+        AuipcOpcode::CLASS_OFFSET
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64AuipcExecutor;
+pub struct AuipcExecutor;
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64AuipcFiller {
+pub struct AuipcFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 // returns rd_data
 #[inline(always)]
 pub(super) fn run_auipc(pc: u32, imm: u32) -> [u16; BLOCK_FE_WIDTH] {
-    let offset = imm << RV64_BYTE_BITS;
+    let offset = imm << BYTE_BITS;
     let auipc = (pc as u64).wrapping_add(sext32_to_u64(offset));
     let auipc_hi = auipc >> 32;
     debug_assert!(auipc_hi == 0 || auipc_hi == u64::from(u32::MAX));

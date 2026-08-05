@@ -956,7 +956,7 @@ impl TracingMemory {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{riscv::RV64_REGISTER_AS, VM_DIGEST_WIDTH};
+    use openvm_instructions::{riscv::REGISTER_AS, VM_DIGEST_WIDTH};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -978,15 +978,15 @@ mod tests {
         // Seed through the underlying image: initialization and peeks are not
         // timed memory-bus accesses.
         unsafe {
-            memory.data.write(RV64_REGISTER_AS, 0, first_block);
+            memory.data.write(REGISTER_AS, 0, first_block);
             memory
                 .data
-                .write(RV64_REGISTER_AS, BLOCK_FE_WIDTH as u32, second_initial);
-            let _: [u16; BLOCK_FE_WIDTH] = memory.data.read(RV64_REGISTER_AS, 0);
+                .write(REGISTER_AS, BLOCK_FE_WIDTH as u32, second_initial);
+            let _: [u16; BLOCK_FE_WIDTH] = memory.data.read(REGISTER_AS, 0);
 
-            let _ = memory.read::<u16, BLOCK_FE_WIDTH>(RV64_REGISTER_AS, 0);
+            let _ = memory.read::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 0);
             let _ = memory.write::<u16, BLOCK_FE_WIDTH>(
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 BLOCK_FE_WIDTH as u32,
                 second_write,
             );
@@ -998,13 +998,13 @@ mod tests {
             vec![
                 PreflightMemoryEvent {
                     timestamp: 1,
-                    address_space_and_kind: RV64_REGISTER_AS,
+                    address_space_and_kind: REGISTER_AS,
                     pointer: 0,
                     value: first_block,
                 },
                 PreflightMemoryEvent {
                     timestamp: 2,
-                    address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+                    address_space_and_kind: REGISTER_AS | PREFLIGHT_WRITE_BIT,
                     pointer: BLOCK_FE_WIDTH as u32,
                     value: second_write,
                 },
@@ -1013,7 +1013,7 @@ mod tests {
         assert_eq!(
             log.initial_writes,
             vec![PreflightInitialWrite {
-                address_space: RV64_REGISTER_AS,
+                address_space: REGISTER_AS,
                 pointer: BLOCK_FE_WIDTH as u32,
                 initial_value: second_initial,
             }]

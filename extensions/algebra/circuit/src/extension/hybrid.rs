@@ -3,7 +3,7 @@
 
 use std::{any::Any, array, collections::BTreeSet, sync::Arc};
 
-use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{Fp2Opcode, ModularArithmeticOpcode};
 #[cfg(all(feature = "rvr", test))]
 use openvm_circuit::arch::rvr::PreflightExecution;
 use openvm_circuit::{
@@ -278,7 +278,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, ModularExtension> for Algebra
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
+                ModularArithmeticOpcode::CLASS_OFFSET + i * ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs = big_uint_to_limbs(modulus, U16_BITS);
 
@@ -612,10 +612,10 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                     "modulus {index} exceeds the supported 48-byte layout"
                 )));
             };
-            let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET
+            let opcode_base = ModularArithmeticOpcode::CLASS_OFFSET
                 .checked_add(
                     index
-                        .checked_mul(Rv64ModularArithmeticOpcode::COUNT)
+                        .checked_mul(ModularArithmeticOpcode::COUNT)
                         .ok_or_else(|| {
                             GpuPostflightError::InvalidAccessSchedule(
                                 "Modular opcode range overflow".to_string(),
@@ -627,7 +627,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                         "Modular opcode range overflow".to_string(),
                     )
                 })?;
-            let opcode = |local: Rv64ModularArithmeticOpcode| {
+            let opcode = |local: ModularArithmeticOpcode| {
                 let opcode = opcode_base.checked_add(local as usize).ok_or_else(|| {
                     GpuPostflightError::InvalidAccessSchedule(
                         "Modular opcode range overflow".to_string(),
@@ -637,12 +637,12 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
             };
             let read_spans = [
                 PostflightAccessSpan::read_fixed(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     0,
                     blocks as u32,
                 ),
                 PostflightAccessSpan::read_fixed(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     1,
                     blocks as u32,
                 ),
@@ -651,7 +651,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 read_spans[0],
                 read_spans[1],
                 PostflightAccessSpan::write_fixed_from_replay_values(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     2,
                     blocks as u32,
                 ),
@@ -660,7 +660,7 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 read_spans[0],
                 read_spans[1],
                 PostflightAccessSpan::write_fixed_zero(
-                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    openvm_instructions::riscv::MEMORY_AS,
                     2,
                     blocks as u32,
                 ),
@@ -673,10 +673,10 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 spans: &write_spans,
             };
             for local in [
-                Rv64ModularArithmeticOpcode::ADD,
-                Rv64ModularArithmeticOpcode::SUB,
-                Rv64ModularArithmeticOpcode::MUL,
-                Rv64ModularArithmeticOpcode::DIV,
+                ModularArithmeticOpcode::ADD,
+                ModularArithmeticOpcode::SUB,
+                ModularArithmeticOpcode::MUL,
+                ModularArithmeticOpcode::DIV,
             ] {
                 registry.register(opcode(local)?, write_schedule)?;
             }
@@ -685,8 +685,8 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 ..write_schedule
             };
             for local in [
-                Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
-                Rv64ModularArithmeticOpcode::SETUP_MULDIV,
+                ModularArithmeticOpcode::SETUP_ADDSUB,
+                ModularArithmeticOpcode::SETUP_MULDIV,
             ] {
                 registry.register(opcode(local)?, zero_write_schedule)?;
             }
@@ -698,12 +698,12 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 spans: &read_spans,
             };
             registry.register_with_replay_value_write(
-                opcode(Rv64ModularArithmeticOpcode::IS_EQ)?,
+                opcode(ModularArithmeticOpcode::IS_EQ)?,
                 read_schedule,
                 1,
             )?;
             registry.register_with_zero_register_write(
-                opcode(Rv64ModularArithmeticOpcode::SETUP_ISEQ)?,
+                opcode(ModularArithmeticOpcode::SETUP_ISEQ)?,
                 read_schedule,
                 1,
             )?;
@@ -741,17 +741,17 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
                 };
                 let spans = [
                     PostflightAccessSpan::read_fixed(
-                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        openvm_instructions::riscv::MEMORY_AS,
                         0,
                         blocks as u32,
                     ),
                     PostflightAccessSpan::read_fixed(
-                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        openvm_instructions::riscv::MEMORY_AS,
                         1,
                         blocks as u32,
                     ),
                     PostflightAccessSpan::write_fixed_from_replay_values(
-                        openvm_instructions::riscv::RV64_MEMORY_AS,
+                        openvm_instructions::riscv::MEMORY_AS,
                         2,
                         blocks as u32,
                     ),
@@ -824,20 +824,20 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
         let mut configured = BTreeSet::new();
         for index in 0..modular.supported_moduli.len() {
             let stride = index
-                .checked_mul(Rv64ModularArithmeticOpcode::COUNT)
+                .checked_mul(ModularArithmeticOpcode::COUNT)
                 .ok_or_else(|| {
                     GpuPostflightError::InvalidTranscript(
                         "Modular opcode range overflow".to_string(),
                     )
                 })?;
-            let base = Rv64ModularArithmeticOpcode::CLASS_OFFSET
+            let base = ModularArithmeticOpcode::CLASS_OFFSET
                 .checked_add(stride)
                 .ok_or_else(|| {
                     GpuPostflightError::InvalidTranscript(
                         "Modular opcode range overflow".to_string(),
                     )
                 })?;
-            for local in 0..Rv64ModularArithmeticOpcode::COUNT {
+            for local in 0..ModularArithmeticOpcode::COUNT {
                 let opcode = base.checked_add(local).ok_or_else(|| {
                     GpuPostflightError::InvalidTranscript("Modular opcode overflow".to_string())
                 })?;

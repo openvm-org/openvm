@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::Rv64JalrAdapterAir;
+use crate::adapters::JalrAdapterAir;
 
 mod core;
 mod execution;
@@ -16,5 +16,5 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64JalrAir = VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir>;
-pub type Rv64JalrChip<F> = VmChipWrapper<F, Rv64JalrFiller>;
+pub type JalrAir = VmAirWrapper<JalrAdapterAir, JalrCoreAir>;
+pub type JalrChip<F> = VmChipWrapper<F, JalrFiller>;

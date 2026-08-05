@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use openvm_riscv_adapters::Rv64VecHeapAdapterCols;
+use openvm_riscv_adapters::VecHeapAdapterCols;
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use super::{
@@ -51,7 +51,7 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
         }
         modulus_bytes.resize(num_bytes, 0);
 
-        let adapter_width = Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS>::width();
+        let adapter_width = VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS>::width();
         let core_width = BaseAir::<F>::width(&chip.inner.expr);
         let expected_core_width = 4usize
             .checked_mul(num_bytes)
@@ -99,9 +99,9 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
         replay_plan: &GpuPostflightPlan,
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let local_opcodes = [
-            Rv64ModularArithmeticOpcode::ADD as usize,
-            Rv64ModularArithmeticOpcode::SUB as usize,
-            Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize,
+            ModularArithmeticOpcode::ADD as usize,
+            ModularArithmeticOpcode::SUB as usize,
+            ModularArithmeticOpcode::SETUP_ADDSUB as usize,
         ];
         let projection = gather_vec_heap_trace_inputs_device::<2, BLOCKS>(
             program,
@@ -130,9 +130,9 @@ impl<const BLOCKS: usize> ModularAddSubReplayChipGpu<BLOCKS> {
                 height,
                 &projection.inputs,
                 &self.modulus,
-                Rv64ModularArithmeticOpcode::ADD as u32,
-                Rv64ModularArithmeticOpcode::SUB as u32,
-                Rv64ModularArithmeticOpcode::SETUP_ADDSUB as u32,
+                ModularArithmeticOpcode::ADD as u32,
+                ModularArithmeticOpcode::SUB as u32,
+                ModularArithmeticOpcode::SETUP_ADDSUB as u32,
                 &delta,
                 self.pointer_max_bits,
                 self.timestamp_max_bits,

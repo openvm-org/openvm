@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::DivRemOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::DivRemExecutor;
+use super::core::DivRemCoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -24,7 +24,7 @@ struct DivRemPreCompute {
     c: u8,
 }
 
-impl<const LIMB_BITS: usize> DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<const LIMB_BITS: usize> DivRemCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -36,7 +36,7 @@ impl<const LIMB_BITS: usize> DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BI
             opcode, a, b, c, d, ..
         } = inst;
         let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        if d.as_canonical_u32() != RV64_REGISTER_AS {
+        if d.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let pre_compute: &mut DivRemPreCompute = data.borrow_mut();
@@ -61,7 +61,7 @@ macro_rules! dispatch {
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for DivRemCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -104,7 +104,7 @@ where
 }
 
 impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for DivRemExecutor<{ RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for DivRemCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -151,12 +151,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: DivRemOp>(
     pre_compute: &DivRemPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs1: [u8; REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(REGISTER_AS, pre_compute.c as u32);
     let result = <OP as DivRemOp>::compute(rs1, rs2);
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &result);
+    exec_state.vm_write_bytes(REGISTER_AS, pre_compute.a as u32, &result);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

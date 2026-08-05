@@ -2,8 +2,8 @@
 
 using LoadWordCore = LoadWidthCore<WORD_ACCESS_WIDTH>;
 
-template <typename T> struct Rv64LoadWordCols {
-    Rv64LoadMultiByteAdapterCols<T> adapter;
+template <typename T> struct LoadWordCols {
+    LoadMultiByteAdapterCols<T> adapter;
     LoadWidthCoreCols<T, WORD_ACCESS_WIDTH> core;
 };
 

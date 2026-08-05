@@ -2,7 +2,7 @@
 
 use std::{ops::Range, sync::Arc};
 
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
@@ -10,10 +10,10 @@ use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     VmOpcode,
 };
-use openvm_riscv_adapters::Rv64IsEqualModU16AdapterCols;
+use openvm_riscv_adapters::IsEqualModU16AdapterCols;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::modular_chip::ModularIsEqualCoreCols;
@@ -127,20 +127,18 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let is_eq_opcode = checked_opcode(
-            self.opcode_base,
-            Rv64ModularArithmeticOpcode::IS_EQ as usize,
-        )?;
+        let is_eq_opcode =
+            checked_opcode(self.opcode_base, ModularArithmeticOpcode::IS_EQ as usize)?;
         let setup_opcode = checked_opcode(
             self.opcode_base,
-            Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize,
+            ModularArithmeticOpcode::SETUP_ISEQ as usize,
         )?;
         let range = opcode_pair_range(replay_plan, [is_eq_opcode, setup_opcode])?;
         if range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let width = Rv64IsEqualModU16AdapterCols::<F, 2, NUM_LANES>::width()
+        let width = IsEqualModU16AdapterCols::<F, 2, NUM_LANES>::width()
             .checked_add(ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width())
             .ok_or_else(|| {
                 GpuPostflightError::InvalidTranscript(
@@ -183,8 +181,8 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
                 range.len(),
                 transcript.error_ptr(),
                 opcode_base,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 &self.d_modulus,
                 &delta,
                 NUM_LANES,
@@ -210,13 +208,10 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
 
     pub fn postflight_opcodes(&self) -> Result<[VmOpcode; 2], GpuPostflightError> {
         Ok([
+            checked_opcode(self.opcode_base, ModularArithmeticOpcode::IS_EQ as usize)?,
             checked_opcode(
                 self.opcode_base,
-                Rv64ModularArithmeticOpcode::IS_EQ as usize,
-            )?,
-            checked_opcode(
-                self.opcode_base,
-                Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize,
+                ModularArithmeticOpcode::SETUP_ISEQ as usize,
             )?,
         ])
     }

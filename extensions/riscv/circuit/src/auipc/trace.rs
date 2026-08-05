@@ -8,22 +8,22 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64AuipcOpcode::AUIPC;
+use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreCols};
+use super::{run_auipc, AuipcChip, AuipcCoreCols};
 use crate::adapters::{
-    ptr_to_u16_limbs, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, U16_BITS,
+    ptr_to_u16_limbs, RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, U16_BITS,
 };
 
 /// Generates the AUIPC trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64AuipcChip<F>,
+    chip: &AuipcChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(AUIPC.global_opcode());
-    let adapter_width = Rv64RdWriteAdapterCols::<F>::width();
-    let width = adapter_width + Rv64AuipcCoreCols::<F>::width();
+    let adapter_width = RdWriteAdapterCols::<F>::width();
+    let width = adapter_width + AuipcCoreCols::<F>::width();
     let height = next_power_of_two_or_zero(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
@@ -37,7 +37,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 "AUIPC immediate exceeds its 24-bit instruction encoding",
             ));
         }
-        let (rd_data, _) = Rv64RdWriteAdapterFiller::replay(
+        let (rd_data, _) = RdWriteAdapterFiller::replay(
             postflight,
             step,
             &chip.mem_helper.as_borrowed(),
@@ -45,10 +45,10 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             |pc, imm| (run_auipc(pc, imm), pc.wrapping_add(DEFAULT_PC_STEP)),
         )?;
 
-        let core_row: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
+        let core_row: &mut AuipcCoreCols<F> = core_row.borrow_mut();
         let imm_bytes = immediate.to_le_bytes();
         let imm_low_8 = imm_bytes[0];
-        let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << RV64_BYTE_BITS);
+        let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << BYTE_BITS);
         let [pc_low, pc_high] = ptr_to_u16_limbs(from_pc);
         let rd_lo = rd_data[0];
         let rd_hi = rd_data[1];
@@ -64,7 +64,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             .add_count(pc_high as u32, PC_BITS - U16_BITS);
         chip.inner
             .range_checker_chip
-            .add_count(imm_low_8 as u32, RV64_BYTE_BITS);
+            .add_count(imm_low_8 as u32, BYTE_BITS);
         chip.inner
             .range_checker_chip
             .add_count(imm_high_16, U16_BITS);

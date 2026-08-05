@@ -2,7 +2,7 @@
 #include "riscv/reg_reg_write_replay.cuh"
 
 
-__global__ void rv64_div_rem_replay_tracegen(
+__global__ void div_rem_replay_tracegen(
     Fp *trace, size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions, uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program_log,
@@ -20,7 +20,7 @@ __global__ void rv64_div_rem_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64DivRemCols<uint8_t>));
+    row.fill_zero(0, sizeof(DivRemCols<uint8_t>));
     size_t total = div_count + divu_count + rem_count + remu_count;
     if (idx >= total) return;
     size_t step_index;
@@ -52,44 +52,44 @@ __global__ void rv64_div_rem_replay_tracegen(
         )) {
         return;
     }
-    Rv64RegRegWriteReplay replay;
+    RegRegWriteReplay replay;
     if (!replay_reg_reg_write(
             transition, expected_opcode, register_address_space,
             step, memory, seeds, predecessors, replay, error, 664
         )) return;
-    uint8_t quotient[RV64_REGISTER_NUM_LIMBS];
-    uint8_t remainder[RV64_REGISTER_NUM_LIMBS];
-    replay_divrem_values<RV64_REGISTER_NUM_LIMBS>(
+    uint8_t quotient[REGISTER_NUM_LIMBS];
+    uint8_t remainder[REGISTER_NUM_LIMBS];
+    replay_divrem_values<REGISTER_NUM_LIMBS>(
         replay.rs1, replay.rs2, local_opcode, quotient, remainder
     );
     uint8_t *expected = (local_opcode == DIV || local_opcode == DIVU) ? quotient : remainder;
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         if (replay.result[i] != expected[i]) { preflight_set_error(error, 669); return; }
     }
-    DivRemCoreRecords<RV64_REGISTER_NUM_LIMBS> core_record{};
+    DivRemCoreRecords<REGISTER_NUM_LIMBS> core_record{};
     core_record.local_opcode = static_cast<uint8_t>(local_opcode);
 #pragma unroll
-    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         core_record.b[i] = replay.rs1[i];
         core_record.c[i] = replay.rs2[i];
     }
-    Rv64MultAdapter adapter(
+    MultAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(row, replay_mult_adapter_record(replay));
-    DivRemCore<RV64_REGISTER_NUM_LIMBS> core(
+    DivRemCore<REGISTER_NUM_LIMBS> core(
         BitwiseOperationLookup(bitwise_lookup),
         RangeTupleChecker<2>(
             range_tuple, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         )
     );
-    core.fill_trace_row(row.slice_from(COL_INDEX(Rv64DivRemCols, core)), core_record);
+    core.fill_trace_row(row.slice_from(COL_INDEX(DivRemCols, core)), core_record);
 }
 
 
 
-extern "C" int _rv64_div_rem_replay_tracegen(
+extern "C" int _div_rem_replay_tracegen(
     Fp *trace, size_t height, size_t width,
     DeviceBufferConstView<RvrReplayInstruction> instructions, uint32_t pc_base,
     DeviceBufferConstView<PreflightProgramEvent> program_log,
@@ -104,7 +104,7 @@ extern "C" int _rv64_div_rem_replay_tracegen(
     uint32_t *range_tuple, uint2 range_tuple_sizes, uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64DivRemCols<uint8_t>));
+    assert(width == sizeof(DivRemCols<uint8_t>));
     assert(memory.len() == predecessors.len());
     assert(div_start <= steps.len() && div_count <= steps.len() - div_start);
     assert(divu_start <= steps.len() && divu_count <= steps.len() - divu_start);
@@ -113,8 +113,8 @@ extern "C" int _rv64_div_rem_replay_tracegen(
     size_t total = div_count + divu_count + rem_count + remu_count;
     assert(total >= div_count && total >= divu_count && total >= rem_count && total >= remu_count);
     assert(height >= total);
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
-    rv64_div_rem_replay_tracegen<<<grid, block, 0, stream>>>(
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
+    div_rem_replay_tracegen<<<grid, block, 0, stream>>>(
         trace, height, instructions, pc_base, program_log, memory, seeds, predecessors, steps,
         div_start, div_count, divu_start, divu_count, rem_start, rem_count, remu_start, remu_count,
         error, div_opcode, divu_opcode, rem_opcode, remu_opcode, register_address_space,

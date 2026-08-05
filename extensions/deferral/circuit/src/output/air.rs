@@ -17,10 +17,10 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_register};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -58,8 +58,8 @@ pub struct DeferralOutputCols<T> {
     pub deferral_idx: T,
 
     // Heap pointers + auxiliary read columns
-    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
-    pub rs_val: [T; RV64_WORD_NUM_LIMBS],
+    pub rd_val: [T; WORD_NUM_LIMBS],
+    pub rs_val: [T; WORD_NUM_LIMBS],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
@@ -247,14 +247,13 @@ where
         // canonical. Note that constraining the starting output pointer is sufficient
         // to constrain the entire write is in range - even if output_ptr + output_len
         // wraps, there will be several written values in the middle that do not.
-        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+        debug_assert!(BYTE_BITS * WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift = AB::F::from_usize(1 << (BYTE_BITS * WORD_NUM_LIMBS - self.address_bits));
 
         self.bitwise_bus
             .send_range(
-                local.rd_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
-                local.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
+                local.rd_val[WORD_NUM_LIMBS - 1] * limb_shift,
+                local.rs_val[WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, local.is_first);
         for val in [&local.rd_val, &local.rs_val] {
@@ -274,12 +273,12 @@ where
             .eval(builder, local.is_first);
 
         // Constrain the heap pointer memory reads.
-        let d = AB::Expr::from_u32(RV64_REGISTER_AS);
-        let e = AB::Expr::from_u32(RV64_MEMORY_AS);
+        let d = AB::Expr::from_u32(REGISTER_AS);
+        let e = AB::Expr::from_u32(MEMORY_AS);
 
         // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let rd_full = expand_to_rv64_register(&local.rd_val);
-        let rs_full = expand_to_rv64_register(&local.rs_val);
+        let rd_full = expand_to_register(&local.rd_val);
+        let rs_full = expand_to_register(&local.rs_val);
 
         self.memory_bridge
             .read(

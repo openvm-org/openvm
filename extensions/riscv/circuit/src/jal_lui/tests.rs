@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
-use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, *};
+use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -32,40 +32,40 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    crate::Rv64JalLuiChipGpu,
+    crate::JalLuiChipGpu,
     openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
 };
 
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        rv64_u16_block_to_bytes, Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols,
-        RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV_J_TYPE_IMM_BITS,
+        u16_block_to_bytes, CondRdWriteAdapterAir, CondRdWriteAdapterCols, BYTE_BITS,
+        PTR_U16_LIMBS, RV_J_TYPE_IMM_BITS,
     },
-    jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
-    Rv64JalLuiAir, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor, Rv64JalLuiFiller,
+    jal_lui::{get_signed_imm, run_jal_lui, JalLuiCoreCols},
+    JalLuiAir, JalLuiChip, JalLuiCoreAir, JalLuiExecutor, JalLuiFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 const LIMB_MAX_U16: u32 = u16::MAX as u32;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChip<F>>;
+type Harness = TestChipHarness<F, JalLuiExecutor, JalLuiAir, JalLuiChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64JalLuiAir, Rv64JalLuiExecutor, Rv64JalLuiChip<F>) {
+) -> (JalLuiAir, JalLuiExecutor, JalLuiChip<F>) {
     let air = VmAirWrapper::new(
-        Rv64CondRdWriteAdapterAir::new(crate::adapters::Rv64RdWriteAdapterAir::new(
+        CondRdWriteAdapterAir::new(crate::adapters::RdWriteAdapterAir::new(
             memory_bridge,
             execution_bridge,
         )),
-        Rv64JalLuiCoreAir::new(range_checker_chip.bus()),
+        JalLuiCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64JalLuiExecutor::new();
-    let chip = VmChipWrapper::<F, _>::new(Rv64JalLuiFiller::new(range_checker_chip), memory_helper);
+    let executor = JalLuiExecutor::new();
+    let chip = VmChipWrapper::<F, _>::new(JalLuiFiller::new(range_checker_chip), memory_helper);
     (air, executor, chip)
 }
 
@@ -74,14 +74,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
@@ -104,7 +102,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
     rng: &mut StdRng,
-    opcode: Rv64JalLuiOpcode,
+    opcode: JalLuiOpcode,
     imm: Option<i32>,
     initial_pc: Option<u32>,
     rd_ptr: Option<usize>,
@@ -155,7 +153,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 
     let (_next_pc, rd_data) = run_jal_lui(is_jal, initial_pc, imm);
     if a != 0 {
-        let rd_bytes = rv64_u16_block_to_bytes(rd_data);
+        let rd_bytes = u16_block_to_bytes(rd_data);
         assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
     }
 }
@@ -169,7 +167,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 
 #[test_case(JAL, 100)]
 #[test_case(LUI, 100)]
-fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
+fn rand_jal_lui_test(opcode: JalLuiOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
@@ -203,7 +201,7 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalLuiPrankValues {
-    pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
+    pub rd_data: Option<[u32; PTR_U16_LIMBS]>,
     pub imm: Option<i32>,
     pub imm_low_4: Option<u32>,
     pub is_jal: Option<bool>,
@@ -215,7 +213,7 @@ struct JalLuiPrankValues {
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_jal_lui_test_with_rd_ptr(
-    opcode: Rv64JalLuiOpcode,
+    opcode: JalLuiOpcode,
     initial_imm: Option<i32>,
     initial_pc: Option<u32>,
     rd_ptr: Option<usize>,
@@ -241,8 +239,8 @@ fn run_negative_jal_lui_test_with_rd_ptr(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        let core_cols: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
+        let adapter_cols: &mut CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_cols: &mut JalLuiCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_u32);
@@ -288,7 +286,7 @@ fn run_negative_jal_lui_test_with_rd_ptr(
 }
 
 fn run_negative_jal_lui_test(
-    opcode: Rv64JalLuiOpcode,
+    opcode: JalLuiOpcode,
     initial_imm: Option<i32>,
     initial_pc: Option<u32>,
     prank_vals: JalLuiPrankValues,
@@ -401,7 +399,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_cols.inner.rd_aux_cols.prev_data[1] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -612,8 +610,7 @@ fn get_signed_imm_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-type GpuHarness =
-    GpuTestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalLuiChip<F>>;
+type GpuHarness = GpuTestChipHarness<F, JalLuiExecutor, JalLuiAir, JalLuiChipGpu, JalLuiChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -626,7 +623,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64JalLuiChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = JalLuiChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
         .with_trace_generators(
             generate_trace_from_postflight,
@@ -639,7 +636,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test_case(JAL, 100)]
 #[test_case(LUI, 100)]
-fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
+fn test_cuda_rand_jal_lui_tracegen(opcode: JalLuiOpcode, num_ops: usize) {
     let mut tester = GpuChipTestBuilder::default()
         .with_bitwise_op_lookup(openvm_circuit::arch::testing::default_bitwise_lookup_bus());
     let mut rng = create_seeded_rng();

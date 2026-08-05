@@ -10,12 +10,10 @@
 using namespace riscv;
 
 // Concrete type aliases for RV64
-using Rv64AddICore = AddICore<BLOCK_FE_WIDTH, U16_BITS, true>;
-template <typename T> using Rv64AddICoreCols = AddICoreCols<T, BLOCK_FE_WIDTH>;
 
-template <typename T> struct Rv64AddICols {
-    Rv64BaseAluImmU16AdapterCols<T> adapter;
-    Rv64AddICoreCols<T> core;
+template <typename T> struct AddICols {
+    BaseAluImmU16AdapterCols<T> adapter;
+    AddICoreCols<T, BLOCK_FE_WIDTH> core;
 };
 
 #include "../rvr/src/addi.inc.cuh"

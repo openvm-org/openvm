@@ -1,7 +1,7 @@
 use openvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use openvm_decoder::instruction_formats::{BType, RType};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, utils::isize_to_field, LocalOpcode,
+    instruction::Instruction, riscv::REGISTER_NUM_LIMBS, utils::isize_to_field, LocalOpcode,
     VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
@@ -18,9 +18,9 @@ use strum::IntoEnumIterator;
 
 #[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x400]
-pub struct Rv64BaseAlu256Opcode(pub BaseAluOpcode);
+pub struct BaseAlu256Opcode(pub BaseAluOpcode);
 
-impl Rv64BaseAlu256Opcode {
+impl BaseAlu256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
         BaseAluOpcode::iter().map(Self)
     }
@@ -28,9 +28,9 @@ impl Rv64BaseAlu256Opcode {
 
 #[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x405]
-pub struct Rv64Shift256Opcode(pub ShiftOpcode);
+pub struct Shift256Opcode(pub ShiftOpcode);
 
-impl Rv64Shift256Opcode {
+impl Shift256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
         ShiftOpcode::iter().map(Self)
     }
@@ -38,9 +38,9 @@ impl Rv64Shift256Opcode {
 
 #[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x408]
-pub struct Rv64LessThan256Opcode(pub LessThanOpcode);
+pub struct LessThan256Opcode(pub LessThanOpcode);
 
-impl Rv64LessThan256Opcode {
+impl LessThan256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
         LessThanOpcode::iter().map(Self)
     }
@@ -48,9 +48,9 @@ impl Rv64LessThan256Opcode {
 
 #[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x420]
-pub struct Rv64BranchEqual256Opcode(pub BranchEqualOpcode);
+pub struct BranchEqual256Opcode(pub BranchEqualOpcode);
 
-impl Rv64BranchEqual256Opcode {
+impl BranchEqual256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
         BranchEqualOpcode::iter().map(Self)
     }
@@ -58,9 +58,9 @@ impl Rv64BranchEqual256Opcode {
 
 #[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x425]
-pub struct Rv64BranchLessThan256Opcode(pub BranchLessThanOpcode);
+pub struct BranchLessThan256Opcode(pub BranchLessThanOpcode);
 
-impl Rv64BranchLessThan256Opcode {
+impl BranchLessThan256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
         BranchLessThanOpcode::iter().map(Self)
     }
@@ -68,9 +68,9 @@ impl Rv64BranchLessThan256Opcode {
 
 #[derive(Copy, Clone, Debug, LocalOpcode)]
 #[opcode_offset = 0x450]
-pub struct Rv64Mul256Opcode(pub MulOpcode);
+pub struct Mul256Opcode(pub MulOpcode);
 
-impl Rv64Mul256Opcode {
+impl Mul256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
         MulOpcode::iter().map(Self)
     }
@@ -100,38 +100,36 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
             INT256_FUNCT3 => {
                 let global_opcode = match Int256Funct7::from_repr(dec_insn.funct7 as u8) {
                     Some(Int256Funct7::Add) => {
-                        BaseAluOpcode::ADD as usize + Rv64BaseAlu256Opcode::CLASS_OFFSET
+                        BaseAluOpcode::ADD as usize + BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sub) => {
-                        BaseAluOpcode::SUB as usize + Rv64BaseAlu256Opcode::CLASS_OFFSET
+                        BaseAluOpcode::SUB as usize + BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Xor) => {
-                        BaseAluOpcode::XOR as usize + Rv64BaseAlu256Opcode::CLASS_OFFSET
+                        BaseAluOpcode::XOR as usize + BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Or) => {
-                        BaseAluOpcode::OR as usize + Rv64BaseAlu256Opcode::CLASS_OFFSET
+                        BaseAluOpcode::OR as usize + BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::And) => {
-                        BaseAluOpcode::AND as usize + Rv64BaseAlu256Opcode::CLASS_OFFSET
+                        BaseAluOpcode::AND as usize + BaseAlu256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sll) => {
-                        ShiftOpcode::SLL as usize + Rv64Shift256Opcode::CLASS_OFFSET
+                        ShiftOpcode::SLL as usize + Shift256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Srl) => {
-                        ShiftOpcode::SRL as usize + Rv64Shift256Opcode::CLASS_OFFSET
+                        ShiftOpcode::SRL as usize + Shift256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sra) => {
-                        ShiftOpcode::SRA as usize + Rv64Shift256Opcode::CLASS_OFFSET
+                        ShiftOpcode::SRA as usize + Shift256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Slt) => {
-                        LessThanOpcode::SLT as usize + Rv64LessThan256Opcode::CLASS_OFFSET
+                        LessThanOpcode::SLT as usize + LessThan256Opcode::CLASS_OFFSET
                     }
                     Some(Int256Funct7::Sltu) => {
-                        LessThanOpcode::SLTU as usize + Rv64LessThan256Opcode::CLASS_OFFSET
+                        LessThanOpcode::SLTU as usize + LessThan256Opcode::CLASS_OFFSET
                     }
-                    Some(Int256Funct7::Mul) => {
-                        MulOpcode::MUL as usize + Rv64Mul256Opcode::CLASS_OFFSET
-                    }
+                    Some(Int256Funct7::Mul) => MulOpcode::MUL as usize + Mul256Opcode::CLASS_OFFSET,
                     _ => unimplemented!(),
                 };
                 Some(from_r_type(global_opcode, 2, &dec_insn, true))
@@ -140,11 +138,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
                 let dec_insn = BType::new(instruction_u32);
                 Some(Instruction::new(
                     VmOpcode::from_usize(
-                        BranchEqualOpcode::BEQ.local_usize()
-                            + Rv64BranchEqual256Opcode::CLASS_OFFSET,
+                        BranchEqualOpcode::BEQ.local_usize() + BranchEqual256Opcode::CLASS_OFFSET,
                     ),
-                    F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs2),
                     isize_to_field(dec_insn.imm as isize),
                     F::ONE,
                     F::TWO,

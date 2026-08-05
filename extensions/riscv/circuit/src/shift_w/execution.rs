@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{ShiftWLogicalExecutor, ShiftWRightArithmeticExecutor};
+use super::{ShiftWLogicalCoreExecutor, ShiftWRightArithmeticCoreExecutor};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -29,7 +29,7 @@ trait ShiftWExecutorKind {
     fn is_right_arithmetic(&self) -> bool;
 }
 
-impl ShiftWExecutorKind for ShiftWLogicalExecutor {
+impl ShiftWExecutorKind for ShiftWLogicalCoreExecutor {
     fn offset(&self) -> usize {
         self.offset
     }
@@ -39,7 +39,7 @@ impl ShiftWExecutorKind for ShiftWLogicalExecutor {
     }
 }
 
-impl ShiftWExecutorKind for ShiftWRightArithmeticExecutor {
+impl ShiftWExecutorKind for ShiftWRightArithmeticCoreExecutor {
     fn offset(&self) -> usize {
         self.offset
     }
@@ -66,8 +66,7 @@ trait ShiftWPreComputeExt: ShiftWExecutorKind {
         if (shift_opcode == ShiftWOpcode::SRAW) != self.is_right_arithmetic() {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        if inst.d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS
-        {
+        if inst.d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = ShiftWPreCompute {
@@ -89,7 +88,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for ShiftWLogicalExecutor
+impl<F> InterpreterExecutor<F> for ShiftWLogicalCoreExecutor
 where
     F: PrimeField32,
 {
@@ -129,7 +128,7 @@ where
     }
 }
 
-impl<F> InterpreterExecutor<F> for ShiftWRightArithmeticExecutor
+impl<F> InterpreterExecutor<F> for ShiftWRightArithmeticCoreExecutor
 where
     F: PrimeField32,
 {
@@ -169,7 +168,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for ShiftWLogicalExecutor
+impl<F> InterpreterMeteredExecutor<F> for ShiftWLogicalCoreExecutor
 where
     F: PrimeField32,
 {
@@ -206,7 +205,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for ShiftWRightArithmeticExecutor
+impl<F> InterpreterMeteredExecutor<F> for ShiftWRightArithmeticCoreExecutor
 where
     F: PrimeField32,
 {
@@ -248,19 +247,13 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ShiftWOp>(
     pre_compute: &ShiftWPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1 =
-        exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 =
-        exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs1 = exec_state.vm_read_bytes::<WORD_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2 = exec_state.vm_read_bytes::<WORD_NUM_LIMBS>(REGISTER_AS, pre_compute.c as u32);
     let rs2 = u32::from_le_bytes(rs2);
 
     let rd_word = u32::from_le_bytes(<OP as ShiftWOp>::compute(rs1, rs2));
     let rd = (rd_word as i32 as i64 as u64).to_le_bytes();
-    exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
-        RV64_REGISTER_AS,
-        pre_compute.a as u32,
-        &rd,
-    );
+    exec_state.vm_write_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -293,25 +286,25 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ShiftWOp>(
 }
 
 trait ShiftWOp {
-    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS];
+    fn compute(rs1: [u8; WORD_NUM_LIMBS], rs2: u32) -> [u8; WORD_NUM_LIMBS];
 }
 struct SllwOp;
 struct SrlwOp;
 struct SrawOp;
 impl ShiftWOp for SllwOp {
-    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
+    fn compute(rs1: [u8; WORD_NUM_LIMBS], rs2: u32) -> [u8; WORD_NUM_LIMBS] {
         let rs1 = u32::from_le_bytes(rs1);
         (rs1 << (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftWOp for SrlwOp {
-    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
+    fn compute(rs1: [u8; WORD_NUM_LIMBS], rs2: u32) -> [u8; WORD_NUM_LIMBS] {
         let rs1 = u32::from_le_bytes(rs1);
         (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftWOp for SrawOp {
-    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
+    fn compute(rs1: [u8; WORD_NUM_LIMBS], rs2: u32) -> [u8; WORD_NUM_LIMBS] {
         let rs1 = i32::from_le_bytes(rs1);
         (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }

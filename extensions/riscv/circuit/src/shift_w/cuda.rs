@@ -9,32 +9,32 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BaseAluWRegU16AdapterCols, RV64_WORD_U16_LIMBS, U16_BITS},
+    adapters::{BaseAluWRegU16AdapterCols, U16_BITS, WORD_U16_LIMBS},
     cuda_abi::shift_w_cuda::{
-        replay_tracegen_logical as rv64_shift_w_logical_replay_tracegen,
-        replay_tracegen_right_arithmetic as rv64_shift_w_right_arithmetic_replay_tracegen,
+        replay_tracegen_logical as shift_w_logical_replay_tracegen,
+        replay_tracegen_right_arithmetic as shift_w_right_arithmetic_replay_tracegen,
     },
     ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
 
 #[derive(new)]
-pub struct Rv64ShiftWLogicalChipGpu {
+pub struct ShiftWLogicalChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
 #[derive(new)]
-pub struct Rv64ShiftWRightArithmeticChipGpu {
+pub struct ShiftWRightArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Rv64ShiftWLogicalChipGpu {
+impl ShiftWLogicalChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -57,12 +57,12 @@ impl Rv64ShiftWLogicalChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
-            + ShiftLogicalCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        let trace_width = BaseAluWRegU16AdapterCols::<F>::width()
+            + ShiftLogicalCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(num_steps);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_w_logical_replay_tracegen(
+            shift_w_logical_replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 program.instructions(),
@@ -79,7 +79,7 @@ impl Rv64ShiftWLogicalChipGpu {
                 transcript.error_ptr(),
                 ShiftWOpcode::SLLW.global_opcode().as_usize() as u32,
                 ShiftWOpcode::SRLW.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
@@ -89,7 +89,7 @@ impl Rv64ShiftWLogicalChipGpu {
     }
 }
 
-impl Rv64ShiftWRightArithmeticChipGpu {
+impl ShiftWRightArithmeticChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -103,12 +103,12 @@ impl Rv64ShiftWRightArithmeticChipGpu {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
-            + ShiftRightArithmeticCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        let trace_width = BaseAluWRegU16AdapterCols::<F>::width()
+            + ShiftRightArithmeticCoreCols::<F, WORD_U16_LIMBS, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_w_right_arithmetic_replay_tracegen(
+            shift_w_right_arithmetic_replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 program.instructions(),
@@ -122,7 +122,7 @@ impl Rv64ShiftWRightArithmeticChipGpu {
                 range.len(),
                 transcript.error_ptr(),
                 ShiftWOpcode::SRAW.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

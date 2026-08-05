@@ -23,7 +23,7 @@ __global__ void auipc_replay_tracegen(
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(Rv64AuipcCols<uint8_t>));
+    row.fill_zero(0, sizeof(AuipcCols<uint8_t>));
     if (idx >= num_steps) return;
 
     auto const &step = steps[step_start + idx];
@@ -106,14 +106,14 @@ __global__ void auipc_replay_tracegen(
         return;
     }
 
-    Rv64RdWriteAdapter adapter(
+    RdWriteAdapter adapter(
         VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
     );
     adapter.fill_trace_row(
         row, from.pc, from.timestamp, rd_ptr, previous.timestamp, previous.value
     );
-    Rv64AuipcCore core(VariableRangeChecker(range_checker, range_checker_num_bins));
-    core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AuipcCols, core)), from.pc, imm);
+    AuipcCore core(VariableRangeChecker(range_checker, range_checker_num_bins));
+    core.fill_trace_row(row.slice_from(COL_INDEX(AuipcCols, core)), from.pc, imm);
 }
 
 
@@ -139,13 +139,13 @@ extern "C" int _auipc_replay_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64AuipcCols<uint8_t>));
+    assert(width == sizeof(AuipcCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
 
-    auto [grid, block] = kernel_launch_params(height, RV64_REPLAY_THREADS);
+    auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
     auipc_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,

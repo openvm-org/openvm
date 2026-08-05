@@ -9,36 +9,36 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64BaseAluWImmU16AdapterCols {
+template <typename T> struct BaseAluWImmU16AdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
     T rs1_ptr;
-    T rs1_high[RV64_WORD_U16_LIMBS];
+    T rs1_high[WORD_U16_LIMBS];
     T result_sign;
     MemoryReadAuxCols<T> reads_aux;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
-static_assert(sizeof(Rv64BaseAluWImmU16AdapterCols<uint8_t>) == 15);
+static_assert(sizeof(BaseAluWImmU16AdapterCols<uint8_t>) == 15);
 
-struct Rv64BaseAluWImmU16AdapterRecord {
+struct BaseAluWImmU16AdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
     uint32_t rs1_ptr;
-    uint16_t rs1_high[RV64_WORD_U16_LIMBS];
+    uint16_t rs1_high[WORD_U16_LIMBS];
     uint16_t result_high;
     MemoryReadAuxRecord reads_aux;
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
 
-static_assert(sizeof(Rv64BaseAluWImmU16AdapterRecord) == 40);
+static_assert(sizeof(BaseAluWImmU16AdapterRecord) == 40);
 
-struct Rv64BaseAluWImmU16Adapter {
+struct BaseAluWImmU16Adapter {
     MemoryAuxColsFactory mem_helper;
     VariableRangeChecker range_checker;
 
-    __device__ Rv64BaseAluWImmU16Adapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+    __device__ BaseAluWImmU16Adapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits), range_checker(rc) {}
 
     __device__ void fill_trace_row(
@@ -47,7 +47,7 @@ struct Rv64BaseAluWImmU16Adapter {
         uint32_t from_timestamp,
         uint32_t rd_ptr,
         uint32_t rs1_ptr,
-        uint16_t const (&rs1_high_value)[RV64_WORD_U16_LIMBS],
+        uint16_t const (&rs1_high_value)[WORD_U16_LIMBS],
         uint16_t result_high,
         uint32_t read_prev_timestamp,
         uint32_t write_prev_timestamp,
@@ -55,14 +55,14 @@ struct Rv64BaseAluWImmU16Adapter {
     ) {
         Fp prev[BLOCK_FE_WIDTH];
         copy_u16_cells(prev, write_prev_data);
-        COL_WRITE_ARRAY(row, Rv64BaseAluWImmU16AdapterCols, writes_aux.prev_data, prev);
+        COL_WRITE_ARRAY(row, BaseAluWImmU16AdapterCols, writes_aux.prev_data, prev);
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BaseAluWImmU16AdapterCols, writes_aux)),
+            row.slice_from(COL_INDEX(BaseAluWImmU16AdapterCols, writes_aux)),
             write_prev_timestamp,
             from_timestamp + 1
         );
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BaseAluWImmU16AdapterCols, reads_aux)),
+            row.slice_from(COL_INDEX(BaseAluWImmU16AdapterCols, reads_aux)),
             read_prev_timestamp,
             from_timestamp
         );
@@ -71,21 +71,21 @@ struct Rv64BaseAluWImmU16Adapter {
             static_cast<uint32_t>(result_high) & ((1u << (U16_BITS - 1)) - 1u), U16_BITS - 1
         );
 
-        Fp rs1_high[RV64_WORD_U16_LIMBS];
+        Fp rs1_high[WORD_U16_LIMBS];
         copy_u16_cells(rs1_high, rs1_high_value);
         COL_WRITE_VALUE(
-            row, Rv64BaseAluWImmU16AdapterCols, result_sign, result_high >> (U16_BITS - 1)
+            row, BaseAluWImmU16AdapterCols, result_sign, result_high >> (U16_BITS - 1)
         );
-        COL_WRITE_ARRAY(row, Rv64BaseAluWImmU16AdapterCols, rs1_high, rs1_high);
-        COL_WRITE_VALUE(row, Rv64BaseAluWImmU16AdapterCols, rs1_ptr, rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64BaseAluWImmU16AdapterCols, rd_ptr, rd_ptr);
+        COL_WRITE_ARRAY(row, BaseAluWImmU16AdapterCols, rs1_high, rs1_high);
+        COL_WRITE_VALUE(row, BaseAluWImmU16AdapterCols, rs1_ptr, rs1_ptr);
+        COL_WRITE_VALUE(row, BaseAluWImmU16AdapterCols, rd_ptr, rd_ptr);
         COL_WRITE_VALUE(
-            row, Rv64BaseAluWImmU16AdapterCols, from_state.timestamp, from_timestamp
+            row, BaseAluWImmU16AdapterCols, from_state.timestamp, from_timestamp
         );
-        COL_WRITE_VALUE(row, Rv64BaseAluWImmU16AdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, BaseAluWImmU16AdapterCols, from_state.pc, from_pc);
     }
 
-    __device__ void fill_trace_row(RowSlice row, Rv64BaseAluWImmU16AdapterRecord record) {
+    __device__ void fill_trace_row(RowSlice row, BaseAluWImmU16AdapterRecord record) {
         fill_trace_row(
             row,
             record.from_pc,

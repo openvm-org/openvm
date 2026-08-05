@@ -15,7 +15,7 @@ use openvm_circuit::arch::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    riscv::{NUM_REGISTERS, REGISTER_BYTES},
     LocalOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -29,7 +29,7 @@ use rvr_openvm_lift::{
 };
 
 fn decode_reg(value: u32) -> Variable {
-    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+    decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
 }
 
 /// Size in bytes of a serialized deferral commitment.

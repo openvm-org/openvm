@@ -8,15 +8,15 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LessThanImmOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
-use super::{imm_to_u16_limbs, LessThanImmCoreCols, Rv64LessThanImmChip};
+use super::{imm_to_u16_limbs, LessThanImmChip, LessThanImmCoreCols};
 use crate::{
-    adapters::{Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterFiller, U16_BITS},
+    adapters::{BaseAluImmU16AdapterCols, BaseAluImmU16AdapterFiller, U16_BITS},
     less_than::run_less_than,
 };
 
 /// Generates the RV64 immediate less-than trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
-    chip: &Rv64LessThanImmChip<F>,
+    chip: &LessThanImmChip<F>,
     postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [LessThanImmOpcode::SLTI, LessThanImmOpcode::SLTIU];
@@ -24,7 +24,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .iter()
         .map(|opcode| postflight.steps(opcode.global_opcode()).len())
         .sum();
-    let adapter_width = Rv64BaseAluImmU16AdapterCols::<F>::width();
+    let adapter_width = BaseAluImmU16AdapterCols::<F>::width();
     let width = adapter_width + LessThanImmCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
     let height = next_power_of_two_or_zero(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
@@ -41,7 +41,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let c = imm_to_u16_limbs::<BLOCK_FE_WIDTH>(imm_low11, imm_sign);
             let is_slt = local_opcode == LessThanImmOpcode::SLTI;
             let mut comparison = (false, 0, false, false);
-            let (b, _) = Rv64BaseAluImmU16AdapterFiller::replay(
+            let (b, _) = BaseAluImmU16AdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),

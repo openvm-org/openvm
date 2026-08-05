@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::{Rv64BaseAluImmAdapterAir, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
+use crate::adapters::{BaseAluImmAdapterAir, BYTE_BITS, REGISTER_NUM_LIMBS};
 
 mod core;
 mod execution;
@@ -17,11 +17,8 @@ mod cuda;
 pub use cuda::*;
 
 // Immediate-only bitwise chip with one register read.
-pub type Rv64BitwiseLogicImmAir = VmAirWrapper<
-    Rv64BaseAluImmAdapterAir,
-    BitwiseLogicImmCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
->;
-pub type Rv64BitwiseLogicImmExecutor =
-    BitwiseLogicImmExecutor<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64BitwiseLogicImmChip<F> =
-    VmChipWrapper<F, BitwiseLogicImmFiller<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
+pub type BitwiseLogicImmAir =
+    VmAirWrapper<BaseAluImmAdapterAir, BitwiseLogicImmCoreAir<REGISTER_NUM_LIMBS, BYTE_BITS>>;
+pub type BitwiseLogicImmExecutor = BitwiseLogicImmCoreExecutor<REGISTER_NUM_LIMBS, BYTE_BITS>;
+pub type BitwiseLogicImmChip<F> =
+    VmChipWrapper<F, BitwiseLogicImmFiller<REGISTER_NUM_LIMBS, BYTE_BITS>>;

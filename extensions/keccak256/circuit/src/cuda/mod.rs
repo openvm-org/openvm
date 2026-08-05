@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::{
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
@@ -33,7 +33,7 @@ mod cuda_abi;
 #[derive(new)]
 pub struct XorinVmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
 }
@@ -70,8 +70,8 @@ impl XorinVmChipGpu {
                 step_range.len(),
                 transcript.error_ptr(),
                 XorinOpcode::XORIN.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
@@ -143,8 +143,8 @@ impl KeccakfOpChipGpu {
                 &d_preimages,
                 transcript.error_ptr(),
                 KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
-                RV64_REGISTER_AS,
-                RV64_MEMORY_AS,
+                REGISTER_AS,
+                MEMORY_AS,
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 self.timestamp_max_bits,

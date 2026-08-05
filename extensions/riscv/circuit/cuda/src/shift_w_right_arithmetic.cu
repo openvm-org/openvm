@@ -9,16 +9,16 @@
 
 using namespace riscv;
 
-// SRAW uses the u16 shift-right-arithmetic core (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low
+// SRAW uses the u16 shift-right-arithmetic core (WORD_U16_LIMBS limbs of 16 bits) over the low
 // 32-bit word and the u16 W adapter.
-using Rv64ShiftWRightArithmeticCore = ShiftRightArithmeticCore<RV64_WORD_U16_LIMBS, U16_BITS>;
+using ShiftWRightArithmeticCore = ShiftRightArithmeticCore<WORD_U16_LIMBS, U16_BITS>;
 template <typename T>
-using Rv64ShiftWRightArithmeticCoreCols =
-    ShiftRightArithmeticCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
+using ShiftWRightArithmeticCoreCols =
+    ShiftRightArithmeticCoreCols<T, WORD_U16_LIMBS, U16_BITS>;
 
 template <typename T> struct ShiftWRightArithmeticCols {
-    Rv64BaseAluWRegU16AdapterCols<T> adapter;
-    Rv64ShiftWRightArithmeticCoreCols<T> core;
+    BaseAluWRegU16AdapterCols<T> adapter;
+    ShiftWRightArithmeticCoreCols<T> core;
 };
 
 #include "../rvr/src/shift_w_right_arithmetic.inc.cuh"

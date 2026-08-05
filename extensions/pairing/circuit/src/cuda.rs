@@ -110,7 +110,7 @@ mod tests {
         exe::{SparseMemoryImage, VmExe},
         instruction::Instruction,
         program::Program,
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, PhantomDiscriminant, SystemOpcode,
     };
     use openvm_pairing_guest::{
@@ -121,7 +121,7 @@ mod tests {
         preflight::{PostflightAccessRegistry, PreflightReplayProgram},
         Rv64ImPreflightGpuTracegen,
     };
-    use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64JalLuiOpcode};
+    use openvm_riscv_transpiler::{HintStoreOpcode, JalLuiOpcode};
     use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, StarkEngine};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rvr_state::PreflightProgramEvent;
@@ -130,7 +130,7 @@ mod tests {
     use crate::PairingCurve;
 
     fn reg(index: usize) -> usize {
-        index * RV64_REGISTER_NUM_LIMBS
+        index * REGISTER_NUM_LIMBS
     }
 
     fn insert_bytes(
@@ -200,18 +200,12 @@ mod tests {
                 curve as u16,
             ),
             Instruction::from_usize(
-                Rv64JalLuiOpcode::JAL.global_opcode(),
-                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0, 0],
+                JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, REGISTER_AS as usize, 0, 0, 0],
             ),
             Instruction::from_usize(
-                Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
-                [
-                    0,
-                    reg(3),
-                    0,
-                    RV64_REGISTER_AS as usize,
-                    RV64_MEMORY_AS as usize,
-                ],
+                HintStoreOpcode::HINT_STORED.global_opcode(),
+                [0, reg(3), 0, REGISTER_AS as usize, MEMORY_AS as usize],
             ),
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 7]),
         ];
@@ -221,14 +215,14 @@ mod tests {
         for (register, value) in [(1, P_HEADER), (2, Q_HEADER), (3, HINT_DESTINATION)] {
             insert_bytes(
                 &mut initial_memory,
-                RV64_REGISTER_AS,
+                REGISTER_AS,
                 reg(register) as u32,
                 u64::from(value).to_le_bytes(),
             );
         }
         insert_bytes(
             &mut initial_memory,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             P_HEADER,
             u64::from(P_DATA)
                 .to_le_bytes()
@@ -237,15 +231,15 @@ mod tests {
         );
         insert_bytes(
             &mut initial_memory,
-            RV64_MEMORY_AS,
+            MEMORY_AS,
             Q_HEADER,
             u64::from(Q_DATA)
                 .to_le_bytes()
                 .into_iter()
                 .chain(1u64.to_le_bytes()),
         );
-        insert_bytes(&mut initial_memory, RV64_MEMORY_AS, P_DATA, p);
-        insert_bytes(&mut initial_memory, RV64_MEMORY_AS, Q_DATA, q);
+        insert_bytes(&mut initial_memory, MEMORY_AS, P_DATA, p);
+        insert_bytes(&mut initial_memory, MEMORY_AS, Q_DATA, q);
 
         let exe = VmExe::new(program.clone()).with_init_memory(initial_memory);
         let mut config =

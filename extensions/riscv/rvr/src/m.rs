@@ -3,7 +3,7 @@
 mod instruction;
 
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{IMM_AS, REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode, MulWOpcode};
@@ -93,7 +93,7 @@ impl RvrExtension for Rv64MExtension {
         let (_, op, word) = operations
             .into_iter()
             .find(|(candidate, _, _)| *candidate == opcode)?;
-        if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
+        if insn.d != REGISTER_AS || insn.e != IMM_AS {
             return None;
         }
 
@@ -122,7 +122,7 @@ impl RvrExtension for Rv64MExtension {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, VmOpcode};
+    use openvm_instructions::{instruction::Instruction, riscv::REGISTER_NUM_LIMBS, VmOpcode};
     use p3_baby_bear::BabyBear;
     use rvr_openvm_ir::{InstrAt, LiftedInstr};
 
@@ -132,9 +132,9 @@ mod tests {
         RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             opcode,
             [
-                RV64_REGISTER_NUM_LIMBS,
-                2 * RV64_REGISTER_NUM_LIMBS,
-                3 * RV64_REGISTER_NUM_LIMBS,
+                REGISTER_NUM_LIMBS,
+                2 * REGISTER_NUM_LIMBS,
+                3 * REGISTER_NUM_LIMBS,
                 d as usize,
                 e as usize,
                 1,
@@ -161,7 +161,7 @@ mod tests {
             (DivRemWOpcode::REMW.global_opcode(), "remw"),
             (DivRemWOpcode::REMUW.global_opcode(), "remuw"),
         ] {
-            let insn = instruction(opcode, RV64_REGISTER_AS, RV64_IMM_AS);
+            let insn = instruction(opcode, REGISTER_AS, IMM_AS);
             let LiftedInstr::Body(InstrAt { instr, .. }) =
                 extension.try_lift(&insn, 0x100).unwrap()
             else {
@@ -169,7 +169,7 @@ mod tests {
             };
             assert_eq!(instr.opname(), name);
 
-            let wrong_source = instruction(opcode, RV64_REGISTER_AS, RV64_REGISTER_AS);
+            let wrong_source = instruction(opcode, REGISTER_AS, REGISTER_AS);
             assert!(extension.try_lift(&wrong_source, 0x100).is_none());
         }
     }
@@ -180,10 +180,10 @@ mod tests {
             MulOpcode::MUL.global_opcode(),
             [
                 0,
-                2 * RV64_REGISTER_NUM_LIMBS,
-                3 * RV64_REGISTER_NUM_LIMBS,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
+                2 * REGISTER_NUM_LIMBS,
+                3 * REGISTER_NUM_LIMBS,
+                REGISTER_AS as usize,
+                IMM_AS as usize,
                 1,
                 0,
             ],
