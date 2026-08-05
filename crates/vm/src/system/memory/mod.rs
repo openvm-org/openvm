@@ -27,10 +27,9 @@ use crate::{
     },
 };
 
-// TODO: Currently this is only used for debug assertions, but we may switch to making it constant
-// and removing from MemoryConfig.
-// This is the max bit width of AS-native OpenVM memory pointers.
-pub const POINTER_MAX_BITS: usize = MEM_BITS - size_of::<u16>().ilog2() as usize;
+/// Default maximum bit width of pointers within each address space. Pointers index cells, not
+/// bytes.
+pub const DEFAULT_POINTER_MAX_BITS: usize = MEM_BITS - size_of::<u16>().ilog2() as usize;
 // Valid RVR memory pointers and leaf indices fit in `u32`. Guest operands stay
 // `u64` until a runtime bounds check proves that they are valid pointers.
 const _: () = assert!(MEM_BITS <= u32::BITS as usize);
