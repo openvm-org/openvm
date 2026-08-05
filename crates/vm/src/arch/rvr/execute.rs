@@ -18,7 +18,10 @@ use super::{
     },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
-    metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
+    metered::{
+        metered_page_buffer_resize, metered_periodic_check, RvrMeteredExecutionOutcome,
+        SegmentationState,
+    },
     metered_cost::RvrMeteredCostResult,
     preflight::{
         PreflightBuffers, PreflightDirtyPages, PreflightEndpoint, PreflightLimits,
@@ -436,10 +439,13 @@ fn execute_metered_impl(
     state.mode_state.mem_page_buf = seg_state.mem_page_buf_ptr();
     state.mode_state.pv_page_buf = seg_state.pv_page_buf_ptr();
     state.mode_state.deferral_page_buf = seg_state.deferral_page_buf_ptr();
+    state.mode_state.pv_page_buf_cap = seg_state.pv_page_buf_cap();
+    state.mode_state.deferral_page_buf_cap = seg_state.deferral_page_buf_cap();
     state.mode_state.check_counter = check_counter;
     state.mode_state.num_preflight_replay_values =
         seg_state.ctx.segmentation_ctx.num_preflight_replay_values;
     state.mode_state.on_check = metered_periodic_check;
+    state.mode_state.on_page_buffer_resize = metered_page_buffer_resize;
     state.mode_state.seg_state = &mut seg_state;
 
     let status = run_and_finalize(

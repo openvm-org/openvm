@@ -254,18 +254,25 @@ impl RvrExecutionKind {
                 writeln!(out, "  struct PageTouch* deferral_page_buf;").unwrap();
                 writeln!(out, "  uint8_t (*on_check)(struct MeteringState*);").unwrap();
                 writeln!(out, "  void (*on_memory_flush)(struct MeteringState*);").unwrap();
+                writeln!(
+                    out,
+                    "  void (*on_page_buffer_resize)(struct MeteringState*, uint32_t, uint32_t);"
+                )
+                .unwrap();
                 writeln!(out, "  struct SegmentationState* seg_state;").unwrap();
                 writeln!(out, "  uint32_t mem_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t pv_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t deferral_page_buf_len;").unwrap();
+                writeln!(out, "  uint32_t pv_page_buf_cap;").unwrap();
+                writeln!(out, "  uint32_t deferral_page_buf_cap;").unwrap();
                 writeln!(out, "  uint32_t check_counter;").unwrap();
                 writeln!(out, "  uint32_t last_mem_page;").unwrap();
                 writeln!(out, "  uint32_t num_preflight_replay_values;").unwrap();
                 writeln!(out, "}} MeteringState;").unwrap();
-                writeln!(out, "static_assert(sizeof(MeteringState) == 80);").unwrap();
+                writeln!(out, "static_assert(sizeof(MeteringState) == 96);").unwrap();
                 writeln!(
                     out,
-                    "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 76);"
+                    "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 92);"
                 )
                 .unwrap();
             }
@@ -1589,12 +1596,16 @@ mod tests {
     use super::{CProject, EmitMode, RvrExecutionKind};
 
     #[test]
-    fn metered_state_layout_includes_memory_flush_callback() {
+    fn metered_state_layout_includes_page_buffer_callbacks() {
         let header = RvrExecutionKind::Metered.state_layout_header();
         assert!(header.contains("void (*on_memory_flush)(struct MeteringState*);"));
-        assert!(header.contains("static_assert(sizeof(MeteringState) == 80);"));
+        assert!(header
+            .contains("void (*on_page_buffer_resize)(struct MeteringState*, uint32_t, uint32_t);"));
+        assert!(header.contains("uint32_t pv_page_buf_cap;"));
+        assert!(header.contains("uint32_t deferral_page_buf_cap;"));
+        assert!(header.contains("static_assert(sizeof(MeteringState) == 96);"));
         assert!(header.contains(
-            "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 76);"
+            "static_assert(offsetof(MeteringState, num_preflight_replay_values) == 92);"
         ));
     }
 

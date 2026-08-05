@@ -606,6 +606,7 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
+        let uses_deferral_address_space = extensions.lifters().uses_deferral_address_space();
         let compiled = compile_metered(exe, extensions.lifters(), &chips, program_metadata)
             .map_err(map_rvr_compile_error)?;
         let runtime_hooks = extensions.into_runtime_hooks();
@@ -615,6 +616,7 @@ where
             RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
+            uses_deferral_address_space,
         ))
     }
 
@@ -635,6 +637,7 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
+        let uses_deferral_address_space = extensions.lifters().uses_deferral_address_space();
         let compiled =
             compile_metered_segment_boundary(exe, extensions.lifters(), &chips, program_metadata)
                 .map_err(map_rvr_compile_error)?;
@@ -645,6 +648,7 @@ where
             RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
+            uses_deferral_address_space,
         ))
     }
 
@@ -657,9 +661,9 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
-        let runtime_hooks = self
-            .build_rvr_extensions(Some(executor_idx_to_air_idx))
-            .into_runtime_hooks();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let uses_deferral_address_space = extensions.lifters().uses_deferral_address_space();
+        let runtime_hooks = extensions.into_runtime_hooks();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
         compiled
             .require_execution_kind(&[RvrExecutionKind::Metered])
@@ -670,6 +674,7 @@ where
             RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
+            uses_deferral_address_space,
         ))
     }
 
@@ -682,9 +687,9 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
-        let runtime_hooks = self
-            .build_rvr_extensions(Some(executor_idx_to_air_idx))
-            .into_runtime_hooks();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let uses_deferral_address_space = extensions.lifters().uses_deferral_address_space();
+        let runtime_hooks = extensions.into_runtime_hooks();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
         compiled
             .require_execution_kind(&[RvrExecutionKind::MeteredSegment])
@@ -695,6 +700,7 @@ where
             RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
+            uses_deferral_address_space,
         ))
     }
 
