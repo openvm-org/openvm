@@ -86,13 +86,9 @@ where
                 }
             }
 
-            fn add(self, mut other: EcPoint) -> EcPoint {
-                match self {
-                    Bucket::None => other,
-                    Bucket::Affine(a) => {
-                        other += a;
-                        other
-                    }
+            fn add_assign_into(self, target: &mut EcPoint) {
+                if let Bucket::Affine(a) = self {
+                    target.add_assign(&a);
                 }
             }
         }
@@ -115,7 +111,7 @@ where
         //                    ((a) + b) + c
         let mut running_sum = EcPoint::IDENTITY;
         for exp in buckets.into_iter().rev() {
-            running_sum = exp.add(running_sum);
+            exp.add_assign_into(&mut running_sum);
             acc.add_assign(&running_sum);
         }
     }
