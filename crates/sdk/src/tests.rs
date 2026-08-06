@@ -668,28 +668,28 @@ fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "lean-verifier")]
+#[cfg(feature = "fv-verifier")]
 #[test]
-fn test_lean_verifier_accepts_canonical_riscv32() -> Result<()> {
+fn test_fv_verifier_accepts_canonical_riscv32() -> Result<()> {
     setup_tracing();
     let params = crate::config::default_system_params();
     let sdk = Sdk::riscv32(params, AggregationSystemParams::default());
     let (proof, baseline) = generate_fib_vm_stark_proof(&sdk)?;
     Sdk::verify_proof((*sdk.agg_vk()).clone(), baseline.clone(), &proof)?;
-    Sdk::verify_proof_with_lean_verifier(&baseline, &proof)?;
+    Sdk::verify_proof_with_fv_verifier(&baseline, &proof)?;
     Ok(())
 }
 
-#[cfg(feature = "lean-verifier")]
+#[cfg(feature = "fv-verifier")]
 #[test]
-fn test_lean_verifier_rejects_non_riscv32_config() -> Result<()> {
+fn test_fv_verifier_rejects_non_riscv32_config() -> Result<()> {
     setup_tracing();
     let params = crate::config::default_system_params();
     let sdk = Sdk::standard(params, AggregationSystemParams::default());
     let (proof, baseline) = generate_fib_vm_stark_proof(&sdk)?;
     Sdk::verify_proof((*sdk.agg_vk()).clone(), baseline.clone(), &proof)?;
-    Sdk::verify_proof_with_lean_verifier(&baseline, &proof)
-        .expect_err("lean verifier should reject a non-riscv32 app VM config");
+    Sdk::verify_proof_with_fv_verifier(&baseline, &proof)
+        .expect_err("FV verifier should reject a non-riscv32 app VM config");
     Ok(())
 }
 

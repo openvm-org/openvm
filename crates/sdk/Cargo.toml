@@ -52,7 +52,7 @@ metrics = { workspace = true, optional = true }
 
 [features]
 default = ["parallel", "jemalloc"]
-lean-verifier = ["dep:openvm-fv-verifier"]
+fv-verifier = ["dep:openvm-fv-verifier"]
 root-prover = [
     "openvm-continuations/root-prover",
     "openvm-stark-sdk/baby-bear-bn254-poseidon2",

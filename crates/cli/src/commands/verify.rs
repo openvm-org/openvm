@@ -85,10 +85,10 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Additionally verify the STARK proof with the formally verified Lean verifier (requires a build with the 'lean-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
+            help = "Additionally verify the STARK proof with the formally verified Swirl verifier (requires a build with the 'fv-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
             help_heading = "OpenVM Options"
         )]
-        lean_verified: bool,
+        fv_verified: bool,
 
         #[command(flatten)]
         cargo_args: SingleTargetCargoArgs,
@@ -198,7 +198,7 @@ impl VerifyCmd {
                 agg_vk,
                 app_baseline,
                 proof,
-                lean_verified,
+                fv_verified,
                 cargo_args,
             } => {
                 let (manifest_path, _) =
@@ -239,17 +239,17 @@ impl VerifyCmd {
                 }
                 let vm_stark_proof = stark_proof.try_into()?;
                 Sdk::verify_proof(agg_vk, expected_baseline.clone(), &vm_stark_proof)?;
-                if *lean_verified {
-                    #[cfg(feature = "lean-verifier")]
+                if *fv_verified {
+                    #[cfg(feature = "fv-verifier")]
                     {
-                        println!("Verifying STARK proof with the canonical RISC-V Lean verifier");
-                        Sdk::verify_proof_with_lean_verifier(&expected_baseline, &vm_stark_proof)?;
-                        println!("Lean verifier accepted the proof");
+                        println!("Verifying STARK proof with the canonical RISC-V FV verifier");
+                        Sdk::verify_proof_with_fv_verifier(&expected_baseline, &vm_stark_proof)?;
+                        println!("FV verifier accepted the proof");
                     }
-                    #[cfg(not(feature = "lean-verifier"))]
+                    #[cfg(not(feature = "fv-verifier"))]
                     eyre::bail!(
-                        "--lean-verified requires cargo-openvm built with the 'lean-verifier' \
-                         feature (cargo install --features lean-verifier ...)"
+                        "--fv-verified requires cargo-openvm built with the 'fv-verifier' \
+                         feature (cargo install --features fv-verifier ...)"
                     );
                 }
             }

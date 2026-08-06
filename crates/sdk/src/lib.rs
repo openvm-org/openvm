@@ -73,8 +73,8 @@ pub mod fs;
 #[cfg(feature = "evm-prove")]
 pub mod halo2_params;
 pub mod keygen;
-#[cfg(feature = "lean-verifier")]
-pub use openvm_fv_verifier as lean_verifier;
+#[cfg(feature = "fv-verifier")]
+pub use openvm_fv_verifier as fv_verifier;
 pub mod prover;
 #[cfg(feature = "evm-verify")]
 mod solidity;
@@ -842,7 +842,7 @@ where
     }
 
     /// Verifies an aggregate STARK proof with the formally verified Lean Swirl verifier (run as
-    /// a subprocess; see the [`lean_verifier`] module docs).
+    /// a subprocess; see the [`fv_verifier`] module docs).
     ///
     /// The Lean formalization only covers the canonical riscv32 pipeline, so this fails if
     /// `verified_baseline` — the [`VerificationBaseline`] the proof is verified against by
@@ -850,8 +850,8 @@ where
     /// (`app_exe_commit` is ignored). The expected baseline and the aggregation vk are both
     /// derived from the canonical riscv32 [`CpuSdk`], making each call keygen-expensive. Use
     /// alongside [`verify_proof`](Self::verify_proof), not instead of it.
-    #[cfg(feature = "lean-verifier")]
-    pub fn verify_proof_with_lean_verifier(
+    #[cfg(feature = "fv-verifier")]
+    pub fn verify_proof_with_fv_verifier(
         verified_baseline: &VerificationBaseline,
         proof: &VmStarkProof,
     ) -> Result<(), SdkError> {
@@ -866,7 +866,7 @@ where
                  and default app and aggregation parameters"
             )));
         }
-        lean_verifier::verify_stark_proof(&sdk.agg_vk(), &proof.inner)
+        fv_verifier::verify_stark_proof(&sdk.agg_vk(), &proof.inner)
             .map_err(|e| SdkError::Other(eyre::eyre!(e)))
     }
 

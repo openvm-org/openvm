@@ -6,7 +6,7 @@
 > of truth: do not edit in place without upstreaming the change, and
 > refresh the vendored copy (see below) when it moves.
 
-This crate lets `openvm-sdk` (behind its `lean-verifier` feature) run
+This crate lets `openvm-sdk` (behind its `fv-verifier` feature) run
 the formally verified (Lean) Swirl verifier against proofs produced by
 this workspace, as a differential check on the Rust verifier.
 
@@ -29,7 +29,7 @@ elan toolchain install leanprover/lean4:v4.26.0
 
 cargo build -p openvm-fv-verifier
 # or, through the SDK:
-cargo build -p openvm-sdk --features lean-verifier
+cargo build -p openvm-sdk --features fv-verifier
 ```
 
 Overrides: `SWIRL_LEANC=<path to leanc>` picks the compiler explicitly.

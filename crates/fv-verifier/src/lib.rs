@@ -33,7 +33,7 @@ pub mod symbolic;
 pub mod vk;
 
 pub use harness::{
-    run_lean_verifier, run_swirl_verify, swirl_verify_bin, verifier_error_from_exit_code,
+    run_fv_verifier, run_swirl_verify, swirl_verify_bin, verifier_error_from_exit_code,
     SwirlVerifyOutcome, VerifierError,
 };
 pub use magic::{MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION};
@@ -47,13 +47,13 @@ pub use vk::write_vk;
 
 /// Failure of a [`verify_stark_proof`] run.
 #[derive(Debug, thiserror::Error)]
-pub enum LeanVerifierError {
+pub enum FvVerifierError {
     /// Encoding the inputs or spawning the verifier process failed; no
     /// verdict on the proof was reached.
-    #[error("failed to run the Lean verifier: {0}")]
+    #[error("failed to run the FV verifier: {0}")]
     Io(#[from] std::io::Error),
     /// The verifier ran and rejected the proof.
-    #[error("Lean verifier rejected the proof: {error:?} (exit {exit_code}), stderr: {stderr}")]
+    #[error("FV verifier rejected the proof: {error:?} (exit {exit_code}), stderr: {stderr}")]
     Rejected {
         error: VerifierError,
         exit_code: i32,
@@ -70,7 +70,7 @@ pub enum LeanVerifierError {
 pub fn verify_stark_proof<SC: EncodableConfig>(
     vk: &MultiStarkVerifyingKey<SC>,
     proof: &Proof<SC>,
-) -> Result<(), LeanVerifierError>
+) -> Result<(), FvVerifierError>
 where
     SC::F: PrimeField32,
 {
@@ -84,7 +84,7 @@ where
     let outcome = run_swirl_verify(&vk_bytes, &proof_bytes, &pv_bytes)?;
     match verifier_error_from_exit_code(outcome.exit_code) {
         None => Ok(()),
-        Some(error) => Err(LeanVerifierError::Rejected {
+        Some(error) => Err(FvVerifierError::Rejected {
             error,
             exit_code: outcome.exit_code,
             stderr: outcome.stderr,

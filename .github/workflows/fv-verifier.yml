@@ -1,4 +1,4 @@
-name: Lean Verifier Tests
+name: FV Verifier Tests
 
 on:
   workflow_call:
@@ -17,11 +17,11 @@ on:
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/actions/sccache/**"
-      - ".github/workflows/lean-verifier.yml"
+      - ".github/workflows/fv-verifier.yml"
       - "ci/scripts/check_swirl_verifier_c.sh"
 
 concurrency:
-  group: ${{ github.workflow_ref }}-lean-verifier-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-fv-verifier-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -32,7 +32,7 @@ jobs:
   openvm-tests:
     name: OpenVM SDK and CLI
     runs-on:
-      - runs-on=${{ github.run_id }}-lean-verifier-openvm/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-fv-verifier-openvm/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -60,7 +60,7 @@ jobs:
 
       - name: Build cargo-openvm
         run: |
-          cargo build --locked --profile fast -p cargo-openvm --features lean-verifier
+          cargo build --locked --profile fast -p cargo-openvm --features fv-verifier
           echo "${{ github.workspace }}/target/fast" >> "$GITHUB_PATH"
 
       - name: Install guest rust-src
@@ -71,21 +71,21 @@ jobs:
           cargo nextest run --cargo-profile=fast --test-threads=1 \
             -p openvm-fv-verifier
 
-      - name: Run SDK Lean verifier tests
+      - name: Run SDK FV verifier tests
         working-directory: crates/sdk
         env:
           OPENVM_SKIP_DEBUG: "1"
         run: |
           cargo nextest run --cargo-profile=fast --test-threads=1 \
-            --features root-prover,lean-verifier -- test_lean_verifier
+            --features root-prover,fv-verifier -- test_fv_verifier
 
-      - name: Run CLI Lean verifier stark e2e test
+      - name: Run CLI FV verifier stark e2e test
         working-directory: crates/cli
         env:
           SKIP_INSTALL: "1"
         run: |
-          cargo nextest run --cargo-profile=fast --test-threads=1 --features lean-verifier \
-            -E 'test(test_cli_stark_e2e_lean_verified)'
+          cargo nextest run --cargo-profile=fast --test-threads=1 --features fv-verifier \
+            -E 'test(test_cli_stark_e2e_fv_verified)'
 
       - name: sccache stats
         if: always()

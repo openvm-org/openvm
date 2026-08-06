@@ -7,8 +7,8 @@ fn install_cli() {
     FORCE_INSTALL.get_or_init(|| {
         if !matches!(env::var("SKIP_INSTALL"), Ok(x) if !x.is_empty()) {
             let mut args = vec!["install", "--path", ".", "--force", "--locked"];
-            if cfg!(feature = "lean-verifier") {
-                args.extend(["--features", "lean-verifier"]);
+            if cfg!(feature = "fv-verifier") {
+                args.extend(["--features", "fv-verifier"]);
             }
             run_cmd("cargo", &args).unwrap();
         }
@@ -62,11 +62,11 @@ fn test_cli_stark_e2e_no_commit() -> Result<()> {
     run_script("cli_stark_e2e_no_commit.sh", &[])
 }
 
-#[cfg(feature = "lean-verifier")]
+#[cfg(feature = "fv-verifier")]
 #[test]
-fn test_cli_stark_e2e_lean_verified() -> Result<()> {
+fn test_cli_stark_e2e_fv_verified() -> Result<()> {
     install_cli();
-    run_script("cli_stark_e2e_lean.sh", &[])
+    run_script("cli_stark_e2e_fv.sh", &[])
 }
 
 #[cfg(feature = "evm-verify")]

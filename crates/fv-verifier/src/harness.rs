@@ -2,7 +2,7 @@
 //!
 //! Exposes:
 //!
-//! - [`run_lean_verifier`] — Phase-0 magic-byte driver.
+//! - [`run_fv_verifier`] — Phase-0 magic-byte driver.
 //! - [`run_swirl_verify`] — Phase-3 driver that frames a `(vk_bytes, proof_bytes, pv_bytes)` triple
 //!   per the protocol in `Tools/SwirlVerifyMain.lean` and pipes it to the compiled `swirl_verify`
 //!   exe.
@@ -38,7 +38,7 @@ pub fn swirl_verify_bin() -> PathBuf {
 ///
 /// Returns [`io::ErrorKind::Other`] when the child exited via a signal
 /// (no numeric exit code available).
-pub fn run_lean_verifier(bytes: &[u8]) -> io::Result<i32> {
+pub fn run_fv_verifier(bytes: &[u8]) -> io::Result<i32> {
     let bin = swirl_verify_bin();
     let bin = bin.as_path();
     let mut child = Command::new(bin)
