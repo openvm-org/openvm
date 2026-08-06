@@ -36,9 +36,4 @@ extern __attribute__((preserve_most)) void rvr_ext_fp2_mul_bls12_381(
 extern __attribute__((preserve_most)) void rvr_ext_fp2_div_bls12_381(
     RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
-extern __attribute__((preserve_most)) void rvr_ext_ec_add_ne_bls12_381(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_ec_double_bls12_381(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr);
-
 #endif /* RVR_EXT_BLS12_381_H */
