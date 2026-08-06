@@ -1,18 +1,19 @@
-use std::{collections::BTreeSet, path::PathBuf};
+use std::path::PathBuf;
 
 use cargo_openvm::{
     args::{ManifestArgs, OpenVmConfigArgs},
     commands::{build, BuildArgs, BuildCargoArgs},
 };
-use elf::{
-    abi::{SHN_UNDEF, STT_FUNC},
-    endian::LittleEndian,
-    ElfBytes,
-};
+use elf::{endian::LittleEndian, ElfBytes};
 use eyre::Result;
 use openvm_build::get_rustc_target;
 use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_sdk::{fs::read_object_from_file, F};
+
+// LLVM assigns this OS-specific type to `.llvm_bb_addr_map`:
+// https://llvm.org/docs/Extensions.html#sht-llvm-bb-addr-map-section-basic-block-address-map
+const SHT_LLVM_BB_ADDR_MAP: u32 = 0x6fff_4c0a;
+const LLVM_BB_ADDR_MAP_BRANCH_PROB: u8 = 1 << 2;
 
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
@@ -181,19 +182,17 @@ fn test_multi_target_transpile_default() -> Result<()> {
         .join("release/examples/fibonacci");
     let elf_data = std::fs::read(elf_path)?;
     let elf = ElfBytes::<LittleEndian>::minimal_parse(&elf_data)?;
-    let function_starts = elf
-        .symbol_table()?
-        .into_iter()
-        .flat_map(|(symbols, _)| symbols.iter())
-        .filter(|symbol| symbol.st_symtype() == STT_FUNC && symbol.st_shndx != SHN_UNDEF)
-        .filter_map(|symbol| u32::try_from(symbol.st_value).ok())
-        .filter(|&pc| is_instruction_pc(pc))
-        .collect::<BTreeSet<_>>();
-    assert!(exe
-        .cfg_block_starts
-        .difference(&function_starts)
-        .next()
-        .is_some());
+    let section = elf
+        .section_headers()
+        .and_then(|sections| {
+            sections
+                .iter()
+                .find(|section| section.sh_type == SHT_LLVM_BB_ADDR_MAP)
+        })
+        .expect("guest ELF should contain LLVM's basic-block address map");
+    let (map, _) = elf.section_data(&section)?;
+    assert!(map.len() > 1);
+    assert_ne!(map[1] & LLVM_BB_ADDR_MAP_BRANCH_PROB, 0);
 
     Ok(())
 }
