@@ -745,7 +745,7 @@ fn compile_impl<F: PrimeField32>(
         }
     }
 
-    compile_generated_project(output_dir, &make_args, &toolchain)?;
+    compile_generated_project(output_dir, &make_args, &toolchain, opts.execution_kind)?;
 
     let lib_path = output_dir.join(&library_name);
     let mut compiled = open_compiled(&lib_path)?;
@@ -834,6 +834,7 @@ fn compile_generated_project(
     output_dir: &Path,
     make_args: &[String],
     toolchain: &rvr_openvm::RuntimeToolchain,
+    execution_kind: RvrExecutionKind,
 ) -> Result<(), CompileError> {
     let stdout_path = output_dir.join("make.stdout.log");
     let stderr_path = output_dir.join("make.stderr.log");
@@ -850,6 +851,7 @@ fn compile_generated_project(
         .map_or(4, |n| n.get().saturating_sub(2).max(1))
         .to_string();
     tracing::debug!(
+        execution_kind = execution_kind.artifact_suffix(),
         translation_units = total_objects,
         make = %toolchain.make,
         jobs = %jobs,
@@ -895,6 +897,7 @@ fn compile_generated_project(
         let elapsed = started_at.elapsed();
         if elapsed >= progress_delay && done >= total_objects && !reported_linking {
             tracing::debug!(
+                execution_kind = execution_kind.artifact_suffix(),
                 objects_done = done,
                 objects_total = total_objects,
                 elapsed_secs = elapsed.as_secs_f64(),
@@ -904,6 +907,7 @@ fn compile_generated_project(
             reported_linking = true;
         } else if elapsed >= progress_delay && last_report_at.elapsed() >= progress_interval {
             tracing::debug!(
+                execution_kind = execution_kind.artifact_suffix(),
                 objects_done = done,
                 objects_total = total_objects,
                 elapsed_secs = elapsed.as_secs_f64(),
@@ -921,6 +925,7 @@ fn compile_generated_project(
         {
             if status.success() {
                 tracing::debug!(
+                    execution_kind = execution_kind.artifact_suffix(),
                     translation_units = total_objects,
                     elapsed_secs = started_at.elapsed().as_secs_f64(),
                     "built rvr native library"
