@@ -179,6 +179,10 @@ impl IntrinsicCurve for Bn254 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
+        if let ([coeff], [base]) = (coeffs, bases) {
+            return base.mul_scalar(coeff);
+        }
+
         // heuristic
         if coeffs.len() < 25 {
             // BN254(Fp) is of prime order by Weil conjecture:

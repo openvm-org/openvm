@@ -60,6 +60,10 @@ impl IntrinsicCurve for Secp256k1 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
+        if let ([coeff], [base]) = (coeffs, bases) {
+            return base.mul_scalar(coeff);
+        }
+
         // heuristic
         if coeffs.len() < 25 {
             let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
@@ -109,20 +113,29 @@ impl Secp256k1Point {
 mod tests {
     use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+    use openvm_ecc_guest::{weierstrass::CachedMulTable, CyclicGroup, Group};
 
     use super::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
 
+    /// Reference implementation: the windowed table, called directly.
+    ///
+    /// `IntrinsicCurve::msm` cannot serve as the reference any more, because it now routes a
+    /// single pair to `mul_scalar` and would compare the ladder against itself.
+    fn windowed_reference(scalar: Secp256k1Scalar) -> Secp256k1Point {
+        let base = [Secp256k1Point::GENERATOR];
+        let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&base, 4);
+        table.windowed_mul(&[scalar])
+    }
+
     #[test]
-    fn mul_scalar_matches_msm() {
+    fn mul_scalar_matches_windowed() {
         for k in [1u64, 2, 3, 255, 0x1234_5678, u32::MAX as u64] {
             let scalar = Secp256k1Scalar::from_u64(k);
             let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
             let via_ladder = unsafe { Secp256k1Point::GENERATOR.mul_scalar_le_unchecked(&bytes) };
-            let via_msm = Secp256k1::msm(&[scalar], &[Secp256k1Point::GENERATOR]);
 
-            assert_eq!(via_ladder, via_msm, "k = {k}");
+            assert_eq!(via_ladder, windowed_reference(scalar), "k = {k}");
         }
     }
 
@@ -135,10 +148,7 @@ mod tests {
         ));
         assert!(!unreduced.is_reduced());
 
-        let expected = Secp256k1::msm(
-            &[Secp256k1Scalar::from_u64(5)],
-            &[Secp256k1Point::GENERATOR],
-        );
+        let expected = windowed_reference(Secp256k1Scalar::from_u64(5));
         assert_eq!(Secp256k1Point::GENERATOR.mul_scalar(&unreduced), expected);
     }
 
