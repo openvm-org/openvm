@@ -61,6 +61,10 @@ impl IntrinsicCurve for NistP256 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
+        if let ([coeff], [base]) = (coeffs, bases) {
+            return base.mul_scalar(coeff);
+        }
+
         if coeffs.len() < 25 {
             let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
             table.windowed_mul(coeffs)
