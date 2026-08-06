@@ -499,7 +499,14 @@ where
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
-        let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
+        // Split into two single-base products so each dispatches to the `EC_MUL` opcode.
+        //
+        // `IntrinsicCurve::msm` routes a single pair to the opcode on curves that expose it, and
+        // falls back to the window table elsewhere. Note this forgoes the shared doubling chain:
+        // `CachedMulTable::windowed_mul` doubles its accumulator once per window regardless of the
+        // number of bases, so the two-base form pays for one chain while this pays for two.
+        let point = &<C as IntrinsicCurve>::msm(&[neg_u1], &[NEG_G])
+            + &<C as IntrinsicCurve>::msm(&[u2], &[R]);
         let vk = VerifyingKey::from_affine(point)?;
 
         Ok(vk)
@@ -551,7 +558,9 @@ where
     let G = C::Point::GENERATOR;
     // public key
     let Q = pubkey;
-    let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
+    // Split into two single-base products so each dispatches to the `EC_MUL` opcode; see the
+    // note in `recover_from_prehash_noverify` for what this trades away.
+    let R = &<C as IntrinsicCurve>::msm(&[u1], &[G]) + &<C as IntrinsicCurve>::msm(&[u2], &[Q]);
     // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert x, y
     // coordinates of R are both reduced.
     if R.is_identity() {
