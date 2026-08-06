@@ -920,6 +920,11 @@ fn compile_generated_project(
             })?
         {
             if status.success() {
+                tracing::debug!(
+                    translation_units = total_objects,
+                    elapsed_secs = started_at.elapsed().as_secs_f64(),
+                    "built rvr native library"
+                );
                 return Ok(());
             }
 

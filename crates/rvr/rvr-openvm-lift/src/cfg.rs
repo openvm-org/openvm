@@ -998,15 +998,8 @@ pub fn build_blocks(
         resolved_jumps,
     } = worklist(&ctx, &function_entries, &internal_targets);
 
-    internal_targets.extend(
-        hinted_block_starts
-            .iter()
-            .map(|&pc| u64::from(pc))
-            .filter(|pc| pc_to_idx.contains_key(pc)),
-    );
-
     // Phase 7: Compute leaders.
-    let leaders = compute_leaders(
+    let mut leaders = compute_leaders(
         instructions,
         &pc_to_idx,
         &successors,
@@ -1014,9 +1007,31 @@ pub fn build_blocks(
         &internal_targets,
         &return_sites,
     );
+    // Track only hints that create a boundary not already implied by the CFG.
+    let mut valid_hints = 0usize;
+    let mut new_hint_leaders = BTreeSet::new();
+    for &pc in hinted_block_starts {
+        let pc = u64::from(pc);
+        if pc_to_idx.contains_key(&pc) {
+            valid_hints += 1;
+            if leaders.insert(pc) {
+                new_hint_leaders.insert(pc);
+            }
+        }
+    }
 
     // Build blocks by splitting at leaders and patching resolved indirect-jump targets.
-    build_block_list(instructions, &leaders, &resolved_jumps)
+    let (blocks, hinted_block_splits) =
+        build_block_list(instructions, &leaders, &new_hint_leaders, &resolved_jumps);
+    tracing::info!(
+        instructions = instructions.len(),
+        blocks = blocks.len(),
+        hints = hinted_block_starts.len(),
+        valid_hints,
+        hinted_block_splits,
+        "built rvr control-flow graph"
+    );
+    blocks
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,
@@ -1024,12 +1039,14 @@ pub fn build_blocks(
 fn build_block_list(
     instructions: &[LiftedInstr],
     leaders: &BTreeSet<u64>,
+    new_hint_leaders: &BTreeSet<u64>,
     resolved_jumps: &FxHashMap<u64, HashSet<u64>>,
-) -> Vec<Block> {
+) -> (Vec<Block>, usize) {
     // Max block size; used to flush periodically so the segmentation check in
     // metered mode (which fires at block boundaries) stays granular enough.
     const MAX_BLOCK_INSNS: u32 = MAX_METERED_BLOCK_INSNS;
     let mut blocks: Vec<Block> = Vec::new();
+    let mut hinted_block_splits = 0usize;
 
     // Accumulate body instructions for the current block.
     let mut body: Vec<InstrAt> = Vec::new();
@@ -1042,6 +1059,9 @@ fn build_block_list(
         // previous block with a FallThrough terminator.
         if leaders.contains(&pc) && block_start_pc.is_some() {
             if !body.is_empty() {
+                if new_hint_leaders.contains(&pc) {
+                    hinted_block_splits += 1;
+                }
                 let start = block_start_pc.unwrap();
                 let last_body_pc = body.last().unwrap().pc;
                 blocks.push(Block {
@@ -1125,7 +1145,7 @@ fn build_block_list(
         }
     }
 
-    blocks
+    (blocks, hinted_block_splits)
 }
 
 #[cfg(test)]
