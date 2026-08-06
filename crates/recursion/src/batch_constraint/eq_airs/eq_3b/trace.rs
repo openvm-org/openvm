@@ -89,7 +89,7 @@ pub(crate) fn generate_eq_3b_blob(
         for (sort_idx, (air_idx, vdata)) in
             preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
         {
-            let n_lift = vdata.log_height.saturating_sub(l_skip);
+            let n_lift = vdata.log_height().saturating_sub(l_skip);
             let num_interactions = vk.per_air[*air_idx].num_interactions();
             if num_interactions == 0 {
                 blob.record_idxs.push(RecordIdx {

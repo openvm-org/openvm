@@ -96,7 +96,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
             for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
                 let chunk = chunks.next().unwrap();
                 let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-                let log_height = vdata.log_height;
+                let log_height = vdata.log_height();
                 let height = 1 << log_height;
                 let n = log_height as isize - l_skip as isize;
                 num_present += 1;
@@ -123,7 +123,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 if sorted_idx < preflight.proof_shape.sorted_trace_vdata.len() {
                     let (next_idx, next_vdata) =
                         &preflight.proof_shape.sorted_trace_vdata[sorted_idx];
-                    let diff = vdata.log_height - next_vdata.log_height;
+                    let diff = vdata.log_height() - next_vdata.log_height();
                     cols.is_height_equal_to_next = F::from_bool(diff == 0);
                     if diff == 0 {
                         range_checker.add_count(*next_idx - *idx - 1);

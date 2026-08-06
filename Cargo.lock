@@ -2929,7 +2929,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-integer",
  "once_cell",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0)",
  "openvm-cuda-common",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -4360,7 +4360,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
@@ -4534,7 +4534,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-riscv-adapters",
@@ -4606,7 +4606,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-platform",
@@ -4651,7 +4651,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -4675,7 +4675,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -4723,7 +4723,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -4748,13 +4748,13 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
  "glob",
  "itertools 0.14.0",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -4775,7 +4775,25 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#be2b6983cbd70976b37acbb72ceb1b3593dc67ae"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
+name = "openvm-cuda-builder"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
+name = "openvm-cuda-builder"
+version = "2.0.0"
+source = "git+https://www.github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "cc",
  "glob",
@@ -4784,13 +4802,13 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://www.github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "bytesize",
  "ctor",
  "lazy_static",
  "metrics",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://www.github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -4823,7 +4841,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-deferral-transpiler",
  "openvm-instructions",
@@ -5065,7 +5083,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
@@ -5123,7 +5141,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-circuit-primitives",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-pairing-guest",
@@ -5260,7 +5278,7 @@ dependencies = [
  "lazy_static",
  "openvm-circuit-primitives",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -5294,7 +5312,7 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-poseidon2-air",
  "openvm-recursion-circuit-derive",
@@ -5352,7 +5370,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-platform",
@@ -5550,7 +5568,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0 (git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-riscv-circuit",
@@ -5588,7 +5606,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -5623,7 +5641,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=poc%2Fdepadding#1b7a545ae0f3e3e1dc2559afb2b178a88e5bf835"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",

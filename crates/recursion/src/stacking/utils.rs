@@ -58,7 +58,7 @@ pub fn get_stacked_slice_data(
         for trace_col_idx in 0..common_width {
             let last_air = sort_idx + 1 == sorted_trace_vdata.len();
             let last_col = trace_col_idx + 1 == common_width;
-            push_res(vdata.log_height, last_air && last_col, need_rot);
+            push_res(vdata.log_height(), last_air && last_col, need_rot);
         }
     }
 
@@ -72,7 +72,7 @@ pub fn get_stacked_slice_data(
         for &part_width in part_widths {
             for part_col_idx in 0..part_width {
                 let is_last = part_col_idx + 1 == part_width;
-                push_res(vdata.log_height, is_last, need_rot);
+                push_res(vdata.log_height(), is_last, need_rot);
             }
         }
     }

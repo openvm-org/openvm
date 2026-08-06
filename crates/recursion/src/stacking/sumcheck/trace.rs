@@ -44,9 +44,9 @@ impl RowMajorChip<F> for SumcheckRoundsTraceGenerator {
                     for (sort_idx, (air_idx, vdata)) in
                         preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
                     {
-                        if vdata.log_height > vk.inner.params.l_skip {
+                        if vdata.log_height() > vk.inner.params.l_skip {
                             let need_rot = vk.inner.per_air[*air_idx].params.need_rot;
-                            let n = vdata.log_height - vk.inner.params.l_skip;
+                            let n = vdata.log_height() - vk.inner.params.l_skip;
                             eq_mults[n - 1] += proof.batch_constraint_proof.column_openings
                                 [sort_idx]
                                 .iter()

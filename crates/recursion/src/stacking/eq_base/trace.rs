@@ -41,8 +41,8 @@ impl RowMajorChip<F> for EqBaseTraceGenerator {
                     preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
                 {
                     let need_rot = vk.inner.per_air[*air_idx].params.need_rot;
-                    if vdata.log_height <= vk.inner.params.l_skip {
-                        let neg_n = vk.inner.params.l_skip - vdata.log_height;
+                    if vdata.log_height() <= vk.inner.params.l_skip {
+                        let neg_n = vk.inner.params.l_skip - vdata.log_height();
                         mults[neg_n] += proof.batch_constraint_proof.column_openings[sort_idx]
                             .iter()
                             .flatten()

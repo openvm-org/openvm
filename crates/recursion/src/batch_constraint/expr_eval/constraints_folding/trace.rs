@@ -79,8 +79,8 @@ impl ConstraintsFoldingBlob {
                         value,
                     });
                 }
-                let n_lift = v.log_height.saturating_sub(vk.params.l_skip);
-                let n = v.log_height as isize - vk.params.l_skip as isize;
+                let n_lift = v.log_height().saturating_sub(vk.params.l_skip);
+                let n = v.log_height() as isize - vk.params.l_skip as isize;
                 folded.push((
                     n,
                     folded_claim * preflight.batch_constraint.eq_ns_frontloaded[n_lift],
@@ -135,7 +135,7 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                     let cols: &mut ConstraintsFoldingCols<_> = chunk.borrow_mut();
                     let n_lift = preflight.proof_shape.sorted_trace_vdata[record.sort_idx]
                         .1
-                        .log_height
+                        .log_height()
                         .saturating_sub(preflight.proof_shape.l_skip);
 
                     cols.is_valid = F::ONE;
@@ -252,8 +252,8 @@ pub(in crate::batch_constraint) mod cuda {
                         .collect_vec();
                     proof_values.push(air_values);
 
-                    let n_lift = v.log_height.saturating_sub(vk.system_params.l_skip);
-                    let n = v.log_height as isize - vk.system_params.l_skip as isize;
+                    let n_lift = v.log_height().saturating_sub(vk.system_params.l_skip);
+                    let n = v.log_height() as isize - vk.system_params.l_skip as isize;
                     folded_claims.push((
                         n,
                         folded_claim * preflight.cpu.batch_constraint.eq_ns_frontloaded[n_lift],

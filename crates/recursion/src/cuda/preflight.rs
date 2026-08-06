@@ -115,7 +115,7 @@ impl PreflightGpu {
             .map(|(air_idx, vdata)| {
                 let height = TraceHeight {
                     air_idx: *air_idx,
-                    log_height: vdata.log_height.try_into().unwrap(),
+                    log_height: vdata.log_height().try_into().unwrap(),
                 };
                 let metadata = TraceMetadata {
                     cached_idx: sorted_cached_commits.len(),
@@ -125,7 +125,7 @@ impl PreflightGpu {
                 };
                 cidx += vdata.cached_commitments.len()
                     + vk.inner.per_air[*air_idx].preprocessed_data.is_some() as usize;
-                total_interactions += (1 << vdata.log_height.max(l_skip))
+                total_interactions += (1 << vdata.log_height().max(l_skip))
                     * vk.inner.per_air[*air_idx].num_interactions();
                 sorted_cached_commits.extend_from_slice(&vdata.cached_commitments);
                 (height, metadata)
