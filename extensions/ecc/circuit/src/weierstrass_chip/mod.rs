@@ -1,19 +1,17 @@
-mod add_ne;
-mod curves;
+mod add;
+pub mod curves;
 mod double;
 mod trace;
 
-pub use add_ne::*;
+pub use add::*;
 #[cfg(feature = "rvr")]
 pub(crate) use curves::get_curve_type;
 pub use curves::CurveType;
 pub use double::*;
-pub(crate) use trace::{
-    generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
-};
+pub(crate) use trace::{generate_add_trace_from_postflight, generate_double_trace_from_postflight};
 #[cfg(test)]
 pub(crate) use trace::{
-    generate_add_ne_trace_from_postflights, generate_double_trace_from_postflights,
+    generate_add_trace_from_postflights, generate_double_trace_from_postflights,
 };
 
 #[cfg(test)]
