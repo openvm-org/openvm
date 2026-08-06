@@ -1,0 +1,16 @@
+[package]
+name = "openvm-poseidon2-guest"
+description = "OpenVM guest library for poseidon2"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-platform = { workspace = true }
+
+[features]
+default = []
