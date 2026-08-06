@@ -102,7 +102,7 @@ pub(crate) fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const 
     program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
     if !matches!(
         (NUM_READS, BLOCKS),
-        (2, 4) | (2, 6) | (2, 8) | (2, 12) | (1, 8) | (1, 12)
+        (2, 4) | (2, 6) | (2, 8) | (2, 12) | (2, 18) | (1, 8) | (1, 12) | (1, 18)
     ) {
         return Err(GpuPostflightError::InvalidTranscript(format!(
             "unsupported VecHeap replay shape ({NUM_READS}, {BLOCKS})"
