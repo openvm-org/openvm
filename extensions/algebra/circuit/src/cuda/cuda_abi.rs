@@ -46,6 +46,7 @@ unsafe extern "C" {
     fn _field_expr_replay_kernel_config(
         num_reads: usize,
         blocks: usize,
+        field_u32_limbs: usize,
         max_grid_blocks: *mut usize,
         block_threads: *mut usize,
         local_bytes_per_thread: *mut usize,
@@ -65,6 +66,7 @@ unsafe extern "C" {
         range_bins: usize,
         d_scratch: *mut u32,
         scratch_words: usize,
+        field_u32_limbs: usize,
         aux_words_per_thread: usize,
         grid_blocks: usize,
         block_threads: usize,
@@ -142,7 +144,12 @@ pub struct FieldExprReplayLaunchConfig {
 }
 
 /// Queries the device-dependent occupancy cap and kernel attributes once for this chip variant.
+///
+/// `field_u32_limbs` selects which coordinate-width kernel instantiation is queried, so it forms
+/// part of the per-variant cache key alongside `NUM_READS`/`BLOCKS`: projective coordinates make
+/// `BLOCKS` alone ambiguous (e.g. `BLOCKS == 12` is either 32-limb projective or 48-limb affine).
 pub fn field_expr_replay_kernel_config<const NUM_READS: usize, const BLOCKS: usize>(
+    field_u32_limbs: usize,
 ) -> Result<FieldExprReplayKernelConfig, CudaError> {
     let mut config = FieldExprReplayKernelConfig {
         max_grid_blocks: 0,
@@ -153,6 +160,7 @@ pub fn field_expr_replay_kernel_config<const NUM_READS: usize, const BLOCKS: usi
         CudaError::from_result(_field_expr_replay_kernel_config(
             NUM_READS,
             BLOCKS,
+            field_u32_limbs,
             &mut config.max_grid_blocks,
             &mut config.block_threads,
             &mut config.local_bytes_per_thread,
@@ -169,6 +177,7 @@ pub unsafe fn field_expr_replay_tracegen<const NUM_READS: usize, const BLOCKS: u
     d_blob: &DeviceBuffer<u32>,
     d_range_delta: &DeviceBuffer<F>,
     d_scratch: &DeviceBuffer<u32>,
+    field_u32_limbs: usize,
     aux_words_per_thread: usize,
     launch: FieldExprReplayLaunchConfig,
     pointer_max_bits: u32,
@@ -191,6 +200,7 @@ pub unsafe fn field_expr_replay_tracegen<const NUM_READS: usize, const BLOCKS: u
         d_range_delta.len(),
         d_scratch.as_mut_ptr(),
         d_scratch.len(),
+        field_u32_limbs,
         aux_words_per_thread,
         launch.grid_blocks,
         launch.block_threads,

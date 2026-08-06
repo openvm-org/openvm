@@ -4,7 +4,7 @@
 //
 // The core-column interpreter is validated bit-exact against
 // FieldExpressionFiller::fill_trace_row (rows and range-checker histograms) on
-// EcAddNe, MulDiv (flags/Select/Div-under-Select/setup rows) and IntMul/IntAdd
+// Projective EC operations, MulDiv (flags/Select/Div-under-Select/setup rows), and IntMul/IntAdd
 // expressions. Adapter columns use the shared VecHeapAdapter device fill.
 #include "algebra/vec_heap_replay.cuh"
 #include "launcher.cuh"
@@ -820,7 +820,7 @@ static __device__ bool field_expr_fill_core_row(
     return true;
 }
 
-template <size_t NUM_READS, size_t BLOCKS>
+template <size_t NUM_READS, size_t BLOCKS, uint32_t K>
 static __global__ void validate_field_expr_replay(
     size_t height,
     size_t width,
@@ -830,7 +830,6 @@ static __global__ void validate_field_expr_replay(
     size_t aux_words,
     uint32_t *error
 ) {
-    constexpr uint32_t K = BLOCKS <= 6 ? 2 * BLOCKS : BLOCKS;
     FieldExprProg s;
     if (!validate_and_load_prog(blob, blob_words, s)) {
         preflight_set_error(error, FIELD_EXPR_BAD_BLOB);
@@ -848,7 +847,7 @@ static __global__ void validate_field_expr_replay(
     }
 }
 
-template <size_t NUM_READS, size_t BLOCKS>
+template <size_t NUM_READS, size_t BLOCKS, uint32_t K>
 static __global__ void field_expr_replay_tracegen(
     Fp *trace,
     size_t height,
@@ -866,7 +865,6 @@ static __global__ void field_expr_replay_tracegen(
     uint32_t timestamp_max_bits,
     uint32_t *error
 ) {
-    constexpr uint32_t K = BLOCKS <= 6 ? 2 * BLOCKS : BLOCKS;
     constexpr size_t ADAPTER_WIDTH =
         sizeof(VecHeapAdapterCols<uint8_t, NUM_READS, BLOCKS, BLOCKS>);
     __shared__ FieldExprProg shared_program;
@@ -928,7 +926,7 @@ static __global__ void field_expr_replay_tracegen(
     }
 }
 
-template <size_t NUM_READS, size_t BLOCKS>
+template <size_t NUM_READS, size_t BLOCKS, uint32_t K>
 static int field_expr_kernel_config(
     size_t *max_grid_blocks,
     size_t *block_threads,
@@ -944,7 +942,7 @@ static int field_expr_kernel_config(
     int blocks_per_multiprocessor;
     cudaError_t result = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &blocks_per_multiprocessor,
-        field_expr_replay_tracegen<NUM_READS, BLOCKS>,
+        field_expr_replay_tracegen<NUM_READS, BLOCKS, K>,
         THREADS,
         0
     );
@@ -958,7 +956,7 @@ static int field_expr_kernel_config(
     if (result != cudaSuccess) return result;
     cudaFuncAttributes attributes;
     result = cudaFuncGetAttributes(
-        &attributes, field_expr_replay_tracegen<NUM_READS, BLOCKS>
+        &attributes, field_expr_replay_tracegen<NUM_READS, BLOCKS, K>
     );
     if (result != cudaSuccess) return result;
     size_t resident_blocks =
@@ -973,38 +971,55 @@ static int field_expr_kernel_config(
 extern "C" int _field_expr_replay_kernel_config(
     size_t num_reads,
     size_t blocks,
+    size_t field_u32_limbs,
     size_t *max_grid_blocks,
     size_t *block_threads,
     size_t *local_bytes_per_thread
 ) {
-    if (num_reads == 2 && blocks == 4)
-        return field_expr_kernel_config<2, 4>(
+    if (num_reads == 2 && blocks == 4 && field_u32_limbs == 8)
+        return field_expr_kernel_config<2, 4, 8>(
             max_grid_blocks, block_threads, local_bytes_per_thread
         );
-    if (num_reads == 2 && blocks == 6)
-        return field_expr_kernel_config<2, 6>(
+    if (num_reads == 2 && blocks == 6 && field_u32_limbs == 12)
+        return field_expr_kernel_config<2, 6, 12>(
             max_grid_blocks, block_threads, local_bytes_per_thread
         );
-    if (num_reads == 2 && blocks == 8)
-        return field_expr_kernel_config<2, 8>(
+    if (num_reads == 2 && blocks == 8 && field_u32_limbs == 8)
+        return field_expr_kernel_config<2, 8, 8>(
             max_grid_blocks, block_threads, local_bytes_per_thread
         );
-    if (num_reads == 2 && blocks == 12)
-        return field_expr_kernel_config<2, 12>(
+    if (num_reads == 2 && blocks == 12 && field_u32_limbs == 8)
+        return field_expr_kernel_config<2, 12, 8>(
             max_grid_blocks, block_threads, local_bytes_per_thread
         );
-    if (num_reads == 1 && blocks == 8)
-        return field_expr_kernel_config<1, 8>(
+    if (num_reads == 2 && blocks == 12 && field_u32_limbs == 12)
+        return field_expr_kernel_config<2, 12, 12>(
             max_grid_blocks, block_threads, local_bytes_per_thread
         );
-    if (num_reads == 1 && blocks == 12)
-        return field_expr_kernel_config<1, 12>(
+    if (num_reads == 2 && blocks == 18 && field_u32_limbs == 12)
+        return field_expr_kernel_config<2, 18, 12>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
+        );
+    if (num_reads == 1 && blocks == 8 && field_u32_limbs == 8)
+        return field_expr_kernel_config<1, 8, 8>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
+        );
+    if (num_reads == 1 && blocks == 12 && field_u32_limbs == 8)
+        return field_expr_kernel_config<1, 12, 8>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
+        );
+    if (num_reads == 1 && blocks == 12 && field_u32_limbs == 12)
+        return field_expr_kernel_config<1, 12, 12>(
+            max_grid_blocks, block_threads, local_bytes_per_thread
+        );
+    if (num_reads == 1 && blocks == 18 && field_u32_limbs == 12)
+        return field_expr_kernel_config<1, 18, 12>(
             max_grid_blocks, block_threads, local_bytes_per_thread
         );
     return cudaErrorInvalidValue;
 }
 
-template <size_t NUM_READS, size_t BLOCKS>
+template <size_t NUM_READS, size_t BLOCKS, uint32_t K>
 static int launch_field_expr_replay(
     Fp *trace,
     size_t height,
@@ -1031,11 +1046,11 @@ static int launch_field_expr_replay(
         block_threads > 1024) {
         return cudaErrorInvalidValue;
     }
-    validate_field_expr_replay<NUM_READS, BLOCKS><<<1, 1, 0, stream>>>(
+    validate_field_expr_replay<NUM_READS, BLOCKS, K><<<1, 1, 0, stream>>>(
         height, width, projection_len, blob, blob_words, aux_words, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    field_expr_replay_tracegen<NUM_READS, BLOCKS>
+    field_expr_replay_tracegen<NUM_READS, BLOCKS, K>
         <<<static_cast<uint32_t>(grid_blocks),
            static_cast<uint32_t>(block_threads),
            0,
@@ -1073,6 +1088,7 @@ extern "C" int _field_expr_replay_tracegen(
     size_t range_bins,
     uint32_t *scratch,
     size_t scratch_words,
+    size_t field_u32_limbs,
     size_t aux_words,
     size_t grid_blocks,
     size_t block_threads,
@@ -1081,38 +1097,62 @@ extern "C" int _field_expr_replay_tracegen(
     uint32_t *error,
     cudaStream_t stream
 ) {
-    if (num_reads == 2 && blocks == 4)
-        return launch_field_expr_replay<2, 4>(
+    if (num_reads == 2 && blocks == 4 && field_u32_limbs == 8)
+        return launch_field_expr_replay<2, 4, 8>(
             trace, height, width, projection, projection_len, blob, blob_words,
             range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
             block_threads, pointer_max_bits, timestamp_max_bits, error, stream
         );
-    if (num_reads == 2 && blocks == 6)
-        return launch_field_expr_replay<2, 6>(
+    if (num_reads == 2 && blocks == 6 && field_u32_limbs == 12)
+        return launch_field_expr_replay<2, 6, 12>(
             trace, height, width, projection, projection_len, blob, blob_words,
             range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
             block_threads, pointer_max_bits, timestamp_max_bits, error, stream
         );
-    if (num_reads == 2 && blocks == 8)
-        return launch_field_expr_replay<2, 8>(
+    if (num_reads == 2 && blocks == 8 && field_u32_limbs == 8)
+        return launch_field_expr_replay<2, 8, 8>(
             trace, height, width, projection, projection_len, blob, blob_words,
             range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
             block_threads, pointer_max_bits, timestamp_max_bits, error, stream
         );
-    if (num_reads == 2 && blocks == 12)
-        return launch_field_expr_replay<2, 12>(
+    if (num_reads == 2 && blocks == 12 && field_u32_limbs == 8)
+        return launch_field_expr_replay<2, 12, 8>(
             trace, height, width, projection, projection_len, blob, blob_words,
             range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
             block_threads, pointer_max_bits, timestamp_max_bits, error, stream
         );
-    if (num_reads == 1 && blocks == 8)
-        return launch_field_expr_replay<1, 8>(
+    if (num_reads == 2 && blocks == 12 && field_u32_limbs == 12)
+        return launch_field_expr_replay<2, 12, 12>(
             trace, height, width, projection, projection_len, blob, blob_words,
             range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
             block_threads, pointer_max_bits, timestamp_max_bits, error, stream
         );
-    if (num_reads == 1 && blocks == 12)
-        return launch_field_expr_replay<1, 12>(
+    if (num_reads == 2 && blocks == 18 && field_u32_limbs == 12)
+        return launch_field_expr_replay<2, 18, 12>(
+            trace, height, width, projection, projection_len, blob, blob_words,
+            range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
+            block_threads, pointer_max_bits, timestamp_max_bits, error, stream
+        );
+    if (num_reads == 1 && blocks == 8 && field_u32_limbs == 8)
+        return launch_field_expr_replay<1, 8, 8>(
+            trace, height, width, projection, projection_len, blob, blob_words,
+            range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
+            block_threads, pointer_max_bits, timestamp_max_bits, error, stream
+        );
+    if (num_reads == 1 && blocks == 12 && field_u32_limbs == 8)
+        return launch_field_expr_replay<1, 12, 8>(
+            trace, height, width, projection, projection_len, blob, blob_words,
+            range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
+            block_threads, pointer_max_bits, timestamp_max_bits, error, stream
+        );
+    if (num_reads == 1 && blocks == 12 && field_u32_limbs == 12)
+        return launch_field_expr_replay<1, 12, 12>(
+            trace, height, width, projection, projection_len, blob, blob_words,
+            range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
+            block_threads, pointer_max_bits, timestamp_max_bits, error, stream
+        );
+    if (num_reads == 1 && blocks == 18 && field_u32_limbs == 12)
+        return launch_field_expr_replay<1, 18, 12>(
             trace, height, width, projection, projection_len, blob, blob_words,
             range_delta, range_bins, scratch, scratch_words, aux_words, grid_blocks,
             block_threads, pointer_max_bits, timestamp_max_bits, error, stream
