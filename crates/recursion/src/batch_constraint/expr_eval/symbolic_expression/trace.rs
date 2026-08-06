@@ -125,7 +125,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                     })
                     .unwrap();
 
-                let log_height = trace_vdata.log_height;
+                let log_height = trace_vdata.log_height();
                 let (n_abs, is_n_neg) = if log_height < l_skip {
                     (l_skip - log_height, 1)
                 } else {
@@ -810,7 +810,7 @@ pub(in crate::batch_constraint) mod cuda {
                         .cpu
                         .trace_vdata
                         .iter()
-                        .map(|v| v.as_ref().map_or(0, |td| td.log_height))
+                        .map(|v| v.as_ref().map_or(0, |td| td.log_height()))
                 })
                 .collect::<Vec<_>>()
                 .to_device_on(device_ctx)

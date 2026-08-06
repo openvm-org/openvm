@@ -6,7 +6,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use super::PhantomCols;
 use crate::{
     arch::{Postflight, PostflightError},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 
 /// Generates the phantom trace directly from immutable preflight history.
@@ -18,7 +18,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(SystemOpcode::PHANTOM.global_opcode());
     let width = PhantomCols::<F>::width();
-    let height = next_power_of_two_or_zero(steps.len());
+    let height = padded_trace_height(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
     for (row_index, &step) in steps.iter().enumerate() {

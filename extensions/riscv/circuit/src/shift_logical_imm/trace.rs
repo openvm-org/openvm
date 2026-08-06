@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError, BLOCK_FE_WIDTH},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::LocalOpcode;
@@ -30,7 +30,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .sum();
     let adapter_width = Rv64BaseAluImmU16AdapterCols::<F>::width();
     let width = adapter_width + ShiftLogicalImmCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
-    let height = next_power_of_two_or_zero(rows_used);
+    let height = padded_trace_height(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
     let mut row_index = 0;
@@ -100,7 +100,7 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
     let adapter_width = Rv64BaseAluWImmU16AdapterCols::<F>::width();
     let width =
         adapter_width + ShiftLogicalImmCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
-    let height = next_power_of_two_or_zero(rows_used);
+    let height = padded_trace_height(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
     let adapter = Rv64BaseAluWImmU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 

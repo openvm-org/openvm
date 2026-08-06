@@ -14,6 +14,41 @@ pub const fn next_power_of_two_or_zero(n: usize) -> usize {
     }
 }
 
+/// Chunk granularity floor for [padded_trace_height]: committed heights are always a multiple of
+/// `2^MIN_LOG_TRACE_GRANULARITY` (or a smaller power of two). Must be at least the system
+/// `l_skip` of every proving configuration the trace is committed under (app configs use
+/// `l_skip = 4`).
+pub const MIN_LOG_TRACE_GRANULARITY: usize = 4;
+
+/// Bound on the number of stacking chunks per column produced by [padded_trace_height]: the
+/// committed height has at most `MAX_LOG_TRACE_CHUNKS` set bits, so the relative padding waste is
+/// below `2^-MAX_LOG_TRACE_CHUNKS`.
+pub const MAX_LOG_TRACE_CHUNKS: usize = 3;
+
+/// Return the committed trace height for `n` used rows under de-padded (chunked) stacking: `n`
+/// rounded up to a multiple of `2^max(MIN_LOG_TRACE_GRANULARITY, ceil(log2 n) -
+/// MAX_LOG_TRACE_CHUNKS)`, or the next power of two when `n <= 2^MIN_LOG_TRACE_GRANULARITY`
+/// (heights below `2^l_skip` must be powers of two). Returns 0 for `n == 0`.
+///
+/// Only valid for chips whose padding rows are all-zero (constraints and interaction counts
+/// selector-gated): the proof system treats the rows beyond the committed height as virtual
+/// zeros of the enclosing power-of-two cube. Chips with content-bearing padding rows must keep
+/// [next_power_of_two_or_zero] or fill rows up to this height explicitly.
+pub const fn padded_trace_height(n: usize) -> usize {
+    if n == 0 {
+        return 0;
+    }
+    if n <= (1 << MIN_LOG_TRACE_GRANULARITY) {
+        return n.next_power_of_two();
+    }
+    let ceil_log = usize::BITS as usize - (n - 1).leading_zeros() as usize;
+    let mut log_g = ceil_log - MAX_LOG_TRACE_CHUNKS;
+    if log_g < MIN_LOG_TRACE_GRANULARITY {
+        log_g = MIN_LOG_TRACE_GRANULARITY;
+    }
+    n.div_ceil(1 << log_g) << log_g
+}
+
 pub fn not<F: PrimeCharacteristicRing>(a: impl Into<F>) -> F {
     F::ONE - a.into()
 }

@@ -179,7 +179,7 @@ impl ProofShapeModule {
                 if let Some(pdata) = avk.preprocessed_data.as_ref() {
                     ts.observe_commit(pdata.commit);
                 } else {
-                    ts.observe(F::from_usize(trace_vdata.log_height));
+                    ts.observe(F::from_usize(trace_vdata.log_height()));
                 }
                 debug_assert_eq!(avk.num_cached_mains(), trace_vdata.cached_commitments.len());
                 if !pvs.is_empty() {
@@ -202,7 +202,7 @@ impl ProofShapeModule {
             .enumerate()
             .filter_map(|(air_id, data)| data.map(|data| (air_id, data)))
             .collect();
-        sorted_trace_vdata.sort_by_key(|(air_idx, data)| (Reverse(data.log_height), *air_idx));
+        sorted_trace_vdata.sort_by_key(|(air_idx, data)| (Reverse(data.log_height()), *air_idx));
 
         let n_max = proof
             .trace_vdata
@@ -210,7 +210,7 @@ impl ProofShapeModule {
             .flat_map(|datum| {
                 datum
                     .as_ref()
-                    .map(|datum| datum.log_height.saturating_sub(l_skip))
+                    .map(|datum| datum.log_height().saturating_sub(l_skip))
             })
             .max()
             .unwrap();

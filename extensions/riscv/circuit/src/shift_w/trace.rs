@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::{ShiftOpcode, ShiftWOpcode};
@@ -30,7 +30,7 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
         .sum();
     let adapter_width = Rv64BaseAluWRegU16AdapterCols::<F>::width();
     let width = adapter_width + ShiftLogicalCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
-    let height = next_power_of_two_or_zero(rows_used);
+    let height = padded_trace_height(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
     let adapter = Rv64BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 
@@ -123,7 +123,7 @@ pub fn generate_right_arithmetic_trace_from_postflight<F: PrimeField32>(
     let adapter_width = Rv64BaseAluWRegU16AdapterCols::<F>::width();
     let width =
         adapter_width + ShiftRightArithmeticCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
-    let height = next_power_of_two_or_zero(rows_used);
+    let height = padded_trace_height(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
     let adapter = Rv64BaseAluWRegU16AdapterFiller::new(chip.inner.range_checker_chip.clone());
 

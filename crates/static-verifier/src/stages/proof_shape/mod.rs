@@ -16,7 +16,7 @@ pub fn log_heights_per_air_from_proof(proof: &Proof<RootConfig>) -> Vec<usize> {
         .map(|(air_id, tv)| {
             tv.as_ref()
                 .unwrap_or_else(|| panic!("missing trace_vdata for air_id {air_id}"))
-                .log_height
+                .log_height()
         })
         .collect()
 }

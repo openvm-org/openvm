@@ -5,7 +5,7 @@ pub mod test_utils;
 
 use std::mem::size_of_val;
 
-pub use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+pub use openvm_circuit_primitives::utils::{next_power_of_two_or_zero, padded_trace_height};
 use openvm_stark_backend::p3_field::PrimeField32;
 #[cfg(any(test, feature = "test-utils"))]
 pub use stark_utils::*;

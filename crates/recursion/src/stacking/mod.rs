@@ -430,7 +430,7 @@ mod cuda_tracegen {
                     let stark_vk = &child_vk.cpu.inner.per_air[*air_idx];
                     let trace_widths = &stark_vk.params.width;
                     let need_rot = stark_vk.params.need_rot as u32;
-                    let log_height = vdata.log_height as u32;
+                    let log_height = vdata.log_height() as u32;
                     // IMPORTANT: This must match CPU `get_stacked_slice_data`, which stacks ONLY
                     // the common-main columns here (cached mains are handled as separate commits).
                     let common_width = trace_widths.common_main as u32;

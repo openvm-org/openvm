@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::MulOpcode;
@@ -24,7 +24,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let adapter_width = Rv64MultAdapterCols::<F>::width();
     let width = adapter_width
         + MultiplicationCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
-    let height = next_power_of_two_or_zero(rows_used);
+    let height = padded_trace_height(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
     fill_trace_rows(&mut trace, 0, postflight.steps(opcode), |row, step| {

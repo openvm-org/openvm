@@ -1,4 +1,4 @@
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives::utils::{next_power_of_two_or_zero, padded_trace_height};
 use openvm_instructions::{exe::VmExe, VM_DIGEST_WIDTH};
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, proof::Proof, prover::ProvingContext, Com, StarkEngine,
@@ -421,9 +421,10 @@ fn validate_metered_estimates<E, VB>(
             continue;
         }
 
-        // Check that estimated_padded exactly matches realized
+        // Check that estimated_padded exactly matches realized. De-padded chips commit
+        // padded_trace_height(rows) instead of the full power of two.
         assert!(
-            estimated_padded == realized,
+            estimated_padded == realized || padded_trace_height(estimated) == realized,
             "Metered estimation mismatch for AIR {} ({}): estimated {} (padded {}) != realized {} \
              (segment {})",
             air_id,

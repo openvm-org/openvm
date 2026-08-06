@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{Postflight, PostflightError, *},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -283,7 +283,7 @@ pub(crate) fn generate_trace_from_postflight<
     let steps = postflight.steps(load_opcode::<LOAD_WIDTH>().global_opcode());
     let adapter_width = Rv64LoadMultiByteAdapterCols::<F>::width();
     let width = adapter_width + LoadCoreCols::<F, NUM_OVERLAP_CELLS>::width();
-    let height = next_power_of_two_or_zero(steps.len());
+    let height = padded_trace_height(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {

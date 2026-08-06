@@ -160,7 +160,7 @@ impl RowMajorChip<F> for EqNsTraceGenerator {
             let mut num_n_lift_con = vec![0; preflights[pidx].proof_shape.n_max + 1];
             for (air_idx, vdata) in preflights[pidx].proof_shape.sorted_trace_vdata.iter() {
                 let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
-                let n_lift = vdata.log_height.saturating_sub(l_skip);
+                let n_lift = vdata.log_height().saturating_sub(l_skip);
                 num_n_lift_con[n_lift] += 1;
                 if num_interactions > 0 {
                     num_n_lift_int[n_lift] += num_interactions;

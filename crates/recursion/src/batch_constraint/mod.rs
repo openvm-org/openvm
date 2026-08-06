@@ -547,7 +547,7 @@ impl BatchConstraintBlob {
                 let constraints = &vk.symbolic_constraints.constraints;
                 let mut expr_evals =
                     vec![EF::ZERO; constraints.nodes.len() + vk.unused_variables.len()];
-                let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
+                let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height();
 
                 for (node_idx, node) in constraints.nodes.iter().enumerate() {
                     match node {
@@ -570,16 +570,16 @@ impl BatchConstraintBlob {
                             Entry::Challenge => unreachable!(),
                         },
                         SymbolicExpressionNode::IsFirstRow => {
-                            expr_evals[node_idx] = is_first_row_by_log_height[vdata.log_height];
+                            expr_evals[node_idx] = is_first_row_by_log_height[vdata.log_height()];
                             selector_counts[log_height].first += 1;
                         }
                         SymbolicExpressionNode::IsLastRow => {
-                            expr_evals[node_idx] = is_last_row_by_log_height[vdata.log_height];
+                            expr_evals[node_idx] = is_last_row_by_log_height[vdata.log_height()];
                             selector_counts[log_height].last += 1;
                         }
                         SymbolicExpressionNode::IsTransition => {
                             expr_evals[node_idx] =
-                                EF::ONE - is_last_row_by_log_height[vdata.log_height];
+                                EF::ONE - is_last_row_by_log_height[vdata.log_height()];
                             selector_counts[log_height].transition += 1;
                         }
                         SymbolicExpressionNode::Constant(val) => {

@@ -67,7 +67,7 @@ impl InteractionsFoldingBlob {
 
             let vdata = &preflight.proof_shape.sorted_trace_vdata;
             for (sort_idx, (air_idx, vdata)) in vdata.iter().enumerate() {
-                let n = vdata.log_height as isize - l_skip as isize;
+                let n = vdata.log_height() as isize - l_skip as isize;
                 let inters = &interactions[*air_idx];
                 let mut num_sum = EF::ZERO;
                 let mut denom_sum = EF::ZERO;
@@ -382,7 +382,7 @@ pub(in crate::batch_constraint) mod cuda {
                 let mut proof_interaction_records = vec![];
 
                 for (air_idx, vdata) in vdata {
-                    let n = vdata.log_height as isize - l_skip as isize;
+                    let n = vdata.log_height() as isize - l_skip as isize;
                     let inters = &interactions[*air_idx];
 
                     let mut num_sum = EF::ZERO;

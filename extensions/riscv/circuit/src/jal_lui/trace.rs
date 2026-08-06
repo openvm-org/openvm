@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, JAL, LUI};
@@ -26,7 +26,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         .sum();
     let adapter_width = Rv64CondRdWriteAdapterCols::<F>::width();
     let width = adapter_width + Rv64JalLuiCoreCols::<F>::width();
-    let height = next_power_of_two_or_zero(rows_used);
+    let height = padded_trace_height(rows_used);
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
     let mut row_index = 0;

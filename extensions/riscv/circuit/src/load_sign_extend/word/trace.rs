@@ -1,6 +1,6 @@
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
-    utils::next_power_of_two_or_zero,
+    utils::padded_trace_height,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADW;
@@ -19,7 +19,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     let steps = postflight.steps(LOADW.global_opcode());
     let width = Rv64LoadMultiByteAdapterCols::<F>::width()
         + LoadSignExtendCoreCols::<F, LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS>::width();
-    let height = next_power_of_two_or_zero(steps.len());
+    let height = padded_trace_height(steps.len());
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {
