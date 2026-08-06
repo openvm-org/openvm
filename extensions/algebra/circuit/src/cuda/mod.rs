@@ -19,6 +19,9 @@ use openvm_stark_backend::prover::AirProvingContext;
 use crate::modular_chip::ModularIsEqualCoreCols;
 
 mod cuda_abi;
+/// Exposed for the `EC_MUL` chip, whose projection shape the vec-heap gather cannot describe
+/// and whose crate has no CUDA build of its own.
+pub use cuda_abi::gather_ec_mul;
 pub mod field_expr;
 pub(crate) mod modular_addsub;
 pub(crate) mod vec_heap;
