@@ -12,3 +12,7 @@ license.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+openvm-stark-backend = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true }

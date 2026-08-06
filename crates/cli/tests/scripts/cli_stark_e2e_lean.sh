@@ -5,6 +5,8 @@ temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
 
 proof_path="$temp_dir/fibonacci.stark.proof"
+non_riscv_proof_path="$temp_dir/fibonacci-non-riscv.stark.proof"
+non_riscv_config="$temp_dir/openvm-non-riscv.toml"
 
 cargo openvm keygen \
   --manifest-path tests/programs/multi/Cargo.toml
@@ -24,3 +26,36 @@ output=$(cargo openvm verify stark \
 
 # ensure the Lean verifier actually ran rather than the flag being ignored
 grep -q "Lean verifier accepted the proof" <<<"$output"
+
+# A proof generated with an additional VM extension is still a valid STARK
+# proof, but it is outside the canonical RISC-V configuration formalized in Lean.
+cp tests/programs/multi/openvm.toml "$non_riscv_config"
+printf '\n[app_vm_config.keccak]\n' >> "$non_riscv_config"
+
+cargo openvm keygen \
+  --manifest-path tests/programs/multi/Cargo.toml \
+  --config "$non_riscv_config"
+
+cargo openvm prove stark \
+  --manifest-path tests/programs/multi/Cargo.toml \
+  --example fibonacci \
+  --config "$non_riscv_config" \
+  --proof "$non_riscv_proof_path"
+
+# Establish that rejection below comes from the Lean verifier's config scope,
+# not from ordinary STARK verification or a malformed proof.
+cargo openvm verify stark \
+  --manifest-path tests/programs/multi/Cargo.toml \
+  --example fibonacci \
+  --proof "$non_riscv_proof_path"
+
+if output=$(cargo openvm verify stark \
+  --manifest-path tests/programs/multi/Cargo.toml \
+  --example fibonacci \
+  --proof "$non_riscv_proof_path" \
+  --lean-verified 2>&1); then
+  echo "Lean verification unexpectedly accepted a non-RISC-V VM config" >&2
+  exit 1
+fi
+printf '%s\n' "$output" >&2
+grep -q "baseline does not match the canonical riscv32 pipeline" <<<"$output"

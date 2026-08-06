@@ -5040,6 +5040,7 @@ name = "openvm-fv-verifier"
 version = "2.0.1"
 dependencies = [
  "openvm-stark-backend",
+ "openvm-stark-sdk",
  "thiserror 1.0.69",
 ]
 

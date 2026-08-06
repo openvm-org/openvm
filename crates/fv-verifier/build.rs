@@ -1,8 +1,7 @@
 // Build script for the vendored Lean Swirl verifier (see README.md).
 // Compiles the Lean-generated C sources under csrc/ into the
-// `swirl_verify` executable using `leanc` from the pinned Lean
-// toolchain, and bakes its path into the crate as the SWIRL_VERIFY_BIN
-// env var.
+// `swirl_verify` and `swirl_dump_proof` executables using `leanc` from
+// the pinned Lean toolchain. The dump tool is placed next to the verifier.
 
 use std::{
     env,
@@ -20,8 +19,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=SWIRL_LEANC");
     println!("cargo:rerun-if-changed=csrc");
 
-    // Escape hatch: point at an externally built verifier and skip the
-    // C build entirely.
+    // Escape hatch: point at externally built sibling executables and
+    // skip the vendored C build entirely.
     if let Ok(path) = env::var("SWIRL_VERIFY_BIN") {
         if !path.is_empty() {
             println!("cargo:rustc-env=SWIRL_VERIFY_BIN={path}");
@@ -84,8 +83,32 @@ fn main() {
         .collect();
     link_args.extend(obj_strs.iter().map(String::as_str));
     run(leanc(&link_args));
-
     println!("cargo:rustc-env=SWIRL_VERIFY_BIN={}", bin.display());
+
+    let dump_main = csrc.join("Tools/SwirlDumpProof.c");
+    let dump_obj = out_dir.join("dump_Tools_SwirlDumpProof.o");
+    run(leanc(&[
+        "-c",
+        "-O3",
+        "-DNDEBUG",
+        "-fwrapv",
+        "-o",
+        dump_obj.to_str().unwrap(),
+        dump_main.to_str().unwrap(),
+    ]));
+    let raw_obj = out_dir.join("Swirl_Protocol_Noninteractive_Wire_Raw.o");
+    assert!(
+        raw_obj.exists(),
+        "swirl_dump_proof needs {}",
+        raw_obj.display()
+    );
+    let dump_bin = out_dir.join("swirl_dump_proof");
+    run(leanc(&[
+        "-o",
+        dump_bin.to_str().unwrap(),
+        dump_obj.to_str().unwrap(),
+        raw_obj.to_str().unwrap(),
+    ]));
 }
 
 /// Locate `leanc`: `SWIRL_LEANC` env override, then the pinned toolchain
@@ -131,7 +154,7 @@ fn find_leanc() -> Box<dyn Fn(&[&str]) -> Command + Sync> {
     }
     panic!(
         "building `openvm-fv-verifier` needs `leanc` (Lean toolchain \
-         {LEAN_TOOLCHAIN}). Install elan (https://github.com/leanprover/elan) \
+        {LEAN_TOOLCHAIN}). Install elan (https://github.com/leanprover/elan) \
          and run `elan toolchain install {LEAN_TOOLCHAIN}`, set SWIRL_LEANC \
          to a leanc binary, or set SWIRL_VERIFY_BIN to a prebuilt verifier."
     );
@@ -142,7 +165,11 @@ fn collect_c_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.unwrap().path();
         if path.is_dir() {
             collect_c_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "c") {
+        } else if path.extension().is_some_and(|e| e == "c")
+            && path
+                .file_name()
+                .is_none_or(|name| name != "SwirlDumpProof.c")
+        {
             out.push(path);
         }
     }

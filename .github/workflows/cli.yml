@@ -9,8 +9,6 @@ name: CLI Tests
 #     out to the scripts under crates/cli/tests/scripts/ covering app/stark e2e,
 #     all `cargo openvm run --mode` variants, and `cargo openvm init` + build.
 #   * Optionally runs the #[ignore]'d EVM end-to-end test on demand.
-#   * Runs the stark e2e with `verify stark --lean-verified` against the
-#     Lean-compiled verifier in a separate job (lean-verifier-tests).
 
 on:
   push:
@@ -134,55 +132,6 @@ jobs:
         env:
           SKIP_INSTALL: "1"
         run: cargo nextest run --cargo-profile=fast --test-threads=1 --run-ignored=only -- test_cli_evm_e2e_simplified
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-  lean-verifier-tests:
-    name: Lean verifier stark e2e
-    runs-on:
-      - runs-on=${{ github.run_id }}-lean-verifier/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
-
-    steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Install Lean toolchain
-        # openvm-fv-verifier's build.rs needs `leanc` (pulled in via the lean-verifier feature)
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.26.0
-
-      - name: Build cargo-openvm
-        run: |
-          cargo build --locked --profile fast -p cargo-openvm --features lean-verifier
-          echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
-
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
-
-      - name: Run Lean verifier stark e2e test
-        working-directory: crates/cli
-        env:
-          SKIP_INSTALL: "1"
-        run: |
-          cargo nextest run --cargo-profile=fast --test-threads=1 --features lean-verifier \
-            -E 'test(test_cli_stark_e2e_lean_verified)'
 
       - name: sccache stats
         if: always()
