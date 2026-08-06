@@ -455,7 +455,7 @@ with user input-output.
 | ---------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HINT_STORED_RV64 | `_,b,_,1,2`     | `[r64{0}(b):8]_2 = next 8 bytes from hint stream`. Only valid if next 8 values in hint stream are bytes and `r64{0}(b)` is aligned to an 8-byte boundary.                                                                          |
 | HINT_BUFFER_RV64 | `a,b,_,1,2`     | `[r64{0}(b):8 * l]_2 = next 8 * l bytes from hint stream` where `l = r64{0}(a)`. Only valid if next `8 * l` values in hint stream are bytes, `l` is non-zero and `<=` `MAX_HINT_BUFFER_DWORDS` (1,023 dwords ≈ 8KB), and `r64{0}(b)` is aligned to an 8-byte boundary. |
-| REVEAL_RV64      | `a,b,c,1,3,1,g` | Dedicated instruction that writes 8 bytes from register `a` to the 8-byte-aligned address `b + sign_extend(c)` in the user IO address space `3`.                                |
+| REVEAL_RV64      | `a,b,c,1,3,1,g` | `[r64{c,g}(b):8]_3 = [a:8]_1`. The effective address must be 8-byte aligned.                                                                                                        |
 
 > **Note:** The `MAX_HINT_BUFFER_DWORDS` bound on `HINT_BUFFER_RV64` is enforced by both the executor and AIR constraints. The SDK's `hint_buffer_chunked` function automatically splits larger reads into multiple `HINT_BUFFER_RV64` instructions.
 
