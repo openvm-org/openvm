@@ -1,3 +1,4 @@
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use hex_literal::hex;
 #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use lazy_static::lazy_static;

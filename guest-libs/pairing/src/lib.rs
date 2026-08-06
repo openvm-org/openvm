@@ -14,7 +14,7 @@ pub mod bls12_381;
 #[cfg(feature = "bn254")]
 pub mod bn254;
 
-pub use openvm_pairing_guest::pairing::PairingCheck;
+pub use openvm_pairing_guest::{pairing::PairingCheck, projective_to_affine};
 
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[cfg_attr(feature = "rvr-checkpoint-tests", inline(never))]
