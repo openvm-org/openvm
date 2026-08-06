@@ -1,12 +1,12 @@
 //! ECC extension for rvr-openvm.
 //!
 //! Provides IR nodes and extension trait implementation for the short Weierstrass
-//! elliptic curve opcodes (EC_ADD_NE, EC_DOUBLE + setups).
+//! elliptic curve opcodes (SW_EC_ADD_PROJ, SW_EC_DOUBLE_PROJ + setups).
 //!
 //! Modular arithmetic opcodes are handled separately by the algebra extension.
 
 use openvm_ecc_transpiler::WeierstrassOpcode::{
-    self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
+    self, SETUP_SW_EC_ADD_PROJ, SETUP_SW_EC_DOUBLE_PROJ, SW_EC_ADD_PROJ, SW_EC_DOUBLE_PROJ,
 };
 use openvm_instructions::{
     riscv::{NUM_REGISTERS, REGISTER_BYTES},
@@ -18,9 +18,10 @@ use rvr_openvm_lift::{
 };
 use strum::EnumCount;
 
-// An ECC addition can read two independent 96-byte points and write one.
+// An ECC addition can read two independent projective points and write one. The largest
+// point is BLS12-381 in projective form (3 x 48 = 144 bytes).
 const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
-    3 * max_main_memory_pages_for_contiguous_range(96);
+    3 * max_main_memory_pages_for_contiguous_range(144);
 
 fn decode_reg(value: u32) -> Variable {
     decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
@@ -66,8 +67,8 @@ impl KnownCurve {
 
     fn point_dwords(self) -> u32 {
         match self {
-            Self::K256 | Self::P256 | Self::Bn254 => 8,
-            Self::Bls12381 => 12,
+            Self::K256 | Self::P256 | Self::Bn254 => 12,
+            Self::Bls12381 => 18,
         }
     }
 
@@ -84,9 +85,9 @@ impl KnownCurve {
 
 // ── IR nodes ──────────────────────────────────────────────────────────────────
 
-/// IR node for EC point addition (non-equal x-coordinates).
+/// IR node for EC point addition (complete projective formula).
 #[derive(Debug, Clone)]
-pub struct EcAddNeInstr {
+pub struct EcAddProjInstr {
     pub rd_reg: Variable,
     pub rs1_reg: Variable,
     pub rs2_reg: Variable,
@@ -94,9 +95,9 @@ pub struct EcAddNeInstr {
     pub is_setup: bool,
 }
 
-impl ExtInstr for EcAddNeInstr {
+impl ExtInstr for EcAddProjInstr {
     fn opname(&self) -> &str {
-        "ec_add_ne"
+        "ec_add_proj"
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
@@ -112,7 +113,7 @@ impl ExtInstr for EcAddNeInstr {
         }
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
-        let name = format!("rvr_ext_{setup_prefix}ec_add_ne_{suffix}");
+        let name = format!("rvr_ext_{setup_prefix}ec_add_proj_{suffix}");
         if self.is_setup {
             ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2]);
         } else {
@@ -138,18 +139,18 @@ impl ExtInstr for EcAddNeInstr {
     }
 }
 
-/// IR node for EC point doubling.
+/// IR node for EC point doubling (complete projective formula).
 #[derive(Debug, Clone)]
-pub struct EcDoubleInstr {
+pub struct EcDoubleProjInstr {
     pub rd_reg: Variable,
     pub rs1_reg: Variable,
     curve: KnownCurve,
     pub is_setup: bool,
 }
 
-impl ExtInstr for EcDoubleInstr {
+impl ExtInstr for EcDoubleProjInstr {
     fn opname(&self) -> &str {
-        "ec_double"
+        "ec_double_proj"
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
@@ -164,7 +165,7 @@ impl ExtInstr for EcDoubleInstr {
         }
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
-        let name = format!("rvr_ext_{setup_prefix}ec_double_{suffix}");
+        let name = format!("rvr_ext_{setup_prefix}ec_double_proj_{suffix}");
         if self.is_setup {
             ctx.emit_checked_call(&name, &["state", &rd, &rs1]);
         } else {
@@ -201,7 +202,7 @@ pub struct CurveInfo {
     curve: Option<KnownCurve>,
 }
 
-/// The ECC extension: handles Weierstrass EC opcodes (EC_ADD_NE, EC_DOUBLE + setups).
+/// The ECC extension: handles Weierstrass EC opcodes (SW_EC_ADD_PROJ, SW_EC_DOUBLE_PROJ + setups).
 pub struct EccExtension {
     curves: Vec<CurveInfo>,
 }
@@ -257,21 +258,21 @@ impl RvrExtension for EccExtension {
 
         let local_opcode = WeierstrassOpcode::from_repr(local_op)?;
         let instr: Box<dyn ExtInstr> = match local_opcode {
-            EC_ADD_NE | SETUP_EC_ADD_NE => {
+            SW_EC_ADD_PROJ | SETUP_SW_EC_ADD_PROJ => {
                 let rs2_reg = decode_reg(insn.c);
-                Box::new(EcAddNeInstr {
+                Box::new(EcAddProjInstr {
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     curve,
-                    is_setup: local_opcode == SETUP_EC_ADD_NE,
+                    is_setup: local_opcode == SETUP_SW_EC_ADD_PROJ,
                 })
             }
-            EC_DOUBLE | SETUP_EC_DOUBLE => Box::new(EcDoubleInstr {
+            SW_EC_DOUBLE_PROJ | SETUP_SW_EC_DOUBLE_PROJ => Box::new(EcDoubleProjInstr {
                 rd_reg,
                 rs1_reg,
                 curve,
-                is_setup: local_opcode == SETUP_EC_DOUBLE,
+                is_setup: local_opcode == SETUP_SW_EC_DOUBLE_PROJ,
             }),
         };
 
@@ -458,9 +459,9 @@ mod tests {
 
     #[test]
     fn add_preflight_matches_schedule_and_minimal_replay_values() {
-        for (curve, point_dwords) in [(KnownCurve::K256, 8), (KnownCurve::Bls12381, 12)] {
+        for (curve, point_dwords) in [(KnownCurve::K256, 12), (KnownCurve::Bls12381, 18)] {
             for is_setup in [false, true] {
-                let instruction = EcAddNeInstr {
+                let instruction = EcAddProjInstr {
                     rd_reg: Variable::new(1),
                     rs1_reg: Variable::new(2),
                     rs2_reg: Variable::new(3),
@@ -481,7 +482,7 @@ mod tests {
                     format!("timestamp_slots({})", 3 * point_dwords),
                 ];
                 let name = format!(
-                    "rvr_ext_{}ec_add_ne_{}",
+                    "rvr_ext_{}ec_add_proj_{}",
                     if is_setup { "setup_" } else { "" },
                     curve.c_suffix()
                 );
@@ -503,9 +504,9 @@ mod tests {
 
     #[test]
     fn double_preflight_matches_schedule_and_minimal_replay_values() {
-        for (curve, point_dwords) in [(KnownCurve::P256, 8), (KnownCurve::Bls12381, 12)] {
+        for (curve, point_dwords) in [(KnownCurve::P256, 12), (KnownCurve::Bls12381, 18)] {
             for is_setup in [false, true] {
-                let instruction = EcDoubleInstr {
+                let instruction = EcDoubleProjInstr {
                     rd_reg: Variable::new(1),
                     rs1_reg: Variable::new(2),
                     curve,
@@ -524,7 +525,7 @@ mod tests {
                     format!("timestamp_slots({})", 2 * point_dwords),
                 ];
                 let name = format!(
-                    "rvr_ext_{}ec_double_{}",
+                    "rvr_ext_{}ec_double_proj_{}",
                     if is_setup { "setup_" } else { "" },
                     curve.c_suffix()
                 );
@@ -548,7 +549,7 @@ mod tests {
 
     #[test]
     fn execution_modes_use_air_operand_order_without_preflight_data() {
-        let add = EcAddNeInstr {
+        let add = EcAddProjInstr {
             rd_reg: Variable::new(1),
             rs1_reg: Variable::new(2),
             rs2_reg: Variable::new(3),
@@ -566,11 +567,11 @@ mod tests {
                 "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
                 "trap",
                 "}",
-                "rvr_ext_ec_add_ne_k256(state, r1, r2, r3)",
+                "rvr_ext_ec_add_proj_k256(state, r1, r2, r3)",
             ]
         );
 
-        let double = EcDoubleInstr {
+        let double = EcDoubleProjInstr {
             rd_reg: Variable::new(1),
             rs1_reg: Variable::new(2),
             curve: KnownCurve::P256,
@@ -586,7 +587,7 @@ mod tests {
                 "if (unlikely(((r1 | r2) & 7ull) != 0ull)) {",
                 "trap",
                 "}",
-                "rvr_ext_ec_double_p256(state, r1, r2)",
+                "rvr_ext_ec_double_proj_p256(state, r1, r2)",
             ]
         );
     }
