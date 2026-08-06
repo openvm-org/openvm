@@ -26,6 +26,18 @@ pub mod merkle_tree {
             stream: cudaStream_t,
         ) -> i32;
 
+        fn _build_sparse_merkle_subtree(
+            d_data: *mut u8,
+            d_tree: *mut std::ffi::c_void,
+            d_labels: *const u32,
+            h_levels: *const usize,
+            base_height: usize,
+            tree_height: usize,
+            cell_type: u8,
+            d_zero_hash: *const std::ffi::c_void,
+            stream: cudaStream_t,
+        ) -> i32;
+
         fn _restore_merkle_subtree_path(
             d_in_out: *mut std::ffi::c_void,
             d_zero_hash: *mut std::ffi::c_void,
@@ -73,11 +85,42 @@ pub mod merkle_tree {
             subtree_layouts: *const u8,
             cell_types: *const u8,
             initial_data_ptrs: *const usize,
+            sparse_label_ptrs: *const usize,
+            sparse_level_ptrs: *const usize,
             d_poseidon2_raw_buffer: *mut std::ffi::c_void,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
             stream: cudaStream_t,
         ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn build_sparse_merkle_subtree<T>(
+        d_data: &DeviceBuffer<u8>,
+        d_tree: &DeviceBuffer<T>,
+        d_labels: &DeviceBuffer<u32>,
+        levels: &[[u32; 2]],
+        base_height: usize,
+        tree_height: usize,
+        cell_type: u8,
+        d_zero_hash: &DeviceBuffer<T>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        let levels = levels
+            .iter()
+            .flat_map(|&[start, count]| [start as usize, count as usize])
+            .collect::<Vec<_>>();
+        CudaError::from_result(_build_sparse_merkle_subtree(
+            d_data.as_mut_ptr(),
+            d_tree.as_mut_raw_ptr(),
+            d_labels.as_ptr(),
+            levels.as_ptr(),
+            base_height,
+            tree_height,
+            cell_type,
+            d_zero_hash.as_raw_ptr(),
+            stream,
+        ))
     }
 
     pub unsafe fn build_merkle_subtree<T>(
@@ -173,6 +216,8 @@ pub mod merkle_tree {
         subtree_layouts: &[u8],
         cell_types: &[u8],
         initial_data_ptrs: &[usize],
+        sparse_label_ptrs: &[usize],
+        sparse_level_ptrs: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
         device_ctx: &GpuDeviceCtx,
@@ -195,6 +240,8 @@ pub mod merkle_tree {
         let subtree_layouts = subtree_layouts.to_device_on(device_ctx).unwrap();
         let cell_types = cell_types.to_device_on(device_ctx).unwrap();
         let initial_data_ptrs = initial_data_ptrs.to_device_on(device_ctx).unwrap();
+        let sparse_label_ptrs = sparse_label_ptrs.to_device_on(device_ctx).unwrap();
+        let sparse_level_ptrs = sparse_level_ptrs.to_device_on(device_ctx).unwrap();
         let poseidon2_records = hasher_buffer.records();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
@@ -215,6 +262,8 @@ pub mod merkle_tree {
             subtree_layouts.as_ptr(),
             cell_types.as_ptr(),
             initial_data_ptrs.as_ptr(),
+            sparse_label_ptrs.as_ptr(),
+            sparse_level_ptrs.as_ptr(),
             poseidon2_records.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.

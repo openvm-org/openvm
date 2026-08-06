@@ -29,7 +29,7 @@ use tracing::instrument;
 use super::{
     boundary::BoundaryChipGPU,
     merkle_tree::{
-        touched_leaf_watermark, MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH,
+        initial_merkle_build, MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH,
     },
     GpuMemoryCellType, Poseidon2PeripheryChipGPU,
 };
@@ -208,9 +208,9 @@ impl MemoryInventoryGPU {
         // on-device. Execution and boundary kernels index the full address-space region, so the
         // device buffer is full-size and the skipped pages must read as zero. Replacing this
         // allocation requires sparse-aware CUDA execution kernels; the CPU sparse-snapshot path
-        // cannot safely be reused here. The Merkle build, however, is truncated at the
-        // touched-pages watermark: leaves above it are all-zero and are covered by precomputed
-        // zero hashes instead of being hashed (see `touched_leaf_watermark`).
+        // cannot safely be reused here. The Merkle build uses touched pages to choose either a
+        // dense prefix or page-dense sparse subtrees whose gaps are covered by precomputed zero
+        // hashes (see `initial_merkle_build`).
         let per_as: Vec<_> = initial_memory
             .get_memory()
             .iter()
@@ -227,6 +227,11 @@ impl MemoryInventoryGPU {
             .sum();
         let staging = self.upload_staging.ensure(total);
         let mut offset = 0usize;
+        let address_height = self
+            .merkle_tree
+            .mem_config()
+            .memory_dimensions()
+            .address_height;
         for (addr_sp, (raw_mem, runs)) in per_as.into_iter().enumerate() {
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
@@ -283,7 +288,7 @@ impl MemoryInventoryGPU {
             self.merkle_tree.build_async(
                 self.initial_memory[addr_sp].clone(),
                 addr_sp,
-                touched_leaf_watermark(initial_memory, addr_sp),
+                initial_merkle_build(initial_memory, addr_sp, address_height),
             );
         }
         self.boundary.initial_leaves = self
