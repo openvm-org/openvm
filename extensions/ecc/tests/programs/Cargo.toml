@@ -55,6 +55,10 @@ name = "ec"
 required-features = ["k256"]
 
 [[example]]
+name = "ec_mul"
+required-features = ["k256"]
+
+[[example]]
 name = "ec_nonzero_a"
 required-features = ["p256"]
 
