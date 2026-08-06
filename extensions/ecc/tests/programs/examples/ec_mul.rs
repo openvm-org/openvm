@@ -6,12 +6,22 @@
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{
+    weierstrass::{CachedMulTable, IntrinsicCurve},
+    CyclicGroup, Group,
+};
 use openvm_k256::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
 
 openvm::init!("openvm_init_ec_mul_k256.rs");
 
 openvm::entry!(main);
+
+/// Reference implementation: the windowed table, called directly.
+fn windowed_reference(scalar: Secp256k1Scalar) -> Secp256k1Point {
+    let base = [Secp256k1Point::GENERATOR];
+    let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&base, 4);
+    table.windowed_mul(&[scalar])
+}
 
 pub fn main() {
     let g = Secp256k1Point::GENERATOR;
@@ -27,7 +37,7 @@ pub fn main() {
         let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
         let via_chip = unsafe { g.mul_scalar_le_unchecked(&bytes) };
-        let expected = Secp256k1::msm(&[scalar.clone()], &[g.clone()]);
+        let expected = windowed_reference(scalar.clone());
 
         assert_eq!(via_chip, expected);
         assert_eq!(g.mul_scalar(&scalar), expected);
@@ -38,7 +48,7 @@ pub fn main() {
     let unreduced = Secp256k1Scalar::from_be_bytes_unchecked(&hex!(
         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364146"
     ));
-    let expected = Secp256k1::msm(&[Secp256k1Scalar::from_u64(5)], &[g.clone()]);
+    let expected = windowed_reference(Secp256k1Scalar::from_u64(5));
     assert_eq!(g.mul_scalar(&unreduced), expected);
 
     // `mul_scalar` also accepts the identity, which the ladder cannot handle for a nonzero scalar.
