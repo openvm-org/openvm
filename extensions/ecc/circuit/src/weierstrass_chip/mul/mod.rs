@@ -42,8 +42,12 @@ mod trace;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "cuda")]
+mod cuda;
 pub use air::*;
 pub use columns::*;
+#[cfg(feature = "cuda")]
+pub(crate) use cuda::*;
 pub use field_expr::*;
 use num_bigint::BigUint;
 use openvm_mod_circuit_builder::FieldExpressionProgram;

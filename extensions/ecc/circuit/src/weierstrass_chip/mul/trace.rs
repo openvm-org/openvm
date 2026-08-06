@@ -71,23 +71,52 @@ impl<F, const NUM_LIMBS: usize, const BLOCKS: usize> EcMulChip<F, NUM_LIMBS, BLO
     }
 }
 
-/// One postflight step's replayed values, before field encoding.
-struct EcMulTraceInput<const BLOCKS: usize> {
+/// One instruction's replayed values, before field encoding.
+///
+/// The layout is the ABI shared with the GPU gather kernel, so it is `repr(C)` with every `u32`
+/// field ahead of every `u16` array. That ordering leaves no interior padding, which lets both
+/// sides assert the same size; see [`ec_mul_trace_input_bytes`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EcMulTraceInput<const BLOCKS: usize> {
     from_pc: u32,
     from_timestamp: u32,
-    is_setup: bool,
+    /// Nonzero for `SETUP_EC_MUL`. An integer rather than a `bool` so the ABI is unambiguous.
+    is_setup: u32,
     /// `[rs1, rs2, rd]`, in the AIR's timestamp order.
     reg_ptrs: [u32; EC_MUL_REGISTER_READS],
     reg_vals: [u32; EC_MUL_REGISTER_READS],
     reg_prev_timestamps: [u32; EC_MUL_REGISTER_READS],
-    point_blocks: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
     point_prev_timestamps: [u32; BLOCKS],
-    scalar_blocks: [[u16; BLOCK_FE_WIDTH]; SCALAR_BLOCKS],
     scalar_prev_timestamps: [u32; SCALAR_BLOCKS],
+    write_prev_timestamps: [u32; BLOCKS],
+    point_blocks: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
+    scalar_blocks: [[u16; BLOCK_FE_WIDTH]; SCALAR_BLOCKS],
     write_blocks: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
     write_predecessors: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
-    write_prev_timestamps: [u32; BLOCKS],
 }
+
+#[cfg(feature = "cuda")]
+impl<const BLOCKS: usize> EcMulTraceInput<BLOCKS> {
+    /// The instruction's start timestamp, used to order projections gathered per opcode.
+    pub(crate) fn start_timestamp(&self) -> u32 {
+        self.from_timestamp
+    }
+}
+
+/// Byte size of [`EcMulTraceInput`], stated independently of the struct so a layout change fails to
+/// compile on both sides of the FFI rather than silently reinterpreting device memory.
+pub(crate) const fn ec_mul_trace_input_bytes(blocks: usize) -> usize {
+    let words = 3 + 3 * EC_MUL_REGISTER_READS + blocks + SCALAR_BLOCKS + blocks;
+    let cells = (blocks + SCALAR_BLOCKS + 2 * blocks) * BLOCK_FE_WIDTH;
+    4 * words + 2 * cells
+}
+
+const _: () = {
+    use crate::{ECC_BLOCKS_32, ECC_BLOCKS_48};
+    assert!(size_of::<EcMulTraceInput<ECC_BLOCKS_32>>() == ec_mul_trace_input_bytes(ECC_BLOCKS_32));
+    assert!(size_of::<EcMulTraceInput<ECC_BLOCKS_48>>() == ec_mul_trace_input_bytes(ECC_BLOCKS_48));
+};
 
 fn checked_u16_pointer(byte_pointer: u32, what: &str) -> Result<u32, PostflightError> {
     if byte_pointer & 1 != 0 {
@@ -213,17 +242,17 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     Ok(EcMulTraceInput {
         from_pc: postflight.pc(step),
         from_timestamp: postflight.timestamp(step),
-        is_setup,
+        is_setup: u32::from(is_setup),
         reg_ptrs,
         reg_vals,
         reg_prev_timestamps,
-        point_blocks,
         point_prev_timestamps,
-        scalar_blocks,
         scalar_prev_timestamps,
+        write_prev_timestamps,
+        point_blocks,
+        scalar_blocks,
         write_blocks,
         write_predecessors,
-        write_prev_timestamps,
     })
 }
 
@@ -271,7 +300,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         let bit = (scalar_bytes[bit_index / 8] >> (bit_index % 8)) & 1 == 1;
 
         let mut flags = vec![false; NUM_STEP_FLAGS];
-        if !input.is_setup {
+        if input.is_setup == 0 {
             flags[match (is_inf, bit) {
                 (false, false) => FLAG_DBL,
                 (false, true) => FLAG_DBL_ADD,
@@ -286,8 +315,9 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             header.is_compute = F::ONE;
             header.is_digest = F::ZERO;
             header.is_first_compute = if row_idx == 0 { F::ONE } else { F::ZERO };
-            header.is_setup = F::from_bool(input.is_setup);
-            header.is_ladder = F::from_bool(!input.is_setup && row_idx != 0);
+            let is_setup = input.is_setup != 0;
+            header.is_setup = F::from_bool(is_setup);
+            header.is_ladder = F::from_bool(!is_setup && row_idx != 0);
             header.row_idx = F::from_usize(row_idx);
 
             // scalar_acc holds the value before this step; the carries relate it to the next row's
@@ -296,7 +326,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             for (i, limb) in header.scalar_acc.iter_mut().enumerate() {
                 *limb = F::from_u8(acc_limbs.get(i).copied().unwrap_or(0));
             }
-            let mut carry = u16::from(bit && !input.is_setup);
+            let mut carry = u16::from(bit && input.is_setup == 0);
             for (i, out) in header.scalar_carry.iter_mut().enumerate() {
                 let doubled = u16::from(acc_limbs.get(i).copied().unwrap_or(0)) * 2 + carry;
                 carry = doubled >> 8;
@@ -309,7 +339,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             }
         }
 
-        let inputs = if input.is_setup {
+        let inputs = if input.is_setup != 0 {
             setup_row_inputs(expr.program())
         } else {
             vec![rx.clone(), ry.clone(), px.clone(), py.clone()]
@@ -339,7 +369,7 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         rx = vars.0;
         ry = vars.1;
 
-        if !input.is_setup {
+        if input.is_setup == 0 {
             scalar_acc = scalar_acc * 2u32 + u32::from(bit);
             is_inf = is_inf && !bit;
         }
@@ -352,8 +382,9 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         header.is_compute = F::ZERO;
         header.is_digest = F::ONE;
         header.is_first_compute = F::ZERO;
-        header.is_setup = F::from_bool(input.is_setup);
-        header.is_real_digest = F::from_bool(!input.is_setup);
+        let is_setup = input.is_setup != 0;
+        header.is_setup = F::from_bool(is_setup);
+        header.is_real_digest = F::from_bool(!is_setup);
         header.row_idx = F::from_usize(EC_MUL_DIGEST_ROW_IDX);
         let acc_limbs = scalar_acc.to_bytes_le();
         for (i, limb) in header.scalar_acc.iter_mut().enumerate() {
@@ -473,8 +504,32 @@ pub fn generate_ec_mul_trace_from_postflight<
     }
     selected.sort_unstable_by_key(|&(step, _)| postflight.timestamp(step));
 
+    let inputs = selected
+        .par_iter()
+        .copied()
+        .map(|(step, is_setup)| {
+            project_step::<F, BLOCKS>(postflight, step, is_setup, chip.ptr_max_bits)
+        })
+        .collect::<Result<Vec<_>, PostflightError>>()?;
+
+    build_ec_mul_trace::<F, NUM_LIMBS, BLOCKS>(chip, &inputs)
+}
+
+/// Fills the trace from already-replayed instruction data.
+///
+/// Split from the postflight walk above so both prover backends share one row layout: the CPU
+/// prover projects from a host [`Postflight`], while the GPU prover gathers the same fields from
+/// the device transcript. Neither can drift from the other's row encoding.
+pub(crate) fn build_ec_mul_trace<
+    F: PrimeField32 + Send + Sync,
+    const NUM_LIMBS: usize,
+    const BLOCKS: usize,
+>(
+    chip: &EcMulChip<F, NUM_LIMBS, BLOCKS>,
+    inputs: &[EcMulTraceInput<BLOCKS>],
+) -> Result<RowMajorMatrix<F>, PostflightError> {
     let width = ec_mul_width::<NUM_LIMBS, BLOCKS>(BaseAir::<F>::width(&chip.expr));
-    let used_rows = selected.len() * EC_MUL_TOTAL_ROWS;
+    let used_rows = inputs.len() * EC_MUL_TOTAL_ROWS;
     let height = if used_rows == 0 {
         0
     } else {
@@ -515,9 +570,8 @@ pub fn generate_ec_mul_trace_from_postflight<
 
     trace.values[..used_rows * width]
         .par_chunks_exact_mut(EC_MUL_TOTAL_ROWS * width)
-        .zip(selected.par_iter().copied())
-        .try_for_each(|(rows, (step, is_setup))| {
-            let input = project_step::<F, BLOCKS>(postflight, step, is_setup, chip.ptr_max_bits)?;
+        .zip(inputs.par_iter())
+        .try_for_each(|(rows, input)| {
             fill_instruction::<F, NUM_LIMBS, BLOCKS>(
                 &chip.expr,
                 counter.as_ref(),
@@ -526,7 +580,7 @@ pub fn generate_ec_mul_trace_from_postflight<
                 &dummy_expr,
                 rows,
                 width,
-                &input,
+                input,
             )
         })?;
 

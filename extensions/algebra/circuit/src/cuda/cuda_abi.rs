@@ -123,6 +123,29 @@ unsafe extern "C" {
         d_error: *mut u32,
         stream: cudaStream_t,
     ) -> i32;
+
+    fn _ec_mul_replay_gather(
+        output: *mut std::ffi::c_void,
+        output_len: usize,
+        output_start: usize,
+        blocks: usize,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program: DeviceBufferView,
+        d_memory: DeviceBufferView,
+        d_seeds: DeviceBufferView,
+        d_predecessors: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        expected_opcode: u32,
+        is_setup: u32,
+        register_as: u32,
+        memory_as: u32,
+        pointer_max_bits: u32,
+        d_error: *mut u32,
+        stream: cudaStream_t,
+    ) -> i32;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -288,6 +311,62 @@ pub unsafe fn gather_vec_heap<const NUM_READS: usize, const BLOCKS: usize>(
         num_steps,
         expected_opcode,
         local_opcode,
+        register_as,
+        memory_as,
+        pointer_max_bits,
+        d_error,
+        stream,
+    ))
+}
+
+/// Gathers `EC_MUL` projections from the replayed history.
+///
+/// `T` is the caller's projection type; this crate cannot name it, since the `EC_MUL` chip lives
+/// downstream. The kernel only needs the buffer's address and capacity, and both sides assert the
+/// element size independently, so the layout contract is checked without the dependency.
+///
+/// # Safety
+///
+/// `T` must have the layout of the kernel's `EcMulTraceInput<BLOCKS>` for the given `blocks`, and
+/// the device views must belong to `stream`'s context.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn gather_ec_mul<T>(
+    output: &DeviceBuffer<T>,
+    output_start: usize,
+    blocks: usize,
+    d_instructions: DeviceBufferView,
+    pc_base: u32,
+    d_program: DeviceBufferView,
+    d_memory: DeviceBufferView,
+    d_seeds: DeviceBufferView,
+    d_predecessors: DeviceBufferView,
+    d_steps: DeviceBufferView,
+    step_start: usize,
+    num_steps: usize,
+    expected_opcode: u32,
+    is_setup: bool,
+    register_as: u32,
+    memory_as: u32,
+    pointer_max_bits: u32,
+    d_error: *mut u32,
+    stream: cudaStream_t,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_ec_mul_replay_gather(
+        output.as_mut_ptr().cast(),
+        output.len(),
+        output_start,
+        blocks,
+        d_instructions,
+        pc_base,
+        d_program,
+        d_memory,
+        d_seeds,
+        d_predecessors,
+        d_steps,
+        step_start,
+        num_steps,
+        expected_opcode,
+        u32::from(is_setup),
         register_as,
         memory_as,
         pointer_max_bits,

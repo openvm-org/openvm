@@ -45,7 +45,8 @@ use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
 
 use crate::{
-    generate_ec_mul_trace_from_postflight, get_ec_addne_chip, get_ec_double_chip, get_ec_mul_chip,
+    generate_ec_mul_trace_from_gpu_postflight, generate_ec_mul_trace_from_postflight,
+    get_ec_addne_chip, get_ec_double_chip, get_ec_mul_chip,
     weierstrass_chip::{
         generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
     },
@@ -508,13 +509,21 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         }
 
         let Some(postflight) = self.cpu_postflight else {
-            // `sw_declare!`'s one-time setup emits SETUP_EC_MUL for every declared curve, so any
-            // program touching a Weierstrass curve reaches this even without a multiplication.
-            return Err(GpuPostflightError::InvalidTranscript(format!(
-                "EC_MUL trace generation needs the host postflight, which this caller did not \
-                 supply; {used} instruction(s) at opcode base {}",
-                chip.opcode_base
-            )));
+            // No host history — the rvr flow emits a compact replay seed and expands it on the
+            // device. Gather the projections from the device transcript instead. The host path is
+            // preferred when available because the CPU prover's tests exercise it directly.
+            let trace = generate_ec_mul_trace_from_gpu_postflight::<NUM_LIMBS, BLOCKS>(
+                &chip.cpu,
+                chip.opcode_base,
+                self.program,
+                self.transcript,
+                self.replay_plan,
+                &chip.device_ctx,
+            )?;
+            return Ok(cpu_proving_ctx_to_gpu(
+                AirProvingContext::simple_no_pis(trace),
+                &chip.device_ctx,
+            ));
         };
 
         let trace = generate_ec_mul_trace_from_postflight(&chip.cpu, postflight, chip.opcode_base)
