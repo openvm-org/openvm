@@ -20,11 +20,13 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_mod_circuit_builder::FieldExpressionProgram;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
+use strum::EnumCount;
 
 use super::{
     setup_row_inputs, EcMulExecutor, EC_MUL_SCALAR_BITS, EC_MUL_TOTAL_ROWS, FLAG_DBL, FLAG_DBL_ADD,
@@ -108,8 +110,18 @@ macro_rules! dispatch {
 }
 
 impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcMulExecutor<BLOCKS> {
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        "EcMul".to_string()
+    /// Distinguishes the setup row from a real multiplication.
+    ///
+    /// Both cost [`EC_MUL_TOTAL_ROWS`] rows, and a program that merely declares a curve emits one
+    /// setup, so folding them under a single name makes an execution histogram unreadable: a count
+    /// of one cannot be told apart from one scalar multiplication.
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        let local = opcode.wrapping_sub(WeierstrassOpcode::CLASS_OFFSET) % WeierstrassOpcode::COUNT;
+        if local == WeierstrassOpcode::SETUP_EC_MUL as usize {
+            "SetupEcMul".to_string()
+        } else {
+            "EcMul".to_string()
+        }
     }
 
     #[inline(always)]
