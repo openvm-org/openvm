@@ -45,11 +45,13 @@ impl AffineCoordinates for P256Point {
     type FieldRepr = FieldBytes;
 
     fn x(&self) -> FieldBytes {
-        *FieldBytes::from_slice(&<Self as WeierstrassPoint>::x(self).to_be_bytes())
+        let n = self.normalize();
+        *FieldBytes::from_slice(&<Self as WeierstrassPoint>::x(&n).to_be_bytes())
     }
 
     fn y_is_odd(&self) -> Choice {
-        (self.y().as_le_bytes()[0] & 1).into()
+        let n = self.normalize();
+        (n.y().as_le_bytes()[0] & 1).into()
     }
 }
 
@@ -58,13 +60,14 @@ impl Copy for P256Point {}
 impl ConditionallySelectable for P256Point {
     fn conditional_select(a: &P256Point, b: &P256Point, choice: Choice) -> P256Point {
         unsafe {
-            P256Point::from_xy_unchecked(
+            P256Point::from_xyz_unchecked(
                 P256Coord::conditional_select(
                     <Self as WeierstrassPoint>::x(a),
                     <Self as WeierstrassPoint>::x(b),
                     choice,
                 ),
                 P256Coord::conditional_select(a.y(), b.y(), choice),
+                P256Coord::conditional_select(a.z(), b.z(), choice),
             )
         }
     }
@@ -72,8 +75,15 @@ impl ConditionallySelectable for P256Point {
 
 impl ConstantTimeEq for P256Point {
     fn ct_eq(&self, other: &P256Point) -> Choice {
-        <Self as WeierstrassPoint>::x(self).ct_eq(<Self as WeierstrassPoint>::x(other))
-            & self.y().ct_eq(other.y())
+        let self_is_identity = self.z().ct_eq(&P256Coord::ZERO);
+        let other_is_identity = other.z().ct_eq(&P256Coord::ZERO);
+        // Projective equivalence: (X1*Z2 == X2*Z1) && (Y1*Z2 == Y2*Z1)
+        let x1z2 = <Self as WeierstrassPoint>::x(self) * other.z();
+        let x2z1 = <Self as WeierstrassPoint>::x(other) * self.z();
+        let y1z2 = self.y() * other.z();
+        let y2z1 = other.y() * self.z();
+        (self_is_identity & other_is_identity)
+            | (!self_is_identity & !other_is_identity & x1z2.ct_eq(&x2z1) & y1z2.ct_eq(&y2z1))
     }
 }
 
@@ -154,7 +164,7 @@ impl elliptic_curve::Group for P256Point {
     }
 
     fn double(&self) -> Self {
-        self + self
+        <Self as openvm_ecc_guest::Group>::double(self)
     }
 }
 
@@ -162,7 +172,7 @@ impl elliptic_curve::group::Curve for P256Point {
     type AffineRepr = P256Point;
 
     fn to_affine(&self) -> P256Point {
-        *self
+        self.normalize()
     }
 }
 
@@ -216,10 +226,11 @@ impl FromEncodedPoint<NistP256> for P256Point {
 
 impl ToEncodedPoint<NistP256> for P256Point {
     fn to_encoded_point(&self, compress: bool) -> EncodedPoint {
+        let n = self.normalize();
         EncodedPoint::conditional_select(
             &EncodedPoint::from_affine_coordinates(
-                &<Self as WeierstrassPoint>::x(self).to_be_bytes().into(),
-                &<Self as WeierstrassPoint>::y(self).to_be_bytes().into(),
+                &<Self as WeierstrassPoint>::x(&n).to_be_bytes().into(),
+                &<Self as WeierstrassPoint>::y(&n).to_be_bytes().into(),
                 compress,
             ),
             &EncodedPoint::identity(),

@@ -45,7 +45,7 @@ impl PrimeCurve for NistP256 {}
 
 impl CurveArithmetic for NistP256 {
     type AffinePoint = P256Point;
-    /// The `ProjectivePoint` type is still internally represented as an affine point.
+    /// Both associated point types use the same projective `(X, Y, Z)` representation.
     type ProjectivePoint = P256Point;
     type Scalar = P256Scalar;
 }
