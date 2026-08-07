@@ -75,8 +75,17 @@ impl<F: PrimeField32> Transpiler<F> {
                 // trap only if execution reaches it.
                 TranspilerOutput::one_to_one(unimp())
             });
+            let used_u32s = transpiler_output.instructions.len();
+            assert_ne!(
+                used_u32s, 0,
+                "transpiler output must consume at least one ELF PC slot"
+            );
+            assert!(
+                used_u32s <= instructions_u32.len() - ptr,
+                "transpiler output cannot exceed the remaining ELF PC slots"
+            );
             instructions.extend(transpiler_output.instructions);
-            ptr += transpiler_output.used_u32s;
+            ptr += used_u32s;
         }
         Ok(instructions)
     }

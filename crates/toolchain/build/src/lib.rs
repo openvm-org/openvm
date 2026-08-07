@@ -326,6 +326,9 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             // Replace atomic ops with nonatomic versions since the guest is single threaded.
             "-C",
             "passes=lower-atomic",
+            // Retain LLVM's post-optimization blocks and CFG successors in the final ELF.
+            "-C",
+            "llvm-args=--basic-block-address-map --pgo-analysis-map=br-prob",
             // Specify where to start loading the program in
             // memory.  The clang linker understands the same
             // command line arguments as the GNU linker does; see
