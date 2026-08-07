@@ -409,7 +409,7 @@ extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u32)
     true
 }
 
-/// Validate and write one public-values word.
+/// Validate and write one public-values u64.
 extern "C" fn host_reveal(
     ctx: *mut c_void,
     src_val: u64,
@@ -564,7 +564,7 @@ mod tests {
     }
 
     #[test]
-    fn rv64io_lifts_reveal_as_a_doubleword_public_values_write() {
+    fn rv64io_lifts_reveal_as_a_u64_public_values_write() {
         let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
@@ -787,7 +787,7 @@ mod tests {
 
     #[test_case(0x1122_3344_5566_7788, 0; "first_dword")]
     #[test_case(0xaabb_ccdd_eeff_0123, 8; "last_dword")]
-    fn host_reveal_writes_doubleword(src_val: u64, addr: u64) {
+    fn host_reveal_writes_u64(src_val: u64, addr: u64) {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
