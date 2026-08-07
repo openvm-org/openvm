@@ -1,4 +1,4 @@
-//! Phase-3 end-to-end tests for the Lean monomorphic verifier.
+//! End-to-end tests for the Lean monomorphic verifier.
 //!
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision (the same fixture
@@ -27,12 +27,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge,
 };
 
-/// log2 of the FibonacciAir trace row count. 5 → 32 rows. The
-/// brief's recommended target (n = 8 or 16) trips an upstream
-/// `log_final_poly_len < l_skip + n_stack` assertion in
-/// `SystemParams::new_for_testing`, so we pin to 5 (the smallest
-/// size known to round-trip cleanly through the SWIRL stacking /
-/// WHIR small-test parameters, matching `wire_roundtrip.rs`).
+/// Base-2 logarithm of the Fibonacci trace length. Five is the smallest
+/// value supported by the stacking and WHIR test parameters.
 const LOG_TRACE_DEGREE: usize = 5;
 
 type SC = BabyBearPoseidon2Config;

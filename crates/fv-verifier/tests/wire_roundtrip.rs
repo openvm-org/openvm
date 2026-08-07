@@ -1,4 +1,4 @@
-//! Phase-2 wire round-trip tests.
+//! Wire-format round-trip tests against the Lean decoder.
 //!
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision, encodes
@@ -6,9 +6,6 @@
 //! three blobs to the Lean `swirl_dump_proof` binary, and asserts byte
 //! parity on the structural digests. Also covers tampered, empty, and
 //! wrong-version inputs.
-//!
-//! See `notes/lean-verifier-wire-format.md` for the byte spec the
-//! encoders and decoders both follow.
 
 use std::{
     io::Write,

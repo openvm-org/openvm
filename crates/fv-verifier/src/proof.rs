@@ -1,5 +1,4 @@
-//! Encoder for `Proof<SC>` matching
-//! `notes/lean-verifier-wire-format.md §B`.
+//! Encoder for the Lean `Proof` wire type.
 //!
 //! Field order on the wire follows the Lean struct in
 //! `Swirl/Protocol/Noninteractive/Proof.lean` (6 fields):
@@ -23,24 +22,23 @@ use super::{
     primitives::{write_length_prefix, write_option},
 };
 
-/// `notes/lean-verifier-wire-format.md §B`.
+/// Encode a proof in the field order expected by the Lean decoder.
 pub fn write_proof<SC: EncodableConfig, W: Write>(writer: &mut W, proof: &Proof<SC>) -> Result<()> {
     write_header(writer, MAGIC_PROOF)?;
-    // §B.1.1
+    // commonMainCommit
     SC::encode_digest(&proof.common_main_commit, writer)?;
-    // §B.1.2 — list of Option<TraceVData>
+    // traceVdata
     write_length_prefix(writer, proof.trace_vdata.len())?;
     for vdata in &proof.trace_vdata {
         write_option(writer, vdata.as_ref(), |w, v| {
             write_trace_vdata::<SC, _>(w, v)
         })?;
     }
-    // §B.1.3-6. The Lean `StackingProof` carries `muPowWitness`; on the
+    // The Lean `StackingProof` carries `muPowWitness`; on the
     // Rust side that PoW witness lives inside `WhirProof::mu_pow_witness`.
     // The wire follows the Lean layout, so we pass the Rust witness from
     // `proof.whir_proof.mu_pow_witness` into the stacking encoder and
-    // omit it from the WHIR body. (See `notes/lean-verifier-wire-format.md
-    // §B.5` and §B.6.)
+    // omit it from the WHIR body.
     write_gkr_proof::<SC, _>(writer, &proof.gkr_proof)?;
     write_batch_constraint_proof::<SC, _>(writer, &proof.batch_constraint_proof)?;
     write_stacking_proof::<SC, _>(
@@ -51,7 +49,7 @@ pub fn write_proof<SC: EncodableConfig, W: Write>(writer: &mut W, proof: &Proof<
     write_whir_proof::<SC, _>(writer, &proof.whir_proof)
 }
 
-/// `notes/lean-verifier-wire-format.md §B.2`.
+/// Encode the metadata and cached commitments for one trace.
 fn write_trace_vdata<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vdata: &TraceVData<SC>,
@@ -64,7 +62,7 @@ fn write_trace_vdata<SC: EncodableConfig, W: Write>(
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §B.3.a`.
+/// Encode the four claims for one GKR layer.
 fn write_gkr_layer_claims<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     claims: &GkrLayerClaims<SC>,
@@ -75,21 +73,17 @@ fn write_gkr_layer_claims<SC: EncodableConfig, W: Write>(
     SC::encode_extension_field(&claims.q_xi_1, writer)
 }
 
-/// `notes/lean-verifier-wire-format.md §B.3`.
+/// Encode a GKR proof in Lean field order.
 fn write_gkr_proof<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     gkr: &GkrProof<SC>,
 ) -> Result<()> {
-    // §B.3.1
     SC::encode_base_field(&gkr.logup_pow_witness, writer)?;
-    // §B.3.2
     SC::encode_extension_field(&gkr.q0_claim, writer)?;
-    // §B.3.3
     write_length_prefix(writer, gkr.claims_per_layer.len())?;
     for claims in &gkr.claims_per_layer {
         write_gkr_layer_claims::<SC, _>(writer, claims)?;
     }
-    // §B.3.4 — Vec<Vec<[EF; 3]>>
     write_length_prefix(writer, gkr.sumcheck_polys.len())?;
     for layer in &gkr.sumcheck_polys {
         write_length_prefix(writer, layer.len())?;
@@ -102,7 +96,7 @@ fn write_gkr_proof<SC: EncodableConfig, W: Write>(
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §B.4`.
+/// Encode a batch-constraint proof in Lean field order.
 fn write_batch_constraint_proof<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     bcp: &BatchConstraintProof<SC>,
@@ -139,10 +133,10 @@ fn write_batch_constraint_proof<SC: EncodableConfig, W: Write>(
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §B.5`. `mu_pow_witness` comes
-/// from the Rust `WhirProof` because that is where upstream stores it
-/// (the Lean `StackingProof` carries it instead — see the comment on
-/// the call site in [`write_proof`]).
+/// Encode a stacking proof.
+///
+/// Rust stores `mu_pow_witness` on `WhirProof`, while Lean stores it on
+/// `StackingProof`, so the caller supplies it separately.
 fn write_stacking_proof<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     sp: &StackingProof<SC>,
@@ -169,7 +163,7 @@ fn write_stacking_proof<SC: EncodableConfig, W: Write>(
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §B.6`.
+/// Encode a WHIR proof in Lean field order.
 fn write_whir_proof<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     whir: &WhirProof<SC>,

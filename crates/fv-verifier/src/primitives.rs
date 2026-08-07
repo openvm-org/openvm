@@ -1,17 +1,14 @@
 //! Primitive byte helpers shared by every wire encoder.
 //!
-//! See `notes/lean-verifier-wire-format.md §A.3`:
+//! The upstream Lean `Wire.Raw` decoder expects:
 //! - `Bool`: 1 byte, `0x00`/`0x01`.
 //! - `Option<T>`: 1 byte tag (`0x00`/`0x01`), then `T` when some.
 //! - `Nat` / `UInt32`: 4 bytes little-endian `u32`.
 //! - `Int`: 4 bytes little-endian sign-extended `i32`.
 //! - `List T`: `u32` length prefix, then values.
 //!
-//! The wire is explicitly `u32`-length-prefixed (not `usize`-prefixed),
-//! so `len()` is narrowed via `try_into` and surfaces `io::Error` if a
-//! collection exceeds `2^32 − 1`. That cannot legitimately happen for
-//! any FibonacciAir / BabyBearPoseidon2 proof at v1, but it is a hard
-//! decoder requirement so we fail fast.
+//! Rust lengths and indices are narrowed to `u32`; values that do not fit
+//! are rejected instead of being truncated.
 
 use std::io::{Error, ErrorKind, Result, Write};
 

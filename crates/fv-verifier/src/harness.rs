@@ -2,10 +2,8 @@
 //!
 //! Exposes:
 //!
-//! - [`run_fv_verifier`] — Phase-0 magic-byte driver.
-//! - [`run_swirl_verify`] — Phase-3 driver that frames a `(vk_bytes, proof_bytes, pv_bytes)` triple
-//!   per the protocol in `Tools/SwirlVerifyMain.lean` and pipes it to the compiled `swirl_verify`
-//!   exe.
+//! - [`run_fv_verifier`] writes an already-framed byte stream to the verifier.
+//! - [`run_swirl_verify`] frames and writes a `(vk, proof, public values)` triple.
 //! - [`verifier_error_from_exit_code`] — mirror of the Lean-side
 //!   `Swirl.Protocol.Noninteractive.exitCode` table.
 //!

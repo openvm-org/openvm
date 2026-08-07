@@ -1,5 +1,4 @@
-//! Encoder for `PublicValuesFor vk` matching
-//! `notes/lean-verifier-wire-format.md §D`.
+//! Encoder for the Lean `PublicValuesFor vk` wire type.
 //!
 //! The Rust source for the per-AIR public values lives on `Proof<SC>`
 //! as `proof.public_values: Vec<Vec<SC::F>>`. The Lean wire treats
@@ -17,14 +16,12 @@ use super::{
     primitives::{write_length_prefix, write_usize_as_u32},
 };
 
-/// `notes/lean-verifier-wire-format.md §D`.
+/// Encode per-AIR public values after validating their shape against the key.
 ///
 /// The encoder cross-checks the `public_values` shape against the
 /// supplied `vk`: it errors with `InvalidData` if `public_values.len()`
 /// does not match `vk.airCount`, or if any per-AIR length does not
-/// match `vk.publicValueCount air`. This makes a misuse a hard build-
-/// time error rather than a wire payload the Lean decoder would later
-/// reject as `decodeFailure "pv-air-len"`.
+/// match `vk.publicValueCount air`.
 pub fn write_public_values<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vk: &MultiStarkVerifyingKey<SC>,

@@ -1,17 +1,8 @@
 //! Encoders for the symbolic-DAG sub-tree of the verifying key.
 //!
-//! Mirrors `notes/lean-verifier-wire-format.md §C.5.c – §C.5.i`:
-//! - [`write_entry`] (§C.5.i) — 1-byte constructor tag + payload.
-//! - [`write_symbolic_variable`] (§C.5.f) — entry + 4-byte index.
-//! - [`write_symbolic_expression_node`] (§C.5.h) — 1-byte constructor tag
-//!   + payload (variable / row-selector / constant / Add / Sub / Neg / Mul).
-//! - [`write_symbolic_expression_dag`] (§C.5.e) — `nodes` then `constraintIdx`.
-//! - [`write_symbolic_interaction`] (§C.5.g) — `message`, `count`, `busIndex`, `countWeight`.
-//! - [`write_symbolic_constraints_dag`] (§C.5.c) — header fields plus the DAG and interactions.
-//!
-//! The encoder refuses to serialize `Entry::Challenge`: the Lean v1
-//! `Entry` inductive has no `Challenge` constructor and the spec
-//! reserves tag `0x03` for a future-version mismatch.
+//! Constructor tags and field order mirror the corresponding types in the
+//! upstream Lean `Wire.Raw` decoder. `Entry::Challenge` is rejected because
+//! the Lean wire type has no matching constructor.
 
 use std::io::{Error, ErrorKind, Result, Write};
 
@@ -26,7 +17,7 @@ use openvm_stark_backend::{
 
 use super::primitives::{write_length_prefix, write_prime_field32, write_u32, write_usize_as_u32};
 
-/// `notes/lean-verifier-wire-format.md §C.5.i`.
+/// Encode a symbolic-variable source using the Lean constructor tags.
 pub fn write_entry<W: Write>(writer: &mut W, entry: &Entry) -> Result<()> {
     match entry {
         Entry::Preprocessed { offset } => {
@@ -46,7 +37,7 @@ pub fn write_entry<W: Write>(writer: &mut W, entry: &Entry) -> Result<()> {
     }
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.f`.
+/// Encode a symbolic-variable source and column index.
 pub fn write_symbolic_variable<F, W: Write>(
     writer: &mut W,
     variable: &SymbolicVariable<F>,
@@ -55,7 +46,7 @@ pub fn write_symbolic_variable<F, W: Write>(
     write_usize_as_u32(writer, variable.index)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.h`.
+/// Encode one symbolic-expression node using the Lean constructor tags.
 pub fn write_symbolic_expression_node<F: PrimeField32, W: Write>(
     writer: &mut W,
     node: &SymbolicExpressionNode<F>,
@@ -109,7 +100,7 @@ pub fn write_symbolic_expression_node<F: PrimeField32, W: Write>(
     }
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.e`.
+/// Encode the expression nodes followed by the constraint-root indices.
 pub fn write_symbolic_expression_dag<F: PrimeField32, W: Write>(
     writer: &mut W,
     dag: &SymbolicExpressionDag<F>,
@@ -125,10 +116,10 @@ pub fn write_symbolic_expression_dag<F: PrimeField32, W: Write>(
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.g`. The Rust source uses
-/// `Interaction<usize>` (`Expr = usize`) inside `SymbolicConstraintsDag`,
-/// so the `message: Vec<usize>` and `count: usize` fields encode as
-/// `List Nat` and `Nat` respectively.
+/// Encode one symbolic interaction.
+///
+/// `Interaction<usize>` uses node indices for `message` and `count`, which
+/// correspond to `List Nat` and `Nat` on the Lean side.
 pub fn write_symbolic_interaction<W: Write>(
     writer: &mut W,
     interaction: &Interaction<usize>,
@@ -142,7 +133,7 @@ pub fn write_symbolic_interaction<W: Write>(
     write_u32(writer, interaction.count_weight)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.c`.
+/// Encode a complete symbolic constraint DAG.
 ///
 /// The encoder takes the resolved `width` and `public_value_count`
 /// explicitly because the Rust source struct does not carry those

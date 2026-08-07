@@ -1,5 +1,4 @@
-//! Encoder for `MultiStarkVerifyingKey<SC>` matching
-//! `notes/lean-verifier-wire-format.md §C`.
+//! Encoder for the Lean `MultiStarkVerifyingKey` wire type.
 //!
 //! Field order on the wire follows the Lean struct in
 //! `Swirl/Protocol/Noninteractive/VerifyingKey.lean`:
@@ -31,7 +30,7 @@ use super::{
     symbolic::{write_symbolic_constraints_dag, write_symbolic_variable},
 };
 
-/// `notes/lean-verifier-wire-format.md §C`.
+/// Encode a verifying key in the field order expected by the Lean decoder.
 pub fn write_vk<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vk: &MultiStarkVerifyingKey<SC>,
@@ -44,7 +43,7 @@ where
     SC::encode_digest(&vk.pre_hash, writer)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.1`.
+/// Encode the inner system parameters, per-AIR keys, and trace-height constraints.
 fn write_vk_inner<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     inner: &MultiStarkVerifyingKey0<SC>,
@@ -64,7 +63,7 @@ where
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §C.2`.
+/// Encode the proof-system parameters shared by all AIRs.
 fn write_system_params<W: Write>(writer: &mut W, params: &SystemParams) -> Result<()> {
     write_usize_as_u32(writer, params.l_skip)?;
     write_usize_as_u32(writer, params.n_stack)?;
@@ -75,9 +74,10 @@ fn write_system_params<W: Write>(writer: &mut W, params: &SystemParams) -> Resul
     write_usize_as_u32(writer, params.max_constraint_degree)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.3`. The Rust `proximity` field
-/// is dropped; v1 Lean has no counterpart and it is not consumed by the
-/// verifier.
+/// Encode the WHIR configuration.
+///
+/// The Rust `proximity` field is omitted because the Lean wire type has
+/// no corresponding field and the verifier does not consume it.
 fn write_whir_config<W: Write>(writer: &mut W, whir: &WhirConfig) -> Result<()> {
     write_usize_as_u32(writer, whir.k)?;
     write_length_prefix(writer, whir.rounds.len())?;
@@ -89,12 +89,12 @@ fn write_whir_config<W: Write>(writer: &mut W, whir: &WhirConfig) -> Result<()> 
     write_usize_as_u32(writer, whir.folding_pow_bits)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.3.a`.
+/// Encode one WHIR round configuration.
 fn write_whir_round_config<W: Write>(writer: &mut W, round: &WhirRoundConfig) -> Result<()> {
     write_usize_as_u32(writer, round.num_queries)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.4`.
+/// Encode the LogUp security parameters.
 fn write_logup_security_parameters<W: Write>(
     writer: &mut W,
     logup: &LogUpSecurityParameters,
@@ -104,7 +104,7 @@ fn write_logup_security_parameters<W: Write>(
     write_usize_as_u32(writer, logup.pow_bits)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5`.
+/// Encode one AIR's verifying key in Lean field order.
 fn write_stark_verifying_key<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vk: &StarkVerifyingKey<SC::F, SC::Digest>,
@@ -132,7 +132,7 @@ where
     Ok(())
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.a`.
+/// Encode the optional preprocessed-trace commitment metadata.
 fn write_verifier_single_preprocessed_data<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     pd: &VerifierSinglePreprocessedData<SC::Digest>,
@@ -142,7 +142,7 @@ fn write_verifier_single_preprocessed_data<SC: EncodableConfig, W: Write>(
     write_usize_as_u32(writer, pd.stacking_width)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.b`.
+/// Encode one AIR's trace layout and public-value parameters.
 fn write_stark_verifying_params<W: Write>(
     writer: &mut W,
     params: &StarkVerifyingParams,
@@ -152,10 +152,10 @@ fn write_stark_verifying_params<W: Write>(
     write_bool(writer, params.need_rot)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.5.d`.
+/// Encode a trace layout.
 ///
 /// The Lean `TraceWidth` carries an extra `afterChallenge : List Nat`
-/// field with no Rust counterpart; encoder always writes `[]`.
+/// field with no Rust counterpart, so the encoder writes an empty list.
 fn write_trace_width<W: Write>(writer: &mut W, width: &TraceWidth) -> Result<()> {
     write_option_usize(writer, width.preprocessed)?;
     write_length_prefix(writer, width.cached_mains.len())?;
@@ -163,11 +163,11 @@ fn write_trace_width<W: Write>(writer: &mut W, width: &TraceWidth) -> Result<()>
         write_usize_as_u32(writer, *w)?;
     }
     write_usize_as_u32(writer, width.common_main)?;
-    // afterChallenge: List Nat = [] under v1.
+    // afterChallenge
     write_length_prefix(writer, 0)
 }
 
-/// `notes/lean-verifier-wire-format.md §C.6`.
+/// Encode one linear trace-height constraint.
 fn write_linear_constraint<W: Write>(writer: &mut W, lc: &LinearConstraint) -> Result<()> {
     write_u32_list(writer, &lc.coefficients)?;
     write_u32(writer, lc.threshold)
