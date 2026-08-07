@@ -539,7 +539,11 @@ impl MemoryMerkleTree {
                     assert!(
                         *addr_space_size
                             <= self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
-                        "subtree size exceeds the address space's configured leaf count"
+                        "subtree size exceeds the address space's configured leaf count: \
+                         addr_space={addr_space}, subtree_leaves={addr_space_size}, \
+                         num_cells={}, leaf_capacity={}, full_height={full_height}",
+                        self.mem_config.addr_spaces[addr_space].num_cells,
+                        self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
                     );
                     MemoryMerkleSubTree::new(*addr_space_size, 1 << full_height, &self.device_ctx)
                 }

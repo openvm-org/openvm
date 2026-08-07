@@ -189,6 +189,8 @@ pub fn compute_root_proof_heights(
         MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;
+    // Keep the stored config in sync with the AIRs; see the matching note in `keygen::dummy`.
+    app_config.app_vm_config.apply_optimizations();
 
     let deferral_setup = match def_prover {
         Some(def_prover) => DeferralSetup::Active(def_prover),

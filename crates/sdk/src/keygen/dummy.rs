@@ -71,6 +71,13 @@ pub(crate) fn compute_root_proof_heights(
         MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;
+    // The dummy VM keeps `AppConfig::riscv64`'s extension set, which has no deferral extension,
+    // but the grafted `system_config` may still size `DEFERRAL_AS`. `create_airs` builds the AIRs
+    // from `to_inner()`, which applies this normalization and drops that address space, whereas
+    // the proving key stores `app_vm_config` verbatim and it is that copy which sizes the
+    // executor's initial memory image. Normalize here so both agree: otherwise the GPU Merkle
+    // build is handed an address space the circuit believes is empty.
+    app_config.app_vm_config.apply_optimizations();
 
     let def_hook_cached_commit = deferral_setup.hook_cached_commit();
     let def_hook_commit = deferral_setup.hook_commit().map(Into::into);
