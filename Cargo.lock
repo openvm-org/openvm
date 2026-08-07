@@ -5476,7 +5476,6 @@ dependencies = [
  "openvm-instructions-derive",
  "openvm-riscv-guest",
  "openvm-transpiler",
- "p3-baby-bear",
  "serde",
  "strum",
  "tracing",
