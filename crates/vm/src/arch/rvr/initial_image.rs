@@ -12,8 +12,8 @@ pub struct RvrInitialImage {
     init_memory: SparseMemoryImage,
 }
 
-impl<F> From<&VmExe<F>> for RvrInitialImage {
-    fn from(exe: &VmExe<F>) -> Self {
+impl From<&VmExe> for RvrInitialImage {
+    fn from(exe: &VmExe) -> Self {
         Self {
             pc_start: exe.pc_start,
             init_memory: exe.init_memory.clone(),

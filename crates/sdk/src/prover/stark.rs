@@ -4,7 +4,7 @@ use eyre::Result;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe,
-        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmField, VmFieldExecutionConfig,
     },
     system::memory::merkle::MerkleTree,
 };
@@ -27,6 +27,7 @@ use crate::{
 pub struct StarkProver<E, VB>
 where
     E: StarkEngine,
+    Val<E::SC>: VmField,
     VB: ContinuationProverBuilder<E>,
 {
     pub app_prover: AppProver<E, VB>,
@@ -38,12 +39,12 @@ impl<E, VB> StarkProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     pub fn new(
         vm_builder: VB,
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmExe<Val<SC>>>,
+        app_exe: Arc<VmExe>,
         agg_prover: Arc<AggProver>,
         deferral_setup: DeferralSetup,
     ) -> Result<Self> {
@@ -70,8 +71,8 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<(VmStarkProof, InternalLayerMetadata)>
     where
-        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
-            Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
+        <VB::VmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor:
+            Executor + MeteredExecutor + 'static,
     {
         let has_deferrals = self.deferral_setup.hook_commit().is_some();
         let memory_dimensions = self.app_prover.memory_dimensions();

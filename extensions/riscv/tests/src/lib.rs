@@ -74,10 +74,10 @@ mod tests {
     }
 
     #[cfg(feature = "rvr")]
-    fn callback_phantom_exe() -> VmExe<F> {
+    fn callback_phantom_exe() -> VmExe {
         let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
@@ -85,11 +85,11 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 reg(1) as isize,
                 0,
@@ -97,7 +97,7 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 reg(2) as isize,
                 reg(3) as isize,
@@ -105,7 +105,7 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         VmExe::from(Program::from_instructions(&instructions))
     }
@@ -141,7 +141,7 @@ mod tests {
     fn owned_and_borrowed_preflight_instances_match() -> Result<()> {
         let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
                     reg(1),
@@ -151,7 +151,7 @@ mod tests {
                     openvm_instructions::riscv::IMM_AS as usize,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 LoadStoreOpcode::LOADW.global_opcode(),
                 [
                     reg(3),
@@ -163,7 +163,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 LoadStoreOpcode::LOADW.global_opcode(),
                 [
                     reg(0),
@@ -175,7 +175,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 LoadStoreOpcode::STOREW.global_opcode(),
                 [
                     reg(2),
@@ -187,7 +187,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [
                     0,
@@ -198,7 +198,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 HintStoreOpcode::HINT_STORED.global_opcode(),
                 [
                     0,
@@ -210,7 +210,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let config = test_rv64im_config();
@@ -292,7 +292,7 @@ mod tests {
     fn interpreter_preflight_proves_from_append_only_history() {
         let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
                     reg(1),
@@ -302,7 +302,7 @@ mod tests {
                     openvm_instructions::riscv::IMM_AS as usize,
                 ],
             ),
-            Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
 
@@ -370,7 +370,7 @@ mod tests {
         opcode: HintStoreOpcode,
         ptr_reg: usize,
         count_reg: usize,
-    ) -> Instruction<F> {
+    ) -> Instruction {
         Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -386,7 +386,7 @@ mod tests {
     }
 
     #[cfg(feature = "rvr")]
-    fn reveal_instruction(src_reg: usize, base_reg: usize, offset: i16) -> Instruction<F> {
+    fn reveal_instruction(src_reg: usize, base_reg: usize, offset: i16) -> Instruction {
         Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
@@ -434,7 +434,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -459,7 +459,7 @@ mod tests {
     fn test_rvr_preflight_matches_branch_suspension_and_resume() -> Result<()> {
         let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let instructions = [
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 reg(1) as isize,
                 reg(0) as isize,
@@ -467,7 +467,7 @@ mod tests {
                 REGISTER_AS as isize,
                 IMM_AS as isize,
             ),
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 BranchEqualOpcode::BNE.global_opcode(),
                 reg(1) as isize,
                 reg(0) as isize,
@@ -475,13 +475,13 @@ mod tests {
                 REGISTER_AS as isize,
                 REGISTER_AS as isize,
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
-            Instruction::<F>::from_usize(
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 8, REGISTER_AS as usize, 0, 0],
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 2, 0, 0),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 2, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -546,7 +546,7 @@ mod tests {
     fn test_rvr_preflight_carries_dirty_memory_across_segments() -> Result<()> {
         let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let memory = |opcode: LoadStoreOpcode, value: usize, base: usize| {
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 opcode.global_opcode(),
                 [
                     reg(value),
@@ -560,7 +560,7 @@ mod tests {
             )
         };
         let jump_to_next = || {
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             )
@@ -571,7 +571,7 @@ mod tests {
             memory(LoadStoreOpcode::LOADD, 3, 1),
             memory(LoadStoreOpcode::STORED, 0, 1),
             jump_to_next(),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -622,7 +622,7 @@ mod tests {
     fn test_rvr_preflight_load_replay_values_omit_x0() -> Result<()> {
         let reg = |index: usize| index * REGISTER_NUM_LIMBS;
         let load = |opcode: LoadStoreOpcode, rd: usize, offset: usize| {
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 opcode.global_opcode(),
                 [
                     reg(rd),
@@ -636,7 +636,7 @@ mod tests {
             )
         };
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
                     reg(1),
@@ -651,7 +651,7 @@ mod tests {
             load(LoadStoreOpcode::LOADD, 2, 0),
             load(LoadStoreOpcode::LOADD, 0, 8),
             load(LoadStoreOpcode::LOADW, 3, 16),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -722,7 +722,7 @@ mod tests {
         let instructions = [
             hint_store_instruction(HintStoreOpcode::HINT_STORED, 1, 0),
             hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 2, 3),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -771,7 +771,7 @@ mod tests {
         let instructions = [
             reveal_instruction(1, 2, 0),
             reveal_instruction(3, 4, 0),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
@@ -821,7 +821,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_builtin_phantoms_have_one_slot_and_no_replay_values() -> Result<()> {
         let instructions = [
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
@@ -829,7 +829,7 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
@@ -837,7 +837,7 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
@@ -845,7 +845,7 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -962,7 +962,7 @@ mod tests {
             hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 1, 2),
             hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 3, 4),
             hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 5, 6),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -1026,12 +1026,12 @@ mod tests {
     fn test_rvr_hint_store_suspends_only_after_consuming_the_whole_instruction() -> Result<()> {
         let instructions = [
             hint_store_instruction(HintStoreOpcode::HINT_STORED, 1, 0),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
             hint_store_instruction(HintStoreOpcode::HINT_STORED, 1, 0),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -1074,7 +1074,7 @@ mod tests {
     fn test_hint_store_uses_the_memory_block_alignment_contract() -> Result<()> {
         let instructions = [
             hint_store_instruction(HintStoreOpcode::HINT_BUFFER, 1, 2),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -1166,12 +1166,12 @@ mod tests {
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(PAGE_SIZE);
         let instructions = [
             reveal_instruction(1, 2, 0),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
             reveal_instruction(3, 4, 0),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
@@ -1230,7 +1230,7 @@ mod tests {
         // fails closed in both execution modes.
         let address_exe = VmExe::from(Program::from_instructions(&[
             reveal_instruction(1, 2, 1),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ]));
         let preflight = executor.preflight_instance(&address_exe)?;
         let invalid = configure_reveal_state(
@@ -1265,7 +1265,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_hint_input_exhaustion_traps() -> Result<()> {
         let instructions = [
-            Instruction::<F>::from_isize(
+            Instruction::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
                 0,
                 0,
@@ -1273,7 +1273,7 @@ mod tests {
                 0,
                 0,
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -1304,7 +1304,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_rejects_timestamp_outside_proof_domain() -> Result<()> {
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
                     REGISTER_NUM_LIMBS,
@@ -1316,7 +1316,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [
                     2 * REGISTER_NUM_LIMBS,
@@ -1328,7 +1328,7 @@ mod tests {
                     0,
                 ],
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let mut config = test_rv64im_config();
@@ -1352,16 +1352,16 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_x0_schedule_does_not_change_jalr_cfg() -> Result<()> {
         let instructions = [
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 BaseAluImmOpcode::ADDI.global_opcode(),
                 [0, 0, 8, REGISTER_AS as usize, IMM_AS as usize, 0, 0],
             ),
-            Instruction::<F>::from_usize(
+            Instruction::from_usize(
                 JalrOpcode::JALR.global_opcode(),
                 [0, 0, 12, REGISTER_AS as usize, IMM_AS as usize, 0, 0],
             ),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
-            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
@@ -1399,7 +1399,7 @@ mod tests {
         )?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1432,7 +1432,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1491,7 +1491,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1515,7 +1515,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1531,7 +1531,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1620,7 +1620,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
@@ -1644,7 +1644,7 @@ mod tests {
         )?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
@@ -1659,7 +1659,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1679,7 +1679,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_large_buffer", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1704,7 +1704,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1739,7 +1739,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1766,7 +1766,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1816,7 +1816,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1831,7 +1831,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1853,7 +1853,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "hashmap", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1873,7 +1873,7 @@ mod tests {
         )?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1891,7 +1891,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
@@ -1908,7 +1908,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1958,7 +1958,7 @@ mod tests {
         .unwrap();
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
@@ -1970,7 +1970,7 @@ mod tests {
     // For testing programs that should only execute RV64I:
     // The ELF might still have Mul instructions even though the program doesn't use them. We
     // mask those to NOP here.
-    fn change_rv64m_insn_to_nop(exe: &mut VmExe<F>) {
+    fn change_rv64m_insn_to_nop(exe: &mut VmExe) {
         for (insn, _) in exe
             .program
             .instructions_and_debug_infos

@@ -150,7 +150,7 @@ pub fn keygen(
 
 pub fn build(
     cached_pk: SdkCachedProvingKey<SdkVmConfig>,
-) -> Result<(Arc<VmExe<F>>, VerificationBaseline)> {
+) -> Result<(Arc<VmExe>, VerificationBaseline)> {
     let num_configured_def_circuits = get_num_configured_def_circuits(&cached_pk);
     let guest_features = if num_configured_def_circuits <= 1 {
         Vec::new()
@@ -173,7 +173,7 @@ pub fn build(
 
 pub fn prove(
     cached_pk: SdkCachedProvingKey<SdkVmConfig>,
-    exe: Arc<VmExe<F>>,
+    exe: Arc<VmExe>,
     child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_baseline: VerificationBaseline,
     input_proof: VersionedVmStarkProof,

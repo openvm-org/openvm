@@ -14,7 +14,7 @@ use crate::adapters::{MultAdapterCols, MultAdapterFiller, ReplayComputation, BYT
 /// Generates the RV64 DIV/DIVU/REM/REMU trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &DivRemChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
         DivRemOpcode::DIV,

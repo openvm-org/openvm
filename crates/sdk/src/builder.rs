@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use eyre::eyre;
-use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
+use openvm_circuit::arch::{VmBuilder, VmFieldExecutionConfig, VmFieldExecutor};
 use openvm_sdk_config::{SdkVmConfig, TranspilerConfig};
 use openvm_stark_backend::StarkEngine;
 use openvm_transpiler::transpiler::Transpiler;
@@ -69,14 +69,14 @@ pub struct GenericSdkBuilder<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmExecutionConfig<F>,
+    VB::VmConfig: VmFieldExecutionConfig<F>,
 {
     app_source: Option<AppSource<VB::VmConfig>>,
     agg_source: Option<AggSource>,
     #[cfg(feature = "root-prover")]
     root_source: Option<RootSource>,
     agg_tree_config: Option<AggregationTreeConfig>,
-    transpiler: Option<Transpiler<F>>,
+    transpiler: Option<Transpiler>,
     deferral_source: Option<DeferralSource>,
     #[cfg(feature = "evm-prove")]
     halo2_source: Option<Halo2Source>,
@@ -88,7 +88,7 @@ impl<E, VB> GenericSdkBuilder<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmExecutionConfig<F>,
+    VB::VmConfig: VmFieldExecutionConfig<F>,
 {
     /// Creates an empty builder with no configured proving layers.
     pub fn new() -> Self {
@@ -277,7 +277,7 @@ where
 
     /// Sets the transpiler used to convert guest ELFs into
     /// [`VmExe`](openvm_circuit::arch::instructions::exe::VmExe)s.
-    pub fn transpiler(mut self, transpiler: Transpiler<F>) -> Self {
+    pub fn transpiler(mut self, transpiler: Transpiler) -> Self {
         Self::set_once(&mut self.transpiler, "transpiler", transpiler);
         self
     }
@@ -351,7 +351,7 @@ where
         #[cfg(feature = "root-prover")]
         let (root_params, root_pk_seed) = Self::normalize_root_source(root_source);
 
-        let executor = VmExecutor::new(app_config.app_vm_config.clone())
+        let executor = VmFieldExecutor::<F, _>::new(app_config.app_vm_config.clone())
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_tree_config = agg_tree_config.unwrap_or_default();
 
@@ -452,7 +452,7 @@ where
     pub fn build(mut self) -> Result<GenericSdk<E, VB>, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         if self.transpiler.is_none() {
             self.transpiler = self.app_source.as_ref().map(|app_source| match app_source {
@@ -548,7 +548,7 @@ impl<E, VB> Default for GenericSdkBuilder<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmExecutionConfig<F>,
+    VB::VmConfig: VmFieldExecutionConfig<F>,
 {
     fn default() -> Self {
         Self {
@@ -571,7 +571,7 @@ impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmExecutionConfig<F>,
+    VB::VmConfig: VmFieldExecutionConfig<F>,
 {
     /// Returns a builder for constructing an immutable [`GenericSdk`].
     pub fn builder() -> GenericSdkBuilder<E, VB> {
@@ -588,7 +588,7 @@ where
     ) -> Result<Self, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         let SdkCachedProvingKey {
             app_pk,

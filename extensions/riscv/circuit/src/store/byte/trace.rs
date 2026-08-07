@@ -14,7 +14,7 @@ use crate::adapters::StoreByteAdapterCols;
 /// Generates the byte-store trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &StoreByteChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(STOREB.global_opcode());
     let adapter_width = StoreByteAdapterCols::<F>::width();

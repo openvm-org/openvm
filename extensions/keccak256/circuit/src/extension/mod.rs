@@ -126,7 +126,7 @@ where
 pub struct Keccak256;
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {
+impl VmRvrExtension for Keccak256 {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         let ext = KeccakExtension::new(ctx).expect("failed to construct rvr KeccakExtension");
         extensions.register_lifter(ext);

@@ -14,11 +14,8 @@ mod tests {
     use openvm_sdk::StdIn;
     use openvm_sha2_circuit::{Sha2Rv64Builder, Sha2Rv64Config};
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-    type F = BabyBear;
 
     enum Sha2Type {
         Sha256,
@@ -74,7 +71,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "sha2", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -122,7 +119,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)

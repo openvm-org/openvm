@@ -186,11 +186,11 @@ pub struct CondRdWriteAdapterFiller;
 
 impl RdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut RdWriteAdapterCols<F>,
-        compute: impl FnOnce(u32, u32) -> ([u16; BLOCK_FE_WIDTH], u32),
+        compute: impl FnOnce(u32) -> ([u16; BLOCK_FE_WIDTH], u32),
     ) -> Result<([u16; BLOCK_FE_WIDTH], u32), PostflightError> {
         if !postflight.instruction(step).f.is_zero() {
             return Err(PostflightError::new(
@@ -203,13 +203,13 @@ impl RdWriteAdapterFiller {
 
 impl CondRdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut CondRdWriteAdapterCols<F>,
-        compute: impl FnOnce(u32, u32) -> ([u16; BLOCK_FE_WIDTH], u32),
+        compute: impl FnOnce(u32) -> ([u16; BLOCK_FE_WIDTH], u32),
     ) -> Result<([u16; BLOCK_FE_WIDTH], u32), PostflightError> {
-        let needs_write = match postflight.instruction(step).f.as_canonical_u32() {
+        let needs_write = match postflight.instruction(step).f.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -231,24 +231,23 @@ impl CondRdWriteAdapterFiller {
 }
 
 fn replay_rd_write<F: PrimeField32>(
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
     step: PostflightStep,
     mem_helper: &MemoryAuxColsFactory<F>,
     adapter_row: &mut RdWriteAdapterCols<F>,
     needs_write: bool,
-    compute: impl FnOnce(u32, u32) -> ([u16; BLOCK_FE_WIDTH], u32),
+    compute: impl FnOnce(u32) -> ([u16; BLOCK_FE_WIDTH], u32),
 ) -> Result<([u16; BLOCK_FE_WIDTH], u32), PostflightError> {
     let instruction = postflight.instruction(step);
-    if instruction.d.as_canonical_u32() != REGISTER_AS || !instruction.e.is_zero() {
+    if instruction.d.as_u32() != REGISTER_AS || !instruction.e.is_zero() {
         return Err(PostflightError::new(
             "destination-write instruction has invalid address spaces",
         ));
     }
     let from_pc = postflight.pc(step);
     let from_timestamp = postflight.timestamp(step);
-    let rd_ptr = instruction.a.as_canonical_u32();
-    let immediate = instruction.c.as_canonical_u32();
-    let (output, next_pc) = compute(from_pc, immediate);
+    let rd_ptr = instruction.a.as_u32();
+    let (output, next_pc) = compute(from_pc);
     let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
     let mut replay = postflight.replay(step);
     if needs_write {

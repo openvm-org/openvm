@@ -15,7 +15,8 @@ use openvm_circuit::arch::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    riscv::{NUM_REGISTERS, REGISTER_BYTES},
+    instruction::Instruction,
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -25,11 +26,15 @@ use rvr_openvm_ir::{
 use rvr_openvm_lift::{
     air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
     max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    RvrExtension, RvrExtensionCtx, RvrRuntimeExtension,
 };
 
 fn decode_reg(value: u32) -> Variable {
     decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
+}
+
+fn has_register_memory_domains(insn: &Instruction) -> bool {
+    insn.d.as_u32() == REGISTER_AS && insn.e.as_u32() == MEMORY_AS
 }
 
 /// Size in bytes of a serialized deferral commitment.
@@ -239,10 +244,14 @@ impl ExtInstr for DeferralOutputInstr {
 pub struct DeferralRvrExtension {
     output_chip_idx: Option<AirIndex>,
     poseidon2_chip_idx: Option<AirIndex>,
+    registered_deferral_count: usize,
 }
 
 impl DeferralRvrExtension {
-    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
+    pub fn new(
+        ctx: Option<&RvrExtensionCtx>,
+        registered_deferral_count: usize,
+    ) -> Result<Self, ExtensionError> {
         let call_chip_idx = opcode_air_idx(ctx, DeferralOpcode::CALL)?;
         let output_chip_idx = opcode_air_idx(ctx, DeferralOpcode::OUTPUT)?;
         // The Poseidon2 hasher is registered adjacent to the CALL chip and
@@ -252,18 +261,25 @@ impl DeferralRvrExtension {
         Ok(Self {
             output_chip_idx,
             poseidon2_chip_idx,
+            registered_deferral_count,
         })
     }
 }
 
 impl RvrExtension for DeferralRvrExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == DeferralOpcode::CALL.global_opcode_usize() {
-            let rd_reg = decode_reg(insn.a);
-            let rs_reg = decode_reg(insn.b);
-            let def_idx = insn.c;
+            if !has_register_memory_domains(insn) {
+                return None;
+            }
+            let rd_reg = decode_reg(insn.a.as_u32());
+            let rs_reg = decode_reg(insn.b.as_u32());
+            let def_idx = insn.c.as_u32();
+            if def_idx as usize >= self.registered_deferral_count {
+                return None;
+            }
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(DeferralCallInstr {
@@ -277,9 +293,12 @@ impl RvrExtension for DeferralRvrExtension {
         }
 
         if opcode == DeferralOpcode::OUTPUT.global_opcode_usize() {
-            let rd_reg = decode_reg(insn.a);
-            let rs_reg = decode_reg(insn.b);
-            let def_idx = insn.c;
+            if !has_register_memory_domains(insn) {
+                return None;
+            }
+            let rd_reg = decode_reg(insn.a.as_u32());
+            let rs_reg = decode_reg(insn.b.as_u32());
+            let def_idx = insn.c.as_u32();
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(DeferralOutputInstr {
@@ -851,6 +870,60 @@ mod tests {
     #[test]
     fn fixed_page_bound_covers_call_memory_ranges() {
         assert_eq!(DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION, 4);
+    }
+
+    #[test]
+    fn deferral_instruction_domains_match_the_interpreter() {
+        let extension = DeferralRvrExtension::new(None, 1).unwrap();
+        for opcode in [DeferralOpcode::CALL, DeferralOpcode::OUTPUT] {
+            let valid = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, REGISTER_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(extension.try_lift(&valid, 0x1000).is_some());
+
+            let wrong_register = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, MEMORY_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(extension.try_lift(&wrong_register, 0x1000).is_none());
+
+            let wrong_memory = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, REGISTER_AS as usize, REGISTER_AS as usize],
+            );
+            assert!(extension.try_lift(&wrong_memory, 0x1000).is_none());
+        }
+    }
+
+    #[test]
+    fn deferral_call_requires_a_registered_index() {
+        let extension = DeferralRvrExtension::new(None, 1).unwrap();
+        let instruction = |opcode, def_idx| {
+            Instruction::from_usize(
+                opcode,
+                [8, 16, def_idx, REGISTER_AS as usize, MEMORY_AS as usize],
+            )
+        };
+
+        assert!(extension
+            .try_lift(
+                &instruction(DeferralOpcode::CALL.global_opcode(), 0),
+                0x1000,
+            )
+            .is_some());
+        assert!(extension
+            .try_lift(
+                &instruction(DeferralOpcode::CALL.global_opcode(), 1),
+                0x1000,
+            )
+            .is_none());
+        assert!(extension
+            .try_lift(
+                &instruction(DeferralOpcode::OUTPUT.global_opcode(), 1),
+                0x1000,
+            )
+            .is_some());
     }
 
     fn commit_from_values(values: [u32; VM_DIGEST_WIDTH]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] {

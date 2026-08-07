@@ -2,6 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError, BLOCK_FE_WIDTH},
+    system::program::trace::instruction_operand_to_field,
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
@@ -14,7 +15,7 @@ use crate::adapters::{BranchAdapterCols, BranchAdapterFiller, U16_BITS};
 /// Generates the RV64 less-than-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &BranchLessThanChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
         BranchLessThanOpcode::BLT,
@@ -46,7 +47,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 |from_pc, [rs1, rs2], immediate| {
                     comparison = run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(local_opcode_u8, &rs1, &rs2);
                     if comparison.0 {
-                        (F::from_u32(from_pc) + F::from_u32(immediate)).as_canonical_u32()
+                        from_pc.wrapping_add_signed(immediate)
                     } else {
                         from_pc.wrapping_add(DEFAULT_PC_STEP)
                     }
@@ -125,7 +126,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.opcode_bge_flag = F::from_bool(local_opcode == BranchLessThanOpcode::BGE);
             core_row.opcode_bltu_flag = F::from_bool(local_opcode == BranchLessThanOpcode::BLTU);
             core_row.opcode_blt_flag = F::from_bool(local_opcode == BranchLessThanOpcode::BLT);
-            core_row.imm = instruction.c;
+            core_row.imm = instruction_operand_to_field(instruction.c);
             core_row.cmp_result = F::from_bool(cmp_result);
             core_row.b = b.map(F::from_u16);
             core_row.a = a.map(F::from_u16);

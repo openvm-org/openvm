@@ -8,11 +8,8 @@ use openvm_riscv_circuit::Rv64ImConfig;
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_toolchain_tests::decode_elf;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-type F = BabyBear;
 
 #[test]
 #[ignore = "must run makefile"]
@@ -34,7 +31,7 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                 let elf = decode_elf(&path)?;
                 let exe = VmExe::from_elf(
                     elf,
-                    Transpiler::<F>::default()
+                    Transpiler::default()
                         .with_extension(Rv64ITranspilerExtension)
                         .with_extension(Rv64MTranspilerExtension)
                         .with_extension(Rv64IoTranspilerExtension),
@@ -97,7 +94,7 @@ fn test_rv64im_riscv_vector_prove() -> Result<()> {
             let elf = decode_elf(&path)?;
             let exe = VmExe::from_elf(
                 elf,
-                Transpiler::<F>::default()
+                Transpiler::default()
                     .with_extension(Rv64ITranspilerExtension)
                     .with_extension(Rv64MTranspilerExtension)
                     .with_extension(Rv64IoTranspilerExtension),

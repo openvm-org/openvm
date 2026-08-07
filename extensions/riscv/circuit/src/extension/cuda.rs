@@ -36,7 +36,7 @@ use openvm_riscv_transpiler::{
     ShiftWOpcode,
 };
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 #[cfg(feature = "rvr")]
 use crate::preflight::PreflightReplayProgram;
@@ -71,14 +71,14 @@ macro_rules! impl_postflight_tracegen {
 
             fn prepare_postflight(
                 vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-                program: &Program<F>,
+                program: &Program,
             ) -> Result<Self::Prepared, GenerationError> {
                 prepare_gpu_postflight(vm, program)
             }
 
             fn generate_proving_ctx(
                 vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-                _host_program: &Program<F>,
+                _host_program: &Program,
                 program: &Self::Prepared,
                 output: &PreflightOutput,
             ) -> Result<ProvingContext<GpuBackend>, GenerationError> {

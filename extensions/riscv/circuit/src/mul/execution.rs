@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::MulOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::MultiplicationCoreExecutor;
 
@@ -25,33 +24,31 @@ struct MultiPreCompute {
 }
 
 impl<const LIMB_BITS: usize> MultiplicationCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut MultiPreCompute,
     ) -> Result<(), StaticProgramError> {
         assert_eq!(
             MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
-        if inst.d.as_canonical_u32() != REGISTER_AS {
+        if inst.d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = MultiPreCompute {
-            a: inst.a.as_canonical_u32() as u8,
-            b: inst.b.as_canonical_u32() as u8,
-            c: inst.c.as_canonical_u32() as u8,
+            a: inst.a.as_u32() as u8,
+            b: inst.b.as_u32() as u8,
+            c: inst.c.as_u32() as u8,
         };
         Ok(())
     }
 }
 
-impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
+impl<const LIMB_BITS: usize> InterpreterExecutor
     for MultiplicationCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
@@ -64,7 +61,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -79,7 +76,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -91,10 +88,8 @@ where
     }
 }
 
-impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+impl<const LIMB_BITS: usize> InterpreterMeteredExecutor
     for MultiplicationCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultiPreCompute>>()
@@ -105,7 +100,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -122,7 +117,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

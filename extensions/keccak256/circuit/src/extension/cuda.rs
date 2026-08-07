@@ -29,14 +29,11 @@ use openvm_riscv_circuit::preflight::{
 };
 use openvm_riscv_circuit::{Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use {
     openvm_circuit::arch::{rvr::PreflightExecution, MemoryConfig},
     openvm_cuda_common::stream::GpuDeviceCtx,
-    openvm_stark_backend::p3_field::PrimeField32,
 };
 
 use super::*;
@@ -131,8 +128,8 @@ impl<'a> Keccak256PreflightGpuTracegen<'a> {
     /// schedules installed once. Callers do not need to construct or merge the
     /// experimental registry themselves.
     #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
-    pub fn upload_postflight_program<F: PrimeField32>(
-        program: &Program<F>,
+    pub fn upload_postflight_program(
+        program: &Program,
         memory_config: &MemoryConfig,
         device_ctx: &GpuDeviceCtx,
     ) -> Result<PreflightReplayProgram, GpuPostflightError> {
@@ -339,14 +336,14 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Keccak256Rv64GpuBuilder 
 
     fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        program: &Program<BabyBear>,
+        program: &Program,
     ) -> Result<Self::Prepared, GenerationError> {
         prepare_gpu_postflight(vm, program)
     }
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        _host_program: &Program<BabyBear>,
+        _host_program: &Program,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {

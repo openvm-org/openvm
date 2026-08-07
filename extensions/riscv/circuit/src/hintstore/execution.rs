@@ -15,7 +15,6 @@ use openvm_riscv_transpiler::{
     HintStoreOpcode,
     HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{validate_hint_buffer_num_words, HintStoreExecutor};
 use crate::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
@@ -30,10 +29,10 @@ struct HintStorePreCompute {
 
 impl HintStoreExecutor {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut HintStorePreCompute,
     ) -> Result<HintStoreOpcode, StaticProgramError> {
         let &Instruction {
@@ -45,14 +44,14 @@ impl HintStoreExecutor {
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != MEMORY_AS {
+        if d.as_u32() != REGISTER_AS || e.as_u32() != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = {
             HintStorePreCompute {
-                c: c.as_canonical_u32(),
-                a: a.as_canonical_u32() as u8,
-                b: b.as_canonical_u32() as u8,
+                c: c.as_u32(),
+                a: a.as_u32() as u8,
+                b: b.as_u32() as u8,
             }
         };
         Ok(HintStoreOpcode::from_usize(
@@ -70,10 +69,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for HintStoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterExecutor for HintStoreExecutor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STORED.global_opcode().as_usize() {
             String::from("HINT_STORED")
@@ -93,7 +89,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
@@ -105,7 +101,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -117,10 +113,7 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for HintStoreExecutor
-where
-    F: PrimeField32,
-{
+impl InterpreterMeteredExecutor for HintStoreExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<HintStorePreCompute>>()
     }
@@ -130,7 +123,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -147,7 +140,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

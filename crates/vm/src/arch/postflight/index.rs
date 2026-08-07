@@ -5,15 +5,11 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rustc_hash::FxHashMap;
 
 use super::{memory_key, PostflightError, PREDECESSOR_INDEX_MASK, PREDECESSOR_SEED_BIT};
 use crate::{
-    arch::{
-        MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory, ADDR_SPACE_OFFSET,
-        BLOCK_FE_WIDTH,
-    },
+    arch::{MemoryCellType, MemoryConfig, PreflightHistory, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::{TouchedBlock, TouchedMemory},
 };
 
@@ -24,7 +20,7 @@ pub struct PostflightProgramIndex {
 }
 
 impl PostflightProgramIndex {
-    pub(crate) fn new<F>(program: &Program<F>) -> Result<Self, PostflightError> {
+    pub(crate) fn new(program: &Program) -> Result<Self, PostflightError> {
         let mut num_rows = 0u32;
         let dense_rows = program
             .instructions_and_debug_infos
@@ -129,8 +125,8 @@ pub(super) fn memory_starts(
     Ok(starts)
 }
 
-pub(super) fn resolve_program_slot<F: Field>(
-    program: &Program<F>,
+pub(super) fn resolve_program_slot(
+    program: &Program,
     history: &PreflightHistory,
     program_index: usize,
 ) -> Result<usize, PostflightError> {
@@ -178,8 +174,8 @@ pub(super) fn validate_step(
     Ok(())
 }
 
-pub(super) fn validate_endpoint<F: Field>(
-    program: &Program<F>,
+pub(super) fn validate_endpoint(
+    program: &Program,
     history: &PreflightHistory,
     exit_code: Option<u32>,
 ) -> Result<(), PostflightError> {
@@ -198,11 +194,11 @@ pub(super) fn validate_endpoint<F: Field>(
     Ok(())
 }
 
-fn resolve_instruction<'a, F: Field>(
-    program: &'a Program<F>,
+fn resolve_instruction<'a>(
+    program: &'a Program,
     history: &PreflightHistory,
     program_index: usize,
-) -> Result<&'a Instruction<F>, PostflightError> {
+) -> Result<&'a Instruction, PostflightError> {
     let slot = resolve_program_slot(program, history, program_index)?;
     Ok(&program.instructions_and_debug_infos[slot]
         .as_ref()
@@ -294,28 +290,16 @@ fn validate_field_reference(
     Ok(())
 }
 
-fn validate_field_block<F: PrimeField32>(
-    block: PreflightFieldBlock,
-) -> Result<(), PostflightError> {
-    if block.values.iter().any(|&value| value >= F::ORDER_U32) {
-        return Err(PostflightError::new(
-            "field sidecar contains a non-canonical raw field value",
-        ));
+fn update_max_field_value(max_field_value: &mut Option<u32>, values: [u32; BLOCK_FE_WIDTH]) {
+    for value in values {
+        *max_field_value = Some(max_field_value.map_or(value, |current| current.max(value)));
     }
-    Ok(())
 }
 
-pub(super) fn decode_field_block<F: PrimeField32>(
-    block: PreflightFieldBlock,
-) -> [F; BLOCK_FE_WIDTH] {
-    debug_assert!(block.values.iter().all(|&value| value < F::ORDER_U32));
-    block.values.map(F::from_u32)
-}
-
-pub(super) fn memory_index<F: PrimeField32>(
+pub(super) fn memory_index(
     history: &PreflightHistory,
     config: &MemoryConfig,
-) -> Result<(Vec<u32>, TouchedMemory<F>), PostflightError> {
+) -> Result<(Vec<u32>, TouchedMemory, Option<u32>), PostflightError> {
     #[derive(Clone, Copy)]
     enum BlockState {
         Seed(u32),
@@ -334,6 +318,7 @@ pub(super) fn memory_index<F: PrimeField32>(
 
     let mut blocks = FxHashMap::with_capacity_and_hasher(seeds.len(), Default::default());
     let mut field_seed_cursor = 0usize;
+    let mut max_field_value = None;
     for (index, seed) in seeds.iter().enumerate() {
         if seed.address_space & rvr_state::PREFLIGHT_WRITE_BIT != 0 {
             return Err(PostflightError::new(
@@ -350,7 +335,10 @@ pub(super) fn memory_index<F: PrimeField32>(
                     history.memory.field_initial_values.len(),
                     "initial-write seed",
                 )?;
-                validate_field_block::<F>(history.memory.field_initial_values[field_seed_cursor])?;
+                update_max_field_value(
+                    &mut max_field_value,
+                    history.memory.field_initial_values[field_seed_cursor].values,
+                );
                 field_seed_cursor += 1;
             }
             _ => unreachable!("validate_memory_block rejects other layouts"),
@@ -387,7 +375,10 @@ pub(super) fn memory_index<F: PrimeField32>(
                     history.memory.field_values.len(),
                     "memory event",
                 )?;
-                validate_field_block::<F>(history.memory.field_values[field_event_cursor])?;
+                update_max_field_value(
+                    &mut max_field_value,
+                    history.memory.field_values[field_event_cursor].values,
+                );
                 field_event_cursor += 1;
             }
             _ => unreachable!("validate_memory_block rejects other layouts"),
@@ -462,10 +453,10 @@ pub(super) fn memory_index<F: PrimeField32>(
             };
             let event = history.memory.accesses[event_index as usize];
             let values = match config.addr_spaces[event.address_space() as usize].layout {
-                MemoryCellType::U16 => event.value.map(F::from_u16),
-                MemoryCellType::FIELD32 => decode_field_block::<F>(
-                    history.memory.field_values[field_reference(event.value)],
-                ),
+                MemoryCellType::U16 => event.value.map(u32::from),
+                MemoryCellType::FIELD32 => {
+                    history.memory.field_values[field_reference(event.value)].values
+                }
                 _ => unreachable!("memory layouts were validated above"),
             };
             TouchedBlock {
@@ -477,5 +468,5 @@ pub(super) fn memory_index<F: PrimeField32>(
             }
         })
         .collect();
-    Ok((predecessors, touched_memory))
+    Ok((predecessors, touched_memory, max_field_value))
 }

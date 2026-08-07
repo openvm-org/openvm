@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::AddSubCoreExecutor;
 
@@ -26,20 +25,20 @@ pub(super) struct AddSubPreCompute {
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubCoreExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
-    pub(super) fn pre_compute_impl<F: PrimeField32>(
+    pub(super) fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut AddSubPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        if (d.as_canonical_u32() != REGISTER_AS) || (e.as_canonical_u32() != REGISTER_AS) {
+        if (d.as_u32() != REGISTER_AS) || (e.as_u32() != REGISTER_AS) {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddSubPreCompute {
-            rs2_ptr: c.as_canonical_u32() as u8,
-            rd_ptr: a.as_canonical_u32() as u8,
-            rs1_ptr: b.as_canonical_u32() as u8,
+            rs2_ptr: c.as_u32() as u8,
+            rd_ptr: a.as_u32() as u8,
+            rs1_ptr: b.as_u32() as u8,
         };
         Ok(())
     }
@@ -57,10 +56,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     for AddSubCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
@@ -75,7 +72,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -91,7 +88,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -104,10 +101,8 @@ where
     }
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
     for AddSubCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -119,7 +114,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -137,7 +132,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -216,7 +211,6 @@ impl AluOp for SubOp {
 #[cfg(test)]
 mod tests {
     use openvm_instructions::{riscv::IMM_AS, LocalOpcode};
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
     use crate::AddSubExecutor;
@@ -226,7 +220,7 @@ mod tests {
         let executor = AddSubExecutor::new(BaseAluOpcode::CLASS_OFFSET);
 
         for opcode in [BaseAluOpcode::ADD, BaseAluOpcode::SUB] {
-            let instruction = Instruction::<BabyBear>::from_usize(
+            let instruction = Instruction::from_usize(
                 opcode.global_opcode(),
                 [
                     REGISTER_NUM_LIMBS,

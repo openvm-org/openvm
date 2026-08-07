@@ -17,7 +17,6 @@ rvr-openvm-lift = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-stark-backend.workspace = true
-openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-algebra-transpiler.workspace = true
 openvm-bigint-circuit.workspace = true

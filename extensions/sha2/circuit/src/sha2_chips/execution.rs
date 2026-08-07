@@ -9,7 +9,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::bytes_to_u32;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{Sha2Config, Sha2VmExecutor, SHA2_READ_SIZE};
 use crate::SHA2_WRITE_SIZE;
@@ -22,7 +21,7 @@ struct Sha2PreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C> {
+impl<C: Sha2Config> InterpreterExecutor for Sha2VmExecutor<C> {
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", C::OPCODE)
     }
@@ -35,7 +34,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -50,7 +49,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -62,7 +61,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
     }
 }
 
-impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExecutor<C> {
+impl<C: Sha2Config> InterpreterMeteredExecutor for Sha2VmExecutor<C> {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<Sha2PreCompute>>()
     }
@@ -72,7 +71,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -89,7 +88,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -194,10 +193,10 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, C: Sha2Config>(
 }
 
 impl<C: Sha2Config> Sha2VmExecutor<C> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut Sha2PreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -209,14 +208,14 @@ impl<C: Sha2Config> Sha2VmExecutor<C> {
             e,
             ..
         } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = Sha2PreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
         assert_eq!(&C::OPCODE.global_opcode(), opcode);
         Ok(())

@@ -14,7 +14,6 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::BaseAluOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
@@ -44,7 +43,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for AddSub256Executor {
+impl InterpreterExecutor for AddSub256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -60,7 +59,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for AddSub256Executor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -76,7 +75,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for AddSub256Executor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -89,7 +88,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for AddSub256Executor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for AddSub256Executor {
+impl InterpreterMeteredExecutor for AddSub256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AddSubPreCompute>>()
     }
@@ -99,7 +98,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for AddSub256Executor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -117,7 +116,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for AddSub256Executor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -174,10 +173,10 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
 }
 
 impl AddSub256Executor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut AddSubPreCompute,
     ) -> Result<BaseAluOpcode, StaticProgramError> {
         let Instruction {
@@ -189,14 +188,14 @@ impl AddSub256Executor {
             e,
             ..
         } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddSubPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
         let local_opcode =
             BaseAluOpcode::from_usize(opcode.local_opcode_idx(BaseAlu256Opcode::CLASS_OFFSET));

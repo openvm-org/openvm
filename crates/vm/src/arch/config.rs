@@ -14,8 +14,6 @@ use openvm_instructions::{
 pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
-#[cfg(feature = "rvr")]
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
@@ -23,7 +21,7 @@ use openvm_stark_backend::{
 use rvr_openvm_lift::RvrExtensions;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
+use super::{AnyEnum, VmChipComplex, VmField, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
@@ -92,12 +90,12 @@ pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
 
 /// A VM configuration is the minimum serializable format to be able to create the execution
 /// environment and circuit for a zkVM supporting a fixed set of instructions.
-/// This trait contains the sub-traits [VmExecutionConfig] and [VmCircuitConfig].
+/// This trait contains the sub-traits [VmFieldExecutionConfig] and [VmCircuitConfig].
 /// The [InitFileGenerator] sub-trait provides custom build hooks to generate code for initializing
 /// some VM extensions. The `VmConfig` is expected to contain the [SystemConfig] internally.
 ///
-/// For users who only need to create an execution environment, use the sub-trait
-/// [VmExecutionConfig] to avoid the `SC` generic.
+/// For users who only need a field-independent execution environment, use
+/// [VmExecutionConfig] to avoid both the `SC` and field generics.
 ///
 /// This trait does not contain the [VmBuilder] trait, because a single VM configuration may
 /// implement multiple [VmBuilder]s for different prover backends.
@@ -106,25 +104,41 @@ pub trait VmConfig<SC>:
     + Serialize
     + DeserializeOwned
     + InitFileGenerator
-    + VmExecutionConfig<Val<SC>>
+    + VmFieldExecutionConfig<Val<SC>>
     + VmCircuitConfig<SC>
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
 where
     SC: StarkProtocolConfig,
+    Val<SC>: VmField,
 {
 }
 
-pub trait VmExecutionConfig<F> {
+/// Configuration for execution whose runtime semantics are independent of the VM field.
+pub trait VmExecutionConfig {
     type Executor: AnyEnum;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 
     #[cfg(feature = "rvr")]
-    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> RvrExtensions
-    where
-        F: PrimeField32;
+    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> RvrExtensions;
+}
+
+/// Configuration for execution that may include field-dependent runtime semantics.
+///
+/// Field-independent configurations can implement this trait by delegating to their
+/// [`VmExecutionConfig`] implementation. Configurations containing an extension such as Deferral
+/// implement this trait directly.
+pub trait VmFieldExecutionConfig<F: VmField> {
+    type Executor: AnyEnum;
+
+    fn create_field_executors(
+        &self,
+    ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+
+    #[cfg(feature = "rvr")]
+    fn create_field_rvr_extensions(&self, air_idx: Option<&[usize]>) -> RvrExtensions;
 }
 
 pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
@@ -133,7 +147,10 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 
 /// This trait is intended to be implemented on a new type wrapper of the VmConfig struct to get
 /// around Rust orphan rules.
-pub trait VmBuilder<E: StarkEngine>: Sized {
+pub trait VmBuilder<E: StarkEngine>: Sized
+where
+    Val<E::SC>: VmField,
+{
     type VmConfig: VmConfig<E::SC>;
     type SystemChipInventory: SystemChipComplex<E::PB>;
 
@@ -151,11 +168,12 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
 impl<SC, VC> VmConfig<SC> for VC
 where
     SC: StarkProtocolConfig,
+    Val<SC>: VmField,
     VC: Clone
         + Serialize
         + DeserializeOwned
         + InitFileGenerator
-        + VmExecutionConfig<Val<SC>>
+        + VmFieldExecutionConfig<Val<SC>>
         + VmCircuitConfig<SC>
         + AsRef<SystemConfig>
         + AsMut<SystemConfig>,

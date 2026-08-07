@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use {
     openvm_algebra_transpiler::ModularArithmeticOpcode,
     openvm_instructions::{program::Program, LocalOpcode},
-    openvm_stark_backend::p3_field::PrimeField32,
     strum::EnumCount,
 };
 
@@ -52,10 +51,7 @@ mod rvr_tests;
 /// Returns the first configured modular IS_EQ/SETUP_ISEQ program slot whose
 /// destination is x0.
 #[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
-pub(crate) fn modular_is_eq_x0_destination<F: PrimeField32>(
-    program: &Program<F>,
-    num_moduli: usize,
-) -> Option<usize> {
+pub(crate) fn modular_is_eq_x0_destination(program: &Program, num_moduli: usize) -> Option<usize> {
     let opcode_base = ModularArithmeticOpcode::CLASS_OFFSET;
     let opcode_count = ModularArithmeticOpcode::COUNT;
     program
@@ -71,7 +67,7 @@ pub(crate) fn modular_is_eq_x0_destination<F: PrimeField32>(
                     ModularArithmeticOpcode::from_usize(local),
                     ModularArithmeticOpcode::IS_EQ | ModularArithmeticOpcode::SETUP_ISEQ
                 )
-                && instruction.a.as_canonical_u32() == 0)
+                && instruction.a.as_u32() == 0)
                 .then_some(slot)
         })
 }

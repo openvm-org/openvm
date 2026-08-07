@@ -262,7 +262,7 @@ type StoreMultiReplay = ([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2], usiz
 impl StoreMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const STORE_WIDTH: usize>(
         &self,
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut StoreMultiByteAdapterCols<F>,
@@ -278,8 +278,8 @@ impl StoreMultiByteAdapterFiller {
             ));
         }
         let instruction = postflight.instruction(step);
-        let mem_as = instruction.e.as_canonical_u32();
-        if instruction.d.as_canonical_u32() != REGISTER_AS || mem_as != MEMORY_AS {
+        let mem_as = instruction.e.as_u32();
+        if instruction.d.as_u32() != REGISTER_AS || mem_as != MEMORY_AS {
             return Err(PostflightError::new(
                 "multi-byte store has invalid address spaces",
             ));
@@ -289,7 +289,7 @@ impl StoreMultiByteAdapterFiller {
                 "multi-byte store instruction must be enabled",
             ));
         }
-        let imm_sign = match instruction.g.as_canonical_u32() {
+        let imm_sign = match instruction.g.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -298,15 +298,15 @@ impl StoreMultiByteAdapterFiller {
                 ));
             }
         };
-        let imm = instruction.c.as_canonical_u32();
+        let imm = instruction.c.as_u32();
         if imm > u16::MAX as u32 {
             return Err(PostflightError::new(
                 "multi-byte store immediate exceeds the u16 execution-bus operand",
             ));
         }
 
-        let rs1_ptr = checked_register_pointer(instruction.b.as_canonical_u32())?;
-        let rs2_ptr = checked_register_pointer(instruction.a.as_canonical_u32())?;
+        let rs1_ptr = checked_register_pointer(instruction.b.as_u32())?;
+        let rs2_ptr = checked_register_pointer(instruction.a.as_u32())?;
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
         let mut replay = postflight.replay(step);

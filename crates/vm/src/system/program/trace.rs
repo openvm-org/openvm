@@ -5,11 +5,12 @@ use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
+    instruction::InstructionOperand,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::AirProvingContext,
@@ -27,6 +28,24 @@ use crate::{
         program::ProgramChip,
     },
 };
+
+/// Lowers a field-independent instruction operand into the proof field.
+///
+/// This belongs at trace-generation boundaries: execution and transpilation should use the
+/// operand's integer representation directly.
+#[inline]
+pub fn instruction_operand_to_field<F: PrimeField32>(operand: InstructionOperand) -> F {
+    assert!(
+        F::ORDER_U32 >= 1_u32 << 30,
+        "the proof field must support the signed 30-bit instruction operand domain"
+    );
+    let value = operand.as_i32();
+    if value < 0 {
+        -F::from_u32(value.unsigned_abs())
+    } else {
+        F::from_u32(value as u32)
+    }
+}
 
 impl<SC: StarkProtocolConfig> ProgramChip<SC> {
     /// Generates the execution-frequency trace against the loaded program.
@@ -71,7 +90,7 @@ impl<SC: StarkProtocolConfig> ProgramChip<SC> {
 /// **Note**: This function recomputes the Merkle tree for the initial memory image.
 pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
     program_commitment: &[F; VM_DIGEST_WIDTH],
-    exe: &VmExe<F>,
+    exe: &VmExe,
     memory_config: &MemoryConfig,
 ) -> [F; VM_DIGEST_WIDTH] {
     let hasher = vm_poseidon2_hasher();
@@ -109,7 +128,7 @@ pub fn compute_exe_commit<F: PrimeField32>(
     hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
 }
 
-pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorMatrix<F> {
+pub(crate) fn generate_cached_trace<F: PrimeField32>(program: &Program) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
     let mut instructions = program
         .enumerate_by_pc()
@@ -132,21 +151,21 @@ pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorM
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
                 pc: F::from_u32(pc),
-                opcode: instruction.opcode.to_field(),
-                a: instruction.a,
-                b: instruction.b,
-                c: instruction.c,
-                d: instruction.d,
-                e: instruction.e,
-                f: instruction.f,
-                g: instruction.g,
+                opcode: F::from_usize(instruction.opcode.as_usize()),
+                a: instruction_operand_to_field(instruction.a),
+                b: instruction_operand_to_field(instruction.b),
+                c: instruction_operand_to_field(instruction.c),
+                d: instruction_operand_to_field(instruction.d),
+                e: instruction_operand_to_field(instruction.e),
+                f: instruction_operand_to_field(instruction.f),
+                g: instruction_operand_to_field(instruction.g),
             };
         });
 
     RowMajorMatrix::new(rows, width)
 }
 
-pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
+pub(super) fn padding_instruction() -> Instruction {
     Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, EXIT_CODE_FAIL],

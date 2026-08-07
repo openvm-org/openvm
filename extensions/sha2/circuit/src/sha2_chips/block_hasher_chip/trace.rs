@@ -29,7 +29,7 @@ impl From<crate::Sha2ReplayRow> for Sha2BlockReplay {
 
 pub(crate) fn generate_trace_from_postflight<F, C>(
     chip: &Sha2BlockHasherChip<F, C>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError>
 where
     F: PrimeField32,
@@ -39,7 +39,7 @@ where
     let replay_rows = steps
         .par_iter()
         .map(|&step| {
-            crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
+            crate::replay_sha2_from_postflight::<C>(postflight, step, chip.pointer_max_bits)
                 .map(Sha2BlockReplay::from)
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -49,7 +49,7 @@ where
 #[cfg(test)]
 pub(crate) fn generate_trace_from_postflights<F, C>(
     chip: &Sha2BlockHasherChip<F, C>,
-    postflights: &[Postflight<'_, F>],
+    postflights: &[Postflight<'_>],
 ) -> Result<RowMajorMatrix<F>, PostflightError>
 where
     F: PrimeField32,
@@ -59,7 +59,6 @@ where
     for postflight in postflights {
         for &step in postflight.steps(C::OPCODE.global_opcode()) {
             replay_rows.push(Sha2BlockReplay::from(crate::replay_sha2_from_postflight::<
-                F,
                 C,
             >(
                 postflight,

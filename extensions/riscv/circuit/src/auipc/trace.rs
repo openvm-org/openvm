@@ -19,7 +19,7 @@ use crate::adapters::{
 /// Generates the AUIPC trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &AuipcChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(AUIPC.global_opcode());
     let adapter_width = RdWriteAdapterCols::<F>::width();
@@ -31,7 +31,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
         let instruction = postflight.instruction(step);
         let from_pc = postflight.pc(step);
-        let immediate = instruction.c.as_canonical_u32();
+        let immediate = instruction.c.as_u32();
         if immediate >= 1 << 24 {
             return Err(PostflightError::new(
                 "AUIPC immediate exceeds its 24-bit instruction encoding",
@@ -42,7 +42,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             step,
             &chip.mem_helper.as_borrowed(),
             adapter_row.borrow_mut(),
-            |pc, imm| (run_auipc(pc, imm), pc.wrapping_add(DEFAULT_PC_STEP)),
+            |pc| (run_auipc(pc, immediate), pc.wrapping_add(DEFAULT_PC_STEP)),
         )?;
 
         let core_row: &mut AuipcCoreCols<F> = core_row.borrow_mut();

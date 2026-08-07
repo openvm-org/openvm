@@ -4,6 +4,7 @@ use std::{ffi::c_void, ops::Range};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
+    instruction::Instruction,
     riscv::{
         is_valid_register_pointer, MEMORY_AS, REGISTER_AS, REGISTER_BYTES, REGISTER_NUM_LIMBS,
     },
@@ -16,7 +17,7 @@ use rvr_openvm_ir::{
 };
 use rvr_openvm_lift::{
     air_index_to_c, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    ExtensionError, RvrExtension, RvrExtensionCtx, RvrRuntimeExtension,
 };
 
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
@@ -216,11 +217,14 @@ impl Rv64IoExtension {
 }
 
 impl RvrExtension for Rv64IoExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == HintStoreOpcode::HINT_STORED.global_opcode_usize() {
-            let ptr_reg = decode_reg(insn.b);
+            if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+                return None;
+            }
+            let ptr_reg = decode_reg(insn.b.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(HintStoreWInstr { ptr_reg }),
@@ -229,8 +233,11 @@ impl RvrExtension for Rv64IoExtension {
         }
 
         if opcode == HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
-            let num_words_reg = decode_reg(insn.a);
-            let ptr_reg = decode_reg(insn.b);
+            if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+                return None;
+            }
+            let num_words_reg = decode_reg(insn.a.as_u32());
+            let ptr_reg = decode_reg(insn.b.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(HintBufferInstr {
@@ -298,15 +305,15 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
     }
 }
 
-fn decode_reveal(insn: &RvrInstruction) -> Option<RevealInstr> {
+fn decode_reveal(insn: &Instruction) -> Option<RevealInstr> {
     let opcode = insn.opcode.as_usize();
-    let src_reg_ptr = insn.a;
-    let base_reg_ptr = insn.b;
-    let immediate = insn.c;
-    let src_address_space = insn.d;
-    let dst_address_space = insn.e;
-    let is_enabled = insn.f;
-    let immediate_sign = insn.g;
+    let src_reg_ptr = insn.a.checked_as_u32()?;
+    let base_reg_ptr = insn.b.checked_as_u32()?;
+    let immediate = insn.c.checked_as_u32()?;
+    let src_address_space = insn.d.checked_as_u32()?;
+    let dst_address_space = insn.e.checked_as_u32()?;
+    let is_enabled = insn.f.checked_as_u32()?;
+    let immediate_sign = insn.g.checked_as_u32()?;
 
     if opcode != RevealOpcode::REVEAL.global_opcode_usize()
         || !is_valid_register_pointer(src_reg_ptr)
@@ -475,9 +482,8 @@ mod tests {
     use std::{collections::VecDeque, ptr::null_mut};
 
     use openvm_circuit::arch::HintStream;
-    use openvm_instructions::{instruction::Instruction, SystemOpcode};
+    use openvm_instructions::SystemOpcode;
     use openvm_riscv_transpiler::LoadStoreOpcode;
-    use p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
     use test_case::test_case;
 
@@ -602,7 +608,7 @@ mod tests {
     #[test]
     fn rv64io_lifts_reveal_as_a_doubleword_public_values_write() {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+        let inst = Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
                 8,
@@ -613,7 +619,7 @@ mod tests {
                 1,
                 0,
             ],
-        ));
+        );
         let lifted = ext.try_lift(&inst, 0x100).unwrap();
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
             panic!("expected reveal body instruction");
@@ -639,7 +645,7 @@ mod tests {
     #[test_case(LoadStoreOpcode::STOREB; "byte")]
     fn rv64io_does_not_treat_load_store_opcodes_as_reveal(opcode: LoadStoreOpcode) {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+        let inst = Instruction::from_usize(
             opcode.global_opcode(),
             [
                 8,
@@ -650,7 +656,7 @@ mod tests {
                 1,
                 0,
             ],
-        ));
+        );
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
@@ -659,10 +665,10 @@ mod tests {
     #[test_case(REGISTER_AS, MEMORY_AS; "destination_domain")]
     fn rv64io_rejects_reveal_with_invalid_address_spaces(d: u32, e: u32) {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+        let inst = Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [8, 16, 0, d as usize, e as usize, 1, 0],
-        ));
+        );
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
@@ -676,18 +682,67 @@ mod tests {
     #[test_case([8, 16, 0, REGISTER_AS, PUBLIC_VALUES_AS, 1, 2]; "invalid_sign")]
     fn rv64io_rejects_malformed_reveal_operands(operands: [u32; 7]) {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+        let inst = Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             operands.map(|operand| operand as usize),
-        ));
+        );
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
 
     #[test]
+    fn rv64io_rejects_negative_reveal_operand() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = Instruction::large_from_isize(
+            RevealOpcode::REVEAL.global_opcode(),
+            8,
+            16,
+            -1,
+            REGISTER_AS as isize,
+            PUBLIC_VALUES_AS as isize,
+            1,
+            0,
+        );
+
+        assert!(ext.try_lift(&inst, 0x100).is_none());
+    }
+
+    #[test]
+    fn hint_stores_require_register_and_memory_address_spaces() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        for opcode in [HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER] {
+            let valid = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, REGISTER_AS as usize, MEMORY_AS as usize, 0, 0],
+            );
+            assert!(ext.try_lift(&valid, 0x100).is_some());
+
+            let invalid_d = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, MEMORY_AS as usize, MEMORY_AS as usize, 0, 0],
+            );
+            assert!(ext.try_lift(&invalid_d, 0x100).is_none());
+
+            let invalid_e = Instruction::from_usize(
+                opcode.global_opcode(),
+                [
+                    8,
+                    16,
+                    0,
+                    REGISTER_AS as usize,
+                    PUBLIC_VALUES_AS as usize,
+                    0,
+                    0,
+                ],
+            );
+            assert!(ext.try_lift(&invalid_e, 0x100).is_none());
+        }
+    }
+
+    #[test]
     fn rv64io_ignores_non_store_public_values_shaped_instruction() {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+        let inst = Instruction::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
             [
                 8,
@@ -698,7 +753,7 @@ mod tests {
                 1,
                 0,
             ],
-        ));
+        );
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }

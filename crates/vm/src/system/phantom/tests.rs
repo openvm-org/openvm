@@ -54,11 +54,11 @@ impl PhantomSubExecutor for CountingPhantomExecutor {
 fn run_phantom_test<E>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     phantom_opcode: VmOpcode,
     num_nops: usize,
 ) where
-    E: Executor<F> + Clone,
+    E: Executor + Clone,
 {
     let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
     let mut pc = F::ZERO;
@@ -131,19 +131,9 @@ fn postflight_trace_does_not_replay_callbacks() {
             generate_trace_from_postflight(postflight)
         });
     let instructions = [
-        Instruction::phantom(
-            discriminant,
-            F::from_u32(0x1234),
-            F::from_u32(0x5678),
-            0x1234,
-        ),
-        Instruction::phantom(
-            discriminant,
-            F::from_u32(0x8765),
-            F::from_u32(0x4321),
-            0x4321,
-        ),
-        Instruction::phantom(discriminant, F::ZERO, F::ONE, 0),
+        Instruction::phantom(discriminant, 0x1234_u16, 0x5678_u16, 0x1234_u16),
+        Instruction::phantom(discriminant, 0x8765_u16, 0x4321_u16, 0x4321_u16),
+        Instruction::phantom(discriminant, 0_u16, 1_u16, 0_u16),
     ];
     for (index, instruction) in instructions.iter().enumerate() {
         tester.execute_with_pc(
@@ -165,9 +155,9 @@ fn postflight_trace_rejects_phantom_history_with_memory_events() {
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
     let instruction = Instruction::phantom(
         PhantomDiscriminant(0x7ffe),
-        F::from_u32(0x1234),
-        F::from_u32(0x5678),
-        0x1234,
+        0x1234_u16,
+        0x5678_u16,
+        0x1234_u16,
     );
     let program = openvm_instructions::program::Program::new_without_debug_infos(
         &[instruction, Instruction::from_usize(phantom_opcode, [0; 3])],
@@ -196,7 +186,7 @@ fn postflight_trace_rejects_phantom_history_with_memory_events() {
     };
     let memory_config = MemoryConfig::default();
     let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
-    let error = generate_trace_from_postflight(&postflight).unwrap_err();
+    let error = generate_trace_from_postflight::<F>(&postflight).unwrap_err();
 
     assert!(error.to_string().contains("left 1 memory events unread"));
 }
@@ -255,9 +245,9 @@ fn test_cuda_phantom_preflight_replay() {
     // GPU replay must treat it as an execution-bus operand and never invoke a callback.
     let instruction = Instruction::phantom(
         PhantomDiscriminant(0x7ffe),
-        F::from_u32(0x1234),
-        F::from_u32(0x5678),
-        0xabcd,
+        0x1234_u16,
+        0x5678_u16,
+        0xabcd_u16,
     );
     let program = Program::new_without_debug_infos(&[instruction.clone(), instruction.clone()], 0);
     let history = PreflightHistory {

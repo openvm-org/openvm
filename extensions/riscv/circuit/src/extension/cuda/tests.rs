@@ -12,6 +12,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
     var_range::VariableRangeCheckerChipGPU,
 };
+use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::copy::MemCopyD2H;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
@@ -27,11 +28,7 @@ use openvm_riscv_transpiler::{
     MulOpcode, MulWOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
     ShiftWOpcode,
 };
-use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    StarkEngine,
-};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 
 use super::Rv64ImPreflightGpuTracegen;
 use crate::{
@@ -39,22 +36,15 @@ use crate::{
     Rv64IConfig, Rv64IGpuBuilder, Rv64ImConfig, Rv64ImGpuBuilder,
 };
 
-type F = BabyBear;
-
 fn reg(index: usize) -> usize {
     index * REGISTER_NUM_LIMBS
 }
 
-fn instruction(opcode: impl LocalOpcode, operands: [usize; 5]) -> Instruction<F> {
+fn instruction(opcode: impl LocalOpcode, operands: [usize; 5]) -> Instruction {
     Instruction::from_usize(opcode.global_opcode(), operands)
 }
 
-fn checkpoint_ri(
-    opcode: impl LocalOpcode,
-    rd: usize,
-    rs1: usize,
-    immediate: usize,
-) -> Instruction<F> {
+fn checkpoint_ri(opcode: impl LocalOpcode, rd: usize, rs1: usize, immediate: usize) -> Instruction {
     instruction(
         opcode,
         [
@@ -67,7 +57,7 @@ fn checkpoint_ri(
     )
 }
 
-fn checkpoint_rr(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+fn checkpoint_rr(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction {
     instruction(
         opcode,
         [
@@ -80,7 +70,7 @@ fn checkpoint_rr(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) ->
     )
 }
 
-fn checkpoint_m(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+fn checkpoint_m(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction {
     instruction(
         opcode,
         [
@@ -93,7 +83,7 @@ fn checkpoint_m(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> 
     )
 }
 
-fn checkpoint_branch(opcode: impl LocalOpcode, rs1: usize, rs2: usize) -> Instruction<F> {
+fn checkpoint_branch(opcode: impl LocalOpcode, rs1: usize, rs2: usize) -> Instruction {
     Instruction::from_usize(
         opcode.global_opcode(),
         [
@@ -155,7 +145,7 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
         instruction(ShiftWImmOpcode::SRAIW, immediate_operands(19, 17, 1)),
         instruction(BaseAluImmOpcode::ORI, immediate_operands(20, 4, 2)),
         instruction(BaseAluImmOpcode::ANDI, immediate_operands(21, 20, 7)),
-        Instruction::<F>::from_isize(
+        Instruction::from_isize(
             BranchEqualOpcode::BEQ.global_opcode(),
             reg(1) as isize,
             reg(2) as isize,
@@ -357,8 +347,8 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
         ),
         Instruction::phantom(
             PhantomDiscriminant(SysPhantom::Nop as u16),
-            F::from_u32(0x1234),
-            F::from_u32(0x5678),
+            0x1234u16,
+            0x5678u16,
             0x1234,
         ),
         Instruction::from_usize(
@@ -738,7 +728,7 @@ fn preflight_gpu_replay_proves_an_empty_suspended_segment() {
 
 #[test]
 fn preflight_gpu_replay_rejects_terminate_in_a_suspended_segment() {
-    let instructions: [Instruction<F>; 1] = [Instruction::from_usize(
+    let instructions: [Instruction; 1] = [Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, 0, 0, 0],
     )];
@@ -906,12 +896,7 @@ fn preflight_gpu_replay_proves_bounded_rv64i_slice() {
         checkpoint_m(DivRemWOpcode::REMUW, 12, 1, 0),
         checkpoint_m(DivRemWOpcode::DIVUW, 11, 1, 2),
         checkpoint_m(DivRemWOpcode::REMUW, 12, 1, 2),
-        Instruction::phantom(
-            PhantomDiscriminant(SysPhantom::Nop as u16),
-            F::ZERO,
-            F::ZERO,
-            0,
-        ),
+        Instruction::phantom(PhantomDiscriminant(SysPhantom::Nop as u16), 0u16, 0u16, 0),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ]);
     let program = Program::from_instructions(&instructions);
@@ -1388,11 +1373,11 @@ fn preflight_postflight_rejects_raw_x0_destination() {
 #[test]
 fn preflight_gpu_replay_proves_hint_store() {
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             HintStoreOpcode::HINT_STORED.global_opcode(),
             [0, reg(1), 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             HintStoreOpcode::HINT_BUFFER.global_opcode(),
             [reg(2), reg(3), 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
@@ -1494,7 +1479,7 @@ fn preflight_gpu_replay_proves_hint_store() {
 fn preflight_gpu_replay_proves_aligned_reveals() {
     let values = [0x0123_4567_89ab_cdefu64, 0xfedc_ba98_7654_3210];
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
                 reg(1),
@@ -1510,7 +1495,7 @@ fn preflight_gpu_replay_proves_aligned_reveals() {
             AuipcOpcode::AUIPC.global_opcode(),
             [reg(4), 0, 0, REGISTER_AS as usize, 0, 0, 0],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
                 reg(3),

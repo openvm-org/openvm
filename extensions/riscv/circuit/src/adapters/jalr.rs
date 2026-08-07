@@ -140,7 +140,7 @@ pub struct JalrAdapterFiller;
 
 impl JalrAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_, F>,
+        postflight: &Postflight<'_>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut JalrAdapterCols<F>,
@@ -152,12 +152,12 @@ impl JalrAdapterFiller {
         ) -> Result<(u32, [u16; BLOCK_FE_WIDTH]), PostflightError>,
     ) -> Result<([u16; BLOCK_FE_WIDTH], u32, [u16; BLOCK_FE_WIDTH]), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS || !instruction.e.is_zero() {
+        if instruction.d.as_u32() != REGISTER_AS || !instruction.e.is_zero() {
             return Err(PostflightError::new(
                 "JALR instruction has invalid address spaces",
             ));
         }
-        let needs_write = match instruction.f.as_canonical_u32() {
+        let needs_write = match instruction.f.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -166,7 +166,7 @@ impl JalrAdapterFiller {
                 ));
             }
         };
-        let imm_sign = match instruction.g.as_canonical_u32() {
+        let imm_sign = match instruction.g.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -175,7 +175,7 @@ impl JalrAdapterFiller {
                 ));
             }
         };
-        let immediate = instruction.c.as_canonical_u32();
+        let immediate = instruction.c.as_u32();
         let canonical_immediate = (immediate & 0x7ff) + u32::from(imm_sign) * 0xf800;
         if immediate != canonical_immediate {
             return Err(PostflightError::new(
@@ -185,8 +185,8 @@ impl JalrAdapterFiller {
 
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
-        let rs1_ptr = instruction.b.as_canonical_u32();
-        let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_ptr = instruction.b.as_u32();
+        let rd_ptr = instruction.a.as_u32();
         let rs1_u16_ptr = checked_register_u16_pointer(rs1_ptr)?;
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);

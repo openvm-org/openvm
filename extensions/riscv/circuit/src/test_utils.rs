@@ -30,7 +30,7 @@ pub fn rand_write_register_or_imm(
     imm: Option<usize>,
     opcode_with_offset: usize,
     rng: &mut StdRng,
-) -> (Instruction<BabyBear>, usize) {
+) -> (Instruction, usize) {
     let rs2_is_imm = imm.is_some();
 
     let rs1 = gen_register_pointer(rng, REGISTER_NUM_LIMBS);

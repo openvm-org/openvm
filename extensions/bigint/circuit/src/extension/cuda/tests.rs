@@ -20,13 +20,10 @@ use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode,
     MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::StarkEngine;
 
 use super::{Int256PreflightGpuTracegen, Int256Rv64GpuBuilder};
 use crate::Int256Rv64Config;
-
-type F = BabyBear;
 
 const DST_PTR: u32 = 0x100;
 const LHS_PTR: u32 = 0x200;
@@ -36,13 +33,13 @@ fn reg(index: usize) -> usize {
     index * REGISTER_BYTES as usize
 }
 
-fn fixture(equal: bool) -> (Program<F>, VmExe<F>) {
+fn fixture(equal: bool) -> (Program, VmExe) {
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
             [reg(4), reg(0), 7, REGISTER_AS as usize, IMM_AS as usize],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
             [
                 reg(1),
@@ -52,12 +49,12 @@ fn fixture(equal: bool) -> (Program<F>, VmExe<F>) {
                 MEMORY_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
             [reg(2), reg(3), 8, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
 
@@ -102,7 +99,7 @@ struct OpcodeCase {
     expected_branch: Option<bool>,
 }
 
-fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
+fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program, VmExe) {
     let cases = vec![
         OpcodeCase {
             opcode: BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
@@ -182,23 +179,20 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
     lhs[31] = 0x80;
     let mut rhs = [0u8; 32];
     rhs[0] = 65;
-    let negative_offset = (F::ORDER_U32 - 4) as usize;
     let mut instructions = cases
         .iter()
         .map(|case| {
             if let Some(expected_branch) = case.expected_branch {
-                Instruction::<F>::from_usize(
+                Instruction::from_isize(
                     case.opcode,
-                    [
-                        reg(2),
-                        reg(3),
-                        if expected_branch { 4 } else { negative_offset },
-                        REGISTER_AS as usize,
-                        MEMORY_AS as usize,
-                    ],
+                    reg(2) as isize,
+                    reg(3) as isize,
+                    if expected_branch { 4 } else { -4 },
+                    REGISTER_AS as isize,
+                    MEMORY_AS as isize,
                 )
             } else {
-                Instruction::<F>::from_usize(
+                Instruction::from_usize(
                     case.opcode,
                     [
                         reg(1),
@@ -211,7 +205,7 @@ fn all_opcode_fixture() -> (Vec<OpcodeCase>, Program<F>, VmExe<F>) {
             }
         })
         .collect::<Vec<_>>();
-    instructions.push(Instruction::<F>::from_usize(
+    instructions.push(Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),
         [0; 5],
     ));
@@ -348,11 +342,11 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
 #[test]
 fn int256_checkpoint_replay_rejects_wrapping_transitions() {
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
             [reg(2), reg(3), 8, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
     let mut init_memory = SparseMemoryImage::default();

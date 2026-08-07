@@ -2,6 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError, BLOCK_FE_WIDTH},
+    system::program::trace::instruction_operand_to_field,
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
@@ -14,7 +15,7 @@ use crate::adapters::{BranchAdapterCols, BranchAdapterFiller};
 /// Generates the RV64 equality-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &BranchEqualChip<F>,
-    postflight: &Postflight<'_, F>,
+    postflight: &Postflight<'_>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE];
     let rows_used = opcodes
@@ -38,7 +39,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 adapter_row.borrow_mut(),
                 |from_pc, [rs1, rs2], immediate| {
                     if fast_run_eq(local_opcode, &rs1, &rs2) {
-                        (F::from_u32(from_pc) + F::from_u32(immediate)).as_canonical_u32()
+                        from_pc.wrapping_add_signed(immediate)
                     } else {
                         from_pc.wrapping_add(chip.inner.pc_step)
                     }
@@ -54,7 +55,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.diff_inv_marker[diff_idx] = diff_inv_val;
             core_row.opcode_bne_flag = F::from_bool(!is_beq);
             core_row.opcode_beq_flag = F::from_bool(is_beq);
-            core_row.imm = instruction.c;
+            core_row.imm = instruction_operand_to_field(instruction.c);
             core_row.cmp_result = F::from_bool(cmp_result);
             core_row.b = b.map(F::from_u16);
             core_row.a = a.map(F::from_u16);

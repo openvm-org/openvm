@@ -23,12 +23,9 @@ use openvm_riscv_circuit::{
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
-
-type F = BabyBear;
 
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -52,7 +49,7 @@ fn test_decode_elf() -> Result<()> {
 #[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
-    let program = Transpiler::<F>::default()
+    let program = Transpiler::default()
         .with_extension(Rv64ITranspilerExtension)
         .with_extension(Rv64MTranspilerExtension)
         .with_extension(Rv64IoTranspilerExtension)
@@ -70,7 +67,7 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension),
@@ -133,7 +130,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let openvm_exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension)
@@ -152,7 +149,7 @@ fn test_terminate_prove() -> Result<()> {
     let elf = get_elf("tests/data/rv64im-terminate-from-as")?;
     let openvm_exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension)

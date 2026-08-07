@@ -22,7 +22,7 @@ pub fn write_heap_default<const NUM_LIMBS: usize>(
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction {
     let [reg1, reg2, reg3] = tester.get_default_registers::<3>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(128);
     write_heap(tester, reg1, pointer1, addr1_writes);
@@ -51,7 +51,7 @@ pub fn write_u16_heap_default<const NUM_LIMBS: usize>(
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction {
     let [reg1, reg2, reg3] = tester.get_default_registers::<3>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(128);
     write_u16_heap(tester, reg1, pointer1, addr1_writes);
@@ -81,7 +81,7 @@ pub fn write_heap_default_with_increment<const NUM_LIMBS: usize>(
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     pointer_increment: usize,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction {
     let [reg1, reg2, reg3] = tester.get_default_registers::<3>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(pointer_increment);
     write_heap(tester, reg1, pointer1, addr1_writes);
@@ -152,7 +152,7 @@ pub fn heap_branch_default<const NUM_LIMBS: usize>(
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     imm: isize,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction {
     let [reg1, reg2] = tester.get_default_registers::<2>(REGISTER_NUM_LIMBS);
     let pointer1 = tester.get_default_pointer(128);
     write_heap(tester, reg1, pointer1, addr1_writes);
@@ -182,7 +182,7 @@ pub fn rand_write_register_or_imm<const NUM_LIMBS: usize>(
     imm: Option<usize>,
     opcode_with_offset: usize,
     rng: &mut StdRng,
-) -> (Instruction<BabyBear>, usize) {
+) -> (Instruction, usize) {
     let rs2_is_imm = imm.is_some();
 
     let rs1 = gen_pointer(rng, NUM_LIMBS);

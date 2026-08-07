@@ -1,3 +1,6 @@
+use openvm_cuda_backend::prelude::F as CudaField;
+use openvm_stark_backend::p3_field::PrimeField32;
+
 use super::*;
 use crate::arch::Postflight;
 
@@ -7,9 +10,9 @@ impl GpuPostflightProgram {
     /// Production interpreter proving derives chronology on the device from
     /// the segment-start memory image. Tests already carry exact first-write
     /// seeds, so they can upload the validated predecessor index directly.
-    pub fn upload_history_for_test<F: PrimeField32>(
+    pub fn upload_history_for_test(
         &self,
-        program: &Program<F>,
+        program: &Program,
         history: &PreflightHistory,
         exit_code: Option<u32>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
@@ -20,9 +23,9 @@ impl GpuPostflightProgram {
 
     /// Uploads an isolated chip fixture whose final sentinel need not resolve
     /// to another instruction in the fixture program.
-    pub fn upload_isolated_history_for_test<F: PrimeField32>(
+    pub fn upload_isolated_history_for_test(
         &self,
-        program: &Program<F>,
+        program: &Program,
         history: &PreflightHistory,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let postflight = Postflight::new_for_test(program, history, &self.memory_config)
@@ -30,11 +33,14 @@ impl GpuPostflightProgram {
         self.upload_validated_history_for_test(history, postflight)
     }
 
-    fn upload_validated_history_for_test<F: PrimeField32>(
+    fn upload_validated_history_for_test(
         &self,
         history: &PreflightHistory,
-        postflight: Postflight<'_, F>,
+        postflight: Postflight<'_>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
+        postflight
+            .validate_field_values(CudaField::ORDER_U32)
+            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         let replay_steps = postflight
             .replay_steps_for_test()
             .map(|(program_index, memory_start)| GpuReplayStep {
@@ -255,7 +261,7 @@ pub type ChronologyOutputForTest = (
     Vec<PreflightFieldBlock>,
     Vec<PreflightFieldBlock>,
     Vec<u32>,
-    Vec<TouchedBlock<BabyBear>>,
+    Vec<TouchedBlock>,
 );
 
 #[cfg(all(test, feature = "rvr"))]

@@ -12,7 +12,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftLogicalCoreExecutor;
 #[derive(AlignedBytesBorrow, Clone)]
@@ -27,10 +26,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ShiftLogicalCoreExecutor<NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut ShiftLogicalPreCompute,
     ) -> Result<ShiftOpcode, StaticProgramError> {
         let Instruction {
@@ -40,13 +39,13 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
         if shift_opcode == ShiftOpcode::SRA {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        if inst.d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
+        if inst.d.as_u32() != REGISTER_AS || e.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = ShiftLogicalPreCompute {
-            rs2_ptr: c.as_canonical_u32() as u8,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            rs2_ptr: c.as_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok(shift_opcode)
     }
@@ -62,10 +61,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     for ShiftLogicalCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
@@ -79,7 +76,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftLogicalPreCompute = data.borrow_mut();
@@ -91,7 +88,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -103,10 +100,8 @@ where
     }
 }
 
-impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
     for ShiftLogicalCoreExecutor<NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftLogicalPreCompute>>()
@@ -117,7 +112,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftLogicalPreCompute> = data.borrow_mut();
@@ -131,7 +126,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftLogicalPreCompute> = data.borrow_mut();
