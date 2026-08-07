@@ -1,8 +1,12 @@
 use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
-    system::memory::merkle::MemoryMerkleCols,
+    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    system::memory::{
+        merkle::MemoryMerkleCols,
+        online::{LinearMemory, PAGE_SIZE},
+        AddressMap,
+    },
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
@@ -28,6 +32,114 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
 /// = 2 (key) + 1 (is_dirty) + VM_DIGEST_WIDTH (values); see `MemoryMerkleRecord`.
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + VM_DIGEST_WIDTH;
 pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
+
+#[derive(Debug)]
+pub(crate) enum InitialMerkleBuild {
+    DensePrefix(usize),
+    SparsePages(SparseMerklePlan),
+}
+
+#[derive(Debug)]
+pub(crate) struct SparseMerklePlan {
+    /// Node labels grouped by height, with the root first. Digests use the same ordering.
+    labels: Vec<u32>,
+    /// For each conceptual node height, `[start, count]` in `labels`.
+    levels: Vec<[u32; 2]>,
+    base_height: usize,
+}
+
+/// Number of leaf digests a subtree must store densely so that every page of `addr_sp` that may
+/// contain non-zero data lies inside it, rounded up to a power of two. Returns 0 for an empty
+/// address space and at least 1 otherwise, so that stored-node reads during
+/// [`MemoryMerkleTree::update_with_touched_blocks`] stay in bounds. All leaves at or beyond the
+/// watermark are guaranteed zero (see
+/// [`TouchedPages`](openvm_circuit::system::memory::online::TouchedPages)), which is exactly the
+/// invariant [`MemoryMerkleTree::build_async`] requires of its `addr_space_size` argument.
+pub(crate) fn touched_leaf_watermark(memory: &AddressMap, addr_sp: usize) -> usize {
+    let raw_len = memory.mem[addr_sp].as_slice().len();
+    if raw_len == 0 {
+        return 0;
+    }
+    let cell_size = memory.config[addr_sp].layout.size();
+    let watermark_bytes = memory.touched_pages[addr_sp]
+        .touched_byte_ranges(raw_len)
+        .last()
+        .map_or(0, |&(_, end)| end);
+    watermark_bytes
+        .div_ceil(cell_size * VM_DIGEST_WIDTH)
+        .next_power_of_two()
+}
+
+/// Chooses between the fast dense-prefix builder and a page-dense, upper-level-sparse builder.
+///
+/// The sparse representation starts at height [`OMITTED_BOTTOM_LEVELS`], so each base node is the
+/// root of eight raw-memory leaves. Touched 4 KiB pages therefore remain dense and coalesced while
+/// gaps between pages are represented by precomputed zero hashes. Dense-prefix construction stays
+/// preferable for the ordinary contiguous guest image because it avoids sparse labels and lookups.
+pub(crate) fn initial_merkle_build(
+    memory: &AddressMap,
+    addr_sp: usize,
+    full_height: usize,
+) -> InitialMerkleBuild {
+    let raw_len = memory.mem[addr_sp].as_slice().len();
+    let dense_size = touched_leaf_watermark(memory, addr_sp);
+    if raw_len == 0 || dense_size == 0 {
+        return InitialMerkleBuild::DensePrefix(dense_size);
+    }
+
+    let ranges = memory.touched_pages[addr_sp].touched_byte_ranges(raw_len);
+    if ranges.is_empty() || (ranges.len() == 1 && ranges[0].0 == 0) {
+        return InitialMerkleBuild::DensePrefix(dense_size);
+    }
+
+    let cell_size = memory.config[addr_sp].layout.size();
+    let leaf_bytes = cell_size * VM_DIGEST_WIDTH;
+    let base_leaf_count = 1usize << OMITTED_BOTTOM_LEVELS;
+    let base_node_bytes = leaf_bytes * base_leaf_count;
+    debug_assert_eq!(PAGE_SIZE % base_node_bytes, 0);
+
+    let mut by_height = vec![Vec::<u32>::new(); full_height + 1];
+    for (start, end) in ranges {
+        let first = start / base_node_bytes;
+        let last = end.div_ceil(base_node_bytes);
+        by_height[OMITTED_BOTTOM_LEVELS].extend((first..last).map(|label| label as u32));
+    }
+    by_height[OMITTED_BOTTOM_LEVELS].sort_unstable();
+    by_height[OMITTED_BOTTOM_LEVELS].dedup();
+    for height in OMITTED_BOTTOM_LEVELS + 1..=full_height {
+        let mut parents = by_height[height - 1]
+            .iter()
+            .map(|label| label >> 1)
+            .collect::<Vec<_>>();
+        parents.dedup();
+        by_height[height] = parents;
+    }
+
+    let sparse_nodes = by_height.iter().map(Vec::len).sum::<usize>();
+    let dense_height = log2_ceil_usize(dense_size);
+    let dense_path_len = full_height - dense_height;
+    let dense_layout = MemoryMerkleSubTree::layout_for_height(dense_height);
+    let dense_nodes = MemoryMerkleSubTree::buffer_len(dense_size, dense_path_len, dense_layout);
+    // Sparse nodes carry a u32 label and use binary-search lookup during updates. Require a
+    // meaningful reduction rather than selecting sparse storage for small holes in a dense image.
+    if sparse_nodes.saturating_mul(2) >= dense_nodes {
+        return InitialMerkleBuild::DensePrefix(dense_size);
+    }
+
+    let mut labels = Vec::with_capacity(sparse_nodes);
+    let mut levels = vec![[0u32; 2]; full_height + 1];
+    for height in (OMITTED_BOTTOM_LEVELS..=full_height).rev() {
+        let start = labels.len();
+        labels.extend_from_slice(&by_height[height]);
+        levels[height] = [start as u32, by_height[height].len() as u32];
+    }
+    debug_assert_eq!(levels[full_height], [0, 1]);
+    InitialMerkleBuild::SparsePages(SparseMerklePlan {
+        labels,
+        levels,
+        base_height: OMITTED_BOTTOM_LEVELS,
+    })
+}
 
 /// Exact number of distinct internal merkle nodes (heights `1..=tree_height`) on the
 /// paths from a sorted stream of global leaf indices to the root: the first leaf's path
@@ -64,6 +176,7 @@ impl SpanningNodeCounter {
 enum MemoryMerkleSubTreeLayout {
     Full = 0,
     OmitBottomLevels = 1,
+    SparsePages = 2,
 }
 
 /// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
@@ -75,6 +188,8 @@ enum MemoryMerkleSubTreeLayout {
 /// - `Full` subtrees store the remaining nodes as the complete subtree heap.
 /// - `OmitBottomLevels` subtrees omit the bottom `OMITTED_BOTTOM_LEVELS` levels and store only the
 ///   retained heap whose leaves are the first stored hashes above the omitted levels.
+/// - `SparsePages` subtrees store sorted `(height, label) -> digest` levels for touched pages and
+///   their ancestors; absent labels resolve to the precomputed zero hash for that height.
 ///
 /// All GPU work is issued on the subtree's `GpuDeviceCtx` stream.
 /// `build_completion_event` records when the build kernels finish so that downstream consumers can
@@ -85,11 +200,13 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
+    sparse_labels: DeviceBuffer<u32>,
+    sparse_levels: DeviceBuffer<[u32; 2]>,
     /// Shared handle to the initial-memory buffer (`d_data`) from [`Self::build_async`], or
     /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: under
-    /// `OmitBottomLevels` the omitted levels aren't in `buf` and are recomputed from this buffer
-    /// during [`MemoryMerkleTree::update_with_touched_blocks`] (`recompute_omitted_node` in
-    /// `merkle_tree.cu`).
+    /// `OmitBottomLevels` and `SparsePages`, the omitted levels aren't in `buf` and are recomputed
+    /// from this buffer during [`MemoryMerkleTree::update_with_touched_blocks`]
+    /// (`recompute_omitted_node` in `merkle_tree.cu`).
     ///
     /// This only covers host-side ownership; the buffer also feeds GPU kernels on the stream, so
     /// drop the subtrees (releasing these handles) only after the `stream.synchronize()` in
@@ -110,6 +227,9 @@ impl MemoryMerkleSubTree {
         let retained_height = match layout {
             MemoryMerkleSubTreeLayout::Full => height,
             MemoryMerkleSubTreeLayout::OmitBottomLevels => height - OMITTED_BOTTOM_LEVELS,
+            MemoryMerkleSubTreeLayout::SparsePages => {
+                unreachable!("sparse buffers are sized by SparseMerklePlan")
+            }
         };
         2 * (1 << retained_height) - 1
     }
@@ -169,6 +289,8 @@ impl MemoryMerkleSubTree {
             buf,
             path_len,
             layout,
+            sparse_labels: DeviceBuffer::new(),
+            sparse_levels: DeviceBuffer::new(),
             initial_data: None,
         }
     }
@@ -180,6 +302,27 @@ impl MemoryMerkleSubTree {
             buf: DeviceBuffer::new(),
             path_len: 0,
             layout: MemoryMerkleSubTreeLayout::Full,
+            sparse_labels: DeviceBuffer::new(),
+            sparse_levels: DeviceBuffer::new(),
+            initial_data: None,
+        }
+    }
+
+    fn new_sparse(full_height: usize, plan: &SparseMerklePlan, device_ctx: &GpuDeviceCtx) -> Self {
+        debug_assert_eq!(plan.levels[full_height], [0, 1]);
+        tracing::debug!(
+            nodes = plan.labels.len(),
+            full_height,
+            "Creating a page-sparse subtree buffer"
+        );
+        Self {
+            build_completion_event: None,
+            buf: DeviceBuffer::<H>::with_capacity_on(plan.labels.len(), device_ctx),
+            height: full_height,
+            path_len: 0,
+            layout: MemoryMerkleSubTreeLayout::SparsePages,
+            sparse_labels: plan.labels.to_device_on(device_ctx).unwrap(),
+            sparse_levels: plan.levels.to_device_on(device_ctx).unwrap(),
             initial_data: None,
         }
     }
@@ -192,6 +335,9 @@ impl MemoryMerkleSubTree {
         match self.layout {
             MemoryMerkleSubTreeLayout::Full => self.height,
             MemoryMerkleSubTreeLayout::OmitBottomLevels => self.height - OMITTED_BOTTOM_LEVELS,
+            MemoryMerkleSubTreeLayout::SparsePages => {
+                unreachable!("sparse subtrees do not use heap height")
+            }
         }
     }
 
@@ -247,6 +393,34 @@ impl MemoryMerkleSubTree {
                 }
                 event.record(device_ctx.stream.as_raw()).unwrap();
             }
+        }
+        self.build_completion_event = Some(event);
+    }
+
+    fn build_sparse_async(
+        &mut self,
+        d_data: Arc<DeviceBuffer<u8>>,
+        addr_space_idx: usize,
+        plan: &SparseMerklePlan,
+        zero_hash: &DeviceBuffer<H>,
+        device_ctx: &GpuDeviceCtx,
+    ) {
+        let event = CudaEvent::new().unwrap();
+        self.initial_data = Some(d_data.clone());
+        unsafe {
+            build_sparse_merkle_subtree(
+                &d_data,
+                &self.buf,
+                &self.sparse_labels,
+                &plan.levels,
+                plan.base_height,
+                self.height,
+                addr_space_idx as u32,
+                zero_hash,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+            event.record(device_ctx.stream.as_raw()).unwrap();
         }
         self.build_completion_event = Some(event);
     }
@@ -339,24 +513,52 @@ impl MemoryMerkleTree {
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
     ///
+    /// `build` selects either a dense prefix or page-dense sparse construction. Both require every
+    /// unrepresented leaf to be all-zero, as guaranteed by the touched-page metadata.
+    ///
     /// **Note:** the caller MUST ENSURE that `d_data` lives long enough to be there
     /// when the enqueued task actually starts. Moreover, when the subtree uses the
-    /// `OmitBottomLevels` layout, `d_data` is also re-read during
+    /// `OmitBottomLevels` or `SparsePages` layout, `d_data` is also re-read during
     /// [`Self::update_with_touched_blocks`] to recompute the omitted bottom levels, so it must
     /// remain valid until that update completes — not just until the build kernel runs. See
     /// [`MemoryMerkleSubTree`]'s `initial_data` field for details.
-    pub fn build_async(&mut self, d_data: Arc<DeviceBuffer<u8>>, addr_space: usize) {
+    pub(crate) fn build_async(
+        &mut self,
+        d_data: Arc<DeviceBuffer<u8>>,
+        addr_space: usize,
+        build: InitialMerkleBuild,
+    ) {
         if addr_space < ADDR_SPACE_OFFSET as usize {
             return;
         }
         let addr_space_idx = addr_space - ADDR_SPACE_OFFSET as usize;
         if addr_space < self.mem_config.addr_spaces.len() && addr_space_idx == self.subtrees.len() {
-            let mut subtree = MemoryMerkleSubTree::new(
-                self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
-                1 << (self.zero_hash.len() - 1), /* label_max_bits */
-                &self.device_ctx,
-            );
-            subtree.build_async(d_data, addr_space_idx, &self.zero_hash, &self.device_ctx);
+            let full_height = self.zero_hash.len() - 1;
+            let mut subtree = match &build {
+                InitialMerkleBuild::DensePrefix(addr_space_size) => {
+                    assert!(
+                        *addr_space_size
+                            <= self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
+                        "subtree size exceeds the address space's configured leaf count"
+                    );
+                    MemoryMerkleSubTree::new(*addr_space_size, 1 << full_height, &self.device_ctx)
+                }
+                InitialMerkleBuild::SparsePages(plan) => {
+                    MemoryMerkleSubTree::new_sparse(full_height, plan, &self.device_ctx)
+                }
+            };
+            match &build {
+                InitialMerkleBuild::DensePrefix(_) => {
+                    subtree.build_async(d_data, addr_space_idx, &self.zero_hash, &self.device_ctx)
+                }
+                InitialMerkleBuild::SparsePages(plan) => subtree.build_sparse_async(
+                    d_data,
+                    addr_space_idx,
+                    plan,
+                    &self.zero_hash,
+                    &self.device_ctx,
+                ),
+            }
             self.subtrees.push(subtree);
         } else {
             panic!("Invalid address space ID");
@@ -427,6 +629,16 @@ impl MemoryMerkleTree {
                 .iter()
                 .map(|s| s.initial_data.as_ref().map_or(0, |b| b.as_ptr() as usize))
                 .collect::<Vec<_>>();
+            let sparse_label_ptrs = self
+                .subtrees
+                .iter()
+                .map(|s| s.sparse_labels.as_ptr() as usize)
+                .collect::<Vec<_>>();
+            let sparse_level_ptrs = self
+                .subtrees
+                .iter()
+                .map(|s| s.sparse_levels.as_ptr() as usize)
+                .collect::<Vec<_>>();
             let subtrees_pointers = self
                 .subtrees
                 .iter()
@@ -445,6 +657,8 @@ impl MemoryMerkleTree {
                     &actual_heights,
                     &subtree_layouts,
                     &initial_data_ptrs,
+                    &sparse_label_ptrs,
+                    &sparse_level_ptrs,
                     unpadded_height,
                     &self.hasher_buffer,
                     &self.device_ctx,
@@ -520,8 +734,8 @@ mod tests {
     use rand::Rng;
 
     use super::{
-        MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, SpanningNodeCounter,
-        OMITTED_BOTTOM_LEVELS,
+        initial_merkle_build, InitialMerkleBuild, MemoryMerkleSubTree, MemoryMerkleSubTreeLayout,
+        MemoryMerkleTree, SpanningNodeCounter, OMITTED_BOTTOM_LEVELS,
     };
     use crate::{
         arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
@@ -678,7 +892,13 @@ mod tests {
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(mem_slice.clone(), i);
+            gpu_merkle_tree.build_async(
+                mem_slice.clone(),
+                i,
+                InitialMerkleBuild::DensePrefix(
+                    mem_config.addr_spaces[i].num_cells / VM_DIGEST_WIDTH,
+                ),
+            );
         }
         assert_eq!(
             gpu_merkle_tree.subtrees[REGISTER_AS as usize - 1].layout,
@@ -884,7 +1104,13 @@ mod tests {
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(mem_slice.clone(), i);
+            gpu_merkle_tree.build_async(
+                mem_slice.clone(),
+                i,
+                InitialMerkleBuild::DensePrefix(
+                    mem_config.addr_spaces[i].num_cells / VM_DIGEST_WIDTH,
+                ),
+            );
         }
         gpu_merkle_tree.finalize();
 
@@ -1008,5 +1234,274 @@ mod tests {
             gpu_rows, cpu_rows,
             "GPU merkle trace rows do not match the CPU reference trace"
         );
+    }
+
+    /// Page-sparse variant of the equivalence tests: the large address spaces contain a low prefix
+    /// and data in their final page. A prefix-only builder would therefore hash the entire address
+    /// space, while the page builder stores only those page subtrees and their ancestors. The
+    /// update then touches dirty and clean blocks across the whole pointer range. Checks the
+    /// initial root, final root, and full trace against the CPU reference.
+    #[test]
+    fn test_cuda_merkle_tree_sparse_pages_cpu_gpu_equivalence() {
+        let mut rng = create_seeded_rng();
+        let mem_config = {
+            let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+            let max_ptr_bits = 16;
+            let max_cells = 1 << max_ptr_bits;
+            // REGISTER_AS uses u16 storage cells.
+            addr_spaces[REGISTER_AS as usize].num_cells = 32 * size_of::<u64>() / U16_CELL_SIZE;
+            addr_spaces[MEMORY_AS as usize].num_cells = max_cells;
+            addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
+            MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
+        };
+
+        // Fill REGISTER_AS fully, plus a low prefix and the final cell of each large address
+        // space. The distant page forces selection of SparsePages (asserted below).
+        let prefix_cells = 1 << 10;
+        let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        for (idx, space) in mem_config.addr_spaces.iter().enumerate() {
+            let num_filled = if idx == REGISTER_AS as usize {
+                space.num_cells
+            } else {
+                space.num_cells.min(prefix_cells)
+            };
+            unsafe {
+                match space.layout {
+                    MemoryCellType::Null => {}
+                    MemoryCellType::U8 => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<u8, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::U16 => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<u16, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::U32 => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<u32, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::F { .. } => {
+                        for i in 0..num_filled {
+                            initial_memory.write::<F, 1>(
+                                idx as u32,
+                                i as u32,
+                                [F::from_u32(rng.random_range(0..F::ORDER_U32))],
+                            );
+                        }
+                    }
+                }
+                if (idx == MEMORY_AS as usize || idx == DEFERRAL_AS as usize)
+                    && space.num_cells != 0
+                {
+                    let ptr = (space.num_cells - 1) as u32;
+                    match space.layout {
+                        MemoryCellType::U8 => initial_memory.write::<u8, 1>(idx as u32, ptr, [1]),
+                        MemoryCellType::U16 => initial_memory.write::<u16, 1>(idx as u32, ptr, [1]),
+                        MemoryCellType::U32 => initial_memory.write::<u32, 1>(idx as u32, ptr, [1]),
+                        MemoryCellType::F { .. } => {
+                            initial_memory.write::<F, 1>(idx as u32, ptr, [F::ONE])
+                        }
+                        MemoryCellType::Null => {}
+                    }
+                }
+            }
+        }
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
+        let mut gpu_merkle_tree = MemoryMerkleTree::new(
+            mem_config.clone(),
+            gpu_hasher_chip.clone(),
+            device_ctx.clone(),
+        );
+        let mem_slices = initial_memory
+            .memory
+            .get_memory()
+            .iter()
+            .map(|mem| {
+                let mem_slice = mem.as_slice();
+                Arc::new(if !mem_slice.is_empty() {
+                    mem_slice.to_device_on(&gpu_merkle_tree.device_ctx).unwrap()
+                } else {
+                    DeviceBuffer::new()
+                })
+            })
+            .collect::<Vec<_>>();
+        for (i, mem_slice) in mem_slices.iter().enumerate() {
+            gpu_merkle_tree.build_async(
+                mem_slice.clone(),
+                i,
+                initial_merkle_build(
+                    &initial_memory.memory,
+                    i,
+                    mem_config.memory_dimensions().address_height,
+                ),
+            );
+        }
+        // The large address spaces must actually select page sparsity, or this test degenerates
+        // into the dense equivalence tests.
+        for addr_space in [MEMORY_AS as usize, DEFERRAL_AS as usize] {
+            let subtree = &gpu_merkle_tree.subtrees[addr_space - 1];
+            assert_eq!(subtree.layout, MemoryMerkleSubTreeLayout::SparsePages);
+        }
+        gpu_merkle_tree.finalize();
+
+        let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+        let cpu_merkle_tree = MerkleTree::<F, VM_DIGEST_WIDTH>::from_memory(
+            &initial_memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher_chip,
+        );
+        assert_eq!(
+            cpu_merkle_tree.root(),
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.device_ctx)
+                .unwrap()[0],
+            "initial roots diverge"
+        );
+
+        // Touch ~1/3 of digest-aligned pointers across the whole pointer range, always including
+        // the very last leaf of the large address spaces.
+        let touched_ptrs = mem_config
+            .addr_spaces
+            .iter()
+            .enumerate()
+            .flat_map(|(i, cnf)| {
+                let mut ptrs = Vec::new();
+                let num_leaves = cnf.num_cells / VM_DIGEST_WIDTH;
+                for j in 0..num_leaves {
+                    let is_last_large = j + 1 == num_leaves
+                        && (i == MEMORY_AS as usize || i == DEFERRAL_AS as usize);
+                    if is_last_large || rng.random_bool(0.333) {
+                        ptrs.push((i as u32, (j * VM_DIGEST_WIDTH) as u32));
+                    }
+                }
+                ptrs
+            })
+            .collect::<Vec<_>>();
+        let mut new_data = touched_ptrs
+            .iter()
+            .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
+            .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
+        // Make every third touched leaf *clean* (final values equal to initial ones). Above the
+        // watermark the initial values are all zero, so this exercises clean zero-hash leaves.
+        for (i, (&(address_space, ptr), values)) in
+            touched_ptrs.iter().zip(new_data.iter_mut()).enumerate()
+        {
+            if i % 3 == 0 {
+                *values = std::array::from_fn(|j| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(address_space, ptr + j as u32)
+                });
+            }
+        }
+        let new_data = new_data;
+        assert!(!touched_ptrs.is_empty());
+
+        let mut cpu_merkle_chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, F>::new(
+            mem_config.memory_dimensions(),
+            PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+            PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+        );
+        let final_partition: BTreeMap<(u32, u32), [F; VM_DIGEST_WIDTH]> = touched_ptrs
+            .iter()
+            .copied()
+            .zip(new_data.iter().copied())
+            .collect();
+        // Dirtiness is per *write*; the test scenario treats exactly the leaves whose
+        // values changed as written (the minimal valid dirty set).
+        let dirty_leaves: DirtyLeaves = final_partition
+            .iter()
+            .filter(|((address_space, ptr), values)| {
+                let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(*address_space, *ptr + i as u32)
+                });
+                init_values != **values
+            })
+            .map(|(&key, _)| key)
+            .collect();
+        cpu_merkle_chip.finalize(
+            &initial_memory.memory,
+            &final_partition,
+            &dirty_leaves,
+            &cpu_hasher_chip,
+        );
+        let cpu_ctx = cpu_merkle_chip.generate_proving_ctx::<SC>();
+
+        let touched_blocks = touched_ptrs
+            .into_iter()
+            .zip(new_data)
+            .map(|(address, data)| {
+                (
+                    address,
+                    TimestampedValues {
+                        timestamp: rng.random_range(0..(1u32 << mem_config.timestamp_max_bits)),
+                        values: data,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let (merkle_records, unpadded_height) =
+            build_records_and_height(&initial_memory, &touched_blocks, &mem_config);
+        let d_touched_blocks = merkle_records
+            .to_device_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
+        gpu_hasher_chip.prepare_records(unpadded_height);
+        let merkle_ctx =
+            gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
+
+        // Final roots and the full trace must match the CPU reference.
+        let gpu_final_root = gpu_merkle_tree
+            .top_roots
+            .to_host_on(&gpu_merkle_tree.device_ctx)
+            .unwrap()[0];
+        let width = cpu_ctx.common_main.width;
+        let height = cpu_ctx.common_main.values.len() / width;
+        let cpu_vals = &cpu_ctx.common_main.values;
+        // The CPU chip's final root is the parent hash of the height-section final root row
+        // (row 1 by the AIR's pinning of the first two rows).
+        let gpu_trace = &merkle_ctx.common_main;
+        assert_eq!(gpu_trace.width(), width, "trace width mismatch");
+        assert_eq!(gpu_trace.height(), height, "trace (padded) height mismatch");
+        let gpu_vals = gpu_trace
+            .buffer()
+            .to_host_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
+        let row_to_u32 = |get: &dyn Fn(usize, usize) -> F, r: usize| -> Vec<u32> {
+            (0..width).map(|c| get(r, c).as_canonical_u32()).collect()
+        };
+        let cpu_get = |r: usize, c: usize| cpu_vals[r * width + c];
+        let gpu_get = |r: usize, c: usize| gpu_vals[c * height + r];
+        let mut cpu_rows: Vec<Vec<u32>> = (0..height).map(|r| row_to_u32(&cpu_get, r)).collect();
+        let mut gpu_rows: Vec<Vec<u32>> = (0..height).map(|r| row_to_u32(&gpu_get, r)).collect();
+        cpu_rows.sort_unstable();
+        gpu_rows.sort_unstable();
+        assert_eq!(
+            gpu_rows, cpu_rows,
+            "GPU merkle trace rows do not match the CPU reference trace"
+        );
+        // Cross-check the final root through an independently finalized CPU tree.
+        let mut cpu_final_tree = MerkleTree::<F, VM_DIGEST_WIDTH>::from_memory(
+            &initial_memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher_chip,
+        );
+        cpu_final_tree.finalize(
+            &cpu_hasher_chip,
+            &final_partition,
+            &dirty_leaves,
+            &mem_config.memory_dimensions(),
+        );
+        assert_eq!(cpu_final_tree.root(), gpu_final_root, "final roots diverge");
     }
 }
