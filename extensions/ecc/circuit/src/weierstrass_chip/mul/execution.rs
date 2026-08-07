@@ -29,8 +29,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::{
-    setup_row_inputs, EcMulExecutor, EC_MUL_SCALAR_BITS, EC_MUL_TOTAL_ROWS, FLAG_DBL, FLAG_DBL_ADD,
-    FLAG_INF_STAY, FLAG_INF_TAKE, NUM_STEP_FLAGS, SCALAR_BLOCKS, SCALAR_LIMBS,
+    setup_row_inputs, EcMulExecutor, EC_MUL_COMPUTE_ROWS, EC_MUL_SCALAR_BITS, EC_MUL_SIGN_PATTERNS,
+    EC_MUL_STEPS_PER_ROW, EC_MUL_TOTAL_ROWS, SCALAR_BLOCKS, SCALAR_LIMBS,
 };
 use crate::weierstrass_chip::curves::{ec_mul, get_curve_type, CurveType};
 
@@ -268,11 +268,11 @@ unsafe fn execute_e12_impl<
     Ok(())
 }
 
-/// Interprets the ladder through the field expression, one step per scalar bit, selecting the
-/// one-hot case flags as the AIR and trace filler do.
+/// Interprets the ladder through the field expression, one row per
+/// [`EC_MUL_STEPS_PER_ROW`] digits, selecting the one-hot sign flag as the AIR and trace filler do.
 ///
 /// Used for unrecognised curves and for `SETUP_EC_MUL`, whose rows carry the modulus and setup
-/// values instead of a point and set no case flag.
+/// values instead of a point and set no flag.
 fn run_ladder_via_expr<const BLOCKS: usize>(
     program: &FieldExpressionProgram,
     point_data: &[[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
@@ -285,29 +285,22 @@ fn run_ladder_via_expr<const BLOCKS: usize>(
     let py = BigUint::from_bytes_le(&flat[coord_bytes..]);
     let outs = program.output_indices();
 
-    let mut rx = BigUint::ZERO;
-    let mut ry = BigUint::ZERO;
-    let mut is_inf = true;
+    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px.clone();
+    let mut ry = py.clone();
 
-    for i in (0..EC_MUL_SCALAR_BITS).rev() {
-        let bit = (scalar[i / 8] >> (i % 8)) & 1 == 1;
+    for row in 0..EC_MUL_COMPUTE_ROWS {
         let (inputs, flags) = if is_setup {
-            (setup_row_inputs(program), vec![false; NUM_STEP_FLAGS])
+            (setup_row_inputs(program), vec![false; EC_MUL_SIGN_PATTERNS])
         } else {
-            let mut flags = vec![false; NUM_STEP_FLAGS];
-            flags[match (is_inf, bit) {
-                (false, false) => FLAG_DBL,
-                (false, true) => FLAG_DBL_ADD,
-                (true, false) => FLAG_INF_STAY,
-                (true, true) => FLAG_INF_TAKE,
-            }] = true;
-            (vec![rx.clone(), ry.clone(), px.clone(), py.clone()], flags)
+            let mut flags = vec![false; EC_MUL_SIGN_PATTERNS];
+            flags[sign_pattern_for_row(scalar, row)] = true;
+            (vec![px.clone(), py.clone(), rx.clone(), ry.clone()], flags)
         };
 
         let vars = program.execute(&inputs, &flags);
         rx = vars[outs[0]].clone();
         ry = vars[outs[1]].clone();
-        is_inf = is_inf && !bit;
     }
 
     let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
@@ -319,6 +312,21 @@ fn run_ladder_via_expr<const BLOCKS: usize>(
         *dst = byte;
     }
     output
+}
+
+/// The one-hot flag index for compute row `row`, packing its digits most significant first.
+///
+/// Digit `i` is bit `i + 1` of the scalar, since the ladder's value is `2B + 1` for
+/// `B = sum b_i 2^i`. Row 0 takes the top digits.
+pub(super) fn sign_pattern_for_row(scalar: &[u8], row: usize) -> usize {
+    let mut pattern = 0usize;
+    for step in 0..EC_MUL_STEPS_PER_ROW {
+        let i = EC_MUL_SCALAR_BITS - 1 - (row * EC_MUL_STEPS_PER_ROW + step);
+        let j = i + 1;
+        let bit = j < EC_MUL_SCALAR_BITS && (scalar[j / 8] >> (j % 8)) & 1 == 1;
+        pattern |= (bit as usize) << (EC_MUL_STEPS_PER_ROW - 1 - step);
+    }
+    pattern
 }
 
 #[create_handler]

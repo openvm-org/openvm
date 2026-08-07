@@ -14,8 +14,8 @@ use halo2curves_axiom::{
 use num_bigint::BigUint;
 use openvm_circuit_primitives::U16_BITS;
 use openvm_ecc_circuit::{
-    ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, CurveType, FLAG_DBL,
-    FLAG_DBL_ADD, FLAG_INF_STAY, FLAG_INF_TAKE,
+    ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, CurveType, EC_MUL_COMPUTE_ROWS,
+    EC_MUL_STEPS_PER_ROW,
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilderConfig, FieldExpressionProgram,
@@ -114,17 +114,23 @@ const SCALAR_BITS: usize = 256;
 /// Scalar operand width in bytes.
 const SCALAR_BYTES: u32 = (SCALAR_BITS / 8) as u32;
 
-/// MSB-first double-and-add over the raw bits of `scalar_le`.
+/// MSB-first double-and-add computing `(scalar | 1) * base`.
 ///
-/// This mirrors the circuit's ladder one iteration per bit. The accumulator stays projective so the
-/// whole multiplication costs a single inversion, in `to_affine`, rather than one per step.
+/// The circuit expands the scalar into digits drawn from `{+1, -1}`, whose sum is `2B + 1` for
+/// `B = scalar >> 1` — equivalently, `scalar | 1`. Forcing the low bit here makes this path agree
+/// with the circuit byte for byte on every input, rather than only on the odd scalars a caller is
+/// obliged to supply. Given an even one the two agree on a value neither can prove, which is
+/// preferable to the backends diverging.
 ///
-/// No case analysis is needed: halo2curves' projective formulas are exception-free, and its affine
-/// identity is `(0, 0)` — the same sentinel the circuit uses — so leading zero bits and an identity
-/// base both fall out of the general case.
+/// The accumulator remains projective, so the multiplication costs a single inversion in
+/// `to_affine` rather than one per step. No case analysis is required: halo2curves' projective
+/// formulas are exception-free and its affine identity is `(0, 0)`, the same sentinel the circuit
+/// uses, so an identity base falls out of the general case.
 fn ec_mul_ladder<C: CurveAffine>(base: C, scalar_le: &[u8]) -> C {
     let mut acc = C::Curve::identity();
-    for byte in scalar_le.iter().rev() {
+    for (i, byte) in scalar_le.iter().enumerate().rev() {
+        // The scalar's low bit is not a digit; it is the `+1` in `2B + 1`, so it is always set.
+        let byte = if i == 0 { byte | 1 } else { *byte };
         for shift in (0..8).rev() {
             acc = acc.double();
             if (byte >> shift) & 1 == 1 {
@@ -157,8 +163,8 @@ where
     write_field_256(state, rd_ptr + BN254_FQ_BYTES, &ry);
 }
 
-/// Execute `EC_MUL` by interpreting the circuit's own step expression, one evaluation per scalar
-/// bit, selecting the same one-hot case flag the AIR does.
+/// Execute `EC_MUL` by interpreting the circuit's own step expression, one evaluation per row,
+/// selecting the same one-hot sign flag the AIR does.
 ///
 /// Used for BLS12-381, whose 48-byte coordinates the native 256-bit path cannot represent. Driving
 /// the circuit's program keeps the two byte-identical; the cost is one field-expression evaluation
@@ -179,23 +185,24 @@ unsafe fn ec_mul_via_expr(
     let scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
 
     let outs = program.output_indices();
-    let mut rx = BigUint::ZERO;
-    let mut ry = BigUint::ZERO;
-    let mut is_inf = true;
+    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px.clone();
+    let mut ry = py.clone();
 
-    for i in (0..SCALAR_BITS).rev() {
-        let bit = (scalar[i / 8] >> (i % 8)) & 1 == 1;
+    for row in 0..EC_MUL_COMPUTE_ROWS {
+        // Digit `i` is bit `i + 1` of the scalar: the ladder's value is `2B + 1`.
+        let mut pattern = 0usize;
+        for step in 0..EC_MUL_STEPS_PER_ROW {
+            let i = SCALAR_BITS - 1 - (row * EC_MUL_STEPS_PER_ROW + step);
+            let j = i + 1;
+            let bit = j < SCALAR_BITS && (scalar[j / 8] >> (j % 8)) & 1 == 1;
+            pattern |= (bit as usize) << (EC_MUL_STEPS_PER_ROW - 1 - step);
+        }
         let mut flags = vec![false; program.num_flags()];
-        flags[match (is_inf, bit) {
-            (false, false) => FLAG_DBL,
-            (false, true) => FLAG_DBL_ADD,
-            (true, false) => FLAG_INF_STAY,
-            (true, true) => FLAG_INF_TAKE,
-        }] = true;
-        let vars = program.execute(&[rx, ry, px.clone(), py.clone()], &flags);
+        flags[pattern] = true;
+        let vars = program.execute(&[px.clone(), py.clone(), rx, ry], &flags);
         rx = vars[outs[0]].clone();
         ry = vars[outs[1]].clone();
-        is_inf = is_inf && !bit;
     }
 
     let mut output = vec![0u8; point_bytes as usize];
@@ -597,8 +604,9 @@ mod tests {
     /// The circuit's ladder, evaluated in affine coordinates with `(0, 0)` for the identity and the
     /// same incomplete formulas the `EC_ADD_NE` and `EC_DOUBLE` opcodes use.
     ///
-    /// [`ec_mul_ladder`] must agree with this for every scalar below the group order, which is the
-    /// precondition that keeps the doubling and addition steps non-exceptional.
+    /// [`ec_mul_ladder`] must agree with this for every odd scalar below the group order. Oddness
+    /// is what makes the two comparable at all, since [`ec_mul_ladder`] forces the low bit; the
+    /// order bound is what keeps the doubling and addition steps non-exceptional.
     fn affine_ladder<C: CurveAffine>(
         px: C::Base,
         py: C::Base,
@@ -644,7 +652,10 @@ mod tests {
         let generator = C::generator();
         let (px, py) = coordinates(generator);
 
-        for k in [0u64, 1, 2, 3, 4, 255, 256, 0x1234_5678, u64::MAX] {
+        // Odd scalars only: `ec_mul_ladder` computes `(k | 1) * P` to match the circuit, so an
+        // even `k` would be compared against the wrong reference. The `| 1` itself is covered by
+        // `ladder_forces_the_low_bit`.
+        for k in [1u64, 3, 5, 255, 257, 0x1234_5679, u64::MAX] {
             let bytes = scalar_le(k);
             let expected = affine_ladder::<C>(px, py, &bytes);
             let actual = coordinates(ec_mul_ladder(generator, &bytes));
@@ -659,14 +670,29 @@ mod tests {
         check_ladder_against_affine::<halo2curves_axiom::bn256::G1Affine>();
     }
 
+    /// An even scalar is multiplied as `k | 1`, matching the circuit.
+    ///
+    /// The circuit's digits are all `+-1`, so it can only represent odd multipliers; its digest row
+    /// rejects an even operand. This path has no such check and must not diverge, so it rounds the
+    /// same way rather than computing the mathematically correct `k * P`.
     #[test]
-    fn ladder_handles_degenerate_inputs() {
+    fn ladder_forces_the_low_bit() {
+        type C = halo2curves_axiom::bn256::G1Affine;
+        let g = C::generator();
+
+        for even in [0u64, 2, 4, 256, 0x1234_5678] {
+            assert_eq!(
+                coordinates(ec_mul_ladder(g, &scalar_le(even))),
+                coordinates(ec_mul_ladder(g, &scalar_le(even | 1))),
+                "k = {even}"
+            );
+        }
+    }
+
+    #[test]
+    fn ladder_handles_an_identity_base() {
         type C = halo2curves_axiom::bn256::G1Affine;
         let zero = <C as CurveAffine>::Base::ZERO;
-
-        // A zero scalar sends any point to the identity, which the circuit encodes as `(0, 0)`.
-        let product = ec_mul_ladder(C::generator(), &scalar_le(0));
-        assert_eq!(coordinates(product), (zero, zero));
 
         // An identity base stays at the identity for every scalar. The circuit cannot prove this
         // case, but execution must still terminate with the mathematically correct value.
@@ -676,16 +702,21 @@ mod tests {
         }
     }
 
+    use openvm_ecc_circuit::SETUP_ACC;
+
     fn write_le(value: &BigUint, out: &mut [u8]) {
         let bytes = value.to_bytes_le();
         out[..bytes.len()].copy_from_slice(&bytes);
     }
 
-    /// A setup row sets no case flag, so the output selects fall through to the base point, which
-    /// `setup_row_inputs` leaves zero. Pinned because a setup row's postimage is otherwise easy to
-    /// mistake for the doubling formula's, as `SETUP_EC_DOUBLE`'s is.
+    /// A setup row's arithmetic is computable for every supported curve.
+    ///
+    /// It sets no sign flag, so its inputs are the prime, `a`, and the fixed accumulator the
+    /// expression reserves for it. That accumulator exists precisely so the row's denominators stay
+    /// nonzero -- `2 * acc_y` would otherwise be `2a`, which is zero on three of the four curves,
+    /// and `SymbolicExpr::compute` inverts it. This is the check that the choice works.
     #[test]
-    fn ec_mul_setup_postimage_is_zero() {
+    fn ec_mul_setup_row_is_computable() {
         for (curve, point_bytes) in [
             (CurveType::K256, POINT_256_BYTES),
             (CurveType::P256, POINT_256_BYTES),
@@ -702,10 +733,20 @@ mod tests {
                 &mut setup[coord_bytes..2 * coord_bytes],
             );
 
+            write_le(
+                &BigUint::from(SETUP_ACC.0),
+                &mut setup[2 * coord_bytes..3 * coord_bytes],
+            );
+            write_le(
+                &BigUint::from(SETUP_ACC.1),
+                &mut setup[3 * coord_bytes..4 * coord_bytes],
+            );
+
+            // Panics on a zero denominator rather than returning; reaching this line is the check.
             let output: Vec<u8> =
                 run_field_expression_precomputed::<true>(&program, program.num_flags(), &setup)
                     .into();
-            assert_eq!(output, vec![0u8; point_bytes as usize], "{curve:?}");
+            assert_eq!(output.len(), point_bytes as usize, "{curve:?}");
         }
     }
 
