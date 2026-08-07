@@ -767,7 +767,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_preflight_reveal_matches_clock_and_public_values() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
+        config.rv64i.system = config.rv64i.system.with_public_values(16);
         let instructions = [
             reveal_instruction(1, 2, 0),
             reveal_instruction(3, 4, 0),
@@ -798,8 +798,8 @@ mod tests {
             execution.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        // Each aligned REVEAL uses two register reads and one full-block write.
-        assert_eq!(execution.to_state.timestamp, 7);
+        // Each aligned REVEAL uses two register reads and two U8 block writes.
+        assert_eq!(execution.to_state.timestamp, 9);
         assert!(execution.transcript.replay_values.is_empty());
 
         let mut expected = initial_public_values;
@@ -1163,7 +1163,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_reveal_preflight_suspends_after_committed_reveal() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(PAGE_SIZE);
+        config.rv64i.system = config.rv64i.system.with_public_values(PAGE_SIZE);
         let instructions = [
             reveal_instruction(1, 2, 0),
             Instruction::<F>::from_usize(
@@ -1224,7 +1224,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_reveal_preflight_fails_before_commit() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
+        config.rv64i.system = config.rv64i.system.with_public_values(16);
         let executor = VmExecutor::new(config)?;
         // The effective address wraps to zero, but the non-u32 base still
         // fails closed in both execution modes.
@@ -1391,7 +1391,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_reveal_negative_offset() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        config.rv64i.system = config.rv64i.system.with_public_values(32);
         let elf = build_example_program_at_path(
             get_programs_dir!(),
             "rvr_reveal_negative_offset",
@@ -1428,7 +1428,7 @@ mod tests {
         const NUM_RUNS: usize = 8;
 
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(64);
+        config.rv64i.system = config.rv64i.system.with_public_values(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -1735,7 +1735,7 @@ mod tests {
     #[cfg(not(feature = "rvr"))]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        config.rv64i.system = config.rv64i.system.with_public_values(32);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
@@ -1755,14 +1755,14 @@ mod tests {
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        config.rv64i.system = config.rv64i.system.with_public_values(32);
         assert_rvr_example_with_config_traps("reveal", config);
     }
 
     #[test]
     fn test_reveal() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values_bytes(64);
+        config.rv64i.system = config.rv64i.system.with_public_values(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -1783,8 +1783,7 @@ mod tests {
         let pv_proof =
             UserPublicValuesProof::compute(config.as_ref(), &hasher, &final_memory, &top_tree);
 
-        // `pv_proof.public_values` is the u16-packed merkle leaf representation;
-        // user-facing byte content is read via `extract_public_values`.
+        // Public values use one field element per byte.
         let mut bytes = [0u8; 32];
         for (i, byte) in bytes.iter_mut().enumerate() {
             *byte = i as u8;
@@ -1799,13 +1798,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(extract_public_values(64, &final_memory), expected_bytes);
 
-        // Sanity-check the merkle leaves are the u16 little-endian packing of the
-        // first `num_public_values` u16 cells.
-        let expected_leaves: Vec<F> = expected_bytes
-            .chunks_exact(2)
-            .take(pv_proof.public_values.len())
-            .map(|c| F::from_u16(u16::from_le_bytes([c[0], c[1]])))
-            .collect();
+        let expected_leaves: Vec<F> = expected_bytes.iter().copied().map(F::from_u8).collect();
         assert_eq!(pv_proof.public_values, expected_leaves);
         Ok(())
     }

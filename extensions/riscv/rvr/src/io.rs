@@ -175,11 +175,9 @@ impl ExtInstr for RevealInstr {
             std::cmp::Ordering::Equal => ptr.clone(),
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
-        // The callback emits the proof-visible public-values memory events.
-        // Reserve only their logical clock here so compact checkpoint
-        // preflight can preserve the schedule without logging those events.
-        // Full preflight performs the aligned block-write reservation inside the callback.
-        ctx.reserve_preflight_timestamp_slots("1u");
+        // Checkpoint replay materializes the two public-values writes. Reserve
+        // their logical clocks here so all execution modes keep the same schedule.
+        ctx.reserve_preflight_timestamp_slots("2u");
         ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr]);
         ctx.trace_page_access(
             &addr,
@@ -290,8 +288,7 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
             hint_read_words: host_hint_read_words,
             hint_storew: host_hint_storew,
             hint_buffer: host_hint_buffer,
-            reveal_prepare: host_reveal_prepare,
-            reveal_commit: host_reveal_commit,
+            reveal: host_reveal,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
@@ -336,16 +333,7 @@ struct Rv64IoHostCallbacks {
     hint_read_words: unsafe extern "C" fn(*mut c_void, *mut u64, u32),
     hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
     hint_buffer: extern "C" fn(*mut c_void, u64, u32) -> bool,
-    reveal_prepare: extern "C" fn(*mut c_void, u64, u64, u64, *mut RevealPlan) -> bool,
-    reveal_commit: unsafe extern "C" fn(*mut c_void, *const RevealPlan),
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct RevealPlan {
-    address: u64,
-    previous: u64,
-    post: u64,
+    reveal: extern "C" fn(*mut c_void, u64, u64, u64) -> bool,
 }
 
 fn checked_hint_range(
@@ -421,53 +409,29 @@ extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u32)
     true
 }
 
-/// Validate and materialize one complete pre/post AS3 block without mutation.
-extern "C" fn host_reveal_prepare(
+/// Validate and write one public-values word.
+extern "C" fn host_reveal(
     ctx: *mut c_void,
     src_val: u64,
     base_addr: u64,
     effective_addr: u64,
-    plan: *mut RevealPlan,
 ) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    if base_addr > u32::MAX as u64 || effective_addr > u32::MAX as u64 || plan.is_null() {
+    if base_addr > u32::MAX as u64 || effective_addr > u32::MAX as u64 {
         return false;
     }
-    let width = WORD_SIZE;
-    let Some(end) = effective_addr.checked_add(width as u64) else {
+    let Some(end) = effective_addr.checked_add(WORD_SIZE as u64) else {
         return false;
     };
     if end > io.public_values.len() as u64 {
         return false;
     }
-    if !effective_addr.is_multiple_of(WORD_SIZE as u64)
-        || u32::try_from(effective_addr >> 1).is_err()
-    {
+    if !effective_addr.is_multiple_of(WORD_SIZE as u64) {
         return false;
     }
     let start = effective_addr as usize;
-    let previous = u64::from_le_bytes(io.public_values[start..start + width].try_into().unwrap());
-    unsafe {
-        plan.write(RevealPlan {
-            address: effective_addr,
-            previous,
-            post: src_val,
-        });
-    }
+    io.public_values[start..start + WORD_SIZE].copy_from_slice(&src_val.to_le_bytes());
     true
-}
-
-/// Apply a previously validated AS3 plan. Generated C logs every block first.
-///
-/// # Safety
-///
-/// `plan` must point to a plan produced by [`host_reveal_prepare`] for this IO
-/// context, with no intervening AS3 mutation.
-unsafe extern "C" fn host_reveal_commit(ctx: *mut c_void, plan: *const RevealPlan) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    let plan = unsafe { &*plan };
-    let start = plan.address as usize;
-    io.public_values[start..start + WORD_SIZE].copy_from_slice(&plan.post.to_le_bytes());
 }
 
 #[cfg(test)]
@@ -621,7 +585,7 @@ mod tests {
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
-        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(1u);");
+        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(2u);");
         assert_eq!(
             ctx.lines[1],
             "bool tmp1 = openvm_reveal(state, r1, r2, r2);"
@@ -713,7 +677,7 @@ mod tests {
         };
         instr.emit_c(&mut ctx);
 
-        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(1u);");
+        assert_eq!(ctx.lines[0], "reserve_preflight_timestamp_slots(2u);");
         assert_eq!(
             ctx.lines[1],
             "bool tmp1 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull));"
@@ -823,7 +787,7 @@ mod tests {
 
     #[test_case(0x1122_3344_5566_7788, 0; "first_dword")]
     #[test_case(0xaabb_ccdd_eeff_0123, 8; "last_dword")]
-    fn host_reveal_plans_then_commits_doubleword(src_val: u64, addr: u64) {
+    fn host_reveal_writes_doubleword(src_val: u64, addr: u64) {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
@@ -844,10 +808,7 @@ mod tests {
         };
 
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
-        let mut plan = RevealPlan::default();
-        assert!(host_reveal_prepare(ctx, src_val, addr, addr, &mut plan));
-        assert!(io.public_values.iter().all(|&byte| byte == 0));
-        unsafe { host_reveal_commit(ctx, &plan) };
+        assert!(host_reveal(ctx, src_val, addr, addr));
 
         let start = addr as usize;
         let end = start + WORD_SIZE;
@@ -878,13 +839,11 @@ mod tests {
             deferrals: &mut deferrals,
         };
 
-        let mut plan = RevealPlan::default();
-        assert!(!host_reveal_prepare(
+        assert!(!host_reveal(
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             u64::MAX,
             addr,
             addr,
-            &mut plan,
         ));
         assert!(io.public_values.iter().all(|&byte| byte == 0));
     }
@@ -908,23 +867,19 @@ mod tests {
             preflight_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
-        let mut plan = RevealPlan::default();
-
-        assert!(!host_reveal_prepare(
+        assert!(!host_reveal(
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             1,
             u64::from(u32::MAX) + 1,
             0,
-            &mut plan,
         ));
         // A positive offset from the largest valid base must not produce an
         // effective byte address outside the AIR's u32 pointer domain.
-        assert!(!host_reveal_prepare(
+        assert!(!host_reveal(
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             1,
             u64::from(u32::MAX),
             u64::from(u32::MAX) + 1,
-            &mut plan,
         ));
         assert!(io.public_values.iter().all(|&byte| byte == 0));
     }

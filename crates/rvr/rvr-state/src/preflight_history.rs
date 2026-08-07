@@ -18,6 +18,9 @@ pub struct PreflightMemoryEvent {
     pub timestamp: u32,
     pub address_space_and_kind: u32,
     pub pointer: u32,
+    /// Fixed eight-byte history payload. U8 blocks occupy the low four bytes and require the high
+    /// four bytes to be zero, U16 blocks occupy all eight bytes, and Field32 events store a dense
+    /// sidecar index in the low four bytes.
     pub value: [u16; 4],
 }
 
@@ -42,6 +45,7 @@ impl PreflightMemoryEvent {
 pub struct PreflightInitialWrite {
     pub address_space: u32,
     pub pointer: u32,
+    /// Uses the same layout-dependent carrier encoding as [`PreflightMemoryEvent::value`].
     pub initial_value: [u16; 4],
 }
 

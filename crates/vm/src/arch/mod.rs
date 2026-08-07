@@ -15,7 +15,7 @@ mod hint_stream;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 mod postflight;
-mod preflight;
+pub(crate) mod preflight;
 #[cfg(feature = "rvr")]
 pub mod rvr;
 /// VM state definitions
@@ -41,8 +41,10 @@ pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use postflight::{
     fill_trace_rows, Postflight, PostflightError, PostflightProgramIndex, PostflightReplay,
-    PostflightStep, U16Access, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
+    PostflightStep, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
 };
+#[rustfmt::skip]
+pub use postflight::{U8Access, U16Access, Field32Access};
 pub use preflight::{
     PreflightFieldBlock, PreflightHistory, PreflightInitialWrite, PreflightMemoryEvent,
     PreflightMemoryLog, PreflightOutput, PreflightProgramEvent,

@@ -649,6 +649,21 @@ __device__ __forceinline__ void write_memory_intent(
     if (write_mask != nullptr) *write_mask = mask;
 }
 
+__device__ __forceinline__ void write_u8_memory_intent(
+    PreflightMemoryEvent &event,
+    uint8_t *write_mask,
+    uint32_t timestamp,
+    uint32_t address_space,
+    uint32_t pointer,
+    uint32_t bytes
+) {
+    event.timestamp = timestamp;
+    event.address_space_and_kind = address_space | PREFLIGHT_WRITE_BIT;
+    event.pointer = pointer;
+    preflight_encode_u8_block(bytes, event.value);
+    if (write_mask != nullptr) *write_mask = 0x0f;
+}
+
 __device__ __forceinline__ bool resolve_access_span_count(
     RvrCheckpointAccessSpan const &span,
     RvrReplayAccessSchedule const &schedule,
@@ -1202,7 +1217,7 @@ __device__ bool replay_chunk(
                 preflight_set_error(error, ERROR_BAD_REVEAL);
                 return false;
             }
-            constexpr uint32_t event_count = 3;
+            constexpr uint32_t event_count = 4;
             if (memory != nullptr) {
                 if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {
                     preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
@@ -1216,12 +1231,16 @@ __device__ bool replay_chunk(
                 write_event(memory[memory_start + emitted + 1],
                             &write_masks[memory_start + emitted + 1], state.timestamp + 1,
                             register_as, instruction->words[1] / U16_CELL_SIZE, false, source);
-                write_memory_intent(
-                    memory[memory_start + emitted + 2],
-                    &write_masks[memory_start + emitted + 2], state.timestamp + 2,
-                    REVEAL_PUBLIC_VALUES_ADDRESS_SPACE, decoded.address, source,
-                    FULL_WRITE_MASK
-                );
+                for (uint32_t block = 0; block < 2; block++) {
+                    write_u8_memory_intent(
+                        memory[memory_start + emitted + 2 + block],
+                        &write_masks[memory_start + emitted + 2 + block],
+                        state.timestamp + 2 + block,
+                        REVEAL_PUBLIC_VALUES_ADDRESS_SPACE,
+                        decoded.address + block * BLOCK_FE_WIDTH,
+                        uint32_t(source >> (32 * block))
+                    );
+                }
             }
             emitted += event_count;
             state.pc += 4;

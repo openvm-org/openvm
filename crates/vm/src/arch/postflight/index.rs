@@ -8,7 +8,9 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rustc_hash::FxHashMap;
 
-use super::{memory_key, PostflightError, PREDECESSOR_INDEX_MASK, PREDECESSOR_SEED_BIT};
+use super::{
+    decode_u8_block, memory_key, PostflightError, PREDECESSOR_INDEX_MASK, PREDECESSOR_SEED_BIT,
+};
 use crate::{
     arch::{
         MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory, ADDR_SPACE_OFFSET,
@@ -253,10 +255,10 @@ fn validate_memory_block(
         })?;
     if !matches!(
         address_space_config.layout,
-        MemoryCellType::U16 | MemoryCellType::FIELD32
+        MemoryCellType::U8 | MemoryCellType::U16 | MemoryCellType::FIELD32
     ) {
         return Err(PostflightError::new(format!(
-            "address space {address_space} must use u16 or field32 cells"
+            "address space {address_space} must use u8, u16, or field32 cells"
         )));
     }
     let pointer_limit = 1u64 << config.pointer_max_bits;
@@ -342,6 +344,13 @@ pub(super) fn memory_index<F: PrimeField32>(
         }
         let layout = validate_memory_block(seed.address_space, seed.pointer, config)?;
         match layout {
+            MemoryCellType::U8 => {
+                if seed.initial_value[2..] != [0, 0] {
+                    return Err(PostflightError::new(
+                        "u8 initial-write seed has nonzero padding",
+                    ));
+                }
+            }
             MemoryCellType::U16 => {}
             MemoryCellType::FIELD32 => {
                 validate_field_reference(
@@ -379,6 +388,11 @@ pub(super) fn memory_index<F: PrimeField32>(
         let address_space = event.address_space();
         let layout = validate_memory_block(address_space, event.pointer, config)?;
         match layout {
+            MemoryCellType::U8 => {
+                if event.value[2..] != [0, 0] {
+                    return Err(PostflightError::new("u8 memory event has nonzero padding"));
+                }
+            }
             MemoryCellType::U16 => {}
             MemoryCellType::FIELD32 => {
                 validate_field_reference(
@@ -462,6 +476,7 @@ pub(super) fn memory_index<F: PrimeField32>(
             };
             let event = history.memory.accesses[event_index as usize];
             let values = match config.addr_spaces[event.address_space() as usize].layout {
+                MemoryCellType::U8 => decode_u8_block(event.value).map(F::from_u8),
                 MemoryCellType::U16 => event.value.map(F::from_u16),
                 MemoryCellType::FIELD32 => decode_field_block::<F>(
                     history.memory.field_values[field_reference(event.value)],

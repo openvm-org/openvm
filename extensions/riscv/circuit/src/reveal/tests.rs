@@ -79,6 +79,25 @@ fn field_block(bytes: &[u8]) -> [F; REGISTER_NUM_LIMBS] {
         .map(F::from_u8)
 }
 
+fn write_public_value_word(tester: &mut VmChipTestBuilder<F>, ptr: usize, bytes: [u8; 8]) {
+    for (block, chunk) in bytes.chunks_exact(4).enumerate() {
+        tester.write(
+            PUBLIC_VALUES_AS as usize,
+            ptr + 4 * block,
+            <[u8; 4]>::try_from(chunk).unwrap().map(F::from_u8),
+        );
+    }
+}
+
+fn read_public_value_word(tester: &mut VmChipTestBuilder<F>, ptr: usize) -> [F; 8] {
+    let mut values = [F::ZERO; 8];
+    for block in 0..2 {
+        values[4 * block..4 * (block + 1)]
+            .copy_from_slice(&tester.read::<4>(PUBLIC_VALUES_AS as usize, ptr + 4 * block));
+    }
+    values
+}
+
 #[test]
 fn reveal_writes_and_overwrites_aligned_public_value() {
     let mut tester = VmChipTestBuilder::from_config(reveal_memory_config());
@@ -91,8 +110,8 @@ fn reveal_writes_and_overwrites_aligned_public_value() {
         0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
         0x1f,
     ];
-    tester.write_bytes(PUBLIC_VALUES_AS as usize, 32, field_block(&initial[..8]));
-    tester.write_bytes(PUBLIC_VALUES_AS as usize, 40, field_block(&initial[8..]));
+    write_public_value_word(&mut tester, 32, initial[..8].try_into().unwrap());
+    write_public_value_word(&mut tester, 40, initial[8..].try_into().unwrap());
     tester.write_bytes(
         REGISTER_AS as usize,
         base_ptr,
@@ -111,11 +130,11 @@ fn reveal_writes_and_overwrites_aligned_public_value() {
     let mut expected = initial;
     expected[8..16].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 32),
+        read_public_value_word(&mut tester, 32),
         field_block(&expected[..8])
     );
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 40),
+        read_public_value_word(&mut tester, 40),
         field_block(&expected[8..])
     );
 
@@ -131,11 +150,11 @@ fn reveal_writes_and_overwrites_aligned_public_value() {
     );
     expected[8..16].copy_from_slice(&0xaabb_ccdd_eeff_0123u64.to_le_bytes());
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 32),
+        read_public_value_word(&mut tester, 32),
         field_block(&expected[..8])
     );
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 40),
+        read_public_value_word(&mut tester, 40),
         field_block(&expected[8..])
     );
 

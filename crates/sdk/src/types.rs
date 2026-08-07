@@ -6,8 +6,6 @@ use std::{
 use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-#[cfg(feature = "evm-prove")]
-use openvm_circuit::arch::U16_CELL_SIZE;
 use openvm_circuit::{
     arch::instructions::exe::VmExe,
     system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
@@ -236,7 +234,7 @@ pub fn encode_raw_evm_proof_calldata(
 /// - `instances[0..12]`: KZG accumulator (12 Fr values)
 /// - `instances[12]`: app_exe_commit (Fr)
 /// - `instances[13]`: app_vm_commit (Fr)
-/// - `instances[14..]`: user public values (each u16 limb as Fr)
+/// - `instances[14..]`: user public values (each byte as Fr)
 #[cfg(feature = "evm-prove")]
 impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
     fn from(raw: openvm_static_verifier::keygen::RawEvmProof) -> Self {
@@ -270,13 +268,13 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let user_public_values = instances[NUM_BN254_ACCUMULATOR + 2..]
             .iter()
-            .flat_map(|f| {
+            .map(|f| {
                 let bytes = f.to_bytes();
                 debug_assert!(
-                    bytes[U16_CELL_SIZE..].iter().all(|&byte| byte == 0),
-                    "user public value limb must fit in u16"
+                    bytes[1..].iter().all(|&byte| byte == 0),
+                    "user public value must fit in one byte"
                 );
-                std::array::from_fn::<_, U16_CELL_SIZE, _>(|i| bytes[i])
+                bytes[0]
             })
             .collect::<Vec<u8>>();
 
@@ -327,15 +325,11 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         app_vm_bytes.reverse();
         let app_vm_fr = Fr::from_bytes(&app_vm_bytes).unwrap();
 
-        assert!(
-            user_public_values.len().is_multiple_of(U16_CELL_SIZE),
-            "user public values length must be a multiple of {U16_CELL_SIZE}"
-        );
         let user_pvs_frs: Vec<Fr> = user_public_values
-            .chunks_exact(U16_CELL_SIZE)
-            .map(|limb| {
+            .into_iter()
+            .map(|byte| {
                 let mut bytes = [0u8; 32];
-                bytes[..U16_CELL_SIZE].copy_from_slice(limb);
+                bytes[0] = byte;
                 Fr::from_bytes(&bytes).unwrap()
             })
             .collect();
@@ -399,25 +393,25 @@ mod tests {
     use halo2_base::halo2_proofs::arithmetic::Field;
     use openvm_static_verifier::{keygen::RawEvmProof, Fr};
 
-    use super::{EvmProof, NUM_BN254_ACCUMULATOR, U16_CELL_SIZE};
+    use super::{EvmProof, NUM_BN254_ACCUMULATOR};
 
-    fn fr_from_u16(value: u16) -> Fr {
+    fn fr_from_u8(value: u8) -> Fr {
         let mut bytes = [0u8; 32];
-        bytes[..U16_CELL_SIZE].copy_from_slice(&value.to_le_bytes());
+        bytes[0] = value;
         Fr::from_bytes(&bytes).unwrap()
     }
 
     #[test]
-    fn evm_proof_roundtrips_u16_public_values() {
+    fn evm_proof_roundtrips_byte_public_values() {
         let mut instances = vec![Fr::ZERO; NUM_BN254_ACCUMULATOR + 2];
-        instances.extend([fr_from_u16(0x1234), fr_from_u16(0xabcd)]);
+        instances.extend([fr_from_u8(0x34), fr_from_u8(0xab)]);
         let raw = RawEvmProof {
             instances,
             proof: vec![1, 2, 3],
         };
 
         let proof = EvmProof::from(raw.clone());
-        assert_eq!(proof.user_public_values, [0x34, 0x12, 0xcd, 0xab]);
+        assert_eq!(proof.user_public_values, [0x34, 0xab]);
 
         let roundtrip = RawEvmProof::from(proof);
         assert_eq!(roundtrip.instances, raw.instances);
