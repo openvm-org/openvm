@@ -43,6 +43,6 @@ bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
     return false;
   }
 
-  trace_write_public_values_word(state, (uint32_t)effective_addr);
+  trace_write_public_values_u64(state, (uint32_t)effective_addr);
   return true;
 }

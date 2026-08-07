@@ -227,7 +227,7 @@ preflight_append_checkpoint(
  * and replay-value accounting stays block-local during preflight, so the
  * callback-facing hooks only preserve execution behavior. */
 static __attribute__((always_inline)) inline void
-trace_write_public_values_word(
+trace_write_public_values_u64(
     RvState* restrict state, uint32_t pointer) {
   PreflightTranscriptState* restrict p = &state->mode_state;
   uint64_t page = (uint64_t)pointer >> PREFLIGHT_DIRTY_PAGE_BITS;

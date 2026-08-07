@@ -6,7 +6,7 @@
 #include "openvm_state.h"
 
 static __attribute__((always_inline)) inline void
-trace_write_public_values_word(
+trace_write_public_values_u64(
     RvState* restrict state [[maybe_unused]], uint32_t pointer [[maybe_unused]]) {}
 
 /* Extension memory operations use one interface in every execution mode.
