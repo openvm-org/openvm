@@ -1,6 +1,9 @@
 //! OpenVM system instruction lifting and RVR extension dispatch.
 
-use openvm_instructions::{instruction::Instruction, LocalOpcode, SysPhantom, SystemOpcode};
+use openvm_instructions::{
+    instruction::{Instruction, InstructionOperand},
+    LocalOpcode, SysPhantom, SystemOpcode,
+};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator};
 
 use crate::{ExtensionError, ExtensionRegistry};
@@ -31,34 +34,38 @@ pub fn lift_instruction(
     }
 
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
-        let discriminant = insn
-            .c
-            .checked_as_u32()
-            .and_then(|value| u16::try_from(value).ok());
-        let c_upper = insn
-            .d
-            .checked_as_u32()
-            .and_then(|value| u16::try_from(value).ok());
-        if [insn.a, insn.b]
-            .into_iter()
-            .any(|operand| operand.checked_as_u32().is_none())
-            || discriminant.is_none()
-            || c_upper.is_none()
-            || [insn.e, insn.f, insn.g]
-                .into_iter()
-                .any(|operand| !operand.is_zero())
-        {
-            return Err(ExtensionError::InvalidInstruction {
-                opcode: insn.opcode,
-                pc,
-            });
-        }
-        if let Some(phantom) = discriminant.and_then(SysPhantom::from_repr) {
+        if let Some(phantom) = decode_system_phantom(insn, pc)? {
             return Ok(Some(lift_system_phantom(pc, phantom)));
         }
     }
 
     extensions.try_lift(insn, pc)
+}
+
+fn decode_system_phantom(
+    insn: &Instruction,
+    pc: u64,
+) -> Result<Option<SysPhantom>, ExtensionError> {
+    let invalid = || ExtensionError::InvalidInstruction {
+        opcode: insn.opcode,
+        pc,
+    };
+    let require_u32 = |operand: InstructionOperand| operand.checked_as_u32().ok_or_else(&invalid);
+
+    if [insn.e, insn.f, insn.g]
+        .into_iter()
+        .any(|operand| !operand.is_zero())
+    {
+        return Err(invalid());
+    }
+
+    require_u32(insn.a)?;
+    require_u32(insn.b)?;
+
+    let discriminant = u16::try_from(require_u32(insn.c)?).map_err(|_| invalid())?;
+    let _c_upper = u16::try_from(require_u32(insn.d)?).map_err(|_| invalid())?;
+
+    Ok(SysPhantom::from_repr(discriminant))
 }
 
 fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {

@@ -255,19 +255,17 @@ mod tests {
     use std::{collections::VecDeque, ptr::null_mut};
 
     use openvm_circuit::arch::HintStream;
-    use openvm_instructions::VmOpcode;
+    use openvm_instructions::PhantomDiscriminant;
     use rand::{rngs::StdRng, RngCore, SeedableRng};
     use rvr_openvm_ir::{MemWidth, PageAddressSpace};
+    use rvr_openvm_lift::{opcode::lift_instruction, ExtensionRegistry};
     use test_case::test_case;
 
     use super::*;
     use crate::i::Rv64IExtension;
 
     fn phantom_instruction(phantom: Rv64Phantom) -> Instruction {
-        Instruction::from_usize(
-            VmOpcode::from_usize(SystemOpcode::PHANTOM.global_opcode_usize()),
-            [8, 16, phantom as usize, 0, 0, 1, 0],
-        )
+        Instruction::phantom(PhantomDiscriminant(phantom as u16), 8u8, 16u8, 0)
     }
 
     #[derive(Default)]
@@ -368,9 +366,11 @@ mod tests {
 
     fn emit_phantom(phantom: Rv64Phantom) -> (bool, Vec<String>) {
         let instruction = phantom_instruction(phantom);
-        let lifted = Rv64PhantomExtension
-            .try_lift(&instruction, 0x100)
-            .expect("RV64 phantom should lift");
+        let mut extensions = ExtensionRegistry::new();
+        extensions.register(Rv64PhantomExtension);
+        let lifted = lift_instruction(&instruction, 0x100, &extensions)
+            .expect("phantom instruction should be valid")
+            .expect("phantom extension should lift");
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
             panic!("expected body instruction");
         };

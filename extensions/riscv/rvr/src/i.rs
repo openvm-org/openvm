@@ -25,6 +25,8 @@ use self::instruction::{AluOp, Rv64IInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
+const B_TYPE_IMM_BITS: u32 = 13;
+const J_TYPE_IMM_BITS: u32 = 21;
 const MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(REGISTER_BYTES as usize);
 
@@ -313,20 +315,20 @@ pub(crate) fn try_lift(insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         .into_iter()
         .find(|(candidate, _)| *candidate == opcode)
     {
-        return Some(lift_branch(insn, pc, cond));
+        return lift_branch(insn, pc, cond);
     }
 
     if opcode == JalLuiOpcode::JAL.global_opcode_usize() {
-        return Some(lift_jal(insn, pc));
+        return lift_jal(insn, pc);
     }
     if opcode == JalLuiOpcode::LUI.global_opcode_usize() {
-        return Some(lift_lui(insn, pc));
+        return lift_lui(insn, pc);
     }
     if opcode == JalrOpcode::JALR.global_opcode_usize() {
-        return Some(lift_jalr(insn, pc));
+        return lift_jalr(insn, pc);
     }
     if opcode == AuipcOpcode::AUIPC.global_opcode_usize() {
-        return Some(lift_auipc(insn, pc));
+        return lift_auipc(insn, pc);
     }
 
     None
@@ -388,7 +390,7 @@ fn lift_load(insn: &Instruction, pc: u64, width: MemWidth, signed: bool) -> Opti
 /// Lift a store encoded as `rs2=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
 fn lift_store(insn: &Instruction, pc: u64, width: MemWidth) -> Option<LiftedInstr> {
-    if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+    if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS || insn.f.is_zero() {
         return None;
     }
     Some(body(
@@ -404,70 +406,87 @@ fn lift_store(insn: &Instruction, pc: u64, width: MemWidth) -> Option<LiftedInst
 
 /// Lift a branch encoded as `rs1=a/8`, `rs2=b/8`, and an offset in `c`
 /// interpreted as a signed instruction operand.
-fn lift_branch(insn: &Instruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
-    term(
+fn lift_branch(insn: &Instruction, pc: u64, cond: CfgBranchCond) -> Option<LiftedInstr> {
+    if insn.d.as_u32() != REGISTER_AS {
+        return None;
+    }
+    let offset = signed_immediate(insn.c.as_i32(), B_TYPE_IMM_BITS)?;
+    Some(term(
         pc,
         Rv64IInstr::Branch {
             cond,
             lhs: decode_reg(insn.a.as_u32()),
             rhs: decode_reg(insn.b.as_u32()),
-            target: pc.wrapping_add_signed(i64::from(insn.c.as_i32())),
+            target: pc.wrapping_add_signed(i64::from(offset)),
         },
-    )
+    ))
 }
 
 /// Lift JAL encoded as `rd=a/8` and a signed instruction operand in `c`.
-fn lift_jal(insn: &Instruction, pc: u64) -> LiftedInstr {
+fn lift_jal(insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
+    let offset = signed_immediate(insn.c.as_i32(), J_TYPE_IMM_BITS)?;
     let rd = decode_reg(insn.a.as_u32());
-    term(
+    Some(term(
         pc,
         Rv64IInstr::Jump {
             link_dst: (rd != ZERO).then_some(rd),
-            target: pc.wrapping_add_signed(i64::from(insn.c.as_i32())),
+            target: pc.wrapping_add_signed(i64::from(offset)),
         },
-    )
+    ))
 }
 
 /// Lift JALR encoded as `rd=a/8`, `rs1=b/8`, immediate low bits in `c`,
 /// and the immediate sign marker in `g`.
-fn lift_jalr(insn: &Instruction, pc: u64) -> LiftedInstr {
+fn lift_jalr(insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
+    if insn.d.as_u32() != REGISTER_AS {
+        return None;
+    }
     let rd = decode_reg(insn.a.as_u32());
-    term(
+    Some(term(
         pc,
         Rv64IInstr::JumpIndirect {
             link_dst: (rd != ZERO).then_some(rd),
             base: decode_reg(insn.b.as_u32()),
             offset: decode_imm_cg(insn) as i32,
         },
-    )
+    ))
 }
 
 /// Lift LUI encoded as `rd=a/8` and the upper immediate in `c << 12`.
-fn lift_lui(insn: &Instruction, pc: u64) -> LiftedInstr {
-    body(
+fn lift_lui(insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
+    let immediate = insn.c.checked_as_u32().filter(|&value| value < 1 << 20)?;
+    Some(body(
         pc,
         Rv64IInstr::Const {
             name: "lui",
             rd: decode_reg(insn.a.as_u32()),
-            value: sign_extend_32(insn.c.as_u32() << 12),
+            value: sign_extend_32(immediate << 12),
         },
-    )
+    ))
 }
 
 /// Lift AUIPC encoded as `rd=a/8` and `c << 8`.
 ///
 /// The transpiler stores `(imm & 0xfffff000) >> 8` in `c`, so shifting by
 /// eight reconstructs the upper 20 bits with twelve low zero bits.
-fn lift_auipc(insn: &Instruction, pc: u64) -> LiftedInstr {
+fn lift_auipc(insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
+    if insn.d.as_u32() != REGISTER_AS {
+        return None;
+    }
     let upper = insn.c.as_u32() << 8;
-    body(
+    Some(body(
         pc,
         Rv64IInstr::Const {
             name: "auipc",
             rd: decode_reg(insn.a.as_u32()),
             value: pc.wrapping_add(sign_extend_32(upper)),
         },
-    )
+    ))
+}
+
+fn signed_immediate(value: i32, bits: u32) -> Option<i32> {
+    let bound = 1i32.checked_shl(bits - 1)?;
+    (-bound..bound).contains(&value).then_some(value)
 }
 
 fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
@@ -673,13 +692,115 @@ mod tests {
     }
 
     #[test]
+    fn stores_require_enabled_flag() {
+        for opcode in [
+            LoadStoreOpcode::STORED,
+            LoadStoreOpcode::STOREW,
+            LoadStoreOpcode::STOREH,
+            LoadStoreOpcode::STOREB,
+        ] {
+            let disabled = instruction(
+                opcode,
+                [
+                    REGISTER_NUM_LIMBS,
+                    2 * REGISTER_NUM_LIMBS,
+                    0,
+                    REGISTER_AS as usize,
+                    MEMORY_AS as usize,
+                    0,
+                    0,
+                ],
+            );
+            assert!(try_lift(&disabled, 0x100).is_none());
+        }
+    }
+
+    #[test]
+    fn branch_and_jal_immediate_widths_are_enforced() {
+        let branch_opcode = BranchEqualOpcode::BEQ.global_opcode();
+        for offset in [-(1 << 12), (1 << 12) - 1] {
+            let valid = Instruction::large_from_isize(
+                branch_opcode,
+                8,
+                16,
+                offset,
+                REGISTER_AS as isize,
+                0,
+                0,
+                0,
+            );
+            assert!(try_lift(&valid, 0x2000).is_some());
+        }
+        for offset in [-(1 << 12) - 1, 1 << 12] {
+            let invalid = Instruction::large_from_isize(
+                branch_opcode,
+                8,
+                16,
+                offset,
+                REGISTER_AS as isize,
+                0,
+                0,
+                0,
+            );
+            assert!(try_lift(&invalid, 0x2000).is_none());
+        }
+
+        let jal_opcode = JalLuiOpcode::JAL.global_opcode();
+        for offset in [-(1 << 20), (1 << 20) - 1] {
+            let valid = Instruction::large_from_isize(jal_opcode, 8, 0, offset, 0, 0, 1, 0);
+            assert!(try_lift(&valid, 0x20_0000).is_some());
+        }
+        for offset in [-(1 << 20) - 1, 1 << 20] {
+            let invalid = Instruction::large_from_isize(jal_opcode, 8, 0, offset, 0, 0, 1, 0);
+            assert!(try_lift(&invalid, 0x20_0000).is_none());
+        }
+    }
+
+    #[test]
+    fn control_flow_address_space_shapes_are_enforced() {
+        let branch = instruction(
+            BranchEqualOpcode::BEQ,
+            [8, 16, 0, REGISTER_AS as usize, 0, 0, 0],
+        );
+        assert!(try_lift(&branch, 0x100).is_some());
+        let invalid_branch = instruction(
+            BranchEqualOpcode::BEQ,
+            [8, 16, 0, MEMORY_AS as usize, 0, 0, 0],
+        );
+        assert!(try_lift(&invalid_branch, 0x100).is_none());
+
+        for opcode in [
+            JalrOpcode::JALR.global_opcode(),
+            AuipcOpcode::AUIPC.global_opcode(),
+        ] {
+            let valid = instruction_for_opcode(opcode, [8, 16, 0, REGISTER_AS as usize, 0, 1, 0]);
+            assert!(try_lift(&valid, 0x100).is_some());
+            let invalid = instruction_for_opcode(opcode, [8, 16, 0, MEMORY_AS as usize, 0, 1, 0]);
+            assert!(try_lift(&invalid, 0x100).is_none());
+        }
+    }
+
+    #[test]
+    fn lui_immediate_shape_is_enforced() {
+        let opcode = JalLuiOpcode::LUI.global_opcode();
+        for immediate in [0, (1 << 20) - 1] {
+            let valid = Instruction::large_from_isize(opcode, 8, 0, immediate, 0, 0, 1, 0);
+            assert!(try_lift(&valid, 0x100).is_some());
+        }
+        for immediate in [-1, 1 << 20] {
+            let invalid = Instruction::large_from_isize(opcode, 8, 0, immediate, 0, 0, 1, 0);
+            assert!(try_lift(&invalid, 0x100).is_none());
+        }
+    }
+
+    #[test]
     fn control_flow_preserves_negative_offsets() {
         let pc = 0x1000;
-        for opcode in [
-            BranchEqualOpcode::BEQ.global_opcode(),
-            JalLuiOpcode::JAL.global_opcode(),
+        for (opcode, d) in [
+            (BranchEqualOpcode::BEQ.global_opcode(), REGISTER_AS),
+            (JalLuiOpcode::JAL.global_opcode(), 0),
         ] {
-            let insn = Instruction::from_isize(opcode, 8, 16, -12, 0, 0);
+            let insn = Instruction::large_from_isize(opcode, 8, 16, -12, d as isize, 0, 1, 0);
             let LiftedInstr::Term { terminator, .. } = try_lift(&insn, pc).unwrap() else {
                 panic!("expected terminator");
             };

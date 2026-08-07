@@ -219,6 +219,9 @@ impl RvrExtension for Rv64IoExtension {
         let opcode = insn.opcode.as_usize();
 
         if opcode == HintStoreOpcode::HINT_STORED.global_opcode_usize() {
+            if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+                return None;
+            }
             let ptr_reg = decode_reg(insn.b.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
@@ -228,6 +231,9 @@ impl RvrExtension for Rv64IoExtension {
         }
 
         if opcode == HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
+            if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+                return None;
+            }
             let num_words_reg = decode_reg(insn.a.as_u32());
             let ptr_reg = decode_reg(insn.b.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
@@ -646,6 +652,38 @@ mod tests {
         );
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
+    }
+
+    #[test]
+    fn hint_stores_require_register_and_memory_address_spaces() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        for opcode in [HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER] {
+            let valid = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, REGISTER_AS as usize, MEMORY_AS as usize, 0, 0],
+            );
+            assert!(ext.try_lift(&valid, 0x100).is_some());
+
+            let invalid_d = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, MEMORY_AS as usize, MEMORY_AS as usize, 0, 0],
+            );
+            assert!(ext.try_lift(&invalid_d, 0x100).is_none());
+
+            let invalid_e = Instruction::from_usize(
+                opcode.global_opcode(),
+                [
+                    8,
+                    16,
+                    0,
+                    REGISTER_AS as usize,
+                    PUBLIC_VALUES_AS as usize,
+                    0,
+                    0,
+                ],
+            );
+            assert!(ext.try_lift(&invalid_e, 0x100).is_none());
+        }
     }
 
     #[test]

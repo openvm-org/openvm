@@ -80,8 +80,8 @@ impl<F: VmField> VmFieldRvrExtension<F> for DeferralExtension {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         let hash = make_deferral_hash::<F>();
         let compress = make_deferral_compress::<F>();
-        let lifter =
-            DeferralRvrExtension::new(ctx).expect("failed to construct rvr DeferralRvrExtension");
+        let lifter = DeferralRvrExtension::new(ctx, self.fns.len())
+            .expect("failed to construct rvr DeferralRvrExtension");
         extensions.register_lifter(lifter);
         // SAFETY: This extension and the VM state use the same field `F`.
         extensions.register_runtime_hook(unsafe {

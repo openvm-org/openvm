@@ -2,11 +2,7 @@
 
 mod instruction;
 
-use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{IMM_AS, REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode, MulWOpcode};
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::RvrExtension;
@@ -94,7 +90,7 @@ impl RvrExtension for Rv64MExtension {
         let (_, op, word) = operations
             .into_iter()
             .find(|(candidate, _, _)| *candidate == opcode)?;
-        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != IMM_AS {
+        if insn.d.as_u32() != REGISTER_AS {
             return None;
         }
 
@@ -161,7 +157,7 @@ mod tests {
             (DivRemWOpcode::REMW.global_opcode(), "remw"),
             (DivRemWOpcode::REMUW.global_opcode(), "remuw"),
         ] {
-            let insn = instruction(opcode, REGISTER_AS, IMM_AS);
+            let insn = instruction(opcode, REGISTER_AS, 0);
             let LiftedInstr::Body(InstrAt { instr, .. }) =
                 extension.try_lift(&insn, 0x100).unwrap()
             else {
@@ -169,8 +165,11 @@ mod tests {
             };
             assert_eq!(instr.opname(), name);
 
-            let wrong_source = instruction(opcode, REGISTER_AS, REGISTER_AS);
-            assert!(extension.try_lift(&wrong_source, 0x100).is_none());
+            let alternate_e = instruction(opcode, REGISTER_AS, u16::MAX.into());
+            assert!(extension.try_lift(&alternate_e, 0x100).is_some());
+
+            let wrong_destination = instruction(opcode, 0, 0);
+            assert!(extension.try_lift(&wrong_destination, 0x100).is_none());
         }
     }
 
@@ -183,7 +182,7 @@ mod tests {
                 2 * REGISTER_NUM_LIMBS,
                 3 * REGISTER_NUM_LIMBS,
                 REGISTER_AS as usize,
-                IMM_AS as usize,
+                0,
                 1,
                 0,
             ],

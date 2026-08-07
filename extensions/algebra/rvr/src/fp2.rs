@@ -4,7 +4,11 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 #[cfg(test)]
 use openvm_instructions::MEMORY_BLOCK_BYTES;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{MEMORY_AS, REGISTER_AS},
+    LocalOpcode,
+};
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension};
 use strum::EnumCount;
@@ -363,6 +367,34 @@ mod tests {
             }));
         }
     }
+
+    #[test]
+    fn fp2_lifter_requires_register_and_memory_address_spaces() {
+        let extension = Fp2RvrExtension::new(vec![BigUint::from(17u8)]);
+
+        for opcode in [
+            Fp2Opcode::ADD,
+            Fp2Opcode::SUB,
+            Fp2Opcode::SETUP_ADDSUB,
+            Fp2Opcode::MUL,
+            Fp2Opcode::DIV,
+            Fp2Opcode::SETUP_MULDIV,
+        ] {
+            let instruction = |d, e| {
+                Instruction::from_usize(opcode.global_opcode(), [8, 16, 24, d as usize, e as usize])
+            };
+
+            assert!(extension
+                .try_lift(&instruction(REGISTER_AS, MEMORY_AS), 0)
+                .is_some());
+            assert!(extension
+                .try_lift(&instruction(MEMORY_AS, MEMORY_AS), 0)
+                .is_none());
+            assert!(extension
+                .try_lift(&instruction(REGISTER_AS, REGISTER_AS), 0)
+                .is_none());
+        }
+    }
 }
 
 impl RvrExtension for Fp2RvrExtension {
@@ -404,6 +436,9 @@ impl Fp2RvrExtension {
         let local = relative % count;
 
         if fp2_idx >= self.fp2_moduli.len() {
+            return None;
+        }
+        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
             return None;
         }
 
