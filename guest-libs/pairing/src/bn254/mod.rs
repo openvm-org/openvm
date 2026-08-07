@@ -79,11 +79,29 @@ impl G1Affine {
         if self.is_identity() {
             return <Self as Group>::IDENTITY;
         }
-        let reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        let mut reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
+        if reduced == Scalar::ZERO {
+            return <Self as Group>::IDENTITY;
+        }
+
+        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
+        // every choice of signs; an even scalar therefore has no digit assignment and would produce
+        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
+        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
+        // negating the result recovers the product.
+        let odd = reduced.as_le_bytes()[0] & 1 == 1;
+        if !odd {
+            reduced.neg_assign();
+        }
         let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
-        // SAFETY: `self` is not the identity, and `reduce_le_bytes` returns a value below the group
-        // order.
-        unsafe { self.mul_scalar_le_unchecked(&bytes) }
+        // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
+        let product = unsafe { self.mul_scalar_le_unchecked(&bytes) };
+        if odd {
+            product
+        } else {
+            -product
+        }
     }
 }
 

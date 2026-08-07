@@ -30,12 +30,12 @@ const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
 /// curve.
 pub const EC_MUL_SCALAR_DWORDS: u32 = 4;
 
-/// Trace rows the `EC_MUL` chip consumes per instruction: one ladder step per scalar bit plus the
-/// digest row that carries the instruction's memory accesses.
+/// Trace rows the `EC_MUL` chip consumes per instruction: one ladder row per two scalar digits
+/// plus the digest row that carries the instruction's memory accesses.
 ///
 /// Restated here rather than imported because `openvm-ecc-circuit` — which owns the chip and is the
 /// authority on this value — depends on this crate. That crate statically asserts the two agree.
-pub const EC_MUL_TRACE_ROWS: u32 = 257;
+pub const EC_MUL_TRACE_ROWS: u32 = 129;
 
 fn decode_reg(value: u32) -> Variable {
     decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)

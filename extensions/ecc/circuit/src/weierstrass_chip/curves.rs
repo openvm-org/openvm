@@ -284,13 +284,7 @@ pub fn ec_double_impl<F: Field + From<u64>, const NEG_A: u64>(x1: F, y1: F) -> (
     (x3, y3)
 }
 
-/// MSB-first binary double-and-add over affine coordinates, with the point at infinity carried as
-/// the `(0, 0)` sentinel.
-///
-/// Must agree byte for byte with `ec_mul_step_expr` iterated over the same bits: the executor
-/// writes this result to memory while trace generation records the field expression's, and the
-/// memory argument only balances if the two match. The four branches below correspond to that
-/// expression's four case flags.
+/// MSB-first double-and-add over signed all-`+-1` digits: `R <- 2R +- P`, starting from `R = P`.
 #[inline(always)]
 pub fn ec_mul_impl<F: Field + From<u64>, const NEG_A: u64>(
     px: F,
@@ -298,31 +292,22 @@ pub fn ec_mul_impl<F: Field + From<u64>, const NEG_A: u64>(
     scalar_le_bytes: &[u8],
     scalar_bits: usize,
 ) -> (F, F) {
-    let mut rx = F::ZERO;
-    let mut ry = F::ZERO;
-    let mut is_inf = true;
-
+    // The most significant digit is always `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px;
+    let mut ry = py;
+    // Assume scalar = 2B + 1
     for i in (0..scalar_bits).rev() {
-        let bit = (scalar_le_bytes[i / 8] >> (i % 8)) & 1 == 1;
-        if is_inf {
-            // Take P on a set bit, otherwise leave the sentinel untouched.
-            if bit {
-                rx = px;
-                ry = py;
-                is_inf = false;
-            }
-        } else {
-            let (dx, dy) = ec_double_impl::<F, NEG_A>(rx, ry);
-            if bit {
-                // Incomplete formula: requires dx != px, the chip's documented precondition.
-                let (ax, ay) = ec_add_ne_impl::<F>(dx, dy, px, py);
-                rx = ax;
-                ry = ay;
-            } else {
-                rx = dx;
-                ry = dy;
-            }
-        }
+        // Bit `i` of `B`, i.e. bit `i + 1` of the scalar. The top one is zero for any scalar below
+        // `2^scalar_bits`, which is what keeps the count at `scalar_bits` digits after the seed.
+        let j = i + 1;
+        let bit = j < scalar_bits && (scalar_le_bytes[j / 8] >> (j % 8)) & 1 == 1;
+
+        // Both formulas are incomplete; the `mul` module's parity argument is what rules out their
+        // exceptional cases. The `(2R) + sigma P` order matters: `R = +- sigma P` really does occur
+        // on the first step, where `R = P`.
+        let (dx, dy) = ec_double_impl::<F, NEG_A>(rx, ry);
+        let signed_py = if bit { py } else { -py };
+        (rx, ry) = ec_add_ne_impl::<F>(dx, dy, px, signed_py);
     }
 
     (rx, ry)
