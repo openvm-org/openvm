@@ -12,9 +12,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_instructions::PUBLIC_VALUES_AS;
-use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STORED};
 use openvm_stark_sdk::utils::create_seeded_rng;
 
@@ -24,8 +22,8 @@ use crate::{
         bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, BYTE_BITS,
     },
     store::{
-        common::store_write_data, core::fill_padding_row, StoreDoublewordAir, StoreDoublewordChip,
-        StoreDoublewordCoreAir, StoreDoublewordExecutor, StoreDoublewordFiller,
+        common::store_write_data, StoreDoublewordAir, StoreDoublewordChip, StoreDoublewordCoreAir,
+        StoreDoublewordExecutor, StoreDoublewordFiller,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -75,8 +73,7 @@ fn create_store_doubleword_harness(
             chip,
             MAX_INS_CAPACITY,
             generate_trace_from_postflight,
-        )
-        .with_padding(fill_padding_row),
+        ),
         (bitwise_chip.air, bitwise_chip),
     )
 }
@@ -93,7 +90,6 @@ fn rand_store_doubleword_test() {
             &mut harness.preflight,
             &mut rng,
             STORED,
-            None,
             None,
             None,
             None,
@@ -123,7 +119,6 @@ fn positive_stored_pointer_limb_boundary_cross_test() {
         Some([0xf9, 0xff, 0x00, 0x00, 0, 0, 0, 0]),
         Some(0),
         Some(0),
-        Some(MEMORY_AS as usize),
     );
     tester
         .build()
@@ -202,13 +197,11 @@ fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStore
                 chip.generate_proving_ctx_from_postflight(program, transcript, plan)
             },
         )
-        .with_padding(fill_padding_row)
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-#[test_case::test_case(MEMORY_AS as usize)]
-#[test_case::test_case(PUBLIC_VALUES_AS as usize)]
-fn test_cuda_rand_store_doubleword_tracegen(mem_as: usize) {
+#[test]
+fn test_cuda_rand_store_doubleword_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::new(store_gpu_memory_config(), default_var_range_checker_bus())
@@ -224,7 +217,6 @@ fn test_cuda_rand_store_doubleword_tracegen(mem_as: usize) {
             None,
             None,
             None,
-            Some(mem_as),
         );
     }
     tester

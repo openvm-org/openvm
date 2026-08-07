@@ -19,7 +19,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
-    LocalOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -36,7 +36,6 @@ struct StorePreCompute {
     imm_extended: u32,
     a: u8,
     b: u8,
-    e: u8,
 }
 
 impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
@@ -62,9 +61,7 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || (e_u32 != MEMORY_AS && e_u32 != PUBLIC_VALUES_AS)
-        {
+        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -82,7 +79,6 @@ impl<const STORE_WIDTH: usize> StoreExecutor<STORE_WIDTH> {
             imm_extended: sign_extend_imm16(imm, imm_sign),
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
-            e: e_u32 as u8,
         };
         Ok(local_opcode)
     }
@@ -195,12 +191,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
         exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32);
     let rs1_val = bytes_to_u32(rs1_bytes);
     let ptr_val = checked_memory_address(pc, rs1_val, pre_compute.imm_extended, OP::WIDTH)?;
-    OP::write(
-        exec_state,
-        pre_compute.e as u32,
-        ptr_val,
-        pre_compute.a as u32,
-    );
+    OP::write(exec_state, ptr_val, pre_compute.a as u32);
     if OP::WIDTH != BYTE_ACCESS_WIDTH
         && ptr_val as usize % DOUBLEWORD_ACCESS_WIDTH + OP::WIDTH <= DOUBLEWORD_ACCESS_WIDTH
     {
@@ -243,7 +234,6 @@ trait StoreOp {
 
     fn write<CTX: ExecutionCtxTrait>(
         exec_state: &mut VmExecState<GuestMemory, CTX>,
-        address_space: u32,
         ptr: u32,
         rs2_ptr: u32,
     );
@@ -260,12 +250,11 @@ impl StoreOp for StoreDOp {
     #[inline(always)]
     fn write<CTX: ExecutionCtxTrait>(
         exec_state: &mut VmExecState<GuestMemory, CTX>,
-        address_space: u32,
         ptr: u32,
         rs2_ptr: u32,
     ) {
         let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
-        exec_state.vm_write_bytes(address_space, ptr, &value);
+        exec_state.vm_write_bytes(MEMORY_AS, ptr, &value);
     }
 }
 
@@ -275,12 +264,11 @@ impl StoreOp for StoreWOp {
     #[inline(always)]
     fn write<CTX: ExecutionCtxTrait>(
         exec_state: &mut VmExecState<GuestMemory, CTX>,
-        address_space: u32,
         ptr: u32,
         rs2_ptr: u32,
     ) {
         let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
-        exec_state.vm_write_bytes(address_space, ptr, &value);
+        exec_state.vm_write_bytes(MEMORY_AS, ptr, &value);
     }
 }
 
@@ -290,12 +278,11 @@ impl StoreOp for StoreHOp {
     #[inline(always)]
     fn write<CTX: ExecutionCtxTrait>(
         exec_state: &mut VmExecState<GuestMemory, CTX>,
-        address_space: u32,
         ptr: u32,
         rs2_ptr: u32,
     ) {
         let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
-        exec_state.vm_write_bytes(address_space, ptr, &value);
+        exec_state.vm_write_bytes(MEMORY_AS, ptr, &value);
     }
 }
 
@@ -305,11 +292,56 @@ impl StoreOp for StoreBOp {
     #[inline(always)]
     fn write<CTX: ExecutionCtxTrait>(
         exec_state: &mut VmExecState<GuestMemory, CTX>,
-        address_space: u32,
         ptr: u32,
         rs2_ptr: u32,
     ) {
         let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(REGISTER_AS, rs2_ptr);
-        exec_state.vm_write_bytes(address_space, ptr, &value);
+        exec_state.vm_write_bytes(MEMORY_AS, ptr, &value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{
+        instruction::Instruction,
+        riscv::{MEMORY_AS, REGISTER_AS},
+        LocalOpcode,
+    };
+    use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::{StoreExecutor, StorePreCompute};
+    use crate::adapters::{
+        BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
+    };
+
+    fn instruction(opcode: LoadStoreOpcode, address_space: u32) -> Instruction<BabyBear> {
+        Instruction::from_usize(
+            opcode.global_opcode(),
+            [8, 16, 0, REGISTER_AS as usize, address_space as usize, 1, 0],
+        )
+    }
+
+    fn assert_address_space<const WIDTH: usize>(opcode: LoadStoreOpcode) {
+        let executor = StoreExecutor::<WIDTH>::new(LoadStoreOpcode::CLASS_OFFSET);
+        let mut data = StorePreCompute {
+            imm_extended: 0,
+            a: 0,
+            b: 0,
+        };
+        assert!(executor
+            .pre_compute_impl(4, &instruction(opcode, MEMORY_AS), &mut data)
+            .is_ok());
+        assert!(executor
+            .pre_compute_impl(4, &instruction(opcode, MEMORY_AS + 1), &mut data)
+            .is_err());
+    }
+
+    #[test]
+    fn ordinary_stores_reject_non_memory_address_spaces() {
+        assert_address_space::<DOUBLEWORD_ACCESS_WIDTH>(STORED);
+        assert_address_space::<WORD_ACCESS_WIDTH>(STOREW);
+        assert_address_space::<HALFWORD_ACCESS_WIDTH>(STOREH);
+        assert_address_space::<BYTE_ACCESS_WIDTH>(STOREB);
     }
 }

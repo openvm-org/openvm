@@ -27,7 +27,8 @@ use openvm_riscv_transpiler::{
     AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
     BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
     JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    MulOpcode, MulWOpcode, RevealOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -42,7 +43,10 @@ use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{adapters::*, *};
+use crate::{
+    adapters::*, hintstore::trace::generate_trace_from_postflight as generate_hintstore_trace,
+    reveal::trace::generate_trace_from_postflight as generate_reveal_trace, *,
+};
 
 macro_rules! add_executor_chip_with_tracegen {
     ($inventory:expr, $chip:expr, $generate:path) => {
@@ -179,6 +183,7 @@ pub enum Rv64MExecutor {
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Rv64IoExecutor {
     HintStore(HintStoreExecutor),
+    Reveal(RevealExecutor),
 }
 
 // ============ VmExtension Implementations ============
@@ -1330,6 +1335,8 @@ impl VmExecutionExtension for Rv64Io {
             hint_store,
             HintStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
+        let reveal = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
+        inventory.add_executor(reveal, RevealOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
     }
@@ -1355,6 +1362,9 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
             byte_ptr_max_bits,
         );
         inventory.add_air(hint_store);
+
+        let reveal = RevealAir::new(exec_bridge, memory_bridge, range_checker, byte_ptr_max_bits);
+        inventory.add_air(reveal);
 
         Ok(())
     }
@@ -1384,11 +1394,14 @@ where
             HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
-        add_executor_chip_with_tracegen!(
-            inventory,
-            hint_store,
-            crate::hintstore::trace::generate_trace_from_postflight
+        add_executor_chip_with_tracegen!(inventory, hint_store, generate_hintstore_trace);
+
+        inventory.next_air::<RevealAir>()?;
+        let reveal = RevealChip::new(
+            RevealFiller::new(byte_ptr_max_bits, range_checker),
+            mem_helper,
         );
+        add_executor_chip_with_tracegen!(inventory, reveal, generate_reveal_trace);
 
         Ok(())
     }

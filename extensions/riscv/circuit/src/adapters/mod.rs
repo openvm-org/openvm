@@ -9,10 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
-use openvm_instructions::{
-    riscv::{MEMORY_AS, REGISTER_AS},
-    PUBLIC_VALUES_AS,
-};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -462,11 +459,7 @@ pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const
 
 #[inline(always)]
 pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
-    debug_assert!(
-        address_space == REGISTER_AS
-            || address_space == MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS,
-    );
+    debug_assert!(address_space == REGISTER_AS || address_space == MEMORY_AS,);
 
     // SAFETY: reads raw storage bytes at VM byte pointers.
     unsafe { memory.read_bytes::<N>(address_space, ptr) }
@@ -479,11 +472,7 @@ pub fn memory_write<const N: usize>(
     ptr: u32,
     data: [u8; N],
 ) {
-    debug_assert!(
-        address_space == REGISTER_AS
-            || address_space == MEMORY_AS
-            || address_space == PUBLIC_VALUES_AS
-    );
+    debug_assert!(address_space == REGISTER_AS || address_space == MEMORY_AS);
 
     // SAFETY: writes raw storage bytes at VM byte pointers.
     unsafe { memory.write_bytes::<N>(address_space, ptr, data) }

@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
-    LocalOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
@@ -33,7 +33,7 @@ pub struct StoreByteChipGpu {
 }
 
 impl StoreByteChipGpu {
-    /// Replays RV64I main-memory and RV64IO public-values STOREB rows.
+    /// Replays RV64I main-memory STOREB rows.
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -67,7 +67,6 @@ impl StoreByteChipGpu {
                 LoadStoreOpcode::STOREB.global_opcode().as_usize() as u32,
                 REGISTER_AS,
                 MEMORY_AS,
-                PUBLIC_VALUES_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,

@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use openvm_cuda_backend::prelude::F;
+use openvm_instructions::PUBLIC_VALUES_AS;
 
 /// A struct that has the same memory layout as `uint2` to be used in FFI functions
 #[repr(C)]
@@ -890,7 +891,6 @@ pub mod store_byte_cuda {
             opcode: u32,
             register_address_space: u32,
             main_memory_address_space: u32,
-            public_values_address_space: u32,
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
@@ -916,7 +916,6 @@ pub mod store_byte_cuda {
         opcode: u32,
         register_address_space: u32,
         main_memory_address_space: u32,
-        public_values_address_space: u32,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
@@ -941,11 +940,86 @@ pub mod store_byte_cuda {
             opcode,
             register_address_space,
             main_memory_address_space,
-            public_values_address_space,
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod reveal_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _reveal_replay_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_instructions: DeviceBufferView,
+            pc_base: u32,
+            d_program_log: DeviceBufferView,
+            d_memory_log: DeviceBufferView,
+            d_initial_write_log: DeviceBufferView,
+            d_memory_predecessors: DeviceBufferView,
+            d_steps: DeviceBufferView,
+            step_start: usize,
+            num_steps: usize,
+            d_error: *mut u32,
+            opcode: u32,
+            register_address_space: u32,
+            public_values_address_space: u32,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn replay_tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program_log: DeviceBufferView,
+        d_memory_log: DeviceBufferView,
+        d_initial_write_log: DeviceBufferView,
+        d_memory_predecessors: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        d_error: *mut u32,
+        opcode: u32,
+        register_address_space: u32,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        assert!(height.is_power_of_two());
+        CudaError::from_result(_reveal_replay_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_instructions,
+            pc_base,
+            d_program_log,
+            d_memory_log,
+            d_initial_write_log,
+            d_memory_predecessors,
+            d_steps,
+            step_start,
+            num_steps,
+            d_error,
+            opcode,
+            register_address_space,
+            PUBLIC_VALUES_AS,
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -973,7 +1047,6 @@ pub mod store_halfword_cuda {
             opcode: u32,
             register_address_space: u32,
             main_memory_address_space: u32,
-            public_values_address_space: u32,
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
@@ -999,7 +1072,6 @@ pub mod store_halfword_cuda {
         opcode: u32,
         register_address_space: u32,
         main_memory_address_space: u32,
-        public_values_address_space: u32,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
@@ -1024,7 +1096,6 @@ pub mod store_halfword_cuda {
             opcode,
             register_address_space,
             main_memory_address_space,
-            public_values_address_space,
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
@@ -1056,7 +1127,6 @@ pub mod store_word_cuda {
             opcode: u32,
             register_address_space: u32,
             main_memory_address_space: u32,
-            public_values_address_space: u32,
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
@@ -1082,7 +1152,6 @@ pub mod store_word_cuda {
         opcode: u32,
         register_address_space: u32,
         main_memory_address_space: u32,
-        public_values_address_space: u32,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
@@ -1107,7 +1176,6 @@ pub mod store_word_cuda {
             opcode,
             register_address_space,
             main_memory_address_space,
-            public_values_address_space,
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
@@ -1139,7 +1207,6 @@ pub mod store_doubleword_cuda {
             opcode: u32,
             register_address_space: u32,
             main_memory_address_space: u32,
-            public_values_address_space: u32,
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
@@ -1165,7 +1232,6 @@ pub mod store_doubleword_cuda {
         opcode: u32,
         register_address_space: u32,
         main_memory_address_space: u32,
-        public_values_address_space: u32,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
@@ -1190,7 +1256,6 @@ pub mod store_doubleword_cuda {
             opcode,
             register_address_space,
             main_memory_address_space,
-            public_values_address_space,
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,

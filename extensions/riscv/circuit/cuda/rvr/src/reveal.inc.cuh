@@ -1,7 +1,4 @@
-#include "riscv/store_multibyte_replay.cuh"
-
-
-__global__ void store_doubleword_replay_tracegen(
+__global__ void reveal_replay_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<RvrReplayInstruction> instructions,
@@ -16,21 +13,20 @@ __global__ void store_doubleword_replay_tracegen(
     uint32_t *error,
     uint32_t opcode,
     uint32_t register_as,
-    uint32_t main_memory_as,
+    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup,
     uint32_t timestamp_max_bits
 ) {
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
-    row.fill_zero(0, sizeof(StoreDoublewordCols<uint8_t>));
+    row.fill_zero(0, sizeof(RevealCols<uint8_t>));
     if (idx >= num_steps) return;
 
-    ReplayStoreMultiByteInput input = {};
-    if (!replay_store_multibyte<DOUBLEWORD_ACCESS_WIDTH>(
+    ReplayRevealInput input = {};
+    if (!replay_reveal(
             instructions,
             pc_base,
             program,
@@ -40,7 +36,7 @@ __global__ void store_doubleword_replay_tracegen(
             steps[step_start + idx],
             opcode,
             register_as,
-            main_memory_as,
+            public_values_as,
             pointer_max_bits,
             input,
             error
@@ -48,37 +44,15 @@ __global__ void store_doubleword_replay_tracegen(
         return;
     }
 
-    auto adapter = StoreAdapter(
+    auto reveal = Reveal(
         pointer_max_bits,
         VariableRangeChecker(range_checker, range_checker_num_bins),
         timestamp_max_bits
     );
-    adapter.fill_trace_row(
-        row,
-        input.from_pc,
-        input.from_timestamp,
-        input.rs1_ptr,
-        input.rs2_ptr,
-        input.rs1_val,
-        input.rs1_prev_timestamp,
-        input.rs2_prev_timestamp,
-        input.write_prev_timestamps[0],
-        input.write_prev_timestamps[1],
-        input.imm,
-        input.imm_sign
-    );
-    auto core = StoreDoublewordCore(BitwiseOperationLookup(bitwise_lookup));
-    core.fill_trace_row(
-        row.slice_from(COL_INDEX(StoreDoublewordCols, core)),
-        input.read_data,
-        input.prev_data,
-        input.shift
-    );
+    reveal.fill_trace_row(row, input);
 }
 
-
-
-extern "C" int _store_doubleword_replay_tracegen(
+extern "C" int _reveal_replay_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -94,21 +68,20 @@ extern "C" int _store_doubleword_replay_tracegen(
     uint32_t *d_error,
     uint32_t opcode,
     uint32_t register_as,
-    uint32_t main_memory_as,
+    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(StoreDoublewordCols<uint8_t>));
+    assert(width == sizeof(RevealCols<uint8_t>));
     assert(d_memory.len() == d_predecessors.len());
     assert(step_start <= d_steps.len());
     assert(num_steps <= d_steps.len() - step_start);
     assert(height >= num_steps);
     auto [grid, block] = kernel_launch_params(height, REPLAY_THREADS);
-    store_doubleword_replay_tracegen<<<grid, block, 0, stream>>>(
+    reveal_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_instructions,
@@ -123,11 +96,10 @@ extern "C" int _store_doubleword_replay_tracegen(
         d_error,
         opcode,
         register_as,
-        main_memory_as,
+        public_values_as,
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
