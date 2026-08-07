@@ -20,7 +20,6 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_AS},
-    PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -72,7 +71,6 @@ pub struct StoreMultiByteAdapterCols<T> {
     pub imm_sign: T,
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
     pub mem_ptr_low_limb: T,
-    pub mem_as: T,
     /// Carry into the high pointer limb for the second block address.
     pub mem_ptr_carry: T,
     /// Timestamp auxiliary columns for the first and optional second block writes. Previous data
@@ -170,9 +168,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
 
-        // Constrain stores to writable u16-celled address spaces.
-        builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
-
         let (prev_data, read_data) = ctx.reads;
         let [prev_data0, prev_data1] = prev_data;
         let [write_data0, write_data1] = ctx.writes;
@@ -195,7 +190,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    local_cols.mem_as,
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone() - shift_amount.clone()),
                 ),
                 write_data0,
@@ -212,7 +207,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    local_cols.mem_as,
+                    AB::F::from_u32(MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(
                         mem_ptr - shift_amount + AB::F::from_u32(MEMORY_BLOCK_BYTES as u32),
                     ),
@@ -237,7 +232,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::from_u32(REGISTER_AS),
-                    local_cols.mem_as.into(),
+                    AB::Expr::from_u32(MEMORY_AS),
                     is_valid.clone(),
                     local_cols.imm_sign.into(),
                 ],
@@ -284,9 +279,7 @@ impl StoreMultiByteAdapterFiller {
         }
         let instruction = postflight.instruction(step);
         let mem_as = instruction.e.as_canonical_u32();
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || !matches!(mem_as, MEMORY_AS | PUBLIC_VALUES_AS)
-        {
+        if instruction.d.as_canonical_u32() != REGISTER_AS || mem_as != MEMORY_AS {
             return Err(PostflightError::new(
                 "multi-byte store has invalid address spaces",
             ));
@@ -407,7 +400,6 @@ impl StoreMultiByteAdapterFiller {
             &mut adapter_row.write_base_aux[0],
         );
 
-        adapter_row.mem_as = F::from_u32(mem_as);
         let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
         let aligned_limb = ptr_limbs[0] - shift as u32;
         self.range_checker_chip

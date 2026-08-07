@@ -50,7 +50,7 @@ mod tests {
             riscv::{IMM_AS, MEMORY_AS, REGISTER_AS},
             SysPhantom, PUBLIC_VALUES_AS,
         },
-        openvm_riscv_transpiler::{BranchEqualOpcode, JalrOpcode, Rv64Phantom},
+        openvm_riscv_transpiler::{BranchEqualOpcode, JalrOpcode, RevealOpcode, Rv64Phantom},
     };
     #[cfg(not(feature = "rvr"))]
     use {
@@ -386,14 +386,9 @@ mod tests {
     }
 
     #[cfg(feature = "rvr")]
-    fn reveal_instruction(
-        opcode: LoadStoreOpcode,
-        src_reg: usize,
-        base_reg: usize,
-        offset: i16,
-    ) -> Instruction<F> {
+    fn reveal_instruction(src_reg: usize, base_reg: usize, offset: i16) -> Instruction<F> {
         Instruction::from_usize(
-            opcode.global_opcode(),
+            RevealOpcode::REVEAL.global_opcode(),
             [
                 src_reg * REGISTER_NUM_LIMBS,
                 base_reg * REGISTER_NUM_LIMBS,
@@ -774,15 +769,19 @@ mod tests {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
         let instructions = [
-            reveal_instruction(LoadStoreOpcode::STOREB, 1, 2, 0),
-            // A word at byte address 7 crosses an eight-byte memory block.
-            reveal_instruction(LoadStoreOpcode::STOREW, 3, 4, 0),
+            reveal_instruction(1, 2, 0),
+            reveal_instruction(3, 4, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
         let preflight = executor.preflight_instance(&exe)?;
-        let registers = [(1, 0xa5), (2, 2), (3, 0x1122_3344), (4, 7)];
+        let registers = [
+            (1, 0xa5a4_a3a2_a1a0_9998),
+            (2, 0),
+            (3, 0x1122_3344_5566_7788),
+            (4, 8),
+        ];
         let initial_public_values = (0u8..16).collect::<Vec<_>>();
         let initial = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
@@ -799,14 +798,13 @@ mod tests {
             execution.endpoint,
             openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
-        // Two register reads plus one memory slot for STOREB, followed by two
-        // register reads plus two slots for the crossing STOREW.
-        assert_eq!(execution.to_state.timestamp, 8);
+        // Each aligned REVEAL uses two register reads and one full-block write.
+        assert_eq!(execution.to_state.timestamp, 7);
         assert!(execution.transcript.replay_values.is_empty());
 
         let mut expected = initial_public_values;
-        expected[2] = 0xa5;
-        expected[7..11].copy_from_slice(&0x1122_3344u32.to_le_bytes());
+        expected[..8].copy_from_slice(&0xa5a4_a3a2_a1a0_9998u64.to_le_bytes());
+        expected[8..].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
         assert_eq!(
             extract_public_values(16, &execution.state.memory.memory),
             expected
@@ -1163,16 +1161,16 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_reveal_preflight_suspends_after_committed_store() -> Result<()> {
+    fn test_rvr_reveal_preflight_suspends_after_committed_reveal() -> Result<()> {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(PAGE_SIZE);
         let instructions = [
-            reveal_instruction(LoadStoreOpcode::STOREW, 1, 2, 0),
+            reveal_instruction(1, 2, 0),
             Instruction::<F>::from_usize(
                 JalLuiOpcode::JAL.global_opcode(),
                 [0, 0, 4, REGISTER_AS as usize, 0, 0],
             ),
-            reveal_instruction(LoadStoreOpcode::STOREB, 3, 4, 0),
+            reveal_instruction(3, 4, 0),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
@@ -1180,7 +1178,12 @@ mod tests {
         let preflight = executor.preflight_instance(&exe)?;
         let initial = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            &[(1, 0xaabb_ccdd), (2, 8), (3, 0xee), (4, 9)],
+            &[
+                (1, 0xaabb_ccdd_eeff_0011),
+                (2, 8),
+                (3, 0x2233_4455_6677_8899),
+                (4, 16),
+            ],
             &vec![0; PAGE_SIZE],
         );
 
@@ -1194,8 +1197,8 @@ mod tests {
         );
         assert!(first.transcript.replay_values.is_empty());
         assert_eq!(
-            &extract_public_values(PAGE_SIZE, &first.state.memory.memory)[8..12],
-            &0xaabb_ccddu32.to_le_bytes()
+            &extract_public_values(PAGE_SIZE, &first.state.memory.memory)[8..16],
+            &0xaabb_ccdd_eeff_0011u64.to_le_bytes()
         );
 
         let second = preflight.execute_from_state_for(
@@ -1208,8 +1211,11 @@ mod tests {
         );
         assert!(second.transcript.replay_values.is_empty());
         assert_eq!(
-            &extract_public_values(PAGE_SIZE, &second.state.memory.memory)[8..12],
-            &[0xdd, 0xee, 0xbb, 0xaa]
+            &extract_public_values(PAGE_SIZE, &second.state.memory.memory)[8..24],
+            &[
+                0x11, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44,
+                0x33, 0x22,
+            ]
         );
         Ok(())
     }
@@ -1223,7 +1229,7 @@ mod tests {
         // The effective address wraps to zero, but the non-u32 base still
         // fails closed in both execution modes.
         let address_exe = VmExe::from(Program::from_instructions(&[
-            reveal_instruction(LoadStoreOpcode::STOREB, 1, 2, 1),
+            reveal_instruction(1, 2, 1),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ]));
         let preflight = executor.preflight_instance(&address_exe)?;
@@ -1723,7 +1729,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Memory access out of bounds")]
+    #[should_panic(
+        expected = "reveal address is not aligned within configured public-values capacity"
+    )]
     #[cfg(not(feature = "rvr"))]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();

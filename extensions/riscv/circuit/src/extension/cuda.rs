@@ -32,7 +32,8 @@ use openvm_riscv_transpiler::{
     AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
     BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
     JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    MulOpcode, MulWOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
@@ -50,8 +51,8 @@ use crate::{
     LoadSignExtendByteAir, LoadSignExtendByteChipGpu, LoadSignExtendHalfwordAir,
     LoadSignExtendHalfwordChipGpu, LoadSignExtendWordAir, LoadSignExtendWordChipGpu, LoadWordAir,
     LoadWordChipGpu, MulHAir, MulHChipGpu, MulWAir, MulWChipGpu, MultiplicationAir,
-    MultiplicationChipGpu, Rv64I, Rv64Io, Rv64M, ShiftLogicalAir, ShiftLogicalChipGpu,
-    ShiftLogicalImmAir, ShiftLogicalImmChipGpu, ShiftRightArithmeticAir,
+    MultiplicationChipGpu, RevealAir, RevealChipGpu, Rv64I, Rv64Io, Rv64M, ShiftLogicalAir,
+    ShiftLogicalChipGpu, ShiftLogicalImmAir, ShiftLogicalImmChipGpu, ShiftRightArithmeticAir,
     ShiftRightArithmeticChipGpu, ShiftRightArithmeticImmAir, ShiftRightArithmeticImmChipGpu,
     ShiftWLogicalAir, ShiftWLogicalChipGpu, ShiftWLogicalImmAir, ShiftWLogicalImmChipGpu,
     ShiftWRightArithmeticAir, ShiftWRightArithmeticChipGpu, ShiftWRightArithmeticImmAir,
@@ -312,6 +313,7 @@ impl<'a> Rv64ImPreflightGpuTracegen<'a> {
         replay_chip!(StoreHalfwordChipGpu, [LoadStoreOpcode::STOREH]);
         replay_chip!(StoreWordChipGpu, [LoadStoreOpcode::STOREW]);
         replay_chip!(StoreDoublewordChipGpu, [LoadStoreOpcode::STORED]);
+        replay_chip!(RevealChipGpu, [RevealOpcode::REVEAL]);
         replay_chip!(
             HintStoreChipGpu,
             [HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER,]
@@ -704,8 +706,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64M> for Rv64ImGpuProverExt
     }
 }
 
-// This implementation is specific to GpuBackend because the lookup chips
-// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverExt {
     fn extend_prover(
         &self,
@@ -716,11 +716,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverEx
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-
         inventory.next_air::<HintStoreAir>()?;
         let hint_store =
             HintStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(hint_store);
+
+        inventory.next_air::<RevealAir>()?;
+        let reveal = RevealChipGpu::new(range_checker, byte_ptr_max_bits, timestamp_max_bits);
+        inventory.add_executor_chip(reveal);
 
         Ok(())
     }

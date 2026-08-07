@@ -7,33 +7,23 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_instructions::{
-    riscv::{MEMORY_AS, REGISTER_AS},
-    LocalOpcode,
-};
-use openvm_riscv_transpiler::LoadStoreOpcode;
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode};
+use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::STORE_DOUBLEWORD_VALUE_CELLS;
-use crate::{
-    adapters::{StoreMultiByteAdapterCols, BYTE_BITS},
-    cuda_abi::store_doubleword_cuda,
-    store::core::StoreCoreCols,
-};
+use super::RevealCols;
+use crate::cuda_abi::reveal_cuda;
 
 #[derive(new)]
-pub struct StoreDoublewordChipGpu {
+pub struct RevealChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl StoreDoublewordChipGpu {
+impl RevealChipGpu {
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -42,17 +32,16 @@ impl StoreDoublewordChipGpu {
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
         program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
-        let step_range = replay_plan.opcode_range(LoadStoreOpcode::STORED.global_opcode());
+        let step_range = replay_plan.opcode_range(RevealOpcode::REVEAL.global_opcode());
         if step_range.is_empty() {
             return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
 
-        let trace_width = StoreMultiByteAdapterCols::<F>::width()
-            + StoreCoreCols::<F, STORE_DOUBLEWORD_VALUE_CELLS>::width();
+        let trace_width = RevealCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(step_range.len());
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            store_doubleword_cuda::replay_tracegen(
+            reveal_cuda::replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 program.instructions(),
@@ -65,12 +54,10 @@ impl StoreDoublewordChipGpu {
                 step_range.start,
                 step_range.len(),
                 transcript.error_ptr(),
-                LoadStoreOpcode::STORED.global_opcode().as_usize() as u32,
+                RevealOpcode::REVEAL.global_opcode().as_usize() as u32,
                 REGISTER_AS,
-                MEMORY_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )?;

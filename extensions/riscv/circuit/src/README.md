@@ -120,17 +120,32 @@ Given
 
 - `rs1`, `rs2` are register addresses
 - `imm` is an immediate value
-- `mem_as` is the target address space, constrained to be the RV64 memory address space (`2`) or the public values address space (`3`)
 - `from_pc` is the current program address
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
-- A memory write to `mem_as` is performed at address `val(rs1) + imm`
+- A memory write to the RV64 memory address space (`2`) is performed at address `val(rs1) + imm`
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 8. [Multiplication adapter](./adapters/mul.rs)
+#### 8. Reveal
+
+Given
+
+- `rs1` is the public-values base-address register
+- `rs2` is the source register
+- `imm` is an immediate value
+- `from_pc` is the current program address
+
+This circuit proves the following:
+
+- Memory reads from registers `rs1` and `rs2` are performed
+- Eight bytes from `rs2` are written at `val(rs1) + imm` in the public-values address space (`3`)
+- The destination is constrained to an eight-byte-aligned, in-bounds address
+- The dedicated reveal instruction is correctly fetched at `from_pc`, and the program counter is set to `from_pc + 4`
+
+#### 9. [Multiplication adapter](./adapters/mul.rs)
 
 Given
 
@@ -144,7 +159,7 @@ This circuit proves the following:
 - A memory write to register `rd` is performed with the result of the multiplication
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 9. [Rdwrite adapter](./adapters/rdwrite.rs)
+#### 10. [Rdwrite adapter](./adapters/rdwrite.rs)
 
 Given
 

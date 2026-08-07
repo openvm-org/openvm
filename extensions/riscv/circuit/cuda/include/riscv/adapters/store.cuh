@@ -18,7 +18,6 @@ template <typename T> struct StoreMultiByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
-    T mem_as;
     T mem_ptr_carry;
     MemoryBaseAuxCols<T> write_base_aux[2];
 };
@@ -48,8 +47,7 @@ struct StoreAdapter {
         uint32_t write0_prev_timestamp,
         uint32_t write1_prev_timestamp,
         uint16_t imm,
-        uint8_t imm_sign,
-        uint32_t mem_as
+        uint8_t imm_sign
     ) {
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.pc, from_pc);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.timestamp, from_timestamp);
@@ -90,7 +88,6 @@ struct StoreAdapter {
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, rs2_ptr, rs2_ptr);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, imm_sign, imm_sign);
-        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, mem_as, mem_as);
 
         uint32_t ptr = rs1_val + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
@@ -129,7 +126,6 @@ template <typename T> struct StoreByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
-    T mem_as;
     MemoryBaseAuxCols<T> write_base_aux;
 };
 
@@ -157,8 +153,7 @@ struct StoreByteAdapter {
         uint32_t rs2_prev_timestamp,
         uint32_t write_prev_timestamp,
         uint16_t imm,
-        uint8_t imm_sign,
-        uint32_t mem_as
+        uint8_t imm_sign
     ) {
         COL_WRITE_VALUE(row, StoreByteAdapterCols, from_state.pc, from_pc);
         COL_WRITE_VALUE(
@@ -189,7 +184,6 @@ struct StoreByteAdapter {
         COL_WRITE_VALUE(row, StoreByteAdapterCols, rs2_ptr, rs2_ptr);
         COL_WRITE_VALUE(row, StoreByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, StoreByteAdapterCols, imm_sign, imm_sign);
-        COL_WRITE_VALUE(row, StoreByteAdapterCols, mem_as, mem_as);
 
         uint32_t ptr = rs1_val + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);

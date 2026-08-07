@@ -105,7 +105,9 @@ pub fn hint_random(len: usize) {
     );
 }
 
-/// Store rs1 to [[rd] + imm]_3.
+/// Reveal rs1 at public-value address `[rd] + imm`.
+///
+/// The destination address must be eight-byte aligned.
 #[macro_export]
 macro_rules! reveal {
     ($rd:ident, $rs1:ident, $imm:expr) => {

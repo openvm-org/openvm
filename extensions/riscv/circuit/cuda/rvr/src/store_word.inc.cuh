@@ -17,7 +17,6 @@ __global__ void store_word_replay_tracegen(
     uint32_t opcode,
     uint32_t register_as,
     uint32_t main_memory_as,
-    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
@@ -28,7 +27,6 @@ __global__ void store_word_replay_tracegen(
     if (idx >= height) return;
     RowSlice row(trace + idx, height);
     row.fill_zero(0, sizeof(StoreWordCols<uint8_t>));
-    COL_WRITE_VALUE(row, StoreWordCols, adapter.mem_as, main_memory_as);
     if (idx >= num_steps) return;
 
     ReplayStoreMultiByteInput input = {};
@@ -43,7 +41,6 @@ __global__ void store_word_replay_tracegen(
             opcode,
             register_as,
             main_memory_as,
-            public_values_as,
             pointer_max_bits,
             input,
             error
@@ -68,8 +65,7 @@ __global__ void store_word_replay_tracegen(
         input.write_prev_timestamps[0],
         input.write_prev_timestamps[1],
         input.imm,
-        input.imm_sign,
-        input.memory_as
+        input.imm_sign
     );
     auto core = StoreWordCore(BitwiseOperationLookup(bitwise_lookup));
     core.fill_trace_row(
@@ -99,7 +95,6 @@ extern "C" int _store_word_replay_tracegen(
     uint32_t opcode,
     uint32_t register_as,
     uint32_t main_memory_as,
-    uint32_t public_values_as,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
@@ -129,7 +124,6 @@ extern "C" int _store_word_replay_tracegen(
         opcode,
         register_as,
         main_memory_as,
-        public_values_as,
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
