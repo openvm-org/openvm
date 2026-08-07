@@ -7,7 +7,7 @@
 
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{NUM_REGISTERS, REGISTER_BYTES},
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
@@ -147,8 +147,17 @@ impl KeccakExtension {
 impl RvrExtension for KeccakExtension {
     fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
+        let is_keccakf = match opcode {
+            opcode if opcode == KeccakfOpcode::KECCAKF.global_opcode_usize() => true,
+            opcode if opcode == XorinOpcode::XORIN.global_opcode_usize() => false,
+            _ => return None,
+        };
 
-        if opcode == KeccakfOpcode::KECCAKF.global_opcode_usize() {
+        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+            return None;
+        }
+
+        if is_keccakf {
             let buffer_ptr_reg = decode_reg(insn.a.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
@@ -160,22 +169,18 @@ impl RvrExtension for KeccakExtension {
             }));
         }
 
-        if opcode == XorinOpcode::XORIN.global_opcode_usize() {
-            let buffer_ptr_reg = decode_reg(insn.a.as_u32());
-            let input_ptr_reg = decode_reg(insn.b.as_u32());
-            let len_reg = decode_reg(insn.c.as_u32());
-            return Some(LiftedInstr::Body(InstrAt {
-                pc,
-                instr: Box::new(XorinInstr {
-                    buffer_ptr_reg,
-                    input_ptr_reg,
-                    len_reg,
-                }),
-                source_loc: None,
-            }));
-        }
-
-        None
+        let buffer_ptr_reg = decode_reg(insn.a.as_u32());
+        let input_ptr_reg = decode_reg(insn.b.as_u32());
+        let len_reg = decode_reg(insn.c.as_u32());
+        Some(LiftedInstr::Body(InstrAt {
+            pc,
+            instr: Box::new(XorinInstr {
+                buffer_ptr_reg,
+                input_ptr_reg,
+                len_reg,
+            }),
+            source_loc: None,
+        }))
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
@@ -236,6 +241,26 @@ mod tests {
                 record_preflight: false,
                 count_replay_values: true,
                 ..Self::default()
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_wrong_address_spaces() {
+        let extension = KeccakExtension::new(None).unwrap();
+        for opcode in [
+            KeccakfOpcode::KECCAKF.global_opcode(),
+            XorinOpcode::XORIN.global_opcode(),
+        ] {
+            let valid = Instruction::from_usize(
+                opcode,
+                [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(extension.try_lift(&valid, 0x100).is_some());
+
+            for (d, e) in [(MEMORY_AS, MEMORY_AS), (REGISTER_AS, REGISTER_AS)] {
+                let invalid = Instruction::from_usize(opcode, [8, 16, 24, d as usize, e as usize]);
+                assert!(extension.try_lift(&invalid, 0x100).is_none());
             }
         }
     }

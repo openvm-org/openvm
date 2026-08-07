@@ -6,7 +6,11 @@ use openvm_algebra_transpiler::{ModularArithmeticOpcode, ModularPhantom};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 #[cfg(test)]
 use openvm_instructions::MEMORY_BLOCK_BYTES;
-use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{MEMORY_AS, REGISTER_AS},
+    LocalOpcode, SystemOpcode,
+};
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension};
@@ -728,6 +732,45 @@ mod tests {
                 .any(|operation| operation.starts_with("replay_value(")));
         }
     }
+
+    #[test]
+    fn modular_lifter_requires_register_and_memory_address_spaces() {
+        let extension = ModularRvrExtension::new(vec![BigUint::from(17u8)]);
+
+        for opcode in [
+            ModularArithmeticOpcode::ADD,
+            ModularArithmeticOpcode::SUB,
+            ModularArithmeticOpcode::SETUP_ADDSUB,
+            ModularArithmeticOpcode::MUL,
+            ModularArithmeticOpcode::DIV,
+            ModularArithmeticOpcode::SETUP_MULDIV,
+            ModularArithmeticOpcode::IS_EQ,
+            ModularArithmeticOpcode::SETUP_ISEQ,
+        ] {
+            let instruction = |a, d, e| {
+                Instruction::from_usize(opcode.global_opcode(), [a, 16, 24, d as usize, e as usize])
+            };
+
+            assert!(extension
+                .try_lift(&instruction(8, REGISTER_AS, MEMORY_AS), 0)
+                .is_some());
+            assert!(extension
+                .try_lift(&instruction(8, MEMORY_AS, MEMORY_AS), 0)
+                .is_none());
+            assert!(extension
+                .try_lift(&instruction(8, REGISTER_AS, REGISTER_AS), 0)
+                .is_none());
+
+            if matches!(
+                opcode,
+                ModularArithmeticOpcode::IS_EQ | ModularArithmeticOpcode::SETUP_ISEQ
+            ) {
+                assert!(extension
+                    .try_lift(&instruction(0, REGISTER_AS, MEMORY_AS), 0)
+                    .is_none());
+            }
+        }
+    }
 }
 
 impl ModularRvrExtension {
@@ -743,6 +786,9 @@ impl ModularRvrExtension {
         let local = relative % count;
 
         if mod_idx >= self.moduli.len() {
+            return None;
+        }
+        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
             return None;
         }
         if insn.a.is_zero()

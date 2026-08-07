@@ -10,7 +10,7 @@ use openvm_ecc_transpiler::WeierstrassOpcode::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{NUM_REGISTERS, REGISTER_BYTES},
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode,
 };
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
@@ -248,13 +248,17 @@ impl RvrExtension for EccExtension {
         let offset = opcode - ecc_base;
         let curve_idx = offset / ecc_count;
         let local_op = offset % ecc_count;
+        let local_opcode = WeierstrassOpcode::from_repr(local_op)?;
+
+        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+            return None;
+        }
 
         let curve = self.curves.get(curve_idx)?.curve?;
 
         let rd_reg = decode_reg(insn.a.as_u32());
         let rs1_reg = decode_reg(insn.b.as_u32());
 
-        let local_opcode = WeierstrassOpcode::from_repr(local_op)?;
         let instr: Box<dyn ExtInstr> = match local_opcode {
             EC_ADD_NE | SETUP_EC_ADD_NE => {
                 let rs2_reg = decode_reg(insn.c.as_u32());
@@ -453,6 +457,26 @@ mod tests {
         let insn = Instruction::from_usize(opcode, []);
 
         assert!(extension.try_lift(&insn, 0x100).is_none());
+    }
+
+    #[test]
+    fn rejects_wrong_address_spaces() {
+        let extension = EccExtension::new(vec![0]);
+        for opcode in [EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE] {
+            let valid = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(extension.try_lift(&valid, 0x100).is_some());
+
+            for (d, e) in [(MEMORY_AS, MEMORY_AS), (REGISTER_AS, REGISTER_AS)] {
+                let invalid = Instruction::from_usize(
+                    opcode.global_opcode(),
+                    [8, 16, 24, d as usize, e as usize],
+                );
+                assert!(extension.try_lift(&invalid, 0x100).is_none());
+            }
+        }
     }
 
     #[test]
