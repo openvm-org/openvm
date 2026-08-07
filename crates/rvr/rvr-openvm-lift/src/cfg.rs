@@ -929,6 +929,8 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// Build basic blocks from a flat `LiftedInstr` sequence using multi-value
 /// constant propagation with worklist fixpoint to resolve dynamic jump targets.
 ///
+/// `hinted_block_starts` provides additive block boundaries retained from the guest build.
+///
 /// `extra_targets` provides additional block entry points discovered externally,
 /// e.g. by scanning read-only data segments for code pointers (switch tables,
 /// function pointer arrays).
@@ -936,7 +938,11 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// Returns `Vec<Block>` with resolved indirect-jump targets filled in.
 /// Invalid control-flow edges are kept and handled at runtime (they dispatch
 /// to `rv_trap`), so block construction itself cannot fail.
-pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<Block> {
+pub fn build_blocks(
+    instructions: &[LiftedInstr],
+    hinted_block_starts: &BTreeSet<u32>,
+    extra_targets: &[u64],
+) -> Vec<Block> {
     if instructions.is_empty() {
         return Vec::new();
     }
@@ -993,7 +999,7 @@ pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<
     } = worklist(&ctx, &function_entries, &internal_targets);
 
     // Phase 7: Compute leaders.
-    let leaders = compute_leaders(
+    let mut leaders = compute_leaders(
         instructions,
         &pc_to_idx,
         &successors,
@@ -1001,9 +1007,31 @@ pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<
         &internal_targets,
         &return_sites,
     );
+    // Track only hints that create a boundary not already implied by the CFG.
+    let mut valid_hints = 0usize;
+    let mut new_hint_leaders = BTreeSet::new();
+    for &pc in hinted_block_starts {
+        let pc = u64::from(pc);
+        if pc_to_idx.contains_key(&pc) {
+            valid_hints += 1;
+            if leaders.insert(pc) {
+                new_hint_leaders.insert(pc);
+            }
+        }
+    }
 
     // Build blocks by splitting at leaders and patching resolved indirect-jump targets.
-    build_block_list(instructions, &leaders, &resolved_jumps)
+    let (blocks, hinted_block_splits) =
+        build_block_list(instructions, &leaders, &new_hint_leaders, &resolved_jumps);
+    tracing::info!(
+        instructions = instructions.len(),
+        blocks = blocks.len(),
+        hints = hinted_block_starts.len(),
+        valid_hints,
+        hinted_block_splits,
+        "built rvr control-flow graph"
+    );
+    blocks
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,
@@ -1011,12 +1039,14 @@ pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<
 fn build_block_list(
     instructions: &[LiftedInstr],
     leaders: &BTreeSet<u64>,
+    new_hint_leaders: &BTreeSet<u64>,
     resolved_jumps: &FxHashMap<u64, HashSet<u64>>,
-) -> Vec<Block> {
+) -> (Vec<Block>, usize) {
     // Max block size; used to flush periodically so the segmentation check in
     // metered mode (which fires at block boundaries) stays granular enough.
     const MAX_BLOCK_INSNS: u32 = MAX_METERED_BLOCK_INSNS;
     let mut blocks: Vec<Block> = Vec::new();
+    let mut hinted_block_splits = 0usize;
 
     // Accumulate body instructions for the current block.
     let mut body: Vec<InstrAt> = Vec::new();
@@ -1029,6 +1059,9 @@ fn build_block_list(
         // previous block with a FallThrough terminator.
         if leaders.contains(&pc) && block_start_pc.is_some() {
             if !body.is_empty() {
+                if new_hint_leaders.contains(&pc) {
+                    hinted_block_splits += 1;
+                }
                 let start = block_start_pc.unwrap();
                 let last_body_pc = body.last().unwrap().pc;
                 blocks.push(Block {
@@ -1112,7 +1145,7 @@ fn build_block_list(
         }
     }
 
-    blocks
+    (blocks, hinted_block_splits)
 }
 
 #[cfg(test)]
@@ -1213,6 +1246,45 @@ mod tests {
     }
 
     #[test]
+    fn hinted_pc_starts_a_block() {
+        let instructions = [
+            body(
+                0,
+                TestInstr {
+                    effect: CfgEffect::None,
+                    term: None,
+                },
+            ),
+            body(
+                4,
+                TestInstr {
+                    effect: CfgEffect::None,
+                    term: None,
+                },
+            ),
+            body(
+                8,
+                TestInstr {
+                    effect: CfgEffect::None,
+                    term: None,
+                },
+            ),
+            term(12, Terminator::Exit { code: 0 }),
+        ];
+        let hinted_block_starts = BTreeSet::from([6, 8, 100]);
+
+        let blocks = build_blocks(&instructions, &hinted_block_starts, &[]);
+
+        assert_eq!(
+            blocks
+                .iter()
+                .map(|block| block.start_pc)
+                .collect::<Vec<_>>(),
+            vec![0, 8]
+        );
+    }
+
+    #[test]
     fn invalid_branch_target_preserves_valid_fallthrough() {
         let blocks = build_blocks(
             &[
@@ -1229,6 +1301,7 @@ mod tests {
                 ),
                 term(4, Terminator::Exit { code: 0 }),
             ],
+            &BTreeSet::new(),
             &[],
         );
 
@@ -1255,6 +1328,7 @@ mod tests {
                     term: None,
                 },
             )],
+            &BTreeSet::new(),
             &[],
         );
 
@@ -1304,6 +1378,7 @@ mod tests {
                 ),
                 term(16, Terminator::Exit { code: 0 }),
             ],
+            &BTreeSet::new(),
             &[4],
         );
 
@@ -1345,6 +1420,7 @@ mod tests {
                 term(12, Terminator::Exit { code: 0 }),
                 term(16, Terminator::Exit { code: 0 }),
             ],
+            &BTreeSet::new(),
             &[],
         );
 
@@ -1386,6 +1462,7 @@ mod tests {
                 term(12, Terminator::Exit { code: 0 }),
                 term(16, Terminator::Exit { code: 0 }),
             ],
+            &BTreeSet::new(),
             &[],
         );
 

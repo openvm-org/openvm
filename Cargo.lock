@@ -1550,6 +1550,7 @@ dependencies = [
  "aws-smithy-xml",
  "aws-types",
  "clap",
+ "elf",
  "eyre",
  "flate2",
  "hex",
@@ -7596,6 +7597,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rvr-openvm-ir",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]

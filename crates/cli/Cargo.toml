@@ -91,6 +91,9 @@ ignored = [
     "aws-types",
 ]
 
+[dev-dependencies]
+elf = "0.7.4"
+
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]

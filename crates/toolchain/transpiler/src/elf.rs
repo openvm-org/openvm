@@ -1,6 +1,12 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{cmp::min, collections::BTreeMap, fmt::Debug};
+mod llvm_bb_addr_map;
+
+use std::{
+    cmp::min,
+    collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
+};
 #[cfg(feature = "function-span")]
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -8,7 +14,7 @@ use std::{
 };
 
 use elf::{
-    abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
+    abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD, SHN_UNDEF, STT_FUNC},
     endian::LittleEndian,
     file::Class,
     ElfBytes,
@@ -20,6 +26,29 @@ use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
 
 /// The size of a RISC-V instruction in bytes.
 const ELF_WORD_SIZE: usize = 4;
+
+/// Uses aligned, defined function entries as conservative block starts.
+fn function_symbol_block_starts(elf: &ElfBytes<'_, LittleEndian>) -> BTreeSet<u32> {
+    elf.symbol_table()
+        .ok()
+        .flatten()
+        .map(|(symbols, _)| {
+            symbols
+                .iter()
+                .filter(|symbol| symbol.st_symtype() == STT_FUNC && symbol.st_shndx != SHN_UNDEF)
+                .filter_map(|symbol| u32::try_from(symbol.st_value).ok())
+                .filter(|pc| pc.is_multiple_of(ELF_WORD_SIZE as u32))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Combines LLVM's machine-block map with function entries from the final ELF.
+fn cfg_block_starts(elf: &ElfBytes<'_, LittleEndian>) -> BTreeSet<u32> {
+    let mut block_starts = function_symbol_block_starts(elf);
+    block_starts.extend(llvm_bb_addr_map::block_starts(elf));
+    block_starts
+}
 
 /// RISC-V 64IM ELF (Executable and Linkable Format) File.
 ///
@@ -42,6 +71,8 @@ pub struct Elf {
     pub(crate) memory_image: BTreeMap<u32, u32>,
     /// Debug info for spanning benchmark metrics by function.
     pub(crate) fn_bounds: FnBounds,
+    /// Machine basic-block PCs retained from the final ELF.
+    pub(crate) cfg_block_starts: BTreeSet<u32>,
 }
 
 impl Elf {
@@ -52,6 +83,7 @@ impl Elf {
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
         fn_bounds: FnBounds,
+        cfg_block_starts: BTreeSet<u32>,
     ) -> Self {
         Self {
             instructions,
@@ -59,6 +91,7 @@ impl Elf {
             pc_base,
             memory_image,
             fn_bounds,
+            cfg_block_starts,
         }
     }
 
@@ -76,6 +109,8 @@ impl Elf {
         // Parse the ELF file assuming that it is little-endian..
         let elf = ElfBytes::<LittleEndian>::minimal_parse(input)
             .map_err(|err| eyre::eyre!("Elf parse error: {err}"))?;
+
+        let mut cfg_block_starts = cfg_block_starts(&elf);
 
         // Some sanity checks to make sure that the ELF file is valid.
         if elf.ehdr.class != Class::ELF64 {
@@ -251,12 +286,38 @@ impl Elf {
             }
         }
 
+        let instruction_bytes = u32::try_from(instructions.len())?
+            .checked_mul(ELF_WORD_SIZE as u32)
+            .context("instruction byte length overflow")?;
+        let program_end = base_address
+            .checked_add(instruction_bytes)
+            .context("program end address overflow")?;
+        cfg_block_starts.retain(|pc| {
+            pc.is_multiple_of(ELF_WORD_SIZE as u32) && (base_address..program_end).contains(pc)
+        });
+
         Ok(Elf::new(
             instructions,
             entry,
             base_address,
             image,
             fn_bounds,
+            cfg_block_starts,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn falls_back_to_function_symbols_without_llvm_map() {
+        let bytes = include_bytes!("../../../sdk/programs/examples/fibonacci.elf");
+        let elf = ElfBytes::<LittleEndian>::minimal_parse(bytes).unwrap();
+
+        assert!(llvm_bb_addr_map::block_starts(&elf).is_empty());
+        assert_eq!(cfg_block_starts(&elf), function_symbol_block_starts(&elf));
+        assert!(!cfg_block_starts(&elf).is_empty());
     }
 }

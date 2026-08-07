@@ -1,3 +1,5 @@
+#[cfg(feature = "rvr")]
+use std::{fs, io};
 use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
@@ -59,6 +61,16 @@ cfg_if::cfg_if! {
 
 /// Default deferral idx for the verify-stark deferral circuit.
 const DEFAULT_VERIFY_STARK_DEF_IDX: usize = 0;
+
+#[cfg(feature = "rvr")]
+fn generated_source(compiled: &crate::CompiledExePure<'_>) -> Result<String> {
+    let sources = tempfile::tempdir()?;
+    compiled.save_generated_sources(sources.path())?;
+    Ok(fs::read_dir(sources.path())?
+        .map(|entry| fs::read_to_string(entry?.path()))
+        .collect::<io::Result<Vec<_>>>()?
+        .concat())
+}
 
 /// Returns app, aggregation, and root params, allowing tests to override them via env vars.
 fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
@@ -546,6 +558,35 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     stdin.write(&n);
 
     prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
+}
+
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_cfg_block_starts_affect_compilation() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let baseline = sdk.compile(exe.clone())?;
+    let baseline_source = generated_source(&baseline)?;
+    let hinted_pc = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| slot.is_some())
+        .map(|(index, _)| exe.program.pc_base + u32::try_from(index).unwrap() * 4)
+        .find(|pc| !baseline_source.contains(&format!("block_0x{pc:08x}")))
+        .expect("fibonacci program has a non-leader instruction");
+
+    let mut hinted_exe = exe.as_ref().clone();
+    hinted_exe.cfg_block_starts.insert(hinted_pc);
+    let hinted = sdk.compile(hinted_exe)?;
+
+    assert!(generated_source(&hinted)?.contains(&format!("block_0x{hinted_pc:08x}")));
+    Ok(())
 }
 
 #[cfg(feature = "rvr")]
