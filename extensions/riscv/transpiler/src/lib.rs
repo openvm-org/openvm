@@ -196,7 +196,7 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, PUBLIC_VALUES_AS,
     };
-    use openvm_riscv_guest::{ALU_OPCODE, REVEAL_FUNCT3, SYSTEM_OPCODE};
+    use openvm_riscv_guest::{ALU_OPCODE, REVEAL_FUNCT3, SYSTEM_OPCODE, TERMINATE_FUNCT3};
     use openvm_transpiler::{util::unimp, TranspilerExtension};
 
     use super::{RevealOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension};
