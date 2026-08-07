@@ -66,6 +66,28 @@ mod tests {
     }
 
     #[test]
+    fn test_ec_mul() -> Result<()> {
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ec_mul",
+            ["k256"],
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
     fn test_nonzero_a() -> Result<()> {
         let config = test_rv64weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(

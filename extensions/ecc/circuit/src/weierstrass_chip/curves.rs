@@ -114,6 +114,30 @@ pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize>(
     }
 }
 
+/// Dispatch variable-base scalar multiplication on the const generic curve type.
+///
+/// `scalar` is little-endian. Keyed on [`CurveType`] rather than `FieldType` because the ladder's
+/// doublings need the curve's `a` coefficient.
+#[inline(always)]
+pub fn ec_mul<const CURVE_TYPE: u8, const BLOCKS: usize>(
+    point: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+    scalar: &[u8],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    match CURVE_TYPE {
+        x if x == CurveType::K256 as u8 => {
+            ec_mul_256bit::<halo2curves_axiom::secq256k1::Fq, 0, BLOCKS>(point, scalar)
+        }
+        x if x == CurveType::P256 as u8 => {
+            ec_mul_256bit::<halo2curves_axiom::secp256r1::Fp, P256_NEG_A, BLOCKS>(point, scalar)
+        }
+        x if x == CurveType::BN254 as u8 => {
+            ec_mul_256bit::<halo2curves_axiom::bn256::Fq, 0, BLOCKS>(point, scalar)
+        }
+        x if x == CurveType::BLS12_381 as u8 => ec_mul_bls12_381::<BLOCKS>(point, scalar),
+        _ => panic!("Unsupported curve type: {CURVE_TYPE}"),
+    }
+}
+
 #[inline(always)]
 fn ec_add_ne_256bit<F: PrimeField<Repr = [u8; 32]>, const BLOCKS: usize>(
     input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
@@ -139,6 +163,26 @@ fn ec_double_256bit<F: PrimeField<Repr = [u8; 32]>, const NEG_A: u64, const BLOC
     let y1 = blocks_to_field_element::<F>(input_data[BLOCKS / 2..].as_flattened());
 
     let (x3, y3) = ec_double_impl::<F, NEG_A>(x1, y1);
+
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
+    field_element_to_blocks::<F>(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks::<F>(&y3, &mut output[BLOCKS / 2..]);
+    output
+}
+
+#[inline(always)]
+fn ec_mul_256bit<
+    F: PrimeField<Repr = [u8; 32]> + From<u64>,
+    const NEG_A: u64,
+    const BLOCKS: usize,
+>(
+    point: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+    scalar: &[u8],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    let px = blocks_to_field_element::<F>(point[..BLOCKS / 2].as_flattened());
+    let py = blocks_to_field_element::<F>(point[BLOCKS / 2..].as_flattened());
+
+    let (x3, y3) = ec_mul_impl::<F, NEG_A>(px, py, scalar, scalar.len() * 8);
 
     let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     field_element_to_blocks::<F>(&x3, &mut output[..BLOCKS / 2]);
@@ -187,6 +231,22 @@ fn ec_double_bls12_381<const BLOCKS: usize>(
 }
 
 #[inline(always)]
+fn ec_mul_bls12_381<const BLOCKS: usize>(
+    point: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+    scalar: &[u8],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    let px = blocks_to_field_element_bls12_381_coordinate(point[..BLOCKS / 2].as_flattened());
+    let py = blocks_to_field_element_bls12_381_coordinate(point[BLOCKS / 2..].as_flattened());
+
+    let (x3, y3) = ec_mul_impl::<blstrs::Fp, 0>(px, py, scalar, scalar.len() * 8);
+
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
+    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS / 2..]);
+    output
+}
+
+#[inline(always)]
 pub fn ec_add_ne_impl<F: Field>(x1: F, y1: F, x2: F, y2: F) -> (F, F) {
     // Calculate lambda = (y2 - y1) / (x2 - x1)
     let lambda = (y2 - y1) * (x2 - x1).invert().unwrap();
@@ -222,4 +282,33 @@ pub fn ec_double_impl<F: Field + From<u64>, const NEG_A: u64>(x1: F, y1: F) -> (
     let y3 = lambda * (x1 - x3) - y1;
 
     (x3, y3)
+}
+
+/// MSB-first double-and-add over signed all-`+-1` digits: `R <- 2R +- P`, starting from `R = P`.
+#[inline(always)]
+pub fn ec_mul_impl<F: Field + From<u64>, const NEG_A: u64>(
+    px: F,
+    py: F,
+    scalar_le_bytes: &[u8],
+    scalar_bits: usize,
+) -> (F, F) {
+    // The most significant digit is always `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px;
+    let mut ry = py;
+    // Assume scalar = 2B + 1
+    for i in (0..scalar_bits).rev() {
+        // Bit `i` of `B`, i.e. bit `i + 1` of the scalar. The top one is zero for any scalar below
+        // `2^scalar_bits`, which is what keeps the count at `scalar_bits` digits after the seed.
+        let j = i + 1;
+        let bit = j < scalar_bits && (scalar_le_bytes[j / 8] >> (j % 8)) & 1 == 1;
+
+        // Both formulas are incomplete; the `mul` module's parity argument is what rules out their
+        // exceptional cases. The `(2R) + sigma P` order matters: `R = +- sigma P` really does occur
+        // on the first step, where `R = P`.
+        let (dx, dy) = ec_double_impl::<F, NEG_A>(rx, ry);
+        let signed_py = if bit { py } else { -py };
+        (rx, ry) = ec_add_ne_impl::<F>(dx, dy, px, signed_py);
+    }
+
+    (rx, ry)
 }

@@ -3,7 +3,7 @@ extern crate alloc;
 use core::ops::{Add, Neg};
 
 use hex_literal::hex;
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
     weierstrass::{CachedMulTable, IntrinsicCurve},
@@ -61,6 +61,48 @@ impl CyclicGroup for G1Affine {
             "45FD7CD8168C203C8DCA7168916A81975D588181B64550B829A031E1724E6430"
         )),
     };
+}
+
+impl G1Affine {
+    /// Returns `scalar * self`, for any scalar representation and any point.
+    ///
+    /// [`G1Affine::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar below
+    /// the group order. EIP-196 `ECMUL` guarantees neither — the scalar is an arbitrary 32-byte
+    /// word and `(0, 0)` encodes the point at infinity — so callers handling untrusted input want
+    /// this total form.
+    ///
+    /// `Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
+    /// `from_be_bytes_unchecked` do not reduce. BN254 G1 has cofactor 1, so every point on the
+    /// curve has order dividing the group order and reducing the scalar leaves the product
+    /// unchanged.
+    pub fn mul_scalar(&self, scalar: &Scalar) -> Self {
+        if self.is_identity() {
+            return <Self as Group>::IDENTITY;
+        }
+        let mut reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
+        if reduced == Scalar::ZERO {
+            return <Self as Group>::IDENTITY;
+        }
+
+        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
+        // every choice of signs; an even scalar therefore has no digit assignment and would produce
+        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
+        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
+        // negating the result recovers the product.
+        let odd = reduced.as_le_bytes()[0] & 1 == 1;
+        if !odd {
+            reduced.neg_assign();
+        }
+        let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
+        // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
+        let product = unsafe { self.mul_scalar_le_unchecked(&bytes) };
+        if odd {
+            product
+        } else {
+            -product
+        }
+    }
 }
 
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
@@ -155,6 +197,10 @@ impl IntrinsicCurve for Bn254 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
+        if let ([coeff], [base]) = (coeffs, bases) {
+            return base.mul_scalar(coeff);
+        }
+
         // heuristic
         if coeffs.len() < 25 {
             // BN254(Fp) is of prime order by Weil conjecture:

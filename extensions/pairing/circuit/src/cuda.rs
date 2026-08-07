@@ -5,7 +5,7 @@ use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
 use openvm_circuit::{
     arch::{
         cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript},
-        prepare_gpu_postflight, AirInventory, ChipInventoryError, GenerationError,
+        prepare_gpu_postflight, AirInventory, ChipInventoryError, GenerationError, Postflight,
         PostflightTracegen, PreflightOutput, VirtualMachine, VmBuilder, VmChipComplex,
         VmProverExtension,
     },
@@ -36,7 +36,7 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        _host_program: &Program<BabyBear>,
+        host_program: &Program<BabyBear>,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
@@ -44,7 +44,23 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64PairingGpuBuilder {
             .postflight_history(program, output)
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         let config = vm.config().clone();
-        Self::generate_proving_ctx_from_postflight(vm, &config, program, &transcript, &replay_plan)
+        // `EC_MUL` has no GPU projection, so its trace comes from the host postflight.
+        let memory_config = vm.config().as_ref().memory_config.clone();
+        let cpu_postflight = Postflight::new(
+            host_program,
+            &output.history,
+            &memory_config,
+            output.exit_code,
+        )
+        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        Self::generate_proving_ctx_from_postflight(
+            vm,
+            &config,
+            program,
+            &transcript,
+            &replay_plan,
+            Some(&cpu_postflight),
+        )
     }
 }
 
@@ -59,9 +75,18 @@ impl Rv64PairingGpuBuilder {
         program: &GpuPostflightProgram,
         transcript: &GpuPostflightTranscript,
         replay_plan: &GpuPostflightPlan,
+        cpu_postflight: Option<&Postflight<'_, BabyBear>>,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
-        WeierstrassPreflightGpuTracegen::new(&config.weierstrass, program, transcript, replay_plan)
-            .generate_proving_ctx(vm, &config.modular.modular, Some(&config.fp2))
+        let mut tracegen = WeierstrassPreflightGpuTracegen::new(
+            &config.weierstrass,
+            program,
+            transcript,
+            replay_plan,
+        );
+        if let Some(postflight) = cpu_postflight {
+            tracegen = tracegen.with_cpu_postflight(postflight);
+        }
+        tracegen.generate_proving_ctx(vm, &config.modular.modular, Some(&config.fp2))
     }
 }
 
@@ -274,12 +299,15 @@ mod tests {
         let (transcript, replay_plan) =
             Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
                 .unwrap();
+        // The rvr preflight carries a `PreflightTranscript`, not the `PreflightHistory` a host
+        // postflight needs, so this path cannot generate an `EC_MUL` trace.
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             gpu_program.program(),
             &transcript,
             &replay_plan,
+            None,
         )
         .unwrap();
         drop(replay_plan);
@@ -300,12 +328,15 @@ mod tests {
         let (transcript, replay_plan) =
             Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
                 .unwrap();
+        // The rvr preflight carries a `PreflightTranscript`, not the `PreflightHistory` a host
+        // postflight needs, so this path cannot generate an `EC_MUL` trace.
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             gpu_program.program(),
             &transcript,
             &replay_plan,
+            None,
         )
         .unwrap();
         drop(replay_plan);
@@ -372,12 +403,20 @@ mod tests {
         let (gpu_transcript, replay_plan) = gpu_program
             .upload_history_for_test(&program, &history, Some(0))
             .unwrap();
+        let cpu_postflight = Postflight::new(
+            &program,
+            &history,
+            &config.modular.system.memory_config,
+            Some(0),
+        )
+        .unwrap();
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             &gpu_program,
             &gpu_transcript,
             &replay_plan,
+            Some(&cpu_postflight),
         )
         .unwrap();
         drop(replay_plan);
