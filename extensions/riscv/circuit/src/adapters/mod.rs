@@ -3,16 +3,19 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{
         execution_mode::ExecutionCtxTrait, ExecutionError, PostflightError, VmStateMut,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        BLOCK_FE_WIDTH, DEFAULT_RV64_MEMORY_BYTE_CAPACITY, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
     },
     system::memory::online::GuestMemory,
 };
-use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
+use openvm_circuit_primitives::{
+    encoder::Encoder,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+};
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
-use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::AirBuilder,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
@@ -91,6 +94,45 @@ pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, Executio
         return Err(ExecutionError::Fail {
             pc,
             msg: "memory block pointer must be eight-byte aligned",
+        });
+    }
+    Ok(ptr)
+}
+
+/// Validate a contiguous span of memory-bus blocks starting at a guest byte pointer.
+///
+/// This check must happen before computing per-block `u32` addresses so an access crossing the
+/// top of the 32-bit RV64 memory domain cannot wrap back to address zero in release builds.
+#[inline(always)]
+pub fn validate_memory_block_byte_span(
+    pc: u32,
+    ptr: u32,
+    num_blocks: usize,
+) -> Result<u32, ExecutionError> {
+    validate_memory_block_byte_ptr(pc, ptr)?;
+    let Some(num_bytes) = num_blocks.checked_mul(MEMORY_BLOCK_BYTES) else {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "memory block span exceeds implemented memory address space",
+        });
+    };
+    validate_memory_byte_span(pc, ptr, num_bytes)
+}
+
+/// Validate a contiguous byte span without imposing an instruction-specific alignment rule.
+#[inline(always)]
+pub fn validate_memory_byte_span(
+    pc: u32,
+    ptr: u32,
+    num_bytes: usize,
+) -> Result<u32, ExecutionError> {
+    let end = u64::try_from(num_bytes)
+        .ok()
+        .and_then(|bytes| u64::from(ptr).checked_add(bytes));
+    if end.is_none_or(|end| end > DEFAULT_RV64_MEMORY_BYTE_CAPACITY as u64) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "memory block span exceeds implemented memory address space",
         });
     }
     Ok(ptr)
@@ -312,9 +354,12 @@ pub(crate) fn checked_memory_address(
     imm_extended: u32,
     access_width: usize,
 ) -> Result<u32, ExecutionError> {
-    debug_assert!(access_width <= MEM_SIZE);
+    // Bound by the *circuit* memory capacity (2^32 bytes), not the guest platform's
+    // `MEM_SIZE`: the RV64 memory address space supports the full 2^32-byte range.
+    // TODO: use `MemoryConfig::pointer_max_bits` once execution state carries the memory config.
+    debug_assert!(access_width <= DEFAULT_RV64_MEMORY_BYTE_CAPACITY);
     let address = address_add_imm(base, imm_extended);
-    if address > (MEM_SIZE - access_width) as u64 {
+    if address > (DEFAULT_RV64_MEMORY_BYTE_CAPACITY - access_width) as u64 {
         return Err(ExecutionError::Fail {
             pc,
             msg: "effective address exceeds implemented memory address space",
@@ -414,6 +459,185 @@ where
     limbs.iter().enumerate().fold(T::ZERO, |acc, (i, limb)| {
         acc + (*limb).into() * T::from_u64(1u64 << (i * U16_BITS))
     })
+}
+
+// ----------------------------------------------------------------------------
+// AS-native pointer-limb helpers.
+//
+// Every memory-bus pointer is two little-endian 16-bit *AS-native cell* pointer limbs
+// `[lo16, hi16]` (see `openvm_circuit::system::memory::MemoryAddress`). These helpers convert
+// between RV64 *byte* pointers (read from registers) and AS-native *cell* pointer limbs without
+// composing a full (up to 31-bit) pointer into one field element.
+// ----------------------------------------------------------------------------
+
+/// AS-native memory pointer represented as little-endian 16-bit limbs `[lo16, hi16]`.
+pub type PtrLimbs<T> = [T; 2];
+
+/// Splits a concrete pointer into little-endian 16-bit limb *values* `[lo16, hi16]`.
+#[inline(always)]
+pub fn u32_to_ptr_limbs(ptr: u32) -> PtrLimbs<u32> {
+    [ptr & 0xffff, ptr >> U16_BITS]
+}
+
+/// Recomposes little-endian 16-bit limb values into a `u32`.
+#[inline(always)]
+pub fn ptr_limbs_to_u32(limbs: PtrLimbs<u32>) -> u32 {
+    limbs[0] | (limbs[1] << U16_BITS)
+}
+
+/// AS-native cell-pointer limbs for a byte pointer in the register address space
+/// ([`REGISTER_AS`]).
+///
+/// The register file holds at most `NUM_REGISTERS * 8` bytes, so a register byte pointer's
+/// cell pointer `ptr / 2` is far below `2^16`: it fits entirely in the low 16-bit limb and the
+/// high limb is always zero. This lets us skip the carry/decomposition columns and range checks
+/// that a general (up to `DEFAULT_POINTER_MAX_BITS`-bit) memory pointer requires. Only use this for
+/// register-AS pointers; for the memory address space use the range-checked decomposition helpers.
+#[inline(always)]
+pub fn reg_byte_ptr_to_cell_ptr_limbs<AB: InteractionBuilder>(
+    byte_ptr: impl Into<AB::Expr>,
+) -> PtrLimbs<AB::Expr> {
+    [byte_ptr_to_u16_ptr::<AB>(byte_ptr), AB::Expr::ZERO]
+}
+
+/// Value form of [`reg_byte_ptr_to_cell_ptr_limbs`].
+#[inline(always)]
+pub fn reg_byte_ptr_to_cell_ptr_limbs_value(byte_ptr: u32) -> PtrLimbs<u32> {
+    [byte_ptr_to_u16_ptr_value(byte_ptr), 0]
+}
+
+/// Converts an aligned RV64 byte pointer given as little-endian 16-bit limbs `[byte_lo, byte_hi]`
+/// into AS-native u16 *cell* pointer limbs `[cell_lo, cell_hi]` (cell = byte / 2).
+///
+/// `carry` is a witness boolean intended to equal `byte_hi & 1`. The returned limbs are the
+/// expressions
+///   cell_lo = (byte_lo + carry * 2^16) / 2,   cell_hi = (byte_hi - carry) / 2.
+/// The composed cell pointer `cell_lo + 2^16 * cell_hi` equals `byte_ptr / 2` as a field identity
+/// for *any* `carry`. The caller must already constrain `byte_lo` to be a canonical 16-bit value
+/// divisible by 8; this makes `cell_lo < 2^16` for either boolean carry. This function range-checks
+/// only `cell_hi < 2^cell_hi_bits`, where the high-limb bound is derived from `byte_ptr_max_bits`
+/// (the guest *byte* pointer width): a u16 cell is two bytes, so
+/// `cell_max_bits = byte_ptr_max_bits - U16_CELL_SIZE_BITS` and
+/// `cell_hi_bits = cell_max_bits - U16_BITS`. Since `cell_hi` is a bounded integer expression, this
+/// also forces `carry = byte_hi & 1`.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_byte_ptr_limbs_to_u16_cell_ptr_limbs<AB: InteractionBuilder>(
+    builder: &mut AB,
+    range_bus: VariableRangeCheckerBus,
+    byte_limbs: [AB::Expr; 2],
+    carry: impl Into<AB::Expr>,
+    byte_ptr_max_bits: usize,
+    enabled: AB::Expr,
+) -> PtrLimbs<AB::Expr> {
+    let cell_hi_bits = byte_ptr_max_bits - U16_CELL_SIZE_BITS - U16_BITS;
+    let carry_e: AB::Expr = carry.into();
+    builder.when(enabled.clone()).assert_bool(carry_e.clone());
+    let inv2 = AB::F::TWO.inverse();
+    let [byte_lo, byte_hi] = byte_limbs;
+    let cell_lo = (byte_lo + carry_e.clone() * AB::F::from_u32(1 << U16_BITS)) * inv2;
+    let cell_hi = (byte_hi - carry_e) * inv2;
+    range_bus
+        .range_check(cell_hi.clone(), cell_hi_bits)
+        .eval(builder, enabled);
+    [cell_lo, cell_hi]
+}
+
+/// Cell high-limb range-check bit width corresponding to a guest `byte_ptr_max_bits`.
+#[inline(always)]
+pub fn cell_ptr_hi_bits(byte_ptr_max_bits: usize) -> usize {
+    byte_ptr_max_bits - U16_CELL_SIZE_BITS - U16_BITS
+}
+
+/// Adds a small constant `constant` (`< 2^16`) to a pointer given as little-endian 16-bit limbs
+/// `[lo, hi]`, carrying into the high limb:
+///   new_lo = lo + constant - carry * 2^16,   new_hi = hi + carry.
+/// `carry` is a witness boolean. Only `new_lo` is range-checked (to 16 bits): this forces `carry`
+/// to be the correct carry bit (given `lo` canonical), so `new_hi = hi + carry` is canonical
+/// whenever `hi` is. Use to add a per-block cell offset to an already-converted base cell pointer.
+#[allow(clippy::too_many_arguments)]
+pub fn eval_add_const_u16_limbs<AB: InteractionBuilder>(
+    builder: &mut AB,
+    range_bus: VariableRangeCheckerBus,
+    limbs: [AB::Expr; 2],
+    constant: u32,
+    carry: AB::Var,
+    enabled: AB::Expr,
+) -> PtrLimbs<AB::Expr> {
+    let carry_e: AB::Expr = carry.into();
+    builder.when(enabled.clone()).assert_bool(carry_e.clone());
+    let [lo, hi] = limbs;
+    let new_lo =
+        lo + AB::Expr::from_u32(constant) - carry_e.clone() * AB::F::from_u32(1 << U16_BITS);
+    let new_hi = hi + carry_e;
+    range_bus
+        .range_check(new_lo.clone(), U16_BITS)
+        .eval(builder, enabled);
+    [new_lo, new_hi]
+}
+
+/// Value form of [`eval_add_const_u16_limbs`]: returns `(carry, [new_lo, new_hi])`.
+#[inline(always)]
+pub fn add_const_u16_limbs_value(limbs: PtrLimbs<u32>, constant: u32) -> (u32, PtrLimbs<u32>) {
+    let sum_lo = limbs[0] + constant;
+    let carry = sum_lo >> U16_BITS;
+    (carry, [sum_lo & 0xffff, limbs[1] + carry])
+}
+
+/// Computes one add-carry per memory block from an already-converted base cell pointer,
+/// registering the matching range checks for each block's new low limb.
+pub fn compute_block_add_carries(
+    range_checker: &SharedVariableRangeCheckerChip,
+    base_cell: [u16; 2],
+    num_blocks: usize,
+    cell_stride: u32,
+) -> Vec<u32> {
+    let base_cell = base_cell.map(u32::from);
+    (0..num_blocks)
+        .map(|i| {
+            let (add_carry, block_cell_ptr) =
+                add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
+            range_checker.add_count(block_cell_ptr[0], U16_BITS);
+            add_carry
+        })
+        .collect()
+}
+
+/// Value form of [`eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`]. Returns
+/// `(carry, [cell_lo, cell_hi])` for an aligned byte pointer given as little-endian 16-bit limb
+/// values. The caller is responsible for registering the matching range-check for `cell_hi`
+/// to `hi_bits`.
+#[inline(always)]
+pub fn byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs: PtrLimbs<u32>) -> (u32, PtrLimbs<u32>) {
+    let carry = byte_limbs[1] & 1;
+    let cell_lo = (byte_limbs[0] + (carry << U16_BITS)) >> 1;
+    let cell_hi = byte_limbs[1] >> 1;
+    (carry, [cell_lo, cell_hi])
+}
+
+/// Computes the byte->cell conversion carry and one add-carry per block for a heap
+/// access group, registering the matching range checks.
+///
+/// Returns `(conv_carry, add_carries)`.
+///
+/// Column writes are left to the caller because vec_heap-family fillers must buffer
+/// carries before overwriting their records.
+pub fn compute_pointer_carries(
+    range_checker: &SharedVariableRangeCheckerChip,
+    byte_ptr: u32,
+    num_blocks: usize,
+    cell_stride: u32,
+    byte_ptr_max_bits: usize,
+) -> (u32, Vec<u32>) {
+    let byte_limbs = u32_to_ptr_limbs(byte_ptr);
+    let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+    range_checker.add_count(base_cell[1], cell_ptr_hi_bits(byte_ptr_max_bits));
+    let add_carries = compute_block_add_carries(
+        range_checker,
+        base_cell.map(|limb| limb as u16),
+        num_blocks,
+        cell_stride,
+    );
+    (conv_carry, add_carries)
 }
 
 /// Expand `N` limbs to `REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
@@ -528,7 +752,10 @@ pub fn read_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
 
 #[cfg(test)]
 mod pointer_tests {
-    use super::{checked_register_u16_pointer, validate_memory_block_byte_ptr};
+    use super::{
+        checked_register_u16_pointer, validate_memory_block_byte_ptr,
+        validate_memory_block_byte_span, validate_memory_byte_span,
+    };
 
     #[test]
     fn memory_block_pointer_uses_the_eight_byte_equipartition() {
@@ -542,6 +769,29 @@ mod pointer_tests {
             let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
             assert!(error.to_string().contains("eight-byte aligned"), "{error}");
         }
+    }
+
+    #[test]
+    fn memory_block_span_rejects_32_bit_wraparound() {
+        let final_block = u32::MAX - 7;
+        assert_eq!(
+            validate_memory_block_byte_span(12, final_block, 1).unwrap(),
+            final_block
+        );
+
+        let error = validate_memory_block_byte_span(12, final_block, 2).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("span exceeds implemented memory address space"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn memory_byte_span_does_not_impose_block_alignment() {
+        assert_eq!(validate_memory_byte_span(12, 2, 8).unwrap(), 2);
+        assert!(validate_memory_byte_span(12, u32::MAX - 1, 4).is_err());
     }
 
     #[test]

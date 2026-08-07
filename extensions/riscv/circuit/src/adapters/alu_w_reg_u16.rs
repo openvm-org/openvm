@@ -24,7 +24,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, checked_register_u16_pointer, concat_u16_block, U16_BITS, WORD_U16_LIMBS,
+    checked_register_u16_pointer, concat_u16_block, reg_byte_ptr_to_cell_ptr_limbs, U16_BITS,
+    WORD_U16_LIMBS,
 };
 
 #[repr(C)]
@@ -93,7 +94,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWRegU16AdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 rs1_data,
                 timestamp_pp(),
@@ -106,7 +107,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWRegU16AdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs2_ptr),
                 ),
                 rs2_data,
                 timestamp_pp(),
@@ -131,7 +132,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWRegU16AdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
                 ),
                 write_data,
                 timestamp_pp(),

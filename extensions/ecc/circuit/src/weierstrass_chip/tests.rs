@@ -293,8 +293,12 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
     tester.memory.memory.data.memory.recompute_touched_pages();
     let device_ctx = tester.range_checker().device_ctx.clone();
     let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
-    tester.memory.inventory =
-        MemoryInventoryGPU::new(tester.memory.config.clone(), hasher_chip, device_ctx);
+    tester.memory.inventory = MemoryInventoryGPU::new(
+        tester.memory.config.clone(),
+        tester.range_checker(),
+        hasher_chip,
+        device_ctx,
+    );
     tester
         .memory
         .inventory

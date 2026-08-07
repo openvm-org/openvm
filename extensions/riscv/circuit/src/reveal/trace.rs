@@ -12,8 +12,9 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{RevealChip, RevealCols};
 use crate::adapters::{
-    address_add_imm, byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value,
+    cell_ptr_hi_bits, checked_register_pointer, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
@@ -88,12 +89,18 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         let dst_ptr_limbs = ptr_to_u16_limbs(dst_ptr).map(u32::from);
+        // Alignment check on the low byte limb: `dst_ptr_low_limb / 8 < 2^13`.
         chip.inner
             .range_checker_chip
             .add_count(dst_ptr_limbs[0] >> 3, U16_BITS - 3);
-        chip.inner
-            .range_checker_chip
-            .add_count(dst_ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);
+        // Byte -> cell pointer conversion for the public-values block; the AIR range-checks
+        // `cell_hi` with `enabled = is_valid`.
+        let (dst_ptr_carry, dst_ptr_cell_limbs) =
+            byte_ptr_limbs_to_cell_ptr_limbs_value(dst_ptr_limbs);
+        chip.inner.range_checker_chip.add_count(
+            dst_ptr_cell_limbs[1],
+            cell_ptr_hi_bits(chip.inner.pointer_max_bits),
+        );
 
         let cols: &mut RevealCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
@@ -112,6 +119,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         cols.imm = F::from_u32(imm);
         cols.imm_sign = F::from_bool(imm_sign);
         cols.dst_ptr_low_limb = F::from_u32(dst_ptr_limbs[0]);
+        cols.dst_ptr_carry = F::from_u32(dst_ptr_carry);
         cols.write_aux
             .set_prev_data(write.previous_value.map(F::from_u16));
         mem_helper.fill(

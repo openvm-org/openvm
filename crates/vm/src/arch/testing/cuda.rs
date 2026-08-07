@@ -32,7 +32,7 @@ use openvm_cuda_common::{
 use openvm_instructions::{
     instruction::Instruction,
     program::{Program, PC_BITS},
-    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
+    riscv::REGISTER_NUM_LIMBS,
 };
 #[cfg(feature = "rvr")]
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode};
@@ -391,10 +391,7 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Tests generate register pointers across the full AS-native pointer range.
-        mem_config.addr_spaces[REGISTER_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
-        Self::new(mem_config, default_var_range_checker_bus())
+        Self::new(MemoryConfig::default(), default_var_range_checker_bus())
     }
 }
 

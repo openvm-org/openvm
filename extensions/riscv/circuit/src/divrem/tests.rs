@@ -3,8 +3,9 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+            memory::{gen_distinct_register_pointers, gen_nonzero_register_pointer},
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            RANGE_TUPLE_CHECKER_BUS,
         },
         ExecutionBridge,
     },
@@ -146,12 +147,9 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         rng.random_range(0..(REGISTER_NUM_LIMBS - 1)),
     ));
 
-    let rs1 = gen_register_pointer(rng, 8);
-    let mut rs2 = gen_register_pointer(rng, 8);
-    while rs2 == rs1 {
-        rs2 = gen_register_pointer(rng, 8);
-    }
-    let rd = rng.random_range(1..32) * REGISTER_NUM_LIMBS;
+    let [rs1, rs2] = gen_distinct_register_pointers(rng, 8);
+    // rd must be a real (nonzero) register: writes to x0 are rejected by the GPU replay.
+    let rd = gen_nonzero_register_pointer(rng, 8);
 
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));
