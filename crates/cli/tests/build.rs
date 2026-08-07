@@ -4,8 +4,16 @@ use cargo_openvm::{
     args::{ManifestArgs, OpenVmConfigArgs},
     commands::{build, BuildArgs, BuildCargoArgs},
 };
+use elf::{endian::LittleEndian, ElfBytes};
 use eyre::Result;
 use openvm_build::get_rustc_target;
+use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
+use openvm_sdk::{fs::read_object_from_file, F};
+
+// LLVM assigns this OS-specific type to `.llvm_bb_addr_map`:
+// https://llvm.org/docs/Extensions.html#sht-llvm-bb-addr-map-section-basic-block-address-map
+const SHT_LLVM_BB_ADDR_MAP: u32 = 0x6fff_4c0a;
+const LLVM_BB_ADDR_MAP_BRANCH_PROB: u8 = 1 << 2;
 
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
@@ -157,6 +165,34 @@ fn test_multi_target_transpile_default() -> Result<()> {
     let palindrome_exe = examples_dir.join("palindrome.vmexe");
     assert!(fibonacci_exe.exists());
     assert!(palindrome_exe.exists());
+
+    let exe: VmExe<F> = read_object_from_file(&fibonacci_exe)?;
+    assert!(!exe.cfg_block_starts.is_empty());
+    let is_instruction_pc = |pc: u32| {
+        pc.checked_sub(exe.program.pc_base)
+            .filter(|offset| offset.is_multiple_of(DEFAULT_PC_STEP))
+            .and_then(|offset| usize::try_from(offset / DEFAULT_PC_STEP).ok())
+            .and_then(|index| exe.program.get_instruction_and_debug_info(index))
+            .is_some()
+    };
+    assert!(exe.cfg_block_starts.iter().copied().all(is_instruction_pc));
+
+    let elf_path = target_dir
+        .join(get_rustc_target())
+        .join("release/examples/fibonacci");
+    let elf_data = std::fs::read(elf_path)?;
+    let elf = ElfBytes::<LittleEndian>::minimal_parse(&elf_data)?;
+    let section = elf
+        .section_headers()
+        .and_then(|sections| {
+            sections
+                .iter()
+                .find(|section| section.sh_type == SHT_LLVM_BB_ADDR_MAP)
+        })
+        .expect("guest ELF should contain LLVM's basic-block address map");
+    let (map, _) = elf.section_data(&section)?;
+    assert!(map.len() > 1);
+    assert_ne!(map[1] & LLVM_BB_ADDR_MAP_BRANCH_PROB, 0);
 
     Ok(())
 }
