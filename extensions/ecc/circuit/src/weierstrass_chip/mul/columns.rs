@@ -12,11 +12,12 @@
 //! `num_limbs`, so the digest region's offset is computed rather than expressed as a struct field.
 //! The header and digest regions are fixed-size and are `AlignedBorrow`ed out of the row slice.
 //!
-//! The three regions do not overlap. Several `FieldExpr` constraints are not gated by `is_valid` —
-//! `check_carry_to_zero`'s carry recurrence and its final zero-carry assertion, and `assert_bool`
-//! on each flag. An inactive expression region must therefore still hold a consistent witness for
-//! some input, which arbitrary digest data is not, so the region cannot be reused. Trace generation
-//! fills it on digest and padding rows with a witness for zero inputs and clears `is_valid`.
+//! The three regions do not overlap, and the digest region cannot be overlaid onto the expression
+//! region to reclaim its width. Several `FieldExpr` constraints are not gated by `is_valid`:
+//! `check_carry_to_zero`'s carry recurrence, its final zero-carry assertion, and `assert_bool` on
+//! each flag. An inactive expression region must therefore still hold a consistent witness for some
+//! input, which arbitrary digest data is not. Trace generation instead fills it on digest and
+//! padding rows with a witness for zero inputs and clears `is_valid`.
 
 use openvm_circuit::{
     arch::{ExecutionState, BLOCK_FE_WIDTH},
@@ -25,7 +26,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::AlignedBorrow;
 use openvm_riscv_circuit::adapters::PTR_U16_LIMBS;
 
-use super::{EC_MUL_COMPUTE_ROWS, SCALAR_BLOCKS, SCALAR_LIMBS};
+use super::{EC_MUL_COMPUTE_ROWS, SCALAR_ACC_LIMBS, SCALAR_BLOCKS, SCALAR_LIMBS};
 
 /// Register reads per instruction: `rd`, `rs1` (base point pointer), `rs2` (scalar pointer).
 pub const EC_MUL_REGISTER_READS: usize = 3;
@@ -70,17 +71,17 @@ pub struct EcMulHeaderCols<T> {
     /// transition constraint in one column, where an `Encoder` over this many rows would raise the
     /// AIR's maximum constraint degree and with it the application's `log_blowup`.
     pub row_idx: T,
-    /// The scalar accumulated so far, MSB-first: `s' = 2*s + bit`, as 8-bit limbs.
+    /// The bit accumulator `B`, MSB-first, in limbs of [`EC_MUL_STEPS_PER_ROW`] bits:
+    /// `B' = 2^EC_MUL_STEPS_PER_ROW * B + digits`.
     ///
-    /// Zero on the first compute row and equal to the full scalar on the digest row, where it is
-    /// checked against the bytes read from memory. That final check also serves as the scalar's
-    /// bit-decomposition proof, so no separate decomposition constraint is needed: any row whose
-    /// case flags imply the wrong bit changes `scalar_acc` and fails it.
-    pub scalar_acc: [T; SCALAR_LIMBS],
-    /// Carries for the `s' = 2*s + bit` recurrence, on compute rows.
+    /// Holds the value entering the row, so it is zero on the first compute row and complete on
+    /// the digest row, where `2B + 1` is checked against the scalar. That check is what binds
+    /// the rows' sign flags to the operand.
     ///
-    /// Boolean, since `2*s[i] + c[i-1] <= 511`. The top carry is constrained to zero.
-    pub scalar_carry: [T; SCALAR_LIMBS],
+    /// The limb size makes the recurrence a shift, so there is nothing to carry and nothing to
+    /// range check. `B'[0]` holds this row's digits, already in range as a degree-1 form in
+    /// the flags, and every other limb copies a neighbour.
+    pub scalar_acc: [T; SCALAR_ACC_LIMBS],
 }
 
 /// Columns used only on the digest row, which carries all of the instruction's memory I/O.
@@ -111,9 +112,15 @@ pub struct EcMulDigestCols<T, const NUM_LIMBS: usize, const BLOCKS: usize> {
     pub point_y: [T; NUM_LIMBS],
     pub point_read_aux: [MemoryReadAuxCols<T>; BLOCKS],
 
-    /// Scalar bytes read from `rs2`, checked against [`EcMulHeaderCols::scalar_acc`].
+    /// Scalar bytes read from `rs2`, checked against `2B + 1` for the accumulated
+    /// [`EcMulHeaderCols::scalar_acc`].
     pub scalar_data: [T; SCALAR_LIMBS],
     pub scalar_read_aux: [MemoryReadAuxCols<T>; SCALAR_BLOCKS],
+    /// Carries for that check, one per byte. Boolean, since `2*B[i] + c <= 511`.
+    ///
+    /// The top carry is constrained to zero, which pins `2B + 1 < 2^256` and so the scalar's
+    /// width. The tighter bound below the curve order stays a caller precondition.
+    pub scalar_carry: [T; SCALAR_LIMBS],
 
     /// Result `k·P`, written to `rd`. Linked to the last compute row's outputs.
     pub result_x: [T; NUM_LIMBS],

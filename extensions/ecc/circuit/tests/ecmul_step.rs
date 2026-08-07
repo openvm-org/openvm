@@ -11,8 +11,8 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus,
 };
 use openvm_ecc_circuit::{
-    ec_mul_step_expr, ec_mul_step_program, EC_MUL_SCALAR_BITS, FLAG_DBL, FLAG_DBL_ADD,
-    FLAG_INF_STAY, FLAG_INF_TAKE, NUM_STEP_FLAGS,
+    ec_mul_step_expr, ec_mul_step_program, EC_MUL_COMPUTE_ROWS, EC_MUL_SCALAR_BITS,
+    EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW,
 };
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::p3_air::BaseAir;
@@ -82,38 +82,37 @@ fn ref_mul(k: &BigUint, base: &Pt, a: &BigUint, p: &BigUint) -> Pt {
 }
 
 /// Runs the ladder through `program.execute`, the same evaluation path used by trace generation.
+///
+/// The sign patterns are recomputed here rather than imported, so this restates the recoding
+/// independently of the chip's own helper.
 fn expr_mul(
     program: &openvm_mod_circuit_builder::FieldExpressionProgram,
     k: &BigUint,
     base: &(BigUint, BigUint),
 ) -> Pt {
     let (px, py) = base;
-    let mut rx = BigUint::zero();
-    let mut ry = BigUint::zero();
-    let mut is_inf = true;
+    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px.clone();
+    let mut ry = py.clone();
     let outs = program.output_indices();
 
-    for i in (0..EC_MUL_SCALAR_BITS).rev() {
-        let bit = k.bit(i as u64);
-        let mut flags = [false; NUM_STEP_FLAGS];
-        flags[match (is_inf, bit) {
-            (false, false) => FLAG_DBL,
-            (false, true) => FLAG_DBL_ADD,
-            (true, false) => FLAG_INF_STAY,
-            (true, true) => FLAG_INF_TAKE,
-        }] = true;
+    for row in 0..EC_MUL_COMPUTE_ROWS {
+        // Digit `i` is bit `i + 1` of the scalar: the ladder's value is `2B + 1`.
+        let mut pattern = 0usize;
+        for step in 0..EC_MUL_STEPS_PER_ROW {
+            let i = EC_MUL_SCALAR_BITS - 1 - (row * EC_MUL_STEPS_PER_ROW + step);
+            let bit = k.bit((i + 1) as u64);
+            pattern |= (bit as usize) << (EC_MUL_STEPS_PER_ROW - 1 - step);
+        }
+        let mut flags = [false; EC_MUL_SIGN_PATTERNS];
+        flags[pattern] = true;
 
-        let vars = program.execute(&[rx.clone(), ry.clone(), px.clone(), py.clone()], &flags);
+        let vars = program.execute(&[px.clone(), py.clone(), rx.clone(), ry.clone()], &flags);
         rx = vars[outs[0]].clone();
         ry = vars[outs[1]].clone();
-        is_inf = is_inf && !bit;
     }
 
-    if is_inf || (rx.is_zero() && ry.is_zero()) {
-        None
-    } else {
-        Some((rx, ry))
-    }
+    Some((rx, ry))
 }
 
 struct Curve {
@@ -194,22 +193,25 @@ fn step_expr_matches_reference_ladder() {
         let g = (c.gx.clone(), c.gy.clone());
         let g_pt: Pt = Some(g.clone());
 
-        // Covers the structural cases: zero, one, small values, a long run of leading zeros, and
-        // a full-width scalar.
+        // Only odd scalars: `sum +-2^i` is odd, so an even operand has no digit assignment and the
+        // digest row's `scalar = 2B + 1` check rejects it. That check is what makes an even operand
+        // unprovable rather than silently answering `(k + 1) * P`, and it is not exercised here --
+        // this test drives the expression alone.
+        //
+        // Covers one, small values, a long run of leading zeros, and a full-width scalar.
         let scalars = [
-            BigUint::zero(),
             BigUint::one(),
-            BigUint::from(2u32),
             BigUint::from(3u32),
+            BigUint::from(5u32),
             BigUint::from(255u32),
-            BigUint::from(0x1234_5678u32),
+            BigUint::from(0x1234_5679u32),
             BigUint::parse_bytes(
                 b"0000000000000000000000000000000000000000000000000000000000FFFFFF",
                 16,
             )
             .unwrap(),
             BigUint::parse_bytes(
-                b"7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0",
+                b"7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A1",
                 16,
             )
             .unwrap(),

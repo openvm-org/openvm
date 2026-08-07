@@ -9,10 +9,10 @@ use num_traits::Zero;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionProgram};
 
 use super::{
-    ec_mul_step_program, EC_MUL_SCALAR_BITS, FLAG_DBL, FLAG_DBL_ADD, FLAG_INF_STAY, FLAG_INF_TAKE,
-    NUM_STEP_FLAGS, SCALAR_LIMBS,
+    ec_mul_step_program, execution::sign_pattern_for_row, EC_MUL_COMPUTE_ROWS, EC_MUL_SCALAR_BITS,
+    EC_MUL_SIGN_PATTERNS, SCALAR_LIMBS,
 };
-use crate::weierstrass_chip::curves::ec_mul_impl;
+use crate::weierstrass_chip::curves::{ec_add_ne_impl, ec_double_impl, ec_mul_impl};
 
 const LIMB_BITS: usize = 8;
 const RANGE_MAX_BITS: usize = 17;
@@ -28,27 +28,40 @@ fn expr_ladder(
     py: &BigUint,
     scalar_le: &[u8; SCALAR_LIMBS],
 ) -> (BigUint, BigUint) {
-    let mut rx = BigUint::zero();
-    let mut ry = BigUint::zero();
-    let mut is_inf = true;
+    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px.clone();
+    let mut ry = py.clone();
     let outs = program.output_indices();
 
-    for i in (0..EC_MUL_SCALAR_BITS).rev() {
-        let bit = (scalar_le[i / 8] >> (i % 8)) & 1 == 1;
-        let mut flags = [false; NUM_STEP_FLAGS];
-        flags[match (is_inf, bit) {
-            (false, false) => FLAG_DBL,
-            (false, true) => FLAG_DBL_ADD,
-            (true, false) => FLAG_INF_STAY,
-            (true, true) => FLAG_INF_TAKE,
-        }] = true;
+    for row in 0..EC_MUL_COMPUTE_ROWS {
+        let mut flags = [false; EC_MUL_SIGN_PATTERNS];
+        flags[sign_pattern_for_row(scalar_le, row)] = true;
 
-        let vars = program.execute(&[rx, ry, px.clone(), py.clone()], &flags);
+        let vars = program.execute(&[px.clone(), py.clone(), rx, ry], &flags);
         rx = vars[outs[0]].clone();
         ry = vars[outs[1]].clone();
-        is_inf = is_inf && !bit;
     }
     (rx, ry)
+}
+
+/// `k * P` by repeated addition, for small odd `k`.
+///
+/// An independent reference for both the native ladder and the expression: it shares none of the
+/// digit recoding, so it is what actually checks that `2B + 1` is the value the ladder computes.
+fn repeated_addition<F: halo2curves_axiom::ff::Field + From<u64>, const NEG_A: u64>(
+    gx: F,
+    gy: F,
+    k: u32,
+) -> (F, F) {
+    if k == 1 {
+        return (gx, gy);
+    }
+    // The first step is `P + P`, which the incomplete addition cannot express.
+    let (mut x, mut y) = ec_double_impl::<F, NEG_A>(gx, gy);
+    for _ in 2..k {
+        (x, y) = ec_add_ne_impl::<F>(x, y, gx, gy);
+    }
+    (x, y)
 }
 
 fn check_curve<F: PrimeField<Repr = [u8; 32]> + From<u64>, const NEG_A: u64>(
@@ -68,10 +81,10 @@ fn check_curve<F: PrimeField<Repr = [u8; 32]> + From<u64>, const NEG_A: u64>(
         a,
     );
 
-    // Covers the identity, the transition out of it, a long leading-zero run, and a full-width
-    // scalar exercising all four cases.
-    let scalars: [[u8; SCALAR_LIMBS]; 5] = [
-        [0u8; SCALAR_LIMBS],
+    // Every scalar must be odd: `sum +-2^i` is odd, so an even one has no digit assignment. The
+    // set covers the smallest values, where the accumulator is `+-P` and the ordering argument
+    // matters, and a full-width scalar below every supported curve order.
+    let scalars: [[u8; SCALAR_LIMBS]; 4] = [
         {
             let mut s = [0u8; SCALAR_LIMBS];
             s[0] = 1;
@@ -91,11 +104,25 @@ fn check_curve<F: PrimeField<Repr = [u8; 32]> + From<u64>, const NEG_A: u64>(
         },
         {
             let mut s = [0x5au8; SCALAR_LIMBS];
+            s[0] = 0x5b;
             // below any supported curve order
             s[SCALAR_LIMBS - 1] = 0x3c;
             s
         },
     ];
+
+    // Anchor the recoding against a reference that shares none of it.
+    for k in [1u32, 3, 5, 7, 9, 17] {
+        let mut scalar = [0u8; SCALAR_LIMBS];
+        scalar[..4].copy_from_slice(&k.to_le_bytes());
+        let (nx, ny) = ec_mul_impl::<F, NEG_A>(gx, gy, &scalar, EC_MUL_SCALAR_BITS);
+        let (rx, ry) = repeated_addition::<F, NEG_A>(gx, gy, k);
+        assert_eq!(
+            (to_biguint(&nx), to_biguint(&ny)),
+            (to_biguint(&rx), to_biguint(&ry)),
+            "{name}: ladder disagrees with repeated addition for k = {k}"
+        );
+    }
 
     for scalar in scalars {
         let (nx, ny) = ec_mul_impl::<F, NEG_A>(gx, gy, &scalar, EC_MUL_SCALAR_BITS);
