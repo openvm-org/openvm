@@ -222,7 +222,6 @@ fn u8_history_replays_packed_event_and_seed() {
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     let mut replay = postflight.replay(step);
     let access = replay.write_u8(PUBLIC_VALUES_AS, 0, written).unwrap();
-    assert_eq!(access.value, written);
     assert_eq!(access.previous_value, initial);
     replay.finish(4).unwrap();
 

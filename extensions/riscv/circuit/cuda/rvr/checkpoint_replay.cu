@@ -1210,7 +1210,7 @@ __device__ bool replay_chunk(
             if (!validate_reveal(
                     *instruction,
                     register_as,
-                    byte_pointer_max_bits,
+                    cell_pointer_max_bits,
                     state,
                     decoded
                 )) {

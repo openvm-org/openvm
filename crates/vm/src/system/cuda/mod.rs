@@ -43,7 +43,7 @@ impl From<MemoryCellType> for MemoryCellKind {
             MemoryCellType::U8 => Self::U8,
             MemoryCellType::U16 => Self::U16,
             MemoryCellType::FIELD32 => Self::Field32,
-            _ => panic!("unsupported CUDA memory layout: {layout:?}"),
+            _ => Self::Unsupported,
         }
     }
 }

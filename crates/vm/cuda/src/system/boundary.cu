@@ -59,7 +59,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
             record.ptr / DIGEST_WIDTH
         );
 
-        FpArray<DIGEST_WIDTH> init_values;
+        FpArray<DIGEST_WIDTH> init_values{};
         uint32_t addr_space_idx = record.address_space - 1;
         if (initial_mem[addr_space_idx]) {
             switch (cell_kinds[addr_space_idx]) {
@@ -88,6 +88,9 @@ __global__ void cukernel_persistent_boundary_tracegen(
                         reinterpret_cast<uint32_t const *>(initial_mem[addr_space_idx]) +
                         record.ptr
                     );
+                    break;
+                default:
+                    assert(false && "unsupported memory cell kind");
                     break;
             }
         } else {

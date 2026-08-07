@@ -5,7 +5,9 @@ mod tests {
 
     use eyre::Result;
     #[cfg(feature = "rvr")]
-    use openvm_circuit::arch::{execution_mode::Segment, ExecutionOutcome, VmState};
+    use openvm_circuit::arch::{
+        execution_mode::Segment, ExecutionOutcome, VmState, BOUNDARY_AIR_ID,
+    };
     use openvm_circuit::{
         arch::{
             hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
@@ -774,7 +776,7 @@ mod tests {
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::new(config.clone())?;
         let preflight = executor.preflight_instance(&exe)?;
         let registers = [
             (1, 0xa5a4_a3a2_a1a0_9998),
@@ -802,7 +804,7 @@ mod tests {
         assert_eq!(execution.to_state.timestamp, 9);
         assert!(execution.transcript.replay_values.is_empty());
 
-        let mut expected = initial_public_values;
+        let mut expected = initial_public_values.clone();
         expected[..8].copy_from_slice(&0xa5a4_a3a2_a1a0_9998u64.to_le_bytes());
         expected[8..].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
         assert_eq!(
@@ -813,6 +815,27 @@ mod tests {
             execution.state.memory.memory.touched_pages[PUBLIC_VALUES_AS as usize]
                 .touched_byte_ranges(16),
             vec![(0, 16)]
+        );
+
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            openvm_riscv_circuit::Rv64ImCpuBuilder,
+            config,
+        )?;
+        let metered_initial = configure_reveal_state(
+            vm.create_initial_state(&exe, Vec::<Vec<u8>>::new()),
+            &registers,
+            &initial_public_values,
+        );
+        let metered_ctx = vm.build_metered_ctx(&exe);
+        let initial_boundary_height = metered_ctx.trace_heights[BOUNDARY_AIR_ID];
+        let (segments, _) = vm
+            .metered_instance(&exe)?
+            .execute_metered_from_state(metered_initial, metered_ctx)?;
+        assert_eq!(segments.len(), 1);
+        assert_eq!(
+            segments[0].trace_heights[BOUNDARY_AIR_ID],
+            initial_boundary_height + 2
         );
         Ok(())
     }

@@ -712,7 +712,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverEx
         _: &Rv64Io,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(pointer_max_bits);
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -722,7 +723,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, Rv64Io> for Rv64ImGpuProverEx
         inventory.add_executor_chip(hint_store);
 
         inventory.next_air::<RevealAir>()?;
-        let reveal = RevealChipGpu::new(range_checker, byte_ptr_max_bits, timestamp_max_bits);
+        let reveal = RevealChipGpu::new(range_checker, pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(reveal);
 
         Ok(())

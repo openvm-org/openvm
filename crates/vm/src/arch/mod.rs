@@ -41,10 +41,8 @@ pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use postflight::{
     fill_trace_rows, Postflight, PostflightError, PostflightProgramIndex, PostflightReplay,
-    PostflightStep, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
+    PostflightStep, U16Access, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
 };
-#[rustfmt::skip]
-pub use postflight::{U8Access, U16Access, Field32Access};
 pub use preflight::{
     PreflightFieldBlock, PreflightHistory, PreflightInitialWrite, PreflightMemoryEvent,
     PreflightMemoryLog, PreflightOutput, PreflightProgramEvent,

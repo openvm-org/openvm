@@ -27,20 +27,32 @@ __device__ __forceinline__ void hash_raw_memory_leaf(
     digest_t *out
 ) {
     Fp cells[CELLS] = {0};
+    size_t const cell_start = DIGEST_WIDTH * leaf_label;
+    switch (cell_kind) {
+        case CELL_U8:
 #pragma unroll
-    for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
-        size_t const cell_idx = DIGEST_WIDTH * leaf_label + i;
-        switch (cell_kind) {
-            case CELL_U8:
+            for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
+                size_t const cell_idx = cell_start + i;
                 cells[i] = Fp(data[cell_idx]);
-                break;
-            case CELL_U16:
+            }
+            break;
+        case CELL_U16:
+#pragma unroll
+            for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
+                size_t const cell_idx = cell_start + i;
                 cells[i] = Fp(u16_from_bytes_le(data + U16_CELL_SIZE * cell_idx));
-                break;
-            case CELL_FIELD32:
+            }
+            break;
+        case CELL_FIELD32:
+#pragma unroll
+            for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
+                size_t const cell_idx = cell_start + i;
                 cells[i] = reinterpret_cast<Fp const *>(data)[cell_idx];
-                break;
-        }
+            }
+            break;
+        default:
+            assert(false && "unsupported memory cell kind");
+            break;
     }
 
     poseidon2_mix(cells);
@@ -770,6 +782,7 @@ extern "C" int _build_merkle_subtree(
     const uint8_t layout,
     cudaStream_t stream
 ) {
+    if (cell_kind < CELL_U8 || cell_kind > CELL_FIELD32) return -1;
     digest_t *tree = buffer + tree_offset;
     assert((size & (size - 1)) == 0);
     {

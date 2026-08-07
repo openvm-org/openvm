@@ -18,7 +18,7 @@ pub struct BoundaryChipGPU {
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
     /// don't own. TODO: use `Arc<DeviceBuffer>` instead?
     pub initial_leaves: Vec<*const std::ffi::c_void>,
-    pub cell_kinds: Vec<u8>,
+    pub(super) cell_kinds: Vec<u8>,
     pub records: Option<DeviceBuffer<u32>>,
     pub num_records: Option<usize>,
     pub trace_width: Option<usize>,

@@ -97,6 +97,9 @@ __device__ inline void read_initial_leaf(
             for (int i = 0; i < DIGEST_WIDTH; ++i) out_values[i] = cells[i];
             break;
         }
+        default:
+            assert(false && "unsupported memory cell kind");
+            break;
     }
 }
 

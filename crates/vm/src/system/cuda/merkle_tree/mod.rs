@@ -153,6 +153,10 @@ impl MemoryMerkleSubTree {
              {max_size}; check that every address space's `num_cells` fits within \
              `pointer_max_bits`"
         );
+        assert!(
+            addr_space_size == 0 || cell_kind != MemoryCellKind::Unsupported,
+            "nonempty CUDA memory address spaces require U8, U16, or Field32 cells"
+        );
         if addr_space_size == 0 {
             let mut res = MemoryMerkleSubTree::dummy();
             res.height = log2_ceil_usize(max_size);
@@ -627,6 +631,21 @@ mod tests {
         assert_eq!(above.layout, MemoryMerkleSubTreeLayout::OmitBottomLevels);
         assert_eq!(above.buf.len(), optimized_len);
         assert!(above.buf.len() < full_len);
+    }
+
+    #[test]
+    #[should_panic(expected = "nonempty CUDA memory address spaces require")]
+    fn test_nonempty_unsupported_cuda_merkle_subtree_is_rejected() {
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let _ = MemoryMerkleSubTree::new(
+            1,
+            1 << OMITTED_BOTTOM_LEVELS,
+            MemoryCellKind::Unsupported,
+            &device_ctx,
+        );
     }
 
     #[test]
