@@ -1,0 +1,18 @@
+[package]
+name = "openvm-fv-verifier"
+description = "Differential verification of OpenVM STARK proofs against the formally verified Lean Swirl verifier."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+openvm-stark-backend = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true }
