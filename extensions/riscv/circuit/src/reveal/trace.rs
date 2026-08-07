@@ -122,7 +122,6 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
             cols.base_aux.as_mut(),
         );
         cols.src_ptr = F::from_u32(src_ptr);
-        cols.src_data = src.value.map(F::from_u16);
         cols.src_bytes = src_bytes.map(F::from_u8);
         mem_helper.fill(src.previous_timestamp, src.timestamp, cols.src_aux.as_mut());
         cols.imm = F::from_u32(imm);

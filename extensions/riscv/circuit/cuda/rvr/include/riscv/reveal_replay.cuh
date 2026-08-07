@@ -19,7 +19,6 @@ struct ReplayRevealInput {
     uint32_t write_prev_timestamp[2];
     uint16_t imm;
     uint8_t imm_sign;
-    uint16_t src_data[BLOCK_FE_WIDTH];
     uint8_t src_bytes[MEMORY_BLOCK_BYTES];
     uint8_t write_prev_data[2][BLOCK_FE_WIDTH];
 };
@@ -175,10 +174,6 @@ static __device__ bool replay_reveal(
     out.src_prev_timestamp = src_previous.timestamp;
     out.imm = static_cast<uint16_t>(imm);
     out.imm_sign = imm_sign;
-#pragma unroll
-    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-        out.src_data[i] = src[i];
-    }
     for (size_t block = 0; block < 2; block++) {
         out.write_prev_timestamp[block] = write_previous[block].timestamp;
         preflight_decode_u8_block(write_previous[block].value, out.write_prev_data[block]);

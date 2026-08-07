@@ -17,7 +17,6 @@ template <typename T> struct RevealCols {
     T base_ptr_limbs[PTR_U16_LIMBS];
     MemoryReadAuxCols<T> base_aux;
     T src_ptr;
-    T src_data[BLOCK_FE_WIDTH];
     T src_bytes[MEMORY_BLOCK_BYTES];
     MemoryReadAuxCols<T> src_aux;
     T imm;
@@ -55,7 +54,6 @@ struct Reveal {
         );
 
         COL_WRITE_VALUE(row, RevealCols, src_ptr, input.src_ptr);
-        COL_WRITE_ARRAY(row, RevealCols, src_data, input.src_data);
         COL_WRITE_ARRAY(row, RevealCols, src_bytes, input.src_bytes);
         mem_helper.fill(
             row.slice_from(COL_INDEX(RevealCols, src_aux)),

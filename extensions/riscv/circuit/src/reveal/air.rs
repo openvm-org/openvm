@@ -19,13 +19,15 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{Air, AirBuilder, BaseAir},
+    p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{byte_ptr_to_u16_ptr, expand_to_block, PTR_U16_LIMBS, U16_BITS};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr, expand_to_block, pack_u8_pair, PTR_U16_LIMBS, U16_BITS,
+};
 
 const REVEAL_TIMESTAMP_DELTA: usize = 4;
 
@@ -44,9 +46,7 @@ pub struct RevealCols<T> {
     pub base_aux: MemoryReadAuxCols<T>,
     /// Byte pointer to the source-value register.
     pub src_ptr: T,
-    /// Source register value as u16 limbs.
-    pub src_data: [T; BLOCK_FE_WIDTH],
-    /// Source register value decomposed into byte-valued public elements.
+    /// Source register value as byte limbs.
     pub src_bytes: [T; MEMORY_BLOCK_BYTES],
     /// Witness for the source-register read.
     pub src_aux: MemoryReadAuxCols<T>,
@@ -118,23 +118,24 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .eval(builder, is_valid.clone());
         let dst_ptr = cols.dst_ptr_low_limb + dst_ptr_high_limb * AB::F::from_u32(1 << U16_BITS);
 
-        // Read the source register and constrain its byte decomposition.
+        // Compose the source-register bus value directly from its byte limbs.
+        let src_cells: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| {
+            pack_u8_pair(
+                cols.src_bytes[2 * i].into(),
+                cols.src_bytes[2 * i + 1].into(),
+            )
+        });
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(cols.src_ptr),
                 ),
-                cols.src_data.map(Into::into),
+                src_cells,
                 timestamp.clone() + AB::Expr::ONE,
                 &cols.src_aux,
             )
             .eval(builder, is_valid.clone());
-        for (cell, bytes) in cols.src_data.iter().zip(cols.src_bytes.chunks_exact(2)) {
-            builder
-                .when(is_valid.clone())
-                .assert_eq(*cell, bytes[0] + bytes[1] * AB::F::from_u32(1 << BYTE_BITS));
-        }
         for &byte in &cols.src_bytes {
             self.range_bus
                 .range_check(byte, BYTE_BITS)
