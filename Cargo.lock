@@ -5009,6 +5009,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-fv-verifier"
+version = "2.0.2"
+dependencies = [
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "openvm-instructions"
 version = "2.0.2"
 dependencies = [
@@ -5441,6 +5450,7 @@ dependencies = [
  "openvm-continuations",
  "openvm-cuda-backend",
  "openvm-deferral-circuit",
+ "openvm-fv-verifier",
  "openvm-recursion-circuit",
  "openvm-sdk-config",
  "openvm-stark-backend",

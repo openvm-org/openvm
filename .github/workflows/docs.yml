@@ -18,6 +18,7 @@ on:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
+  LEAN_TOOLCHAIN: leanprover/lean4:v4.26.0
 
 jobs:
   docs:
@@ -50,6 +51,13 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+
+      - name: Install Lean toolchain
+        # openvm-fv-verifier's build.rs needs leanc from the toolchain that generated csrc/.
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
 
       - name: Build documentation
         run: cargo +nightly-2026-01-18 doc --workspace --no-deps --exclude "openvm-benchmarks*" --exclude "*-tests" --features "cuda"

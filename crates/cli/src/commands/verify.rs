@@ -6,7 +6,7 @@ use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof_with_expected_exe_commit,
     types::{AppExecutionCommit, VerificationBaselineJson, VersionedVmStarkProof},
-    Sdk, OPENVM_VERSION,
+    Sdk, VerificationBaseline, OPENVM_VERSION,
 };
 
 use crate::{
@@ -81,6 +81,14 @@ enum VerifySubCommand {
             help_heading = "OpenVM Options"
         )]
         proof: Option<PathBuf>,
+
+        #[arg(
+            long,
+            action,
+            help = "Additionally verify the STARK proof with the formally verified Swirl verifier (requires a build with the 'fv-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
+            help_heading = "OpenVM Options"
+        )]
+        fv_verified: bool,
 
         #[command(flatten)]
         cargo_args: SingleTargetCargoArgs,
@@ -190,6 +198,7 @@ impl VerifyCmd {
                 agg_vk,
                 app_baseline,
                 proof,
+                fv_verified,
                 cargo_args,
             } => {
                 let (manifest_path, _) =
@@ -217,7 +226,7 @@ impl VerifyCmd {
                     get_app_baseline_path(&target_output_dir, target_name)
                 };
                 let baseline_json: VerificationBaselineJson = read_from_file_json(baseline_path)?;
-                let expected_app_commit = baseline_json.into();
+                let expected_baseline: VerificationBaseline = baseline_json.into();
 
                 let proof_path = resolve_proof_path(proof, STARK_PROOF_EXT)?;
                 println!("Verifying STARK proof at {}", proof_path.display());
@@ -228,7 +237,21 @@ impl VerifyCmd {
                 if stark_proof.version != format!("v{OPENVM_VERSION}") {
                     eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", stark_proof.version);
                 }
-                Sdk::verify_proof(agg_vk, expected_app_commit, &stark_proof.try_into()?)?;
+                let vm_stark_proof = stark_proof.try_into()?;
+                Sdk::verify_proof(agg_vk, expected_baseline.clone(), &vm_stark_proof)?;
+                if *fv_verified {
+                    #[cfg(feature = "fv-verifier")]
+                    {
+                        println!("Verifying STARK proof with the canonical RISC-V FV verifier");
+                        Sdk::verify_proof_with_fv_verifier(&expected_baseline, &vm_stark_proof)?;
+                        println!("FV verifier accepted the proof");
+                    }
+                    #[cfg(not(feature = "fv-verifier"))]
+                    eyre::bail!(
+                        "--fv-verified requires cargo-openvm built with the 'fv-verifier' \
+                         feature (cargo install --features fv-verifier ...)"
+                    );
+                }
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm {

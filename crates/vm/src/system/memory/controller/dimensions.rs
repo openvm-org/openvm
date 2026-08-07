@@ -9,7 +9,7 @@ use crate::{
 
 // indicates that there are 2^`addr_space_height` address spaces numbered starting from 1,
 // and that each address space has 2^`address_height` addresses numbered starting from 0
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, new)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, new)]
 pub struct MemoryDimensions {
     /// Address space height
     pub addr_space_height: usize,

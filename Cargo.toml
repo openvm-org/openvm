@@ -31,6 +31,7 @@ members = [
   "crates/continuations",
   "crates/recursion",
   "crates/verify",
+  "crates/fv-verifier",
   "crates/vm",
   "extensions/rv32im/circuit",
   "extensions/rv32im/transpiler",
@@ -143,6 +144,7 @@ openvm-recursion-circuit = { version = "2.0.2", path = "crates/recursion", defau
 openvm-recursion-circuit-derive = { version = "2.0.2", path = "crates/recursion/derive", default-features = false }
 openvm-continuations = { version = "2.0.2", path = "crates/continuations", default-features = false }
 openvm-verify-stark-host = { version = "2.0.2", path = "crates/verify", default-features = false }
+openvm-fv-verifier = { version = "2.0.2", path = "crates/fv-verifier", default-features = false }
 openvm-static-verifier = { version = "2.0.2", path = "crates/static-verifier", default-features = false }
 openvm-sdk = { version = "2.0.2", path = "crates/sdk", default-features = false }
 openvm-sdk-config = { version = "2.0.2", path = "crates/sdk-config", default-features = false }
