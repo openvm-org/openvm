@@ -16,10 +16,10 @@ struct PreflightMemoryEvent {
     uint32_t timestamp;
     uint32_t address_space_and_kind;
     uint32_t pointer;
-    // Eight-byte inline payload: U8 cells 0/1 occupy the low/high bytes of
-    // value[0], cells 2/3 occupy value[1], and value[2..4] must be zero. U16
-    // uses all four lanes; Field32 stores a sidecar index in value[0] and
-    // value[1], and requires value[2] and value[3] to be zero.
+    // Eight-byte inline payload:
+    // - U8: four values in the low four bytes; high four bytes are zero.
+    // - U16: four values occupying all eight bytes.
+    // - Field32: dense sidecar index in the low four bytes.
     uint16_t value[4];
 };
 
