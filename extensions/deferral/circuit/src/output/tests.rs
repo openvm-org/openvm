@@ -19,10 +19,7 @@ use openvm_instructions::{
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_stark_backend::{
-    interaction::BusIndex,
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-};
+use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeCharacteristicRing};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
@@ -379,7 +376,7 @@ fn postflight_output_trace_rejects_truncated_history_without_mutating_periphery(
         &mut rng,
         NUM_DEFERRALS,
     );
-    let from_pc = tester.last_from_pc().as_canonical_u32();
+    let from_pc = tester.last_from_pc();
     let sentinel = instruction.clone();
     let program = Program::new_without_debug_infos(&[instruction, sentinel], from_pc);
     let history = &mut harness.preflight.executions[0].history;

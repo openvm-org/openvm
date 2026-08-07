@@ -104,6 +104,15 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
 }
 
 /// Create a new [`Instruction`] from a B-type instruction.
+///
+/// The immediate stays a byte offset; the AIR scales it by `inverse(DEFAULT_PC_STEP)` because
+/// circuit-visible pc values are pc indices. A misaligned offset therefore has no sound
+/// encoding, but it cannot be rejected here: the transpiler decodes every word of `.text`,
+/// including embedded data and never-taken branches that merely *look* like misaligned
+/// branches. Misalignment is enforced where the target is actually used — the interpreter
+/// traps on the misaligned pc and tracegen rejects the row via
+/// `checked_branch_target` — so a misaligned branch that is never taken falls through
+/// normally, exactly as it does on hardware.
 pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
     Instruction::new(
         VmOpcode::from_usize(opcode),
@@ -118,6 +127,10 @@ pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruct
 }
 
 /// Create a new [`Instruction`] from a J-type instruction.
+///
+/// The jump offset is a byte offset and is not required to be `DEFAULT_PC_STEP`-aligned here;
+/// see [`from_b_type`]. A misaligned JAL that is actually executed is rejected by the
+/// interpreter and by JAL tracegen ("JAL target outside implemented PC address space").
 pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruction<F> {
     Instruction::new(
         VmOpcode::from_usize(opcode),

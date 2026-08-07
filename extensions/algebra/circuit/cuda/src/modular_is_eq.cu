@@ -294,7 +294,8 @@ __global__ void modular_is_eq_replay_tracegen(
     VariableRangeChecker range_checker(range_checker_counts, range_checker_bins);
     MemoryAuxColsFactory memory_aux(range_checker, timestamp_max_bits);
 
-    row[offsetof(AdapterCols, from_state) + offsetof(ExecutionState<uint8_t>, pc)] = Fp(from.pc);
+    row[offsetof(AdapterCols, from_state) + offsetof(ExecutionState<uint8_t>, pc)] =
+        Fp(::program::pc_to_idx(from.pc));
     row[offsetof(AdapterCols, from_state) + offsetof(ExecutionState<uint8_t>, timestamp)] =
         Fp(from.timestamp);
     for (size_t read = 0; read < 2; read++) {

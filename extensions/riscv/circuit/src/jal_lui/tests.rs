@@ -16,7 +16,11 @@ use openvm_circuit_primitives::{
     },
     var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -110,7 +114,10 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let is_jal = opcode == JAL;
     let imm = imm.unwrap_or_else(|| {
         if is_jal {
-            let raw: i32 = rng.random_range(0..(1 << (RV_J_TYPE_IMM_BITS - 1)));
+            // JAL offsets are DEFAULT_PC_STEP-aligned byte offsets.
+            let raw: i32 = rng
+                .random_range(0..(1 << (RV_J_TYPE_IMM_BITS - 1)) / DEFAULT_PC_STEP as i32)
+                * DEFAULT_PC_STEP as i32;
             if rng.random_bool(0.5) {
                 -raw
             } else {
@@ -123,10 +130,14 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let a = rd_ptr.unwrap_or_else(|| (rng.random_range(0..32) << 3) as usize);
 
     let initial_pc = initial_pc.unwrap_or_else(|| {
-        if is_jal && imm < 0 {
-            rng.random_range((-imm as u32)..(1u32 << 30))
+        // An aligned byte pc over the full 32-bit range; for JAL, keep the target and the
+        // return address inside the implemented PC address space.
+        if is_jal {
+            let lo = (-imm).max(0) as u32 / DEFAULT_PC_STEP;
+            let hi = (MAX_ALLOWED_PC - DEFAULT_PC_STEP - imm.max(0) as u32) / DEFAULT_PC_STEP;
+            rng.random_range(lo..=hi) * DEFAULT_PC_STEP
         } else {
-            rng.random_range(0..(1u32 << 30).min(1u32 << PC_BITS))
+            (rng.random::<u32>() & !3).min(MAX_ALLOWED_PC - DEFAULT_PC_STEP)
         }
     });
     let imm_field: F = if imm.is_negative() {
@@ -184,6 +195,33 @@ fn rand_jal_lui_test(opcode: JalLuiOpcode, num_ops: usize) {
             None,
         );
     }
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn jal_max_pc_test() {
+    // JAL from the second-to-last instruction slot of the 32-bit PC address space, jumping
+    // backward; the return address is the last slot.
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        JAL,
+        Some(-4096),
+        Some(MAX_ALLOWED_PC - 2 * DEFAULT_PC_STEP),
+        None,
+    );
+
     let tester = tester
         .build()
         .load(harness)
@@ -344,7 +382,7 @@ fn opcode_flag_negative_test() {
 fn write_suppression_boundary_negative_test() {
     run_negative_jal_lui_test_with_rd_ptr(
         JAL,
-        Some((1 << 19) + 2),
+        Some((1 << 19) + 4),
         Some(28120),
         Some(0),
         JalLuiPrankValues {
@@ -356,7 +394,7 @@ fn write_suppression_boundary_negative_test() {
 
     run_negative_jal_lui_test_with_rd_ptr(
         JAL,
-        Some((1 << 19) + 2),
+        Some((1 << 19) + 4),
         Some(28120),
         Some(8),
         JalLuiPrankValues {
@@ -458,7 +496,7 @@ fn overflow_negative_tests() {
     run_negative_jal_lui_test(
         JAL,
         None,
-        Some((1u32 << 28) - 6),
+        Some((1u32 << 28) - 8),
         JalLuiPrankValues {
             rd_data: Some([0, 0]),
             ..Default::default()
@@ -546,7 +584,8 @@ fn execute_roundtrip_sanity_test() {
         &mut harness.preflight,
         &mut rng,
         JAL,
-        Some((1i32 << (RV_J_TYPE_IMM_BITS - 1)) - 1),
+        // The largest DEFAULT_PC_STEP-aligned J-type offset.
+        Some((1i32 << (RV_J_TYPE_IMM_BITS - 1)) - DEFAULT_PC_STEP as i32),
         None,
         None,
     );
@@ -573,7 +612,7 @@ fn jal_x0_write_suppression_test() {
         &mut harness.preflight,
         &mut rng,
         JAL,
-        Some((1 << 19) + 2),
+        Some((1 << 19) + 4),
         Some(28120),
         Some(0),
     );

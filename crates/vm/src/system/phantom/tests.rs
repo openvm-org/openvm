@@ -10,7 +10,7 @@ use openvm_instructions::{
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_instructions::{program::Program, riscv::MEMORY_AS};
-use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -61,13 +61,13 @@ fn run_phantom_test<E>(
     E: Executor<F> + Clone,
 {
     let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
-    let mut pc = F::ZERO;
+    let mut pc = 0u32;
 
     for _ in 0..num_nops {
-        tester.execute_with_pc(executor, preflight, &nop, pc.as_canonical_u32());
+        tester.execute_with_pc(executor, preflight, &nop, pc);
         let new_state = tester.execution_final_state();
-        assert_eq!(pc + F::from_usize(4), new_state.pc);
-        assert_eq!(F::TWO, new_state.timestamp);
+        assert_eq!(pc + 4, new_state.pc);
+        assert_eq!(2, new_state.timestamp);
         pc = new_state.pc;
     }
 }

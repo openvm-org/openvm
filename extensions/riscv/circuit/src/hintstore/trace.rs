@@ -8,7 +8,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
+    program::{pc_to_idx, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
@@ -254,7 +254,7 @@ fn fill_row<F: PrimeField32>(
     range_checker.add_count(byte_limbs[0], U16_BITS);
     cols.mem_ptr_ptr = F::from_u32(input.mem_ptr_ptr);
     cols.from_state.timestamp = F::from_u32(timestamp);
-    cols.from_state.pc = F::from_u32(input.from_pc);
+    cols.from_state.pc = F::from_u32(pc_to_idx(input.from_pc));
     cols.rem_words = F::from_u32(input.num_words - local_index);
     cols.is_buffer = F::from_bool(!is_single);
     cols.is_single = F::from_bool(is_single);

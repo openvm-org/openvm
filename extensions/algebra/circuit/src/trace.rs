@@ -15,7 +15,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
+    program::{pc_to_idx, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS},
     VmOpcode,
 };
@@ -444,7 +444,7 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
                 adapter_cols.rs_ptr[read] = F::from_u32(rs_ptrs[read]);
             }
             adapter_cols.from_state.timestamp = F::from_u32(from_timestamp);
-            adapter_cols.from_state.pc = F::from_u32(from_pc);
+            adapter_cols.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
             chip.inner.fill_trace_row_from_execution_data(
                 temporary_range_checker.as_ref(),

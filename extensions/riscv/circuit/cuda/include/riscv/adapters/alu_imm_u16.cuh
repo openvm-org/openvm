@@ -47,7 +47,7 @@ struct BaseAluImmU16Adapter {
         uint32_t write_prev_timestamp,
         uint16_t const (&write_prev_data)[BLOCK_FE_WIDTH]
     ) {
-        COL_WRITE_VALUE(row, BaseAluImmU16AdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, BaseAluImmU16AdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         COL_WRITE_VALUE(row, BaseAluImmU16AdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, BaseAluImmU16AdapterCols, rd_ptr, rd_ptr);
         COL_WRITE_VALUE(row, BaseAluImmU16AdapterCols, rs1_ptr, rs1_ptr);

@@ -22,7 +22,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
+    program::pc_to_idx,
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
@@ -206,7 +206,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> VecHeapAdapterFiller<NUM_READS
                 *cols_ptr = F::from_u32(*ptr);
             });
         cols.from_state.timestamp = F::from_u32(input.from_timestamp);
-        cols.from_state.pc = F::from_u32(input.from_pc);
+        cols.from_state.pc = F::from_u32(pc_to_idx(input.from_pc));
     }
 }
 
@@ -352,7 +352,7 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (DEFAULT_PC_STEP, ctx.to_pc),
+                (1, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }

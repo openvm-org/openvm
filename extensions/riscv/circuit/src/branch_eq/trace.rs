@@ -9,7 +9,9 @@ use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{fast_run_eq, run_eq, BranchEqualChip, BranchEqualCoreCols};
-use crate::adapters::{BranchAdapterCols, BranchAdapterFiller};
+use crate::adapters::{
+    checked_branch_target, taken_branch_pc, BranchAdapterCols, BranchAdapterFiller,
+};
 
 /// Generates the RV64 equality-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
@@ -31,6 +33,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(local_opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
+            let mut taken = false;
             let (inputs, _) = BranchAdapterFiller::replay(
                 postflight,
                 step,
@@ -38,12 +41,17 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 adapter_row.borrow_mut(),
                 |from_pc, [rs1, rs2], immediate| {
                     if fast_run_eq(local_opcode, &rs1, &rs2) {
-                        (F::from_u32(from_pc) + F::from_u32(immediate)).as_canonical_u32()
+                        taken = true;
+                        taken_branch_pc::<F>(from_pc, immediate)
                     } else {
                         from_pc.wrapping_add(chip.inner.pc_step)
                     }
                 },
             )?;
+            if taken {
+                let instruction = postflight.instruction(step);
+                checked_branch_target::<F>(postflight.pc(step), instruction.c.as_canonical_u32())?;
+            }
             let [a, b] = inputs;
             let core_row: &mut BranchEqualCoreCols<F, BLOCK_FE_WIDTH> = core_row.borrow_mut();
             let instruction = postflight.instruction(step);

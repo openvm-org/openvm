@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::PC_BITS, LocalOpcode};
+use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -15,7 +15,9 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::adapters::{ptr_to_u16_limbs, sext32_to_u64, BYTE_BITS, PTR_U16_LIMBS, U16_BITS};
+use crate::adapters::{
+    ptr_to_u16_limbs, sext32_to_u64, BYTE_BITS, PC_IDX_LOW_BITS, PTR_U16_LIMBS, U16_BITS,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -77,14 +79,18 @@ where
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
         let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << BYTE_BITS);
-        let pc_low = from_pc - pc_high * limb_base;
+        // `from_pc` is a pc index; the byte pc is 4 * from_pc, whose u16 limbs are
+        // [4 * pc_idx_low, pc_high] with pc_idx_low = from_pc - pc_high * 2^PC_IDX_LOW_BITS.
+        let pc_idx_low = from_pc - pc_high * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
+        let pc_low = pc_idx_low.clone() * AB::F::from_u32(DEFAULT_PC_STEP);
 
-        // `from_pc` is bounded to `PC_BITS` by the program bus.
+        // `from_pc` is bounded to `PC_BITS` by the program bus, so the split into a
+        // PC_IDX_LOW_BITS-bit low part and a u16 high part is unique.
         self.range_bus
-            .range_check(pc_low.clone(), U16_BITS)
+            .range_check(pc_idx_low, PC_IDX_LOW_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(pc_high, PC_BITS - U16_BITS)
+            .range_check(pc_high, U16_BITS)
             .eval(builder, is_valid);
 
         let carry_low =

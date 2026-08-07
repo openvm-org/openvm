@@ -44,7 +44,7 @@ struct Reveal {
 
     __device__ void fill_trace_row(RowSlice row, ReplayRevealInput const &input) {
         COL_WRITE_VALUE(row, RevealCols, is_valid, 1);
-        COL_WRITE_VALUE(row, RevealCols, from_state.pc, input.from_pc);
+        COL_WRITE_VALUE(row, RevealCols, from_state.pc, ::program::pc_to_idx(input.from_pc));
         COL_WRITE_VALUE(row, RevealCols, from_state.timestamp, input.from_timestamp);
         COL_WRITE_VALUE(row, RevealCols, base_ptr, input.base_ptr);
 

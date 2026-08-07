@@ -11,9 +11,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
-};
+use openvm_instructions::{riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -164,7 +162,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
                 ],
                 cols.from_state,
                 ExecutionState {
-                    pc: cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP),
+                    pc: cols.from_state.pc + AB::F::ONE,
                     timestamp: timestamp + AB::F::from_usize(REVEAL_TIMESTAMP_DELTA),
                 },
             )

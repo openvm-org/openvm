@@ -440,7 +440,7 @@ fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() 
         &mut rng,
         NUM_DEFERRALS,
     );
-    let from_pc = tester.last_from_pc().as_canonical_u32();
+    let from_pc = tester.last_from_pc();
     let sentinel = instruction.clone();
     let program = Program::new_without_debug_infos(&[instruction, sentinel], from_pc);
     let history = &mut harness.preflight.executions[0].history;
