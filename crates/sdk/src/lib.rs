@@ -29,7 +29,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
         InitFileGenerator, MeteredExecutor, VirtualMachine, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmExecutor, VmState, U16_CELL_SIZE,
+        VmExecutionConfig, VmExecutor, VmState,
     },
     system::memory::{merkle::public_values::extract_public_values, online::GuestMemory},
 };
@@ -600,7 +600,7 @@ where
             .map_err(VirtualMachineError::from)?
             .memory;
         let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
+            self.executor.config.as_ref().num_public_values,
             &final_memory.memory,
         );
         Ok(public_values)
@@ -756,7 +756,7 @@ where
             .execute_metered(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
         let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
+            self.executor.config.as_ref().num_public_values,
             &final_state.memory.memory,
         );
 
@@ -845,7 +845,7 @@ where
         let cost = ctx.cost;
 
         let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
+            self.executor.config.as_ref().num_public_values,
             &final_state.memory.memory,
         );
 

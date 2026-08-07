@@ -23,8 +23,9 @@ static constexpr uint32_t ERROR_FIELD_REFERENCE = 119;
 
 enum class GpuMemoryCellKind : uint32_t {
     Unsupported = 0,
-    U16 = 1,
-    Field32 = 2,
+    U8 = 1,
+    U16 = 2,
+    Field32 = 3,
 };
 static constexpr uint8_t FIELD_FULL_WRITE_MASK = 0xff;
 static constexpr int BLOCK_KEY_BEGIN_BIT = 32;
@@ -41,8 +42,9 @@ static_assert(offsetof(GpuMemoryAddressSpace, num_cells) == 0);
 static_assert(offsetof(GpuMemoryAddressSpace, cell_kind) == 8);
 static_assert(offsetof(GpuMemoryAddressSpace, padding) == 12);
 static_assert(static_cast<uint32_t>(GpuMemoryCellKind::Unsupported) == 0);
-static_assert(static_cast<uint32_t>(GpuMemoryCellKind::U16) == 1);
-static_assert(static_cast<uint32_t>(GpuMemoryCellKind::Field32) == 2);
+static_assert(static_cast<uint32_t>(GpuMemoryCellKind::U8) == 1);
+static_assert(static_cast<uint32_t>(GpuMemoryCellKind::U16) == 2);
+static_assert(static_cast<uint32_t>(GpuMemoryCellKind::Field32) == 3);
 static_assert(offsetof(PreflightMemoryEvent, value) % alignof(uint32_t) == 0);
 using GpuTouchedBlock = MemoryTouchedBlock;
 using AliasedU32 = uint32_t __attribute__((may_alias));
@@ -90,7 +92,7 @@ __device__ bool compact_block_key(
     bool allow_field,
     uint32_t &out
 ) {
-    // Pointers here count AS-native cells (u16 or field32 per `cell_kind`), so the
+    // Pointers here count AS-native cells, so the
     // per-AS `num_cells` check below is the authoritative pointer-domain bound;
     // `pointer_limit` only guarantees the packed key fits `block_pointer_bits`.
     uint64_t address_space_limit =
@@ -101,7 +103,8 @@ __device__ bool compact_block_key(
         return false;
     }
     auto const &config = address_spaces[address_space];
-    if ((config.cell_kind != GpuMemoryCellKind::U16 &&
+    if ((config.cell_kind != GpuMemoryCellKind::U8 &&
+         config.cell_kind != GpuMemoryCellKind::U16 &&
          !(allow_field && config.cell_kind == GpuMemoryCellKind::Field32)) ||
         static_cast<uint64_t>(pointer) + 4 > config.num_cells) {
         return false;
@@ -124,7 +127,9 @@ __device__ bool initial_quad(
     }
     auto const &config = address_spaces[address_space];
     uint32_t cell_bytes;
-    if (config.cell_kind == GpuMemoryCellKind::U16) {
+    if (config.cell_kind == GpuMemoryCellKind::U8) {
+        cell_bytes = 1;
+    } else if (config.cell_kind == GpuMemoryCellKind::U16) {
         cell_bytes = 2;
     } else if (config.cell_kind == GpuMemoryCellKind::Field32) {
         cell_bytes = 4;
@@ -230,6 +235,12 @@ __global__ void prepare_chronology_entries(
             preflight_set_error(error, ERROR_MEMORY_MASK);
         } else if (!field_block_is_valid(field_values[reference])) {
             preflight_set_error(error, ERROR_FIELD_VALUE);
+        }
+    } else if (cell_kind == GpuMemoryCellKind::U8) {
+        uint8_t expected_mask = is_write ? 0x0f : 0;
+        if (mask != expected_mask) preflight_set_error(error, ERROR_MEMORY_MASK);
+        if (event.value[2] != 0 || event.value[3] != 0) {
+            preflight_set_error(error, ERROR_MEMORY_MASK);
         }
     } else if (is_write && preflight_address_space(event) != address_space_offset) {
         auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
@@ -416,9 +427,10 @@ __global__ void scatter_chronology_metadata(
                 field_seeds[field_seed_index] = initial;
                 set_field_reference(seed.initial_value, field_seed_index);
             } else {
-                uint8_t initial[8];
+                uint8_t initial[8] = {};
+                uint32_t num_quads = config.cell_kind == GpuMemoryCellKind::U8 ? 1 : 2;
 #pragma unroll
-                for (uint32_t quad = 0; quad < 2; ++quad) {
+                for (uint32_t quad = 0; quad < num_quads; ++quad) {
                     uint8_t bytes[4];
                     if (!initial_quad(
                             preflight_address_space(event),
@@ -494,8 +506,9 @@ __global__ void prepare_value_chunks(
     auto const &config = address_spaces[preflight_address_space(event)];
     ValueChunk chunk{0, 0, 0};
     if (head) {
+        uint32_t num_quads = config.cell_kind == GpuMemoryCellKind::U8 ? 1 : 2;
 #pragma unroll
-        for (uint32_t quad = 0; quad < 2; ++quad) {
+        for (uint32_t quad = 0; quad < num_quads; ++quad) {
             uint8_t initial[4];
             if (!initial_quad(
                     preflight_address_space(event),
@@ -687,6 +700,13 @@ __global__ void finalize_chronology_touched(
 #pragma unroll
         for (uint32_t lane = 0; lane < 4; ++lane) {
             record.values[lane] = Fp(field_values[reference].values[lane]).asRaw();
+        }
+    } else if (config.cell_kind == GpuMemoryCellKind::U8) {
+        uint8_t bytes[4];
+        preflight_decode_u8_block(event.value, bytes);
+#pragma unroll
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+            record.values[lane] = Fp(bytes[lane]).asRaw();
         }
     } else {
 #pragma unroll

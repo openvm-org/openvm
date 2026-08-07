@@ -81,8 +81,9 @@ struct GpuMemoryAddressSpace {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GpuMemoryCellKind {
     Unsupported = 0,
-    U16 = 1,
-    Field32 = 2,
+    U8 = 1,
+    U16 = 2,
+    Field32 = 3,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -117,6 +118,7 @@ const _: () = {
 
 fn memory_cell_kind(layout: MemoryCellType) -> GpuMemoryCellKind {
     match layout {
+        MemoryCellType::U8 => GpuMemoryCellKind::U8,
         MemoryCellType::U16 => GpuMemoryCellKind::U16,
         MemoryCellType::FIELD32 => GpuMemoryCellKind::Field32,
         _ => GpuMemoryCellKind::Unsupported,
@@ -418,7 +420,12 @@ fn validated_history_write_masks(
                 ))
             })?
             .layout;
-        write_masks.push(if event.is_write() { u8::MAX } else { 0 });
+        let full_write_mask = match layout {
+            MemoryCellType::U8 => 0x0f,
+            MemoryCellType::U16 | MemoryCellType::FIELD32 => u8::MAX,
+            _ => 0,
+        };
+        write_masks.push(if event.is_write() { full_write_mask } else { 0 });
         if layout == MemoryCellType::field32() {
             let reference =
                 usize::try_from(u32::from(event.value[0]) | (u32::from(event.value[1]) << 16))

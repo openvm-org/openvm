@@ -12,7 +12,9 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+    program::DEFAULT_PC_STEP,
+    riscv::{BYTE_BITS, REGISTER_AS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{
@@ -23,9 +25,11 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{byte_ptr_to_u16_ptr, expand_to_block, PTR_U16_LIMBS, U16_BITS};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr, expand_to_block, pack_u8_pair, PTR_U16_LIMBS, U16_BITS,
+};
 
-const REVEAL_TIMESTAMP_DELTA: usize = 3;
+const REVEAL_TIMESTAMP_DELTA: usize = 4;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -42,8 +46,8 @@ pub struct RevealCols<T> {
     pub base_aux: MemoryReadAuxCols<T>,
     /// Byte pointer to the source-value register.
     pub src_ptr: T,
-    /// Source register value as u16 limbs.
-    pub src_data: [T; BLOCK_FE_WIDTH],
+    /// Source register value as byte limbs.
+    pub src_bytes: [T; MEMORY_BLOCK_BYTES],
     /// Witness for the source-register read.
     pub src_aux: MemoryReadAuxCols<T>,
     /// Low 16 bits of the signed address offset.
@@ -53,7 +57,7 @@ pub struct RevealCols<T> {
     /// Low u16 limb of the aligned reveal address.
     pub dst_ptr_low_limb: T,
     /// Witness for the public-values write.
-    pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
+    pub write_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -114,31 +118,52 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .eval(builder, is_valid.clone());
         let dst_ptr = cols.dst_ptr_low_limb + dst_ptr_high_limb * AB::F::from_u32(1 << U16_BITS);
 
-        // Read the source register, then write it to public values.
+        // Compose the source-register bus value directly from its byte limbs.
+        let src_cells: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| {
+            pack_u8_pair(
+                cols.src_bytes[2 * i].into(),
+                cols.src_bytes[2 * i + 1].into(),
+            )
+        });
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(cols.src_ptr),
                 ),
-                cols.src_data.map(Into::into),
+                src_cells,
                 timestamp.clone() + AB::Expr::ONE,
                 &cols.src_aux,
             )
             .eval(builder, is_valid.clone());
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(
-                    AB::F::from_u32(PUBLIC_VALUES_AS),
-                    byte_ptr_to_u16_ptr::<AB>(dst_ptr),
-                ),
-                cols.src_data.map(Into::into),
-                timestamp.clone() + AB::Expr::TWO,
-                &cols.write_aux,
-            )
-            .eval(builder, is_valid.clone());
+        for &byte in &cols.src_bytes {
+            self.range_bus
+                .range_check(byte, BYTE_BITS)
+                .eval(builder, is_valid.clone());
+        }
 
-        // Bind the row to the dedicated opcode and its three memory events.
+        // One RV64 register expands to two four-byte public-values writes.
+        for (chunk_idx, (bytes, aux)) in cols
+            .src_bytes
+            .chunks_exact(BLOCK_FE_WIDTH)
+            .zip(&cols.write_aux)
+            .enumerate()
+        {
+            let values: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|lane| bytes[lane].into());
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        AB::F::from_u32(PUBLIC_VALUES_AS),
+                        dst_ptr.clone() + AB::F::from_usize(chunk_idx * BLOCK_FE_WIDTH),
+                    ),
+                    values,
+                    timestamp.clone() + AB::Expr::from_usize(2 + chunk_idx),
+                    aux,
+                )
+                .eval(builder, is_valid.clone());
+        }
+
+        // Bind the row to the dedicated opcode and its four memory events.
         self.execution_bridge
             .execute(
                 AB::Expr::from_usize(RevealOpcode::REVEAL.global_opcode().as_usize()),

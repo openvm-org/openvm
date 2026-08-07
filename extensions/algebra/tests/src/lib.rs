@@ -160,7 +160,7 @@ mod tests {
     fn test_bls12_381_rvr_equivalence() -> Result<()> {
         let mut modular =
             Rv64ModularConfig::new(vec![BLS12_381_MODULUS.clone(), BLS12_381_ORDER.clone()]);
-        modular.system = test_system_config().with_public_values_bytes(32);
+        modular.system = test_system_config().with_public_values(32);
         let config = Rv64ModularWithFp2Config {
             modular,
             fp2: Fp2Extension::new(vec![(

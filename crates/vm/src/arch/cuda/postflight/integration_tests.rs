@@ -17,7 +17,10 @@ use super::{
     },
     *,
 };
-use crate::arch::{rvr::PreflightEndpoint, Postflight, POSTFLIGHT_PREDECESSOR_INDEX_LIMIT};
+use crate::arch::{
+    preflight::encode_u8_block, rvr::PreflightEndpoint, Postflight,
+    POSTFLIGHT_PREDECESSOR_INDEX_LIMIT,
+};
 
 fn configured_byte_lengths(config: &MemoryConfig) -> Vec<usize> {
     config
@@ -416,6 +419,51 @@ fn gpu_chronology_keeps_narrow_u16_only_path() {
             .unwrap();
     assert_eq!(touched.len(), 1);
     assert_eq!(touched[0].is_dirty, 1);
+}
+
+#[test]
+fn gpu_chronology_handles_u8_blocks_as_native_cells() {
+    let mut config = MemoryConfig::default();
+    for address_space in &mut config.addr_spaces {
+        address_space.num_cells = 0;
+    }
+    config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 8;
+    let mut initial_memory = config
+        .addr_spaces
+        .iter()
+        .map(|space| vec![0u8; space.num_cells * space.layout.size()])
+        .collect::<Vec<_>>();
+    initial_memory[PUBLIC_VALUES_AS as usize].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+
+    let write = event_value(
+        1,
+        PUBLIC_VALUES_AS,
+        0,
+        true,
+        encode_u8_block([9, 10, 11, 12]),
+    );
+    let read = event_value(2, PUBLIC_VALUES_AS, 0, false, [0; 4]);
+    let (resolved, seeds, fields, field_seeds, predecessors, touched) =
+        gpu_chronology_with_fields(&[write, read], &[0x0f, 0], &[], &initial_memory, &config)
+            .unwrap();
+
+    assert_eq!(resolved[0].value, encode_u8_block([9, 10, 11, 12]));
+    assert_eq!(resolved[1].value, encode_u8_block([9, 10, 11, 12]));
+    assert_eq!(seeds[0].initial_value, encode_u8_block([1, 2, 3, 4]));
+    assert!(fields.is_empty());
+    assert!(field_seeds.is_empty());
+    assert_eq!(predecessors, [POSTFLIGHT_PREDECESSOR_INDEX_LIMIT, 1]);
+    assert_eq!(touched.len(), 1);
+    assert_eq!(
+        touched[0].values.map(|value| value.as_canonical_u32()),
+        [9, 10, 11, 12]
+    );
+
+    let invalid_padding = event_value(1, PUBLIC_VALUES_AS, 0, true, [0, 0, 1, 0]);
+    assert!(
+        gpu_chronology_with_fields(&[invalid_padding], &[0x0f], &[], &initial_memory, &config,)
+            .is_err()
+    );
 }
 
 #[test]

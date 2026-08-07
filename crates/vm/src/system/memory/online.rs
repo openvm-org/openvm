@@ -15,8 +15,8 @@ use tracing::instrument;
 use super::has_nonzero_byte;
 use crate::{
     arch::{
-        AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryCellType, MemoryConfig,
-        PreflightMemoryLog, BLOCK_FE_WIDTH,
+        preflight::encode_u8_block, AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryCellType,
+        MemoryConfig, PreflightMemoryLog, BLOCK_FE_WIDTH,
     },
     system::{TouchedBlock, TouchedMemory},
 };
@@ -672,6 +672,10 @@ impl TracingMemory {
     ) {
         let layout = self.data.memory.config[address_space as usize].layout;
         let event_value = match layout {
+            MemoryCellType::U8 => {
+                debug_assert_eq!(value.len(), BLOCK_FE_WIDTH);
+                encode_u8_block(value.try_into().unwrap())
+            }
             MemoryCellType::U16 => {
                 debug_assert_eq!(value.len(), BLOCK_FE_WIDTH * size_of::<u16>());
                 from_fn(|lane| {
@@ -693,7 +697,7 @@ impl TracingMemory {
                 self.log.field_values.push(field);
                 reference
             }
-            _ => panic!("preflight memory log requires u16 or 32-bit field cells"),
+            _ => panic!("preflight memory log requires u8, u16, or 32-bit field cells"),
         };
 
         self.log.accesses.push(PreflightMemoryEvent {
@@ -707,6 +711,10 @@ impl TracingMemory {
             return;
         };
         let initial_value = match layout {
+            MemoryCellType::U8 => {
+                debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH);
+                encode_u8_block(initial_value.try_into().unwrap())
+            }
             MemoryCellType::U16 => {
                 debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH * size_of::<u16>());
                 from_fn(|lane| {
@@ -956,7 +964,7 @@ impl TracingMemory {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{riscv::REGISTER_AS, VM_DIGEST_WIDTH};
+    use openvm_instructions::{riscv::REGISTER_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -1017,6 +1025,26 @@ mod tests {
                 pointer: BLOCK_FE_WIDTH as u32,
                 initial_value: second_initial,
             }]
+        );
+        assert!(log.field_values.is_empty());
+        assert!(log.field_initial_values.is_empty());
+    }
+
+    #[test]
+    fn u8_accesses_use_packed_inline_history() {
+        let mut memory = TracingMemory::new(&MemoryConfig::default());
+        let initial = [1u8, 2, 3, 4];
+        let written = [5u8, 6, 7, 8];
+        unsafe {
+            memory.data.write(PUBLIC_VALUES_AS, 0, initial);
+            let _ = memory.write::<u8, BLOCK_FE_WIDTH>(PUBLIC_VALUES_AS, 0, written);
+        }
+
+        let log = memory.take_log();
+        assert_eq!(log.accesses[0].value, encode_u8_block(written));
+        assert_eq!(
+            log.initial_writes[0].initial_value,
+            encode_u8_block(initial)
         );
         assert!(log.field_values.is_empty());
         assert!(log.field_initial_values.is_empty());

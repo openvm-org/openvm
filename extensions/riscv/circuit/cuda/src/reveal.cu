@@ -17,12 +17,12 @@ template <typename T> struct RevealCols {
     T base_ptr_limbs[PTR_U16_LIMBS];
     MemoryReadAuxCols<T> base_aux;
     T src_ptr;
-    T src_data[BLOCK_FE_WIDTH];
+    T src_bytes[MEMORY_BLOCK_BYTES];
     MemoryReadAuxCols<T> src_aux;
     T imm;
     T imm_sign;
     T dst_ptr_low_limb;
-    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[2];
 };
 
 struct Reveal {
@@ -54,7 +54,7 @@ struct Reveal {
         );
 
         COL_WRITE_VALUE(row, RevealCols, src_ptr, input.src_ptr);
-        COL_WRITE_ARRAY(row, RevealCols, src_data, input.src_data);
+        COL_WRITE_ARRAY(row, RevealCols, src_bytes, input.src_bytes);
         mem_helper.fill(
             row.slice_from(COL_INDEX(RevealCols, src_aux)),
             input.src_prev_timestamp,
@@ -70,13 +70,23 @@ struct Reveal {
         COL_WRITE_VALUE(row, RevealCols, dst_ptr_low_limb, dst_ptr_limbs[0]);
         range_checker.add_count(dst_ptr_limbs[0] >> 3, U16_BITS - 3);
         range_checker.add_count(dst_ptr_limbs[1], pointer_max_bits - U16_BITS);
+        for (size_t i = 0; i < MEMORY_BLOCK_BYTES; i++) {
+            range_checker.add_count(input.src_bytes[i], BYTE_BITS);
+        }
 
-        COL_WRITE_ARRAY(row, RevealCols, write_aux.prev_data, input.write_prev_data);
-        mem_helper.fill(
-            row.slice_from(COL_INDEX(RevealCols, write_aux)),
-            input.write_prev_timestamp,
-            input.from_timestamp + 2
-        );
+        for (size_t block = 0; block < 2; block++) {
+            COL_WRITE_ARRAY(
+                row,
+                RevealCols,
+                write_aux[block].prev_data,
+                input.write_prev_data[block]
+            );
+            mem_helper.fill(
+                row.slice_from(COL_INDEX(RevealCols, write_aux[block])),
+                input.write_prev_timestamp[block],
+                input.from_timestamp + 2 + block
+            );
+        }
     }
 };
 

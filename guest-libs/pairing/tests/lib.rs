@@ -652,7 +652,7 @@ mod bls12_381 {
             b: BigUint::from_u8(4).unwrap(),
         };
         let mut config = test_rv64weierstrass_config(vec![curve]);
-        *config.as_mut() = test_system_config().with_public_values_bytes(32);
+        *config.as_mut() = test_system_config().with_public_values(32);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "bls_ec",

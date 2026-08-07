@@ -1,11 +1,13 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{fill_trace_rows, Postflight, PostflightError, MEMORY_BLOCK_BYTES},
+    arch::{fill_trace_rows, Postflight, PostflightError, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+    program::DEFAULT_PC_STEP,
+    riscv::{BYTE_BITS, REGISTER_AS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
@@ -13,7 +15,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use super::{RevealChip, RevealCols};
 use crate::adapters::{
     address_add_imm, byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
+    ptr_to_u16_limbs, sign_extend_imm16, u16_block_to_bytes, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
@@ -80,11 +82,19 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         let dst_ptr = dst_ptr as u32;
 
         let src = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(src_ptr))?;
-        let write = replay.write_u16(
-            PUBLIC_VALUES_AS,
-            byte_ptr_to_u16_ptr_value(dst_ptr),
-            src.value,
-        )?;
+        let src_bytes = u16_block_to_bytes(src.value);
+        let writes = [
+            replay.write_u8(
+                PUBLIC_VALUES_AS,
+                dst_ptr,
+                src_bytes[..BLOCK_FE_WIDTH].try_into().unwrap(),
+            )?,
+            replay.write_u8(
+                PUBLIC_VALUES_AS,
+                dst_ptr + BLOCK_FE_WIDTH as u32,
+                src_bytes[BLOCK_FE_WIDTH..].try_into().unwrap(),
+            )?,
+        ];
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         let dst_ptr_limbs = ptr_to_u16_limbs(dst_ptr).map(u32::from);
@@ -94,6 +104,11 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         chip.inner
             .range_checker_chip
             .add_count(dst_ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);
+        for &byte in &src_bytes {
+            chip.inner
+                .range_checker_chip
+                .add_count(u32::from(byte), BYTE_BITS);
+        }
 
         let cols: &mut RevealCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
@@ -107,18 +122,15 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
             cols.base_aux.as_mut(),
         );
         cols.src_ptr = F::from_u32(src_ptr);
-        cols.src_data = src.value.map(F::from_u16);
+        cols.src_bytes = src_bytes.map(F::from_u8);
         mem_helper.fill(src.previous_timestamp, src.timestamp, cols.src_aux.as_mut());
         cols.imm = F::from_u32(imm);
         cols.imm_sign = F::from_bool(imm_sign);
         cols.dst_ptr_low_limb = F::from_u32(dst_ptr_limbs[0]);
-        cols.write_aux
-            .set_prev_data(write.previous_value.map(F::from_u16));
-        mem_helper.fill(
-            write.previous_timestamp,
-            write.timestamp,
-            cols.write_aux.as_mut(),
-        );
+        for (aux, write) in cols.write_aux.iter_mut().zip(writes) {
+            aux.set_prev_data(write.previous_value.map(F::from_u8));
+            mem_helper.fill(write.previous_timestamp, write.timestamp, aux.as_mut());
+        }
         Ok(())
     })?;
     Ok(trace)

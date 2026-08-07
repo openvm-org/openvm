@@ -15,7 +15,7 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::AirProvingContext};
 use p3_field::PrimeCharacteristicRing;
 
-use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU};
+use super::{poseidon2::SharedBuffer, MemoryCellKind, Poseidon2PeripheryChipGPU};
 
 pub mod cuda;
 use cuda::merkle_tree::*;
@@ -85,6 +85,7 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
+    cell_kind: MemoryCellKind,
     /// Shared handle to the initial-memory buffer (`d_data`) from [`Self::build_async`], or
     /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: under
     /// `OmitBottomLevels` the omitted levels aren't in `buf` and are recomputed from this buffer
@@ -132,7 +133,12 @@ impl MemoryMerkleSubTree {
     ///
     /// `addr_space_size` must be a power of two or zero.
     /// `max_size` must be a power of two.
-    pub fn new(addr_space_size: usize, max_size: usize, device_ctx: &GpuDeviceCtx) -> Self {
+    fn new(
+        addr_space_size: usize,
+        max_size: usize,
+        cell_kind: MemoryCellKind,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Self {
         assert!(
             addr_space_size == 0 || addr_space_size.is_power_of_two(),
             "The actual address space size must be a power of two"
@@ -146,6 +152,10 @@ impl MemoryMerkleSubTree {
             "Address space needs {addr_space_size} leaf digests but the tree supports at most \
              {max_size}; check that every address space's `num_cells` fits within \
              `pointer_max_bits`"
+        );
+        assert!(
+            addr_space_size == 0 || cell_kind != MemoryCellKind::Unsupported,
+            "nonempty CUDA memory address spaces require U8, U16, or Field32 cells"
         );
         if addr_space_size == 0 {
             let mut res = MemoryMerkleSubTree::dummy();
@@ -169,6 +179,7 @@ impl MemoryMerkleSubTree {
             buf,
             path_len,
             layout,
+            cell_kind,
             initial_data: None,
         }
     }
@@ -180,6 +191,7 @@ impl MemoryMerkleSubTree {
             buf: DeviceBuffer::new(),
             path_len: 0,
             layout: MemoryMerkleSubTreeLayout::Full,
+            cell_kind: MemoryCellKind::Unsupported,
             initial_data: None,
         }
     }
@@ -197,12 +209,9 @@ impl MemoryMerkleSubTree {
 
     /// Builds the Merkle subtree on the provided `GpuDeviceCtx` stream.
     /// Also reconstructs the vertical path if `path_len > 0`, and records a completion event.
-    ///
-    /// Here `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
     pub fn build_async(
         &mut self,
         d_data: Arc<DeviceBuffer<u8>>,
-        addr_space_idx: usize,
         zero_hash: &DeviceBuffer<H>,
         device_ctx: &GpuDeviceCtx,
     ) {
@@ -229,7 +238,7 @@ impl MemoryMerkleSubTree {
                     1 << self.stored_heap_height(),
                     &self.buf,
                     self.path_len,
-                    addr_space_idx as u32,
+                    self.cell_kind as u8,
                     self.layout_tag(),
                     device_ctx.stream.as_raw(),
                 )
@@ -354,9 +363,10 @@ impl MemoryMerkleTree {
             let mut subtree = MemoryMerkleSubTree::new(
                 self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
                 1 << (self.zero_hash.len() - 1), /* label_max_bits */
+                self.mem_config.addr_spaces[addr_space].layout.into(),
                 &self.device_ctx,
             );
-            subtree.build_async(d_data, addr_space_idx, &self.zero_hash, &self.device_ctx);
+            subtree.build_async(d_data, &self.zero_hash, &self.device_ctx);
             self.subtrees.push(subtree);
         } else {
             panic!("Invalid address space ID");
@@ -422,6 +432,11 @@ impl MemoryMerkleTree {
                 .iter()
                 .map(|s| s.layout_tag())
                 .collect::<Vec<_>>();
+            let cell_kinds = self
+                .subtrees
+                .iter()
+                .map(|s| s.cell_kind as u8)
+                .collect::<Vec<_>>();
             let initial_data_ptrs = self
                 .subtrees
                 .iter()
@@ -444,6 +459,7 @@ impl MemoryMerkleTree {
                     self.height - log2_ceil_usize(self.subtrees.len()),
                     &actual_heights,
                     &subtree_layouts,
+                    &cell_kinds,
                     &initial_data_ptrs,
                     unpadded_height,
                     &self.hasher_buffer,
@@ -512,7 +528,7 @@ mod tests {
     };
     use openvm_instructions::{
         riscv::{MEMORY_AS, REGISTER_AS},
-        DEFERRAL_AS, VM_DIGEST_WIDTH,
+        DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
     };
     use openvm_stark_backend::{interaction::PermutationCheckBus, prover::MatrixDimensions};
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -520,8 +536,8 @@ mod tests {
     use rand::Rng;
 
     use super::{
-        MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, SpanningNodeCounter,
-        OMITTED_BOTTOM_LEVELS,
+        MemoryCellKind, MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree,
+        SpanningNodeCounter, OMITTED_BOTTOM_LEVELS,
     };
     use crate::{
         arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
@@ -580,28 +596,56 @@ mod tests {
         };
         let max_size = 1 << (OMITTED_BOTTOM_LEVELS + 3);
 
-        let below =
-            MemoryMerkleSubTree::new(1 << (OMITTED_BOTTOM_LEVELS - 1), max_size, &device_ctx);
+        let below = MemoryMerkleSubTree::new(
+            1 << (OMITTED_BOTTOM_LEVELS - 1),
+            max_size,
+            MemoryCellKind::U16,
+            &device_ctx,
+        );
         assert_eq!(below.layout, MemoryMerkleSubTreeLayout::Full);
         assert_eq!(
             below.buf.len(),
             below.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS - 1)) - 1)
         );
 
-        let equal = MemoryMerkleSubTree::new(1 << OMITTED_BOTTOM_LEVELS, max_size, &device_ctx);
+        let equal = MemoryMerkleSubTree::new(
+            1 << OMITTED_BOTTOM_LEVELS,
+            max_size,
+            MemoryCellKind::U16,
+            &device_ctx,
+        );
         assert_eq!(equal.layout, MemoryMerkleSubTreeLayout::Full);
         assert_eq!(
             equal.buf.len(),
             equal.path_len + (2 * (1 << OMITTED_BOTTOM_LEVELS) - 1)
         );
 
-        let above =
-            MemoryMerkleSubTree::new(1 << (OMITTED_BOTTOM_LEVELS + 1), max_size, &device_ctx);
+        let above = MemoryMerkleSubTree::new(
+            1 << (OMITTED_BOTTOM_LEVELS + 1),
+            max_size,
+            MemoryCellKind::U16,
+            &device_ctx,
+        );
         let full_len = above.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS + 1)) - 1);
         let optimized_len = above.path_len + (2 * (1 << 1) - 1);
         assert_eq!(above.layout, MemoryMerkleSubTreeLayout::OmitBottomLevels);
         assert_eq!(above.buf.len(), optimized_len);
         assert!(above.buf.len() < full_len);
+    }
+
+    #[test]
+    #[should_panic(expected = "nonempty CUDA memory address spaces require")]
+    fn test_nonempty_unsupported_cuda_merkle_subtree_is_rejected() {
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let _ = MemoryMerkleSubTree::new(
+            1,
+            1 << OMITTED_BOTTOM_LEVELS,
+            MemoryCellKind::Unsupported,
+            &device_ctx,
+        );
     }
 
     #[test]
@@ -615,6 +659,7 @@ mod tests {
             addr_spaces[REGISTER_AS as usize].num_cells = 32 * size_of::<u64>() / U16_CELL_SIZE;
             addr_spaces[MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
+            addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = max_cells;
             MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
         };
 

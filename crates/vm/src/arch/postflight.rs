@@ -13,8 +13,8 @@ use thiserror::Error;
 use tracing::instrument;
 
 use super::{
-    ExecutionState, MemoryCellType, MemoryConfig, PreflightHistory, PreflightMemoryEvent,
-    BLOCK_FE_WIDTH,
+    preflight::decode_u8_block, ExecutionState, MemoryCellType, MemoryConfig, PreflightHistory,
+    PreflightMemoryEvent, BLOCK_FE_WIDTH,
 };
 use crate::system::TouchedMemory;
 
@@ -50,6 +50,13 @@ pub struct PostflightReplay<'a, 'history, F> {
     step: PostflightStep,
     memory_cursor: usize,
     timestamp: u32,
+}
+
+pub struct U8Access {
+    pub value: [u8; BLOCK_FE_WIDTH],
+    pub previous_value: [u8; BLOCK_FE_WIDTH],
+    pub previous_timestamp: u32,
+    pub timestamp: u32,
 }
 
 pub struct U16Access {
@@ -333,7 +340,19 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         }
     }
 
+    fn u8_value(&self, event_index: usize) -> [u8; BLOCK_FE_WIDTH] {
+        decode_u8_block(self.history.memory.accesses[event_index].value)
+    }
+
+    fn previous_u8(&self, event_index: usize) -> [u8; BLOCK_FE_WIDTH] {
+        decode_u8_block(self.previous_inline(event_index))
+    }
+
     fn previous_u16(&self, event_index: usize) -> [u16; BLOCK_FE_WIDTH] {
+        self.previous_inline(event_index)
+    }
+
+    fn previous_inline(&self, event_index: usize) -> [u16; BLOCK_FE_WIDTH] {
         let predecessor = self.memory_predecessors[event_index];
         if predecessor == 0 {
             self.history.memory.accesses[event_index].value
@@ -369,6 +388,23 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
 }
 
 impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
+    pub fn read_u8(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+    ) -> Result<U8Access, PostflightError> {
+        self.access_u8(address_space, pointer, false, None)
+    }
+
+    pub fn write_u8(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        expected_value: [u8; BLOCK_FE_WIDTH],
+    ) -> Result<U8Access, PostflightError> {
+        self.access_u8(address_space, pointer, true, Some(expected_value))
+    }
+
     pub fn read_u16(
         &mut self,
         address_space: u32,
@@ -487,6 +523,32 @@ impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
             )));
         }
         Ok(())
+    }
+
+    fn access_u8(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        is_write: bool,
+        expected_write: Option<[u8; BLOCK_FE_WIDTH]>,
+    ) -> Result<U8Access, PostflightError> {
+        let (event_index, event) =
+            self.consume_event(address_space, pointer, is_write, MemoryCellType::U8)?;
+        let value = self.postflight.u8_value(event_index);
+        if expected_write.is_some_and(|expected| expected != value) {
+            return Err(PostflightError::new(format!(
+                "instruction at PC {:#x} logged an unexpected write at timestamp {}",
+                self.postflight.pc(self.step),
+                event.timestamp
+            )));
+        }
+        let access = U8Access {
+            value,
+            previous_value: self.postflight.previous_u8(event_index),
+            previous_timestamp: self.postflight.previous_timestamp(event_index),
+            timestamp: event.timestamp,
+        };
+        Ok(access)
     }
 
     fn access_u16(

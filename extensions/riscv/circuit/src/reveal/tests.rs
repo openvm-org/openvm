@@ -4,7 +4,7 @@ use openvm_circuit::arch::testing::{
 };
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
-    MemoryConfig,
+    MemoryConfig, VmCircuitConfig,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -13,40 +13,37 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::{
     trace::generate_trace_from_postflight, RevealAir, RevealChip, RevealExecutor, RevealFiller,
 };
-use crate::test_utils::memory::{F, MAX_INS_CAPACITY};
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{reveal::RevealChipGpu, test_utils::memory::dummy_range_checker};
+use crate::{
+    test_utils::memory::{F, MAX_INS_CAPACITY},
+    Rv64IConfig,
+};
 
 type RevealHarness = TestChipHarness<F, RevealExecutor, RevealAir, RevealChip<F>>;
 
 fn reveal_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-    config
-}
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-fn reveal_gpu_memory_config() -> MemoryConfig {
-    let mut config = MemoryConfig::default();
     config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config
 }
 
-fn create_harness(tester: &mut VmChipTestBuilder<F>) -> RevealHarness {
+fn create_harness(tester: &mut VmChipTestBuilder<F>, pointer_max_bits: usize) -> RevealHarness {
     let range_checker = tester.range_checker();
     let air = RevealAir::new(
         tester.execution_bridge(),
         tester.memory_bridge(),
         range_checker.bus(),
-        tester.address_bits(),
+        pointer_max_bits,
     );
     let executor = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
     let chip = RevealChip::new(
-        RevealFiller::new(tester.address_bits(), range_checker),
+        RevealFiller::new(pointer_max_bits, range_checker),
         tester.memory_helper(),
     );
     RevealHarness::with_capacity(
@@ -79,10 +76,42 @@ fn field_block(bytes: &[u8]) -> [F; REGISTER_NUM_LIMBS] {
         .map(F::from_u8)
 }
 
+fn write_public_value_u64(tester: &mut VmChipTestBuilder<F>, ptr: usize, bytes: [u8; 8]) {
+    for (block, chunk) in bytes.chunks_exact(4).enumerate() {
+        tester.write(
+            PUBLIC_VALUES_AS as usize,
+            ptr + 4 * block,
+            <[u8; 4]>::try_from(chunk).unwrap().map(F::from_u8),
+        );
+    }
+}
+
+fn read_public_value_u64(tester: &mut VmChipTestBuilder<F>, ptr: usize) -> [F; 8] {
+    let mut values = [F::ZERO; 8];
+    for block in 0..2 {
+        values[4 * block..4 * (block + 1)]
+            .copy_from_slice(&tester.read::<4>(PUBLIC_VALUES_AS as usize, ptr + 4 * block));
+    }
+    values
+}
+
+#[test]
+fn reveal_air_uses_native_public_value_pointer_bits() {
+    let mut config = Rv64IConfig::default();
+    config.system.memory_config.pointer_max_bits = 20;
+    let inventory =
+        <Rv64IConfig as VmCircuitConfig<BabyBearPoseidon2Config>>::create_airs(&config).unwrap();
+    let reveal = inventory.find_air::<RevealAir>().next().unwrap();
+
+    assert_eq!(reveal.pointer_max_bits, 20);
+}
+
 #[test]
 fn reveal_writes_and_overwrites_aligned_public_value() {
-    let mut tester = VmChipTestBuilder::from_config(reveal_memory_config());
-    let mut harness = create_harness(&mut tester);
+    let config = reveal_memory_config();
+    let pointer_max_bits = config.pointer_max_bits;
+    let mut tester = VmChipTestBuilder::from_config(config);
+    let mut harness = create_harness(&mut tester, pointer_max_bits);
     let base_ptr = REGISTER_NUM_LIMBS;
     let first_src = 2 * REGISTER_NUM_LIMBS;
     let second_src = 3 * REGISTER_NUM_LIMBS;
@@ -91,8 +120,8 @@ fn reveal_writes_and_overwrites_aligned_public_value() {
         0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
         0x1f,
     ];
-    tester.write_bytes(PUBLIC_VALUES_AS as usize, 32, field_block(&initial[..8]));
-    tester.write_bytes(PUBLIC_VALUES_AS as usize, 40, field_block(&initial[8..]));
+    write_public_value_u64(&mut tester, 32, initial[..8].try_into().unwrap());
+    write_public_value_u64(&mut tester, 40, initial[8..].try_into().unwrap());
     tester.write_bytes(
         REGISTER_AS as usize,
         base_ptr,
@@ -111,11 +140,11 @@ fn reveal_writes_and_overwrites_aligned_public_value() {
     let mut expected = initial;
     expected[8..16].copy_from_slice(&0x1122_3344_5566_7788u64.to_le_bytes());
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 32),
+        read_public_value_u64(&mut tester, 32),
         field_block(&expected[..8])
     );
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 40),
+        read_public_value_u64(&mut tester, 40),
         field_block(&expected[8..])
     );
 
@@ -131,11 +160,11 @@ fn reveal_writes_and_overwrites_aligned_public_value() {
     );
     expected[8..16].copy_from_slice(&0xaabb_ccdd_eeff_0123u64.to_le_bytes());
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 32),
+        read_public_value_u64(&mut tester, 32),
         field_block(&expected[..8])
     );
     assert_eq!(
-        tester.read_bytes::<REGISTER_NUM_LIMBS>(PUBLIC_VALUES_AS as usize, 40),
+        read_public_value_u64(&mut tester, 40),
         field_block(&expected[8..])
     );
 
@@ -152,22 +181,22 @@ type GpuRevealHarness =
     GpuTestChipHarness<F, RevealExecutor, RevealAir, RevealChipGpu, RevealChip<F>>;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn create_gpu_harness(tester: &GpuChipTestBuilder) -> GpuRevealHarness {
+fn create_gpu_harness(tester: &GpuChipTestBuilder, pointer_max_bits: usize) -> GpuRevealHarness {
     let range_checker = dummy_range_checker();
     let air = RevealAir::new(
         tester.execution_bridge(),
         tester.memory_bridge(),
         range_checker.bus(),
-        tester.address_bits(),
+        pointer_max_bits,
     );
     let executor = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
     let cpu_chip = RevealChip::new(
-        RevealFiller::new(tester.address_bits(), range_checker),
+        RevealFiller::new(pointer_max_bits, range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip = RevealChipGpu::new(
         tester.range_checker(),
-        tester.address_bits(),
+        pointer_max_bits,
         tester.timestamp_max_bits(),
     );
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -182,9 +211,10 @@ fn create_gpu_harness(tester: &GpuChipTestBuilder) -> GpuRevealHarness {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_reveal_tracegen_aligned() {
-    let mut tester =
-        GpuChipTestBuilder::new(reveal_gpu_memory_config(), default_var_range_checker_bus());
-    let mut harness = create_gpu_harness(&tester);
+    let config = reveal_memory_config();
+    let pointer_max_bits = config.pointer_max_bits;
+    let mut tester = GpuChipTestBuilder::new(config, default_var_range_checker_bus());
+    let mut harness = create_gpu_harness(&tester, pointer_max_bits);
     let base_ptr = REGISTER_NUM_LIMBS;
     let src_ptr = 2 * REGISTER_NUM_LIMBS;
 
