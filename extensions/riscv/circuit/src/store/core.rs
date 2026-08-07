@@ -16,7 +16,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
     BaseAirWithPublicValues,
 };
 
@@ -354,14 +353,5 @@ pub(crate) fn generate_trace_from_postflight<
             .fill_core_row(shift, read_data, prev_data, core_row.borrow_mut());
         Ok(())
     })?;
-    trace.values[steps.len() * width..]
-        .par_chunks_exact_mut(width)
-        .for_each(fill_padding_row);
     Ok(trace)
-}
-
-pub(crate) fn fill_padding_row<F: PrimeField32>(row: &mut [F]) {
-    let adapter_width = StoreMultiByteAdapterCols::<F>::width();
-    let adapter_row: &mut StoreMultiByteAdapterCols<F> = row[..adapter_width].borrow_mut();
-    adapter_row.mem_as = F::from_u32(2);
 }

@@ -4,13 +4,14 @@ use std::{env, fmt::Write, fs, path::Path};
 #[cfg(feature = "cuda")]
 use openvm_cuda_builder::{cuda_available, CudaBuilder};
 #[cfg(feature = "cuda")]
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS};
 #[cfg(feature = "cuda")]
 use openvm_riscv_transpiler::{
     AuipcOpcode, BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode,
     BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, HintStoreOpcode,
     JalLuiOpcode, JalrOpcode, LessThanImmOpcode, LessThanOpcode, LoadStoreOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    MulOpcode, MulWOpcode, RevealOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
 #[cfg(feature = "cuda")]
 fn opcode_family<T: Copy + LocalOpcode>(
@@ -149,10 +150,13 @@ fn write_replay_opcode_registry(out_dir: &Path) {
             "HINT_STORE",
             &[HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER],
         ),
+        opcode("REVEAL", RevealOpcode::REVEAL),
         opcode("PHANTOM", SystemOpcode::PHANTOM),
         opcode("TERMINATE", SystemOpcode::TERMINATE),
     ];
-    let mut header = String::from("#pragma once\n\n#include <cstdint>\n\n");
+    let mut header = format!(
+        "#pragma once\n\n#include <cstdint>\n\nstatic constexpr uint32_t REVEAL_PUBLIC_VALUES_ADDRESS_SPACE = {PUBLIC_VALUES_AS}u;\n"
+    );
     for &(name, base, count) in &families {
         writeln!(
             header,
@@ -161,7 +165,7 @@ fn write_replay_opcode_registry(out_dir: &Path) {
         .unwrap();
     }
     fs::write(out_dir.join("checkpoint_replay_opcodes.cuh"), header)
-        .expect("write RV64 checkpoint replay opcodes");
+        .expect("write checkpoint replay opcodes");
 
     let mut rust = String::from("const REPLAY_OPCODES: &[u32] = &[\n");
     for (_, base, count) in families {
@@ -171,7 +175,7 @@ fn write_replay_opcode_registry(out_dir: &Path) {
     }
     rust.push_str("];\n");
     fs::write(out_dir.join("checkpoint_replay_opcodes.rs"), rust)
-        .expect("write RV64 checkpoint replay opcode registry");
+        .expect("write checkpoint replay opcode registry");
 }
 
 fn main() {

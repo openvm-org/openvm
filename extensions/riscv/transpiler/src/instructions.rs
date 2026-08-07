@@ -268,6 +268,15 @@ pub enum HintStoreOpcode {
     HINT_BUFFER,
 }
 
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
+)]
+#[opcode_offset = 0x262]
+#[repr(usize)]
+pub enum RevealOpcode {
+    REVEAL,
+}
+
 // =================================================================================================
 // RV64-specific W-suffix opcodes (32-bit operations on 64-bit registers)
 // =================================================================================================
