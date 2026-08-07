@@ -47,6 +47,35 @@ fn test_projective_to_affine_adapter() {
 }
 
 #[test]
+fn test_bls12_381_msm_matches_pippenger_for_small_inputs() {
+    use openvm_ecc_guest::{msm, weierstrass::IntrinsicCurve, Group};
+
+    use crate::bls12_381::{Bls12_381, G1Affine as OpenVmG1Affine, Scalar};
+
+    let check = |scalars: &[Scalar], bases: &[OpenVmG1Affine]| {
+        assert_eq!(
+            <Bls12_381 as IntrinsicCurve>::msm(scalars, bases),
+            msm(scalars, bases),
+        );
+    };
+
+    let g = OpenVmG1Affine::GENERATOR;
+    let g2 = g.double();
+    let g3 = &g2 + &g;
+    let s = Scalar::from_u32;
+
+    let just_g = core::slice::from_ref(&g);
+    check(&[s(0)], just_g);
+    check(&[s(1)], just_g);
+    check(&[s(15)], just_g);
+    check(&[s(255)], just_g);
+    check(&[s(65_537)], just_g);
+    check(&[s(7)], &[<OpenVmG1Affine as WeierstrassPoint>::IDENTITY]);
+    check(&[s(3), s(5)], &[g.clone(), g2.clone()]);
+    check(&[s(1), s(0), s(9)], &[g, g2, g3]);
+}
+
+#[test]
 fn test_bls12381_frobenius_coeffs() {
     #[allow(clippy::needless_range_loop)]
     for i in 0..12 {

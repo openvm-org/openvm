@@ -3,7 +3,10 @@ extern crate alloc;
 #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{
+    weierstrass::{CachedMulTable, IntrinsicCurve},
+    CyclicGroup, Group,
+};
 
 mod fp12;
 mod fp2;
@@ -79,7 +82,12 @@ impl IntrinsicCurve for Bls12_381 {
     type Point = G1Affine;
 
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        openvm_ecc_guest::msm(coeffs, bases)
+        if coeffs.len() < 25 {
+            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            openvm_ecc_guest::msm(coeffs, bases)
+        }
     }
 }
 

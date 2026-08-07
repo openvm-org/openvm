@@ -230,7 +230,7 @@ mod host_tests {
     use openvm_algebra_guest::IntMod;
     use openvm_ecc_guest::{
         msm,
-        weierstrass::{CachedMulTable, WeierstrassPoint},
+        weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
         CyclicGroup, Group,
     };
     #[cfg(feature = "ecdsa-core")]
@@ -284,6 +284,45 @@ mod host_tests {
         for scalar in [0, 1, 2, 3, 7, 15, 16, 255] {
             let scalar = P256Scalar::from_u32(scalar);
             assert_eq!(table.windowed_mul(&[scalar]), msm(&[scalar], &bases));
+        }
+    }
+
+    #[test]
+    fn test_fixed_generator_lincomb_matches_msm() {
+        let point = P256Point::GENERATOR.double();
+        let wide = P256Scalar::from_le_bytes_unchecked(&hex!(
+            "efcdab896745230fefcdab896745230fefcdab896745230fefcdab896745230f"
+        ));
+        let scalars = [
+            (P256Scalar::from_u32(0), P256Scalar::from_u32(0)),
+            (P256Scalar::from_u32(1), P256Scalar::from_u32(1)),
+            (P256Scalar::from_u32(7), P256Scalar::from_u32(15)),
+            (P256Scalar::from_u32(255), P256Scalar::from_u32(65_537)),
+            (wide, P256Scalar::from_u32(3)),
+        ];
+        for (generator_scalar, point_scalar) in scalars {
+            assert_eq!(
+                <NistP256 as IntrinsicCurve>::lincomb_generator(
+                    &generator_scalar,
+                    &point_scalar,
+                    &point,
+                ),
+                msm(
+                    &[generator_scalar, point_scalar],
+                    &[P256Point::GENERATOR, point]
+                )
+            );
+            assert_eq!(
+                <NistP256 as IntrinsicCurve>::lincomb_neg_generator(
+                    &generator_scalar,
+                    &point_scalar,
+                    &point,
+                ),
+                msm(
+                    &[generator_scalar, point_scalar],
+                    &[P256Point::NEG_GENERATOR, point]
+                )
+            );
         }
     }
 
