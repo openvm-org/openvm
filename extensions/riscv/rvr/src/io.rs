@@ -655,6 +655,23 @@ mod tests {
     }
 
     #[test]
+    fn rv64io_rejects_negative_reveal_operand() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = Instruction::large_from_isize(
+            RevealOpcode::REVEAL.global_opcode(),
+            8,
+            16,
+            -1,
+            REGISTER_AS as isize,
+            PUBLIC_VALUES_AS as isize,
+            1,
+            0,
+        );
+
+        assert!(ext.try_lift(&inst, 0x100).is_none());
+    }
+
+    #[test]
     fn hint_stores_require_register_and_memory_address_spaces() {
         let ext = Rv64IoExtension::new(None).unwrap();
         for opcode in [HintStoreOpcode::HINT_STORED, HintStoreOpcode::HINT_BUFFER] {
