@@ -14,8 +14,8 @@ use halo2curves_axiom::{
 use num_bigint::BigUint;
 use openvm_circuit_primitives::U16_BITS;
 use openvm_ecc_circuit::{
-    ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, CurveType, EC_MUL_COMPUTE_ROWS,
-    EC_MUL_STEPS_PER_ROW,
+    ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, setup_row_inputs, CurveType,
+    EC_MUL_COMPUTE_ROWS, EC_MUL_STEPS_PER_ROW,
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilderConfig, FieldExpressionProgram,
@@ -349,15 +349,24 @@ unsafe fn ec_mul_setup(
     program: &FieldExpressionProgram,
 ) -> bool {
     let coord_bytes = (point_bytes / 2) as usize;
-    let mut setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
+    let operand = trace_read_bytes(state, rs1_ptr, point_bytes);
     let _scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
-    if !setup_values_match(program, coord_bytes, &setup_bytes) {
+    if !setup_values_match(program, coord_bytes, &operand) {
         return false;
     }
-    setup_bytes.resize(program.num_inputs() * coord_bytes, 0);
+
+    // Build the row from `setup_row_inputs` rather than zero-padding the operand. The trailing
+    // accumulator must not be zero, since the expression divides by `2*acc_y` with no guard, and
+    // going through the same helper the circuit uses keeps the two from drifting.
+    let mut inputs = vec![0u8; program.num_inputs() * coord_bytes];
+    for (i, value) in setup_row_inputs(program).iter().enumerate() {
+        let le = value.to_bytes_le();
+        inputs[i * coord_bytes..][..le.len()].copy_from_slice(&le);
+    }
+
     let flag_idx = program.num_flags();
     let output: Vec<u8> =
-        run_field_expression_precomputed::<true>(program, flag_idx, &setup_bytes).into();
+        run_field_expression_precomputed::<true>(program, flag_idx, &inputs).into();
     trace_write_bytes(state, rd_ptr, &output);
     true
 }
