@@ -155,7 +155,9 @@ mod tests {
         let invalid = [
             Instruction::from_isize(opcode, -1, 0, discriminant as isize, 0, 0),
             Instruction::from_isize(opcode, 0, -1, discriminant as isize, 0, 0),
+            Instruction::from_isize(opcode, 0, 0, -1, 0, 0),
             Instruction::from_isize(opcode, 0, 0, discriminant as isize, -1, 0),
+            Instruction::from_usize(opcode, [0, 0, usize::from(u16::MAX) + 1]),
             Instruction::from_usize(opcode, [0, 0, discriminant, usize::from(u16::MAX) + 1]),
             Instruction::from_usize(opcode, [0, 0, discriminant, 0, 1]),
         ];

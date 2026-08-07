@@ -1479,7 +1479,7 @@ fn preflight_gpu_replay_proves_hint_store() {
 fn preflight_gpu_replay_proves_aligned_reveals() {
     let values = [0x0123_4567_89ab_cdefu64, 0xfedc_ba98_7654_3210];
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
                 reg(1),
@@ -1495,7 +1495,7 @@ fn preflight_gpu_replay_proves_aligned_reveals() {
             AuipcOpcode::AUIPC.global_opcode(),
             [reg(4), 0, 0, REGISTER_AS as usize, 0, 0, 0],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             RevealOpcode::REVEAL.global_opcode(),
             [
                 reg(3),
