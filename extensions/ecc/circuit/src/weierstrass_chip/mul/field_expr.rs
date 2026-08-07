@@ -1,59 +1,67 @@
-//! Field expression for one step of the `EC_MUL` ladder.
+//! Field expression for one row of the `EC_MUL` ladder.
 //!
-//! A compute row constrains
+//! A row applies [`EC_MUL_STEPS_PER_ROW`] steps of `R = 2R + sigma*P` in affine coordinates. The
+//! accumulator is chained between them inside the expression, so only the row's first input and
+//! last output cross a row boundary.
 //!
-//! ```text
-//!     R' = bit ? 2R + P : 2R
-//! ```
+//! Signs come from the one-hot flags rather than columns of their own: step `j` uses
+//! `sum_f flag_f * sigma_j(f)`, which is degree 1. The AIR reads the same sums to recover the
+//! scalar's bits. Negation is free because the expression works mod `p`, so `-Py` is `0 - Py`.
 //!
-//! over affine coordinates, with the point at infinity carried as the `(0, 0)` sentinel. Both the
-//! doubling denominator `2*Ry` and the addition denominator `Px - Dx` are zero for some inputs, so
-//! the step is expressed as four mutually exclusive cases, each selecting its own denominator and
-//! output.
+//! Steps run as `(2R) + sigma*P` rather than `(R + sigma*P) + R`. Both cost the same, but the
+//! second needs `R != +-sigma*P` for its first addition, which fails on the first step, where
+//! `R = P`.
 //!
-//! The cases are one-hot flags because [`FieldExpr`] derives `is_setup = is_valid - sum(flags)` and
-//! asserts it boolean, so at most one flag may be set on a row. `is_inf` and the scalar bit
-//! therefore cannot be separate flags; both are recovered from the encoding by the AIR at no
-//! column cost.
-//!
-//! | flag | case | output |
-//! |---|---|---|
-//! | [`FLAG_DBL`] | `R != O`, `bit = 0` | `2R` |
-//! | [`FLAG_DBL_ADD`] | `R != O`, `bit = 1` | `2R + P` |
-//! | [`FLAG_INF_STAY`] | `R = O`, `bit = 0` | `(0, 0)` |
-//! | [`FLAG_INF_TAKE`] | `R = O`, `bit = 1` | `P` |
-//! | none set | setup | unconstrained |
-//!
-//! The addition branch requires `Dx != Px`, which follows from the scalar bound documented on the
-//! `mul` module.
+//! The doubling's `y` is not saved. It feeds only the addition's lambda and the final `y`, and
+//! inlining it keeps both constraints at degree 2. That is five saved variables per step instead of
+//! six, which matters because saved variables dominate the row's width.
 
 use std::{cell::RefCell, rc::Rc};
 
 use num_bigint::BigUint;
-use num_traits::{One, Zero};
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionProgram, FieldVariable,
 };
 
-/// `R ≠ ∞`, scalar bit `0`: output `2R`.
-pub const FLAG_DBL: usize = 0;
-/// `R ≠ ∞`, scalar bit `1`: output `2R + P`.
-pub const FLAG_DBL_ADD: usize = 1;
-/// `R = ∞`, scalar bit `0`: output stays `(0, 0)`.
-pub const FLAG_INF_STAY: usize = 2;
-/// `R = ∞`, scalar bit `1`: output `P`.
-pub const FLAG_INF_TAKE: usize = 3;
-/// Number of one-hot case flags.
-pub const NUM_STEP_FLAGS: usize = 4;
+use super::{EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW};
 
 /// Input indices into the expression's `inputs`.
-pub const IN_RX: usize = 0;
-pub const IN_RY: usize = 1;
-pub const IN_PX: usize = 2;
-pub const IN_PY: usize = 3;
+///
+/// `P` comes first on purpose. On a setup row `FieldExpr` pins the leading inputs to the prime and
+/// `a`, and the doubling denominator is `2*acc_y`. With the accumulator first, a setup row would
+/// carry `acc_y = a`, which is zero on three of the four supported curves. That row is
+/// unsatisfiable, and also uncomputable, since `SymbolicExpr::compute` inverts the denominator.
+///
+/// Pinning `P` instead leaves the accumulator free on setup rows for [`setup_row_inputs`] to
+/// choose. It also matches the other ECC chips, whose setup operand carries `(modulus, a)`.
+pub const IN_PX: usize = 0;
+pub const IN_PY: usize = 1;
+pub const IN_ACC_X: usize = 2;
+pub const IN_ACC_Y: usize = 3;
 
-/// `a_biguint` is the curve's `a` coefficient, folded in as a constant.
+/// The accumulator a setup row carries.
+///
+/// The setup check does not pin it, so it only has to keep the row's denominators nonzero. That is
+/// easy to get wrong. A setup row's `P` is `(prime, a)`, which is the identity sentinel `(0, 0)`
+/// whenever `a = 0`. Adding it repeatedly drives many starting values to `(0, 0)` as well, and then
+/// `2*acc_y` is zero. `(1, 1)` degenerates this way after one step.
+///
+/// `(2, 1)` works on all four supported curves. `ec_mul_setup_row_is_computable` in the rvr FFI
+/// checks it.
+pub const SETUP_ACC: (u64, u64) = (2, 1);
+
+/// The sign step `step` takes under `pattern`, as `+1` or `-1`.
+///
+/// Step 0 reads the most significant bit, matching the order a row consumes digits.
+pub const fn sign_of(pattern: usize, step: usize) -> i64 {
+    let bit = (pattern >> (EC_MUL_STEPS_PER_ROW - 1 - step)) & 1;
+    2 * (bit as i64) - 1
+}
+
+/// Builds the ladder-step expression for one curve.
+///
+/// `a_biguint` is the curve's `a` coefficient, folded into the expression as a constant.
 pub fn ec_mul_step_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
@@ -63,18 +71,6 @@ pub fn ec_mul_step_expr(
         ec_mul_step_program(config, range_bus.range_max_bits, a_biguint),
         range_bus,
     )
-}
-
-/// Inputs for a setup row: the modulus, the expression's setup values, then zero padding.
-///
-/// `FieldExpr`'s setup constraint compares the leading inputs against these, and the row's output
-/// follows from them, so execution and trace generation must build them identically.
-pub fn setup_row_inputs(program: &FieldExpressionProgram) -> Vec<BigUint> {
-    let mut inputs = Vec::with_capacity(program.num_inputs());
-    inputs.push(program.prime().clone());
-    inputs.extend(program.setup_values().iter().cloned());
-    inputs.resize(program.num_inputs(), BigUint::ZERO);
-    inputs
 }
 
 pub fn ec_mul_step_program(
@@ -89,6 +85,21 @@ pub fn ec_mul_step_program(
     )
 }
 
+/// Inputs for a setup row: the modulus, the expression's setup values, then [`SETUP_ACC`].
+///
+/// Only the leading inputs are compared against the first two. The accumulator is fixed here
+/// because execution and trace generation must build the row identically, or the memory argument
+/// will not balance.
+pub fn setup_row_inputs(program: &FieldExpressionProgram) -> Vec<BigUint> {
+    let mut inputs = Vec::with_capacity(program.num_inputs());
+    inputs.push(program.prime().clone());
+    inputs.extend(program.setup_values().iter().cloned());
+    inputs.push(BigUint::from(SETUP_ACC.0));
+    inputs.push(BigUint::from(SETUP_ACC.1));
+    inputs.resize(program.num_inputs(), BigUint::ZERO);
+    inputs
+}
+
 fn build_ec_mul_step_expr(
     config: ExprBuilderConfig,
     range_max_bits: usize,
@@ -98,73 +109,71 @@ fn build_ec_mul_step_expr(
     let builder = ExprBuilder::new(config, range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
-    let mut rx = ExprBuilder::new_input(builder.clone());
-    let mut ry = ExprBuilder::new_input(builder.clone());
     let px = ExprBuilder::new_input(builder.clone());
     let py = ExprBuilder::new_input(builder.clone());
+    let mut acc_x = ExprBuilder::new_input(builder.clone());
+    let mut acc_y = ExprBuilder::new_input(builder.clone());
 
-    let f_dbl = (*builder).borrow_mut().new_flag();
-    let f_dbl_add = (*builder).borrow_mut().new_flag();
-    let f_inf_stay = (*builder).borrow_mut().new_flag();
-    let _f_inf_take = (*builder).borrow_mut().new_flag();
-    debug_assert_eq!(f_dbl, FLAG_DBL);
-    debug_assert_eq!(f_dbl_add, FLAG_DBL_ADD);
-    debug_assert_eq!(f_inf_stay, FLAG_INF_STAY);
-    debug_assert_eq!(_f_inf_take, FLAG_INF_TAKE);
+    let flags: Vec<usize> = (0..EC_MUL_SIGN_PATTERNS)
+        .map(|_| (*builder).borrow_mut().new_flag())
+        .collect();
 
     let a = ExprBuilder::new_const(builder.clone(), a_biguint.clone());
-    let one = ExprBuilder::new_const(builder.clone(), BigUint::one());
-    let zero = ExprBuilder::new_const(builder.clone(), BigUint::zero());
+    let zero = ExprBuilder::new_const(builder.clone(), BigUint::ZERO);
 
-    // ---- D = 2R ----------------------------------------------------------------
-    // 2*Ry is a valid denominator only under FLAG_DBL or FLAG_DBL_ADD; every other case, setup
-    // included, substitutes 1, since a zero denominator makes the row unsatisfiable. `select`
-    // takes a flag index rather than an expression, so the disjunction is expressed by nesting.
-    let two_ry = ry.int_mul(2);
-    let mut denom_d = FieldVariable::select(
-        f_dbl,
-        &two_ry,
-        &FieldVariable::select(f_dbl_add, &two_ry, &one),
-    );
-    denom_d.save();
-    let mut lambda_d = (rx.square().int_mul(3) + a) / denom_d;
+    for step in 0..EC_MUL_STEPS_PER_ROW {
+        let signed_py = signed_point_y(&py, &zero, &flags, step);
 
-    // `Select` requires both branches to have equal limb counts, and the output selection below
-    // mixes these values with the 32-limb inputs, so they are saved to canonical width rather than
-    // left as overflow expressions.
-    let mut dx = lambda_d.square() - rx.int_mul(2);
-    dx.save();
-    let mut dy = lambda_d.clone() * (rx.clone() - dx.clone()) - ry.clone();
-    dy.save();
+        // ---- D = 2R -------------------------------------------------------------------
+        // `2*Ry` is never zero. On a compute row the multiplier is odd and below the curve order,
+        // and the group has prime order so there is no 2-torsion. On a setup row the accumulator is
+        // `SETUP_ACC`, picked for the same reason.
+        let mut lambda_d = (acc_x.square().int_mul(3) + a.clone()) / acc_y.int_mul(2);
+        let mut dx = lambda_d.square() - acc_x.int_mul(2);
+        dx.save();
+        // Not saved: it appears only in the two expressions below, and inlining it keeps both at
+        // degree 2.
+        let dy = lambda_d.clone() * (acc_x.clone() - dx.clone()) - acc_y.clone();
 
-    // ---- A = D + P -------------------------------------------------------------
-    // Px − Dx is only a valid denominator under FLAG_DBL_ADD.
-    let px_minus_dx = px.clone() - dx.clone();
-    let denom_a = FieldVariable::select(f_dbl_add, &px_minus_dx, &one);
-    let mut lambda_a = (py.clone() - dy.clone()) / denom_a;
+        // ---- R' = D + sigma*P ---------------------------------------------------------
+        // `Px - Dx` is never zero. That would need `2m = +-sigma`, which the parity argument in the
+        // `mul` module rules out.
+        let mut lambda_a = (signed_py.clone() - dy.clone()) / (px.clone() - dx.clone());
+        let mut next_x = lambda_a.square() - dx.clone() - px.clone();
+        next_x.save();
+        let mut next_y = lambda_a.clone() * (dx.clone() - next_x.clone()) - dy;
+        next_y.save();
 
-    let mut ax = lambda_a.square() - dx.clone() - px.clone();
-    ax.save();
-    let mut ay = lambda_a * (dx.clone() - ax.clone()) - dy.clone();
-    ay.save();
+        acc_x = next_x;
+        acc_y = next_y;
+    }
 
-    // ---- output selection ------------------------------------------------------
-    // Exactly one flag is set, so the nested selects form a 4-way one-hot mux. The fall-through
-    // arm, reached when no flag is set, is the setup row, whose output is unconstrained.
-    let mut inner_x = FieldVariable::select(f_inf_stay, &zero, &px);
-    inner_x.save();
-    let mut mid_x = FieldVariable::select(f_dbl_add, &ax, &inner_x);
-    mid_x.save();
-    let mut out_x = FieldVariable::select(f_dbl, &dx, &mid_x);
-    out_x.save_output();
-
-    let mut inner_y = FieldVariable::select(f_inf_stay, &zero, &py);
-    inner_y.save();
-    let mut mid_y = FieldVariable::select(f_dbl_add, &ay, &inner_y);
-    mid_y.save();
-    let mut out_y = FieldVariable::select(f_dbl, &dy, &mid_y);
-    out_y.save_output();
+    acc_x.save_output();
+    acc_y.save_output();
 
     let builder = (*builder).borrow().clone();
     builder
+}
+
+/// `sigma_step * Py`, written as `2*(b_step * Py) - Py` for the scalar bit `b_step`.
+///
+/// `Select` is the only handle `FieldExpr` gives on a flag, so `b_step * Py` is a sum of
+/// `Select(flag, Py, 0)` over the patterns whose `step`-th sign is positive, which is half of them.
+/// Going through the bit instead of one signed term per pattern halves the number of selects.
+///
+/// Summing does not raise degree, so this is degree 2: one flag times one input. Exactly one flag
+/// is set on a compute row, giving `+-Py`. A setup row sets none, giving `-Py`.
+fn signed_point_y(
+    py: &FieldVariable,
+    zero: &FieldVariable,
+    flags: &[usize],
+    step: usize,
+) -> FieldVariable {
+    let mut bit_py = zero.clone();
+    for (pattern, &flag) in flags.iter().enumerate() {
+        if sign_of(pattern, step) > 0 {
+            bit_py = bit_py + FieldVariable::select(flag, py, zero);
+        }
+    }
+    bit_py.int_mul(2) - py.clone()
 }

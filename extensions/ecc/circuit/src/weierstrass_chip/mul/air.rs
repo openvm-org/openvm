@@ -1,28 +1,37 @@
 //! AIR for the `EC_MUL` chip.
 //!
-//! Constrains the ladder over [`EC_MUL_COMPUTE_ROWS`] rows and the instruction's memory accesses on
-//! the digest row.
+//! Constrains the ladder across [`EC_MUL_COMPUTE_ROWS`] rows, and the memory accesses on the digest
+//! row that follows them.
 //!
-//! Transition constraints are gated by degree-1 selectors, which keeps the AIR at the same maximum
-//! constraint degree as the neighbouring chips. That bound matters beyond this chip: `log_blowup`
-//! is derived from the configuration's `max_constraint_degree` and applies to every AIR in the
-//! application, so exceeding it here would raise the proving cost of all of them.
-//! `tests/ecmul_air.rs` asserts it.
+//! Transition constraints are gated by degree-1 selectors so the AIR stays at the same maximum
+//! constraint degree as the chips around it. That bound is not local: `log_blowup` comes from the
+//! configuration's `max_constraint_degree` and applies to every AIR in the application.
+//! `tests/ecmul_air.rs` asserts it. [`EcMulHeaderCols::is_ladder`] and
+//! [`EcMulHeaderCols::is_real_digest`] are stored rather than formed inline for the same reason;
+//! the conjunctions they stand for are degree 2.
 //!
-//! Two of those selectors are stored as columns ([`EcMulHeaderCols::is_ladder`] and
-//! [`EcMulHeaderCols::is_real_digest`]) rather than formed inline, because the conjunctions they
-//! stand for are degree 2 and would push the constraints they gate over the bound.
+//! # Binding the digits to the scalar
 //!
-//! Three properties are assumed rather than constrained here:
+//! Two accumulators run together: the point `R = m*P` in the expression, and the bits `B` of the
+//! signs chosen so far in [`EcMulHeaderCols::scalar_acc`]. `B` is never a multiplier, only
+//! bookkeeping. An invariant ties them, and every step preserves it:
 //!
-//! - That the scalar operand is less than the curve order. The ladder's addition uses the
-//!   incomplete affine formula, and at or above the order an intermediate `2R` can equal `P`,
-//!   collapsing the addition constraint to `0 = 0`. Callers must enforce the bound, as they must
-//!   for `EC_ADD_NE`'s distinct-x precondition.
-//! - That the guest called `SETUP_EC_MUL`, as for the neighbouring chips. With continuations only
-//!   the first segment would observe the setup row, so it is enforced at the program level.
-//! - Curve membership of the base point. The chip constrains the group law, not that `P` lies on
-//!   the curve.
+//! ```text
+//! m  = 2B + 1
+//! m' = 2m + sigma = 2(2B + 1) + (2b - 1) = 2(2B + b) + 1 = 2B' + 1
+//! ```
+//!
+//! It holds at the seed, where `m = 1` and `B = 0`. So checking `2B + 1` against the scalar on the
+//! digest row checks that `m = k`, and hence that `R = k*P`. Wrong signs give a different `B` and
+//! fail the check. Even operands fail it too, since `2B + 1` is odd for every `B`.
+//!
+//! Three things are assumed rather than constrained:
+//!
+//! - The scalar is below the curve order. The `mul` module's argument that the incomplete affine
+//!   formulas never degenerate needs this. Callers enforce it, as they do for `EC_ADD_NE`.
+//! - The guest called `SETUP_EC_MUL`. Under continuations only the first segment sees the setup
+//!   row, so this is enforced at the program level.
+//! - The base point is on the curve. The chip constrains the group law, not membership.
 
 use std::borrow::Borrow;
 
@@ -53,8 +62,9 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    ec_mul_digest_offset, ec_mul_header_width, ec_mul_width, EcMulDigestCols, EcMulHeaderCols,
-    FLAG_DBL, FLAG_DBL_ADD, FLAG_INF_STAY, FLAG_INF_TAKE, IN_PX, IN_PY, IN_RX, IN_RY, SCALAR_LIMBS,
+    ec_mul_digest_offset, ec_mul_header_width, ec_mul_width, sign_of, EcMulDigestCols,
+    EcMulHeaderCols, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, IN_ACC_X, IN_ACC_Y, IN_PX, IN_PY,
+    SCALAR_ACC_LIMBS, SCALAR_ACC_LIMBS_PER_BYTE, SCALAR_LIMBS,
 };
 
 /// `NUM_LIMBS` is the coordinate width in 8-bit limbs; `BLOCKS` is the memory blocks per point.
@@ -166,18 +176,22 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         } = self.expr.load_vars(local_expr);
         let next_cols = self.expr.load_vars(next_expr);
 
-        let f_dbl = flags[FLAG_DBL];
-        let f_dbl_add = flags[FLAG_DBL_ADD];
-        let f_inf_stay = flags[FLAG_INF_STAY];
-        let f_inf_take = flags[FLAG_INF_TAKE];
-
-        // The scalar bit and the infinity indicator are recovered from the one-hot case flags
-        // rather than stored.
-        let bit = f_dbl_add + f_inf_take;
+        // This row's scalar bits, read off the one-hot sign flags instead of being stored:
+        // `b_j = sum of flag_f over the patterns whose j-th sign is positive`, which is degree 1.
+        // Packed most significant first, they are the accumulator limb this row contributes.
+        let digits: AB::Expr = (0..EC_MUL_STEPS_PER_ROW)
+            .map(|step| {
+                let bit: AB::Expr = (0..EC_MUL_SIGN_PATTERNS)
+                    .filter(|&pattern| sign_of(pattern, step) > 0)
+                    .map(|pattern| flags[pattern].into())
+                    .sum();
+                bit * AB::Expr::from_u32(1 << (EC_MUL_STEPS_PER_ROW - 1 - step))
+            })
+            .sum();
 
         // `is_setup` must agree with the value `FieldExpr` derives internally,
         // `is_valid − Σflags`. On a compute row `is_valid == is_compute`.
-        let flag_sum = f_dbl + f_dbl_add + f_inf_stay + f_inf_take;
+        let flag_sum: AB::Expr = flags.iter().map(|&f| f.into()).sum();
         builder
             .when(local.is_compute)
             .assert_eq(local.is_setup, local.is_compute - flag_sum);
@@ -208,37 +222,24 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         builder.assert_zero(local.is_first_compute * local.row_idx);
 
         // ==== First compute row ==============================================================
-        // The accumulator starts at the affine identity sentinel (0, 0).
+        // The accumulator starts at `P`. The most significant digit is `+1` for every odd scalar
+        // in range, so the ladder seeds itself from the point it already holds, with no memory read
+        // and no sign to store.
         //
-        // Gated on `!is_setup` because `FieldExpr`'s setup check requires `inputs[0..]` to equal
-        // the prime limbs followed by the setup values, and `inputs[0..2]` are
-        // `IN_RX`/`IN_RY`. Without the gate a setup row would have to satisfy both
-        // conditions at once.
+        // Gated on `!is_setup`, since a setup row's leading inputs are already pinned to the prime
+        // and `a` by `FieldExpr`. Without the gate it would have to satisfy both at once.
         let first_real_compute = local.is_first_compute * (AB::Expr::ONE - local.is_setup);
-        for (rx, ry) in inputs[IN_RX].iter().zip(&inputs[IN_RY]) {
-            builder.when(first_real_compute.clone()).assert_zero(*rx);
-            builder.when(first_real_compute.clone()).assert_zero(*ry);
+        for (acc, p) in inputs[IN_ACC_X].iter().zip(&inputs[IN_PX]) {
+            builder.when(first_real_compute.clone()).assert_eq(*acc, *p);
         }
-        // ...so the case must be one of the two infinity cases. On a setup row every flag is
-        // clear, and this holds trivially.
-        builder
-            .when(local.is_first_compute)
-            .assert_zero(f_dbl + f_dbl_add);
-        // The scalar accumulator starts empty. This also holds on setup rows, where every flag is
-        // clear so `bit` is always zero and the accumulator stays zero.
+        for (acc, p) in inputs[IN_ACC_Y].iter().zip(&inputs[IN_PY]) {
+            builder.when(first_real_compute.clone()).assert_eq(*acc, *p);
+        }
+        // The bit accumulator starts empty. This also holds on setup rows, where every flag is
+        // clear, so the contributed limb is zero and the accumulator stays zero.
         for &limb in local.scalar_acc.iter() {
             builder.when(local.is_first_compute).assert_zero(limb);
         }
-
-        // ==== Running scalar: s' = 2·s + bit ================================================
-        // Carries are boolean because 2·s[i] + c ≤ 511.
-        for &carry in local.scalar_carry.iter() {
-            builder.assert_bool(carry);
-        }
-        // Nothing may carry out of the top limb: after `i` steps s < 2^i ≤ 2^256.
-        builder
-            .when(local.is_compute)
-            .assert_zero(local.scalar_carry[SCALAR_LIMBS - 1]);
 
         // ==== Transitions ===================================================================
         // A digest row always follows a ladder row. Without this the digest row's data would be
@@ -276,14 +277,12 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         // A continuation row is never a first row.
         when_in_instruction.assert_zero(next.is_first_compute);
 
-        // s' = 2·s + bit, limb by limb, little-endian. The incoming carry of limb 0 is the bit.
-        let mut carry_in = bit.clone();
-        for i in 0..SCALAR_LIMBS {
-            when_in_instruction.assert_eq(
-                local.scalar_acc[i] * AB::Expr::TWO + carry_in,
-                next.scalar_acc[i] + local.scalar_carry[i] * AB::Expr::from_u32(1 << 8),
-            );
-            carry_in = local.scalar_carry[i].into();
+        // B' = 2^EC_MUL_STEPS_PER_ROW * B + digits. With limbs sized to one row's contribution
+        // this is a shift: the new low limb holds this row's digits and the rest copy a neighbour,
+        // so there is nothing to carry and nothing to range check.
+        when_in_instruction.assert_eq(next.scalar_acc[0], digits);
+        for i in 1..SCALAR_ACC_LIMBS {
+            when_in_instruction.assert_eq(next.scalar_acc[i], local.scalar_acc[i - 1]);
         }
 
         // Setup rows are excluded from the data links below: every setup row must carry the prime
@@ -297,16 +296,12 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         let out_x = &vars[self.expr.program().output_indices()[0]];
         let out_y = &vars[self.expr.program().output_indices()[1]];
         for i in 0..NUM_LIMBS {
-            when_both_compute.assert_eq(next_cols.inputs[IN_RX][i], out_x[i]);
-            when_both_compute.assert_eq(next_cols.inputs[IN_RY][i], out_y[i]);
+            when_both_compute.assert_eq(next_cols.inputs[IN_ACC_X][i], out_x[i]);
+            when_both_compute.assert_eq(next_cols.inputs[IN_ACC_Y][i], out_y[i]);
             // The base point is constant for the whole instruction.
             when_both_compute.assert_eq(next_cols.inputs[IN_PX][i], inputs[IN_PX][i]);
             when_both_compute.assert_eq(next_cols.inputs[IN_PY][i], inputs[IN_PY][i]);
         }
-
-        // is_inf' = is_inf AND NOT bit, which under the one-hot encoding is exactly `f_inf_stay`.
-        let next_is_inf = next_cols.flags[FLAG_INF_STAY] + next_cols.flags[FLAG_INF_TAKE];
-        when_both_compute.assert_eq(next_is_inf, f_inf_stay);
 
         // ==== Compute → digest handoff ======================================================
         let mut when_to_digest = builder.when_transition();
@@ -323,14 +318,32 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         }
 
         // ==== Digest row ====================================================================
-        // The accumulated scalar must equal the scalar read from memory. This is also what pins the
-        // per-row case flags: any row implying the wrong bit changes `scalar_acc` and fails here.
-        // Skipped for setup, whose scalar operand is a dummy.
-        for i in 0..SCALAR_LIMBS {
-            builder
-                .when(local.is_real_digest)
-                .assert_eq(local.scalar_acc[i], local_digest.scalar_data[i]);
+        // The scalar read from memory must equal `2B + 1` for the `B` the rows accumulated. See
+        // the note on binding at the top of this file. Skipped for setup, whose scalar operand is a
+        // placeholder.
+        for &carry in local_digest.scalar_carry.iter() {
+            builder.assert_bool(carry);
         }
+        let mut carry_in = AB::Expr::ONE;
+        for i in 0..SCALAR_LIMBS {
+            // Byte `i` of `B`, from the accumulator limbs it spans, least significant first.
+            let b_byte: AB::Expr = (0..SCALAR_ACC_LIMBS_PER_BYTE)
+                .map(|j| {
+                    local.scalar_acc[i * SCALAR_ACC_LIMBS_PER_BYTE + j]
+                        * AB::Expr::from_u32(1 << (j * EC_MUL_STEPS_PER_ROW))
+                })
+                .sum();
+            builder.when(local.is_real_digest).assert_eq(
+                b_byte * AB::Expr::TWO + carry_in,
+                local_digest.scalar_data[i]
+                    + local_digest.scalar_carry[i] * AB::Expr::from_u32(1 << 8),
+            );
+            carry_in = local_digest.scalar_carry[i].into();
+        }
+        // No carry may leave the top byte, which pins `2B + 1 < 2^256` and so the scalar's width.
+        builder
+            .when(local.is_real_digest)
+            .assert_zero(local_digest.scalar_carry[SCALAR_LIMBS - 1]);
 
         let _ = next_digest;
         self.eval_io(builder, local, local_digest);

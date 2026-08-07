@@ -26,21 +26,23 @@ fn windowed_reference(scalar: Secp256k1Scalar) -> Secp256k1Point {
 pub fn main() {
     let g = Secp256k1Point::GENERATOR;
 
-    // Scalars are chosen to reach each of the ladder's cases: an all-zero scalar stays at the
-    // identity throughout, small values exercise the transition out of it, and a full-width value
-    // interleaves doublings with additions. All are well below the group order, which
-    // `mul_scalar_le_unchecked` requires.
-    let scalars = [0u64, 1, 2, 3, 255, 0x1234_5678, u32::MAX as u64];
-
-    for k in scalars {
+    // The intrinsic requires an odd scalar below the group order. Its digits are all `+-1`, whose
+    // sum is odd for any choice of signs, so an even scalar has no digit assignment at all. These
+    // reach the small multipliers, where the accumulator is `+-P` and the step ordering matters,
+    // and a full-width one that interleaves both signs.
+    for k in [1u64, 3, 5, 255, 0x1234_5679, u32::MAX as u64] {
         let scalar = Secp256k1Scalar::from_u64(k);
         let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
         let via_chip = unsafe { g.mul_scalar_le_unchecked(&bytes) };
-        let expected = windowed_reference(scalar.clone());
+        assert_eq!(via_chip, windowed_reference(scalar));
+    }
 
-        assert_eq!(via_chip, expected);
-        assert_eq!(g.mul_scalar(&scalar), expected);
+    // `mul_scalar` discharges that precondition, so it is total. Zero and the even scalars below
+    // route through the `n - k` substitution and a negation.
+    for k in [0u64, 1, 2, 3, 255, 0x1234_5678, u32::MAX as u64] {
+        let scalar = Secp256k1Scalar::from_u64(k);
+        assert_eq!(g.mul_scalar(&scalar), windowed_reference(scalar));
     }
 
     // `mul_scalar` accepts an unreduced scalar, which is what callers get from
