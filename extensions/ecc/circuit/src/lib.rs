@@ -12,8 +12,8 @@ pub use extension::*;
 pub use openvm_algebra_circuit::{NUM_LIMBS_32, NUM_LIMBS_48};
 pub use weierstrass_chip::*;
 
-// Blocks per ECC operation (2 coordinates per point)
-/// Blocks for ECC with 32-limb coordinates: 2 * (32 / 8) = 8 blocks
-pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / MEMORY_BLOCK_BYTES);
-/// Blocks for ECC with 48-limb coordinates: 2 * (48 / 8) = 12 blocks
-pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / MEMORY_BLOCK_BYTES);
+// Blocks per ECC operation (3 projective coordinates per point: X, Y, Z)
+/// Blocks for ECC with 32-limb coordinates: 3 * (32 / 8) = 12 blocks
+pub const ECC_BLOCKS_32: usize = 3 * (NUM_LIMBS_32 / MEMORY_BLOCK_BYTES);
+/// Blocks for ECC with 48-limb coordinates: 3 * (48 / 8) = 18 blocks
+pub const ECC_BLOCKS_48: usize = 3 * (NUM_LIMBS_48 / MEMORY_BLOCK_BYTES);

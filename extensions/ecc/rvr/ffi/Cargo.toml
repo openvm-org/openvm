@@ -19,7 +19,7 @@ openvm-circuit-primitives.workspace = true
 openvm-ecc-circuit.workspace = true
 openvm-mod-circuit-builder.workspace = true
 
+blstrs.workspace = true
 halo2curves-axiom.workspace = true
-
-[dev-dependencies]
+hex-literal.workspace = true
 num-bigint.workspace = true

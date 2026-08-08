@@ -1,6 +1,6 @@
+use std::str::FromStr;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use std::sync::Arc;
-use std::{str::FromStr, sync::atomic::Ordering};
 
 use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
@@ -37,6 +37,7 @@ use {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::cuda::postflight::GpuPostflightProgram,
+    openvm_circuit::arch::rvr::PreflightLimits,
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
         arch::{
@@ -57,10 +58,10 @@ use {
 };
 
 use crate::{
-    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
-    get_ec_double_chip, get_ec_double_executor,
+    get_ec_add_air, get_ec_add_chip, get_ec_add_executor, get_ec_double_air, get_ec_double_chip,
+    get_ec_double_executor,
     weierstrass_chip::{
-        generate_add_ne_trace_from_postflight, generate_add_ne_trace_from_postflights,
+        generate_add_trace_from_postflight, generate_add_trace_from_postflights,
         generate_double_trace_from_postflight, generate_double_trace_from_postflights,
     },
     EcDoubleExecutor, WeierstrassAir, WeierstrassChip, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
@@ -407,15 +408,15 @@ fn combine_two_vec_heap_histories(
     )
 }
 
-mod ec_addne_tests {
+mod ec_add_tests {
     use num_traits::One;
 
     use super::*;
-    use crate::EcAddNeExecutor;
+    use crate::EcAddExecutor;
 
-    type EcAddneHarness<const BLOCKS: usize> = TestChipHarness<
+    type EcAddHarness<const BLOCKS: usize> = TestChipHarness<
         F,
-        EcAddNeExecutor<BLOCKS>,
+        EcAddExecutor<BLOCKS>,
         WeierstrassAir<2, BLOCKS>,
         WeierstrassChip<F, 2, BLOCKS>,
     >;
@@ -424,43 +425,51 @@ mod ec_addne_tests {
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> EcAddneHarness<BLOCKS> {
-        let air = get_ec_addne_air::<BLOCKS>(
+        a: BigUint,
+        b: BigUint,
+    ) -> EcAddHarness<BLOCKS> {
+        let air = get_ec_add_air::<BLOCKS>(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
             offset,
+            a.clone(),
+            b.clone(),
         );
-        let executor = get_ec_addne_executor::<BLOCKS>(
+        let executor = get_ec_add_executor::<BLOCKS>(
             config.clone(),
             tester.range_checker().bus().range_max_bits,
             offset,
+            a.clone(),
+            b.clone(),
         );
-        let chip = get_ec_addne_chip::<F, BLOCKS>(
+        let chip = get_ec_add_chip::<F, BLOCKS>(
             config.clone(),
             tester.memory_helper(),
             tester.range_checker(),
             tester.address_bits(),
+            a,
+            b,
         );
 
-        EcAddneHarness::with_capacity(
+        EcAddHarness::with_capacity(
             executor,
             air,
             chip,
             MAX_INS_CAPACITY,
-            move |chip, postflight| generate_add_ne_trace_from_postflight(chip, postflight, offset),
+            move |chip, postflight| generate_add_trace_from_postflight(chip, postflight, offset),
         )
         .with_batch_trace_generator(move |chip, postflights| {
-            generate_add_ne_trace_from_postflights(chip, postflights, offset)
+            generate_add_trace_from_postflights(chip, postflights, offset)
         })
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     type GpuHarness<const BLOCKS: usize> = GpuTestChipHarness<
         F,
-        EcAddNeExecutor<BLOCKS>,
+        EcAddExecutor<BLOCKS>,
         WeierstrassAir<2, BLOCKS>,
         HybridWeierstrassChip<F, 2, BLOCKS>,
         WeierstrassChip<F, 2, BLOCKS>,
@@ -471,34 +480,48 @@ mod ec_addne_tests {
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
+        a: BigUint,
+        b: BigUint,
     ) -> GpuHarness<BLOCKS> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-        let air = get_ec_addne_air(
+        let air = get_ec_add_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             range_bus,
             tester.address_bits(),
             offset,
+            a.clone(),
+            b.clone(),
         );
-        let executor = get_ec_addne_executor(config.clone(), range_bus.range_max_bits, offset);
+        let executor = get_ec_add_executor(
+            config.clone(),
+            range_bus.range_max_bits,
+            offset,
+            a.clone(),
+            b.clone(),
+        );
 
-        let cpu_chip = get_ec_addne_chip(
+        let cpu_chip = get_ec_add_chip(
             config.clone(),
             tester.dummy_memory_helper(),
             dummy_range_checker_chip,
             tester.address_bits(),
+            a.clone(),
+            b.clone(),
         );
 
-        let gpu_cpu_chip = get_ec_addne_chip(
+        let gpu_cpu_chip = get_ec_add_chip(
             config,
             tester.cpu_memory_helper(),
             tester.cpu_range_checker(),
             tester.address_bits(),
+            a,
+            b,
         );
         #[cfg(feature = "rvr")]
         let hybrid_chip = HybridWeierstrassChip::new_with_replay(
@@ -515,47 +538,72 @@ mod ec_addne_tests {
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
             .with_trace_generators(
                 move |chip, postflight| {
-                    generate_add_ne_trace_from_postflight(chip, postflight, offset)
+                    generate_add_trace_from_postflight(chip, postflight, offset)
                 },
                 |chip, program, transcript, plan| {
                     chip.generate_proving_ctx_from_postflight(program, transcript, plan)
                 },
             )
             .with_batch_trace_generator(move |chip, postflights| {
-                generate_add_ne_trace_from_postflights(chip, postflights, offset)
+                generate_add_trace_from_postflights(chip, postflights, offset)
             })
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_and_execute_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn set_and_execute_ec_add<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
-        executor: &mut EcAddNeExecutor<BLOCKS>,
+        executor: &mut EcAddExecutor<BLOCKS>,
         preflight: &mut TestPreflight<F>,
         rng: &mut StdRng,
         modulus: &BigUint,
+        a: &BigUint,
+        b: &BigUint,
         is_setup: bool,
         offset: usize,
         p1: Option<(BigUint, BigUint)>,
         p2: Option<(BigUint, BigUint)>,
     ) -> Instruction<F> {
-        let (x1, y1, x2, y2, op_local) = if is_setup {
+        // For projective coordinates, each point has 3 coordinates (X, Y, Z).
+        // For setup: P1 = (modulus, a, b), P2 = (1, 1, 1) (dummy).
+        // For normal: P1 = (x1, y1, 1), P2 = (x2, y2, 1) (affine embedded as Z = 1).
+        let (x1, y1, z1, x2, y2, z2, op_local) = if is_setup {
             (
                 modulus.clone(),
+                a.clone(),
+                b.clone(),
                 BigUint::one(),
                 BigUint::one(),
                 BigUint::one(),
-                WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ as usize,
             )
-        } else if let Some((x1, y1)) = p1 {
-            let (x2, y2) = p2.unwrap();
-            let x1 = x1 % modulus;
-            let y1 = y1 % modulus;
-            let x2 = x2 % modulus;
-            let y2 = y2 % modulus;
+        } else if let Some((px1, py1)) = p1 {
+            let (px2, py2) = p2.unwrap();
+            let px1 = px1 % modulus;
+            let py1 = py1 % modulus;
+            let px2 = px2 % modulus;
+            let py2 = py2 % modulus;
+            let one = BigUint::one();
+            // Complete addition formulas handle all input pairs, so no x1 != x2 special-casing.
             if rng.random_bool(0.5) {
-                (x1, y1, x2, y2, WeierstrassOpcode::EC_ADD_NE as usize)
+                (
+                    px1,
+                    py1,
+                    one.clone(),
+                    px2,
+                    py2,
+                    one,
+                    WeierstrassOpcode::SW_EC_ADD_PROJ as usize,
+                )
             } else {
-                (x2, y2, x1, y1, WeierstrassOpcode::EC_ADD_NE as usize)
+                (
+                    px2,
+                    py2,
+                    one.clone(),
+                    px1,
+                    py1,
+                    one,
+                    WeierstrassOpcode::SW_EC_ADD_PROJ as usize,
+                )
             }
         } else {
             panic!("Generating random inputs generically is harder because the input points need to be on the curve.");
@@ -590,11 +638,15 @@ mod ec_addne_tests {
             .into_iter()
             .map(F::from_u8)
             .collect();
-        let x2_limbs: Vec<F> = biguint_to_limbs_vec(&x2, NUM_LIMBS)
+        let y1_limbs: Vec<F> = biguint_to_limbs_vec(&y1, NUM_LIMBS)
             .into_iter()
             .map(F::from_u8)
             .collect();
-        let y1_limbs: Vec<F> = biguint_to_limbs_vec(&y1, NUM_LIMBS)
+        let z1_limbs: Vec<F> = biguint_to_limbs_vec(&z1, NUM_LIMBS)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+        let x2_limbs: Vec<F> = biguint_to_limbs_vec(&x2, NUM_LIMBS)
             .into_iter()
             .map(F::from_u8)
             .collect();
@@ -602,18 +654,28 @@ mod ec_addne_tests {
             .into_iter()
             .map(F::from_u8)
             .collect();
+        let z2_limbs: Vec<F> = biguint_to_limbs_vec(&z2, NUM_LIMBS)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
 
+        // Write projective points P1 = (X1, Y1, Z1) and P2 = (X2, Y2, Z2), each coordinate
+        // occupying NUM_LIMBS bytes and written a memory block at a time.
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
             tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p1_base_addr as usize + i,
                 x1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
-
             tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p1_base_addr + NUM_LIMBS as u64) as usize + i,
                 y1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
+                data_as,
+                (p1_base_addr + 2 * NUM_LIMBS as u64) as usize + i,
+                z1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
             tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
@@ -621,11 +683,15 @@ mod ec_addne_tests {
                 p2_base_addr as usize + i,
                 x2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
-
             tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p2_base_addr + NUM_LIMBS as u64) as usize + i,
                 y2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
+                data_as,
+                (p2_base_addr + 2 * NUM_LIMBS as u64) as usize + i,
+                z2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
         }
 
@@ -642,9 +708,11 @@ mod ec_addne_tests {
         instruction
     }
 
-    fn run_ec_addne_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn run_ec_add_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
+        a: BigUint,
+        b: BigUint,
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -654,38 +722,44 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
+        let mut harness = create_harness::<BLOCKS>(&tester, config, offset, a.clone(), b.clone());
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
+        set_and_execute_ec_add::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
             &mut harness.preflight,
             &mut rng,
             &modulus,
+            &a,
+            &b,
             true,
             offset,
             None,
             None,
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
+        set_and_execute_ec_add::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
             &mut harness.preflight,
             &mut rng,
             &modulus,
+            &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[0].clone()),
             Some(SampleEcPoints[1].clone()),
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
+        set_and_execute_ec_add::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
             &mut harness.preflight,
             &mut rng,
             &modulus,
+            &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[2].clone()),
@@ -698,149 +772,33 @@ mod ec_addne_tests {
     }
 
     #[test]
-    fn test_ec_addne_32limb() {
-        run_ec_addne_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
+    fn test_ec_add_32limb() {
+        // secp256k1: a=0, b=7
+        run_ec_add_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
+            BigUint::zero(),
+            BigUint::from(7u32), // secp256k1 b coefficient,
         );
     }
 
     #[test]
-    fn test_ec_addne_48limb() {
-        run_ec_addne_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
+    fn test_ec_add_48limb() {
+        // BLS12-381: a=0, b=4
+        run_ec_add_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
             WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
+            BigUint::zero(),
+            BigUint::from(4u32), // BLS12-381 b coefficient,
         );
     }
 
-    #[test]
-    fn ec_addne_postflight_generation_and_malformed_history() {
-        let mut tester = VmChipTestBuilder::<F>::default();
-        let modulus = secp256k1_coord_prime();
-        let config = ExprBuilderConfig {
-            modulus: modulus.clone(),
-            num_limbs: NUM_LIMBS_32,
-            limb_bits: LIMB_BITS,
-        };
-        let opcode_base = WeierstrassOpcode::CLASS_OFFSET;
-        let mut harness = create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base);
-
-        let rd_register = 24usize;
-        let lhs_register = 8usize;
-        let rhs_register = 16usize;
-        let rd_pointer = 0x300u32;
-        let lhs_pointer = 0x100u32;
-        let rhs_pointer = 0x200u32;
-        for (register, pointer) in [
-            (rd_register, rd_pointer),
-            (lhs_register, lhs_pointer),
-            (rhs_register, rhs_pointer),
-        ] {
-            unsafe {
-                tester.memory.memory.data.write_bytes(
-                    REGISTER_AS,
-                    register as u32,
-                    u64::from(pointer).to_le_bytes(),
-                );
-            }
-        }
-        for (pointer, (x, y)) in [
-            (lhs_pointer, &SampleEcPoints[0]),
-            (rhs_pointer, &SampleEcPoints[1]),
-        ] {
-            let bytes = [x, y]
-                .into_iter()
-                .flat_map(|coordinate| biguint_to_limbs_vec(coordinate, NUM_LIMBS_32).into_iter())
-                .collect::<Vec<_>>();
-            for byte_offset in (0..2 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
-                unsafe {
-                    tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
-                        MEMORY_AS,
-                        pointer + byte_offset as u32,
-                        bytes[byte_offset..byte_offset + MEMORY_BLOCK_BYTES]
-                            .try_into()
-                            .unwrap(),
-                    );
-                }
-            }
-        }
-        let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + WeierstrassOpcode::EC_ADD_NE as usize),
-            [
-                rd_register,
-                lhs_register,
-                rhs_register,
-                REGISTER_AS as usize,
-                MEMORY_AS as usize,
-            ],
-        );
-        tester.execute_with_pc(
-            &mut harness.executor,
-            &mut harness.preflight,
-            &instruction,
-            0,
-        );
-        let execution = harness.preflight.executions.last().unwrap();
-        let mut history = execution.history.clone();
-        let memory_config = MemoryConfig::default();
-        let postflight =
-            Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
-        generate_add_ne_trace_from_postflight(&harness.chip, &postflight, opcode_base).unwrap();
-
-        drop(postflight);
-        history.memory.accesses[0].value[2] = 1;
-        let malformed =
-            Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
-        let error = generate_add_ne_trace_from_postflight(&harness.chip, &malformed, opcode_base)
-            .unwrap_err();
-        assert!(
-            error.to_string().contains("nonzero upper 32 bits"),
-            "{error}"
-        );
-
-        history.memory.accesses[0].value[2] = 0;
-        history.memory.accesses[0].pointer += 1;
-        let error = Postflight::new_for_test(&execution.program, &history, &memory_config)
-            .err()
-            .expect("misaligned memory event must be rejected");
-        assert!(error.to_string().contains("misaligned"), "{error}");
-
-        history.memory.accesses[0].pointer -= 1;
-        let write = history
-            .memory
-            .accesses
-            .iter_mut()
-            .find(|event| event.is_write())
-            .unwrap();
-        write.value[0] ^= 1;
-        let range_counts_before = harness
-            .chip
-            .inner
-            .range_checker
-            .count
-            .iter()
-            .map(|count| count.load(Ordering::Relaxed))
-            .collect::<Vec<_>>();
-        let malformed =
-            Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
-        let error = generate_add_ne_trace_from_postflight(&harness.chip, &malformed, opcode_base)
-            .unwrap_err();
-        assert!(error.to_string().contains("OutputMismatch"), "{error}");
-        let range_counts_after = harness
-            .chip
-            .inner
-            .range_checker
-            .count
-            .iter()
-            .map(|count| count.load(Ordering::Relaxed))
-            .collect::<Vec<_>>();
-        assert_eq!(range_counts_after, range_counts_before);
-    }
-
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_cuda_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    #[cfg(feature = "cuda")]
+    fn run_cuda_ec_add<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
+        a: BigUint,
+        b: BigUint,
     ) {
         let mut rng = create_seeded_rng();
 
@@ -852,38 +810,45 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
+        let mut harness =
+            create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone(), b.clone());
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
+        set_and_execute_ec_add::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
             &mut harness.preflight,
             &mut rng,
             &modulus,
+            &a,
+            &b,
             true,
             offset,
             None,
             None,
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
+        set_and_execute_ec_add::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
             &mut harness.preflight,
             &mut rng,
             &modulus,
+            &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[0].clone()),
             Some(SampleEcPoints[1].clone()),
         );
 
-        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS>(
+        set_and_execute_ec_add::<BLOCKS, NUM_LIMBS>(
             &mut tester,
             &mut harness.executor,
             &mut harness.preflight,
             &mut rng,
             &modulus,
+            &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[2].clone()),
@@ -900,25 +865,31 @@ mod ec_addne_tests {
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
-    fn test_weierstrass_addne_cuda_2x32() {
-        run_cuda_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(
+    fn test_weierstrass_add_cuda_2x32() {
+        run_cuda_ec_add::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
+            BigUint::zero(),
+            BigUint::from(7u32), // secp256k1 b coefficient,
         );
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
-    fn test_weierstrass_addne_cuda_6x16() {
-        run_cuda_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(
+    fn test_weierstrass_add_cuda_6x16() {
+        run_cuda_ec_add::<ECC_BLOCKS_48, NUM_LIMBS_48>(
             WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
+            BigUint::zero(),
+            BigUint::from(4u32), // BLS12-381 b coefficient,
         );
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn run_preflight_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn run_preflight_ec_add<const BLOCKS: usize, const NUM_LIMBS: usize>(
         modulus: BigUint,
+        a: BigUint,
+        b: BigUint,
         is_setup: bool,
     ) {
         let offset = WeierstrassOpcode::CLASS_OFFSET;
@@ -928,20 +899,24 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
         let mut tester = GpuChipTestBuilder::default();
-        let harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
+        let harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone(), b.clone());
         let values = if is_setup {
             vec![
                 modulus,
-                BigUint::from(1u8),
-                BigUint::from(1u8),
-                BigUint::from(1u8),
+                a,
+                b,
+                BigUint::one(),
+                BigUint::one(),
+                BigUint::one(),
             ]
         } else {
             vec![
                 BigUint::from(1u8),
                 BigUint::from(2u8),
+                BigUint::one(),
                 BigUint::from(3u8),
                 BigUint::from(4u8),
+                BigUint::one(),
             ]
         };
         let input_bytes = encode_field_inputs(&values, NUM_LIMBS);
@@ -960,9 +935,9 @@ mod ec_addne_tests {
             &input_bytes,
         );
         let local_opcode = if is_setup {
-            WeierstrassOpcode::SETUP_EC_ADD_NE
+            WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ
         } else {
-            WeierstrassOpcode::EC_ADD_NE
+            WeierstrassOpcode::SW_EC_ADD_PROJ
         };
         let instruction = Instruction::from_usize(
             VmOpcode::from_usize(offset + local_opcode as usize),
@@ -1025,12 +1000,16 @@ mod ec_addne_tests {
     #[test]
     fn weierstrass_add_preflight_rows_counts_setup_and_corruption_32_48() {
         for is_setup in [false, true] {
-            run_preflight_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(
+            run_preflight_ec_add::<ECC_BLOCKS_32, NUM_LIMBS_32>(
                 secp256k1_coord_prime(),
+                BigUint::zero(),
+                BigUint::from(7u8),
                 is_setup,
             );
-            run_preflight_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(
+            run_preflight_ec_add::<ECC_BLOCKS_48, NUM_LIMBS_48>(
                 BLS12_381_MODULUS.clone(),
+                BigUint::zero(),
+                BigUint::from(4u8),
                 is_setup,
             );
         }
@@ -1047,15 +1026,25 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
         let tester = GpuChipTestBuilder::default();
-        let first = create_cuda_harness::<ECC_BLOCKS_32>(&tester, config.clone(), first_base);
-        let second = create_cuda_harness::<ECC_BLOCKS_32>(&tester, config, second_base);
+        let a = BigUint::zero();
+        let b = BigUint::from(7u8);
+        let first = create_cuda_harness::<ECC_BLOCKS_32>(
+            &tester,
+            config.clone(),
+            first_base,
+            a.clone(),
+            b.clone(),
+        );
+        let second = create_cuda_harness::<ECC_BLOCKS_32>(&tester, config, second_base, a, b);
 
         let first_input = encode_field_inputs(
             &[
                 BigUint::from(1u8),
                 BigUint::from(2u8),
+                BigUint::one(),
                 BigUint::from(3u8),
                 BigUint::from(4u8),
+                BigUint::one(),
             ],
             NUM_LIMBS_32,
         );
@@ -1063,8 +1052,10 @@ mod ec_addne_tests {
             &[
                 BigUint::from(5u8),
                 BigUint::from(6u8),
+                BigUint::one(),
                 BigUint::from(7u8),
                 BigUint::from(8u8),
+                BigUint::one(),
             ],
             NUM_LIMBS_32,
         );
@@ -1072,11 +1063,11 @@ mod ec_addne_tests {
         let second_output =
             field_expression_output(second.executor.program(), &second_input, false);
         let first_instruction = Instruction::from_usize(
-            VmOpcode::from_usize(first_base + WeierstrassOpcode::EC_ADD_NE as usize),
+            VmOpcode::from_usize(first_base + WeierstrassOpcode::SW_EC_ADD_PROJ as usize),
             [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
         );
         let second_instruction = Instruction::from_usize(
-            VmOpcode::from_usize(second_base + WeierstrassOpcode::EC_ADD_NE as usize),
+            VmOpcode::from_usize(second_base + WeierstrassOpcode::SW_EC_ADD_PROJ as usize),
             [32, 40, 48, REGISTER_AS as usize, MEMORY_AS as usize],
         );
         let (_, first_history) = make_vec_heap_history::<2, ECC_BLOCKS_32>(
@@ -1199,10 +1190,14 @@ mod ec_addne_tests {
         ]);
         *vm_config.as_mut() = test_system_config();
         let executor = VmExecutor::new(vm_config.clone()).unwrap();
-        let state = executor
-            .interpreter_instance(&exe)
-            .unwrap()
-            .create_initial_vm_state(Vec::<Vec<u8>>::new());
+        let checkpoint = executor.preflight_instance(&exe).unwrap();
+        let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        let execution = checkpoint
+            .execute(
+                Vec::<Vec<u8>>::new(),
+                PreflightLimits::new(3, 2 * ECC_BLOCKS_32, 1),
+            )
+            .unwrap();
 
         let mut incomplete_config =
             crate::Rv64WeierstrassConfig::new(vec![crate::SECP256K1_CONFIG.clone()]);
@@ -1216,18 +1211,27 @@ mod ec_addne_tests {
         let cached_program = poisoned_vm.commit_program_on_device(&program);
         poisoned_vm.load_program(cached_program);
         poisoned_vm.transport_init_memory_to_device(&state.memory);
-        let poisoned_gpu_program = GpuPostflightProgram::upload(
-            &program,
-            &incomplete_config.modular.system.memory_config,
-            &poisoned_vm.engine.device().device_ctx,
-        )
-        .unwrap();
-        let (poisoned_transcript, poisoned_plan) = poisoned_gpu_program
-            .upload_history_for_test(&program, &history, Some(0))
+        let poisoned_gpu_program =
+            crate::WeierstrassPreflightGpuTracegen::upload_postflight_program(
+                &program,
+                &incomplete_config.modular.system.memory_config,
+                &incomplete_config.modular.modular,
+                None,
+                &extension,
+                &poisoned_vm.engine.device().device_ctx,
+            )
+            .unwrap();
+        let (poisoned_transcript, poisoned_plan) =
+            crate::WeierstrassPreflightGpuTracegen::postflight(
+                &poisoned_vm,
+                &poisoned_gpu_program,
+                &execution,
+                execution.retired,
+            )
             .unwrap();
         let late_coverage_error = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
-            &poisoned_gpu_program,
+            poisoned_gpu_program.program(),
             &poisoned_transcript,
             &poisoned_plan,
         )
@@ -1239,14 +1243,17 @@ mod ec_addne_tests {
             .contains(&(second_base as u32).to_string()));
         let retry_error = crate::WeierstrassPreflightGpuTracegen::new(
             &extension,
-            &poisoned_gpu_program,
+            poisoned_gpu_program.program(),
             &poisoned_transcript,
             &poisoned_plan,
         )
         .generate_proving_ctx(&mut poisoned_vm, &incomplete_config.modular.modular, None)
         .err()
         .expect("a failed preflight tracegen session must poison retries");
-        assert!(retry_error.to_string().contains("poisoned"));
+        assert!(matches!(
+            retry_error,
+            openvm_circuit::arch::GenerationError::ProverPoisoned
+        ));
 
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),
@@ -1257,18 +1264,25 @@ mod ec_addne_tests {
         let cached_program = vm.commit_program_on_device(&program);
         vm.load_program(cached_program);
         vm.transport_init_memory_to_device(&state.memory);
-        let vm_gpu_program = GpuPostflightProgram::upload(
+        let vm_gpu_program = crate::WeierstrassPreflightGpuTracegen::upload_postflight_program(
             &program,
             &vm_config.modular.system.memory_config,
+            &vm_config.modular.modular,
+            None,
+            &vm_config.weierstrass,
             &vm.engine.device().device_ctx,
         )
         .unwrap();
-        let (vm_transcript, vm_plan) = vm_gpu_program
-            .upload_history_for_test(&program, &history, Some(0))
-            .unwrap();
+        let (vm_transcript, vm_plan) = crate::WeierstrassPreflightGpuTracegen::postflight(
+            &vm,
+            &vm_gpu_program,
+            &execution,
+            execution.retired,
+        )
+        .unwrap();
         let proving_ctx = crate::WeierstrassPreflightGpuTracegen::new(
             &vm_config.weierstrass,
-            &vm_gpu_program,
+            vm_gpu_program.program(),
             &vm_transcript,
             &vm_plan,
         )
@@ -1282,12 +1296,16 @@ mod ec_addne_tests {
         // Tracegen consumes the segment-start upload. This replay only checks that successful
         // coordination clears the session poison, so restore the fixture's input image first.
         vm.transport_init_memory_to_device(&state.memory);
-        let (retry_transcript, retry_plan) = vm_gpu_program
-            .upload_history_for_test(&program, &history, Some(0))
-            .unwrap();
+        let (retry_transcript, retry_plan) = crate::WeierstrassPreflightGpuTracegen::postflight(
+            &vm,
+            &vm_gpu_program,
+            &execution,
+            execution.retired,
+        )
+        .unwrap();
         let retry_ctx = crate::WeierstrassPreflightGpuTracegen::new(
             &vm_config.weierstrass,
-            &vm_gpu_program,
+            vm_gpu_program.program(),
             &retry_transcript,
             &retry_plan,
         )
@@ -1297,50 +1315,78 @@ mod ec_addne_tests {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
-    /// SANITY TESTS
-    ///
-    /// Ensure that execute functions produce the correct results.
+    // SANITY TESTS
+    //
+    // Ensure that execute functions produce the correct results.
     ///////////////////////////////////////////////////////////////////////////////////////
+
+    /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z.
+    fn proj_to_affine(
+        x_proj: &BigUint,
+        y_proj: &BigUint,
+        z_proj: &BigUint,
+        p: &BigUint,
+    ) -> (BigUint, BigUint) {
+        // Compute z^{-1} mod p using Fermat's little theorem: z^{-1} = z^{p-2} mod p.
+        let z_inv = z_proj.modpow(&(p - BigUint::from(2u32)), p);
+        let x_affine = (x_proj * &z_inv) % p;
+        let y_affine = (y_proj * &z_inv) % p;
+        (x_affine, y_affine)
+    }
+
     #[test]
-    fn ec_addne_sanity_test() {
+    fn ec_add_sanity_test() {
         let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let p = secp256k1_coord_prime();
         let config = ExprBuilderConfig {
-            modulus: secp256k1_coord_prime(),
+            modulus: p.clone(),
             num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_addne_executor::<{ ECC_BLOCKS_32 }>(
+        // secp256k1: a=0, b=7
+        let executor = get_ec_add_executor::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus().range_max_bits,
             WeierstrassOpcode::CLASS_OFFSET,
+            BigUint::zero(),
+            BigUint::from(7u32),
         );
 
         let (p1_x, p1_y) = SampleEcPoints[0].clone();
         let (p2_x, p2_y) = SampleEcPoints[1].clone();
-        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
-        let r = executor
-            .program()
-            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
-        assert_eq!(r.len(), 3); // lambda, x3, y3
-        assert_eq!(r[1], SampleEcPoints[2].0);
-        assert_eq!(r[2], SampleEcPoints[2].1);
+        // Projective input: (X1, Y1, Z1, X2, Y2, Z2) where Z=1 for affine points.
+        let z = BigUint::one();
+        let vars = executor
+            .program()
+            .execute(&[p1_x, p1_y, z.clone(), p2_x, p2_y, z.clone()], &[true]);
+        // Output vars (X3, Y3, Z3) are the final three variables.
+        let r = &vars[vars.len() - 3..];
+
+        assert_eq!(r.len(), 3); // X3, Y3, Z3
+        let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
+        assert_eq!(x3_affine, SampleEcPoints[2].0);
+        assert_eq!(y3_affine, SampleEcPoints[2].1);
 
         let (p1_x, p1_y) = SampleEcPoints[2].clone();
         let (p2_x, p2_y) = SampleEcPoints[3].clone();
-        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
-        let r = executor
+        let vars = executor
             .program()
-            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
+            .execute(&[p1_x, p1_y, z.clone(), p2_x, p2_y, z], &[true]);
+        // Output vars (X3, Y3, Z3) are the final three variables.
+        let r = &vars[vars.len() - 3..];
 
-        assert_eq!(r.len(), 3); // lambda, x3, y3
-        assert_eq!(r[1], SampleEcPoints[4].0);
-        assert_eq!(r[2], SampleEcPoints[4].1);
+        assert_eq!(r.len(), 3); // X3, Y3, Z3
+        let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
+        assert_eq!(x3_affine, SampleEcPoints[4].0);
+        assert_eq!(y3_affine, SampleEcPoints[4].1);
     }
 }
 
 mod ec_double_tests {
+    use num_traits::One;
+
     use super::*;
 
     type EcDoubleHarness<const BLOCKS: usize> = TestChipHarness<
@@ -1355,6 +1401,7 @@ mod ec_double_tests {
         config: ExprBuilderConfig,
         offset: usize,
         a_biguint: BigUint,
+        b: BigUint,
     ) -> EcDoubleHarness<BLOCKS> {
         let air = get_ec_double_air(
             tester.execution_bridge(),
@@ -1364,12 +1411,14 @@ mod ec_double_tests {
             tester.address_bits(),
             offset,
             a_biguint.clone(),
+            b.clone(),
         );
         let executor = get_ec_double_executor(
             config.clone(),
             tester.range_checker().bus().range_max_bits,
             offset,
             a_biguint.clone(),
+            b.clone(),
         );
         let chip = get_ec_double_chip(
             config.clone(),
@@ -1377,6 +1426,7 @@ mod ec_double_tests {
             tester.range_checker(),
             tester.address_bits(),
             a_biguint,
+            b,
         );
         EcDoubleHarness::with_capacity(
             executor,
@@ -1405,6 +1455,7 @@ mod ec_double_tests {
         config: ExprBuilderConfig,
         offset: usize,
         a_biguint: BigUint,
+        b: BigUint,
     ) -> GpuHarness<BLOCKS> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
@@ -1419,12 +1470,14 @@ mod ec_double_tests {
             tester.address_bits(),
             offset,
             a_biguint.clone(),
+            b.clone(),
         );
         let executor = get_ec_double_executor(
             config.clone(),
             range_bus.range_max_bits,
             offset,
             a_biguint.clone(),
+            b.clone(),
         );
 
         let cpu_chip = get_ec_double_chip(
@@ -1433,6 +1486,7 @@ mod ec_double_tests {
             dummy_range_checker_chip,
             tester.address_bits(),
             a_biguint.clone(),
+            b.clone(),
         );
         let gpu_cpu_chip = get_ec_double_chip(
             config,
@@ -1440,6 +1494,7 @@ mod ec_double_tests {
             tester.cpu_range_checker(),
             tester.address_bits(),
             a_biguint,
+            b,
         );
         #[cfg(feature = "rvr")]
         let hybrid_chip = HybridWeierstrassChip::new_with_replay(
@@ -1475,27 +1530,42 @@ mod ec_double_tests {
         rng: &mut StdRng,
         modulus: &BigUint,
         a_biguint: &BigUint,
+        b_biguint: &BigUint,
         is_setup: bool,
         offset: usize,
         x: Option<BigUint>,
         y: Option<BigUint>,
     ) -> Instruction<F> {
-        let (x1, y1, op_local) = if is_setup {
+        // For projective coordinates, each point has 3 coordinates (X, Y, Z).
+        // For setup: P = (modulus, a, b).
+        // For normal: P = (x, y, 1) (affine embedded as Z = 1).
+        let (x1, y1, z1, op_local) = if is_setup {
             (
                 modulus.clone(),
                 a_biguint.clone(),
-                WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+                b_biguint.clone(),
+                WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ as usize,
             )
         } else if let Some(x) = x {
             let y = y.unwrap();
             let x = x % modulus;
             let y = y % modulus;
-            (x, y, WeierstrassOpcode::EC_DOUBLE as usize)
+            (
+                x,
+                y,
+                BigUint::one(),
+                WeierstrassOpcode::SW_EC_DOUBLE_PROJ as usize,
+            )
         } else {
             let x = generate_random_biguint(modulus);
             let y = generate_random_biguint(modulus);
 
-            (x, y, WeierstrassOpcode::EC_DOUBLE as usize)
+            (
+                x,
+                y,
+                BigUint::one(),
+                WeierstrassOpcode::SW_EC_DOUBLE_PROJ as usize,
+            )
         };
 
         let ptr_as = REGISTER_AS as usize;
@@ -1525,18 +1595,27 @@ mod ec_double_tests {
             .into_iter()
             .map(F::from_u8)
             .collect();
+        let z1_limbs: Vec<F> = biguint_to_limbs_vec(&z1, NUM_LIMBS)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
 
+        // Write projective point P = (X, Y, Z), each coordinate occupying NUM_LIMBS bytes.
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
             tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p1_base_addr as usize + i,
                 x1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
-
             tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p1_base_addr + NUM_LIMBS as u64) as usize + i,
                 y1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
+                data_as,
+                (p1_base_addr + 2 * NUM_LIMBS as u64) as usize + i,
+                z1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
         }
 
@@ -1558,6 +1637,7 @@ mod ec_double_tests {
         modulus: BigUint,
         num_ops: usize,
         a: BigUint,
+        b: BigUint,
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -1567,7 +1647,7 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_harness::<BLOCKS>(&tester, config, offset, a.clone());
+        let mut harness = create_harness::<BLOCKS>(&tester, config, offset, a.clone(), b.clone());
 
         for i in 0..num_ops {
             set_and_execute_ec_double::<BLOCKS, NUM_LIMBS>(
@@ -1577,6 +1657,7 @@ mod ec_double_tests {
                 &mut rng,
                 &modulus,
                 &a,
+                &b,
                 i == 0,
                 offset,
                 None,
@@ -1591,6 +1672,7 @@ mod ec_double_tests {
             &mut rng,
             &modulus,
             &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[0].0.clone()),
@@ -1604,6 +1686,7 @@ mod ec_double_tests {
             &mut rng,
             &modulus,
             &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[1].0.clone()),
@@ -1629,6 +1712,7 @@ mod ec_double_tests {
             &mut rng,
             &modulus,
             &a,
+            &b,
             false,
             offset,
             Some(p1_x),
@@ -1642,34 +1726,47 @@ mod ec_double_tests {
 
     #[test]
     fn test_ec_double_32limb() {
+        // secp256k1: a=0, b=7
         run_ec_double_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
             BigUint::zero(),
+            BigUint::from(7u32), // secp256k1 b coefficient,
         );
     }
 
     #[test]
     fn test_ec_double_32limb_nonzero_a() {
+        // secp256r1: a=-3 (p-3),
+        // b=0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
         let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
         let a = BigUint::from_bytes_le(&coeff_a);
+        // b coefficient (functions compute b3 = 3*b internally)
+        let b = BigUint::from_str_radix(
+            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+            16,
+        )
+        .unwrap();
 
         run_ec_double_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
             a,
+            b,
         );
     }
 
     #[test]
     fn test_ec_double_48limb() {
+        // BLS12-381: a=0, b=4
         run_ec_double_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
             WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
             BigUint::zero(),
+            BigUint::from(4u32), // BLS12-381 b coefficient,
         );
     }
 
@@ -1684,7 +1781,9 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
         let opcode_base = WeierstrassOpcode::CLASS_OFFSET;
-        let mut harness = create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base, a.clone());
+        let b = BigUint::from(7u32);
+        let mut harness =
+            create_harness::<ECC_BLOCKS_32>(&tester, config, opcode_base, a.clone(), b);
 
         let rd_register = 16usize;
         let input_register = 8usize;
@@ -1699,11 +1798,12 @@ mod ec_double_tests {
                 );
             }
         }
-        let bytes = [&SampleEcPoints[0].0, &SampleEcPoints[0].1]
+        let projective_z = BigUint::one();
+        let bytes = [&SampleEcPoints[0].0, &SampleEcPoints[0].1, &projective_z]
             .into_iter()
             .flat_map(|coordinate| biguint_to_limbs_vec(coordinate, NUM_LIMBS_32).into_iter())
             .collect::<Vec<_>>();
-        for byte_offset in (0..2 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
+        for byte_offset in (0..3 * NUM_LIMBS_32).step_by(MEMORY_BLOCK_BYTES) {
             unsafe {
                 tester.memory.memory.data.write_bytes::<MEMORY_BLOCK_BYTES>(
                     MEMORY_AS,
@@ -1715,7 +1815,7 @@ mod ec_double_tests {
             }
         }
         let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + WeierstrassOpcode::EC_DOUBLE as usize),
+            VmOpcode::from_usize(opcode_base + WeierstrassOpcode::SW_EC_DOUBLE_PROJ as usize),
             [
                 rd_register,
                 input_register,
@@ -1744,6 +1844,7 @@ mod ec_double_tests {
         modulus: BigUint,
         num_ops: usize,
         a: BigUint,
+        b: BigUint,
     ) {
         let mut rng = create_seeded_rng();
 
@@ -1755,7 +1856,8 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone());
+        let mut harness =
+            create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone(), b.clone());
 
         // Run some operations
         for i in 0..num_ops {
@@ -1766,6 +1868,7 @@ mod ec_double_tests {
                 &mut rng,
                 &modulus,
                 &a,
+                &b,
                 i == 0,
                 offset,
                 None,
@@ -1780,6 +1883,7 @@ mod ec_double_tests {
             &mut rng,
             &modulus,
             &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[0].0.clone()),
@@ -1793,6 +1897,7 @@ mod ec_double_tests {
             &mut rng,
             &modulus,
             &a,
+            &b,
             false,
             offset,
             Some(SampleEcPoints[1].0.clone()),
@@ -1818,6 +1923,7 @@ mod ec_double_tests {
             &mut rng,
             &modulus,
             &a,
+            &b,
             false,
             offset,
             Some(p1_x),
@@ -1835,36 +1941,49 @@ mod ec_double_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_ec_double_cuda_2x32() {
+        // secp256k1: a=0, b=7
         run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
             BigUint::zero(),
+            BigUint::from(7u32), // secp256k1 b coefficient,
         );
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_ec_double_cuda_2x32_nonzero_a_1() {
+        // secp256r1: a=-3 (p-3),
+        // b=0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
         let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
         let a = BigUint::from_bytes_le(&coeff_a);
+        // b coefficient (functions compute b3 = 3*b internally)
+        let b = BigUint::from_str_radix(
+            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+            16,
+        )
+        .unwrap();
 
         run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
             a,
+            b,
         );
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[test]
     fn test_ec_double_cuda_6x16() {
+        // BLS12-381: a=0, b=4
         run_ec_double_cuda_test::<ECC_BLOCKS_48, NUM_LIMBS_48>(
             WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
             BigUint::zero(),
+            BigUint::from(4u32), // BLS12-381 b coefficient,
         );
     }
 
@@ -1872,6 +1991,7 @@ mod ec_double_tests {
     fn run_preflight_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize>(
         modulus: BigUint,
         a: BigUint,
+        b: BigUint,
         is_setup: bool,
         rows: usize,
     ) {
@@ -1882,16 +2002,16 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
         let mut tester = GpuChipTestBuilder::default();
-        let harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone());
+        let harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone(), b.clone());
         let values = if is_setup {
-            vec![modulus, a]
+            vec![modulus, a, b]
         } else {
             // Exercise device input reduction with the smallest noncanonical value and the
             // largest value representable by the declared limb width.
             let one = BigUint::from(1u8);
             let max_value = (&one << (NUM_LIMBS * LIMB_BITS)) - &one;
             assert_ne!(&max_value % &modulus, BigUint::zero());
-            vec![modulus + &one, max_value]
+            vec![modulus + &one, max_value, BigUint::one()]
         };
         let input_bytes = encode_field_inputs(&values, NUM_LIMBS);
         let output_bytes =
@@ -1909,9 +2029,9 @@ mod ec_double_tests {
             &input_bytes,
         );
         let local_opcode = if is_setup {
-            WeierstrassOpcode::SETUP_EC_DOUBLE
+            WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ
         } else {
-            WeierstrassOpcode::EC_DOUBLE
+            WeierstrassOpcode::SW_EC_DOUBLE_PROJ
         };
         let instruction = Instruction::from_usize(
             VmOpcode::from_usize(offset + local_opcode as usize),
@@ -1978,12 +2098,14 @@ mod ec_double_tests {
             run_preflight_ec_double::<ECC_BLOCKS_32, NUM_LIMBS_32>(
                 secp256k1_coord_prime(),
                 BigUint::zero(),
+                BigUint::from(7u8),
                 is_setup,
                 1,
             );
             run_preflight_ec_double::<ECC_BLOCKS_48, NUM_LIMBS_48>(
                 BLS12_381_MODULUS.clone(),
                 BigUint::zero(),
+                BigUint::from(4u8),
                 is_setup,
                 1,
             );
@@ -1996,52 +2118,87 @@ mod ec_double_tests {
         run_preflight_ec_double::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             BigUint::zero(),
+            BigUint::from(7u8),
             false,
             3,
         );
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
-    /// SANITY TESTS
-    ///
-    /// Ensure that execute functions produce the correct results.
+    // SANITY TESTS
+    //
+    // Ensure that execute functions produce the correct results.
     ///////////////////////////////////////////////////////////////////////////////////////
+
+    /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z.
+    fn proj_to_affine(
+        x_proj: &BigUint,
+        y_proj: &BigUint,
+        z_proj: &BigUint,
+        p: &BigUint,
+    ) -> (BigUint, BigUint) {
+        // Compute z^{-1} mod p using Fermat's little theorem: z^{-1} = z^{p-2} mod p.
+        let z_inv = z_proj.modpow(&(p - BigUint::from(2u32)), p);
+        let x_affine = (x_proj * &z_inv) % p;
+        let y_affine = (y_proj * &z_inv) % p;
+        (x_affine, y_affine)
+    }
+
     #[test]
     fn ec_double_sanity_test_sample_ec_points() {
         let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let p = secp256k1_coord_prime();
         let config = ExprBuilderConfig {
-            modulus: secp256k1_coord_prime(),
+            modulus: p.clone(),
             num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
 
+        // secp256k1: a=0, b=7
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus().range_max_bits,
             WeierstrassOpcode::CLASS_OFFSET,
             BigUint::zero(),
+            BigUint::from(7u32), // secp256k1 b coefficient,
         );
 
         let (p1_x, p1_y) = SampleEcPoints[1].clone();
 
-        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
+        // Projective input: (X, Y, Z) where Z=1 for affine point.
+        let z1 = BigUint::one();
+        let vars = executor.program().execute(&[p1_x, p1_y, z1], &[true]);
+        // Output vars (X3, Y3, Z3) are the final three variables.
+        let r = &vars[vars.len() - 3..];
 
-        let r = executor.program().execute(&[p1_x, p1_y], &[true]);
-        assert_eq!(r.len(), 3); // lambda, x3, y3
-        assert_eq!(r[1], SampleEcPoints[3].0);
-        assert_eq!(r[2], SampleEcPoints[3].1);
+        // Output is projective coordinates in (X3, Y3, Z3) order.
+        assert_eq!(r.len(), 3);
+
+        // Convert projective output to affine and compare.
+        let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
+        assert_eq!(x3_affine, SampleEcPoints[3].0);
+        assert_eq!(y3_affine, SampleEcPoints[3].1);
     }
 
     #[test]
     fn ec_double_sanity_test() {
         let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let p = secp256r1_coord_prime();
         let config = ExprBuilderConfig {
-            modulus: secp256r1_coord_prime(),
+            modulus: p.clone(),
             num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
+        // secp256r1: a=-3 (p-3),
+        // b=0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
         let a = BigUint::from_str_radix(
             "ffffffff00000001000000000000000000000000fffffffffffffffffffffffc",
+            16,
+        )
+        .unwrap();
+        // b coefficient (functions compute b3 = 3*b internally)
+        let b = BigUint::from_str_radix(
+            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
             16,
         )
         .unwrap();
@@ -2051,6 +2208,7 @@ mod ec_double_tests {
             tester.range_checker().bus().range_max_bits,
             WeierstrassOpcode::CLASS_OFFSET,
             a.clone(),
+            b,
         );
 
         // Testing data from: http://point-at-infinity.org/ecc/nisttv
@@ -2065,10 +2223,15 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
+        // Projective input: (X, Y, Z) where Z=1 for affine point.
+        let z1 = BigUint::one();
+        let vars = executor.program().execute(&[p1_x, p1_y, z1], &[true]);
+        // Output vars (X3, Y3, Z3) are the final three variables.
+        let r = &vars[vars.len() - 3..];
 
-        let r = executor.program().execute(&[p1_x, p1_y], &[true]);
-        assert_eq!(r.len(), 3); // lambda, x3, y3
+        // Output is projective coordinates in (X3, Y3, Z3) order.
+        assert_eq!(r.len(), 3);
+
         let expected_double_x = BigUint::from_str_radix(
             "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
             16,
@@ -2079,7 +2242,10 @@ mod ec_double_tests {
             16,
         )
         .unwrap();
-        assert_eq!(r[1], expected_double_x);
-        assert_eq!(r[2], expected_double_y);
+
+        // Convert projective output to affine and compare.
+        let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
+        assert_eq!(x3_affine, expected_double_x);
+        assert_eq!(y3_affine, expected_double_y);
     }
 }

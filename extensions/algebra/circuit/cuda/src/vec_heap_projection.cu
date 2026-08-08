@@ -119,6 +119,13 @@ extern "C" int _vec_heap_replay_gather(
             register_as, memory_as, pointer_max_bits, error, stream
         );
     }
+    if (num_reads == 2 && blocks == 18) {
+        return launch_vec_heap_replay_gather<2, 18>(
+            output, output_len, output_start, instructions, pc_base, program, memory, seeds,
+            predecessors, steps, step_start, num_steps, expected_opcode, local_opcode,
+            register_as, memory_as, pointer_max_bits, error, stream
+        );
+    }
     if (num_reads == 1 && blocks == 8) {
         return launch_vec_heap_replay_gather<1, 8>(
             output, output_len, output_start, instructions, pc_base, program, memory, seeds,
@@ -128,6 +135,13 @@ extern "C" int _vec_heap_replay_gather(
     }
     if (num_reads == 1 && blocks == 12) {
         return launch_vec_heap_replay_gather<1, 12>(
+            output, output_len, output_start, instructions, pc_base, program, memory, seeds,
+            predecessors, steps, step_start, num_steps, expected_opcode, local_opcode,
+            register_as, memory_as, pointer_max_bits, error, stream
+        );
+    }
+    if (num_reads == 1 && blocks == 18) {
+        return launch_vec_heap_replay_gather<1, 18>(
             output, output_len, output_start, instructions, pc_base, program, memory, seeds,
             predecessors, steps, step_start, num_steps, expected_opcode, local_opcode,
             register_as, memory_as, pointer_max_bits, error, stream

@@ -31,6 +31,8 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{program::Program, LocalOpcode};
+#[cfg(feature = "rvr")]
+use openvm_mod_circuit_builder::run_field_expression_precomputed;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use openvm_riscv_circuit::preflight::PreflightReplayProgram;
@@ -45,12 +47,12 @@ use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
 
 #[cfg(feature = "rvr")]
+use crate::ec_double_proj_program;
+#[cfg(feature = "rvr")]
 use crate::CurveConfig;
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip,
-    weierstrass_chip::{
-        generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
-    },
+    get_ec_add_chip, get_ec_double_chip,
+    weierstrass_chip::{generate_add_trace_from_postflight, generate_double_trace_from_postflight},
     Rv64WeierstrassConfig, WeierstrassAir, WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32,
     ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
@@ -62,6 +64,7 @@ fn ec_double_setup_words(
 ) -> Result<Vec<u64>, GpuPostflightError> {
     if curve.modulus == Default::default()
         || curve.a >= curve.modulus
+        || curve.b >= curve.modulus
         || curve.modulus.bits().div_ceil(8) as usize > coordinate_bytes
         || !coordinate_bytes.is_multiple_of(std::mem::size_of::<u64>())
     {
@@ -70,22 +73,34 @@ fn ec_double_setup_words(
             curve.struct_name
         )));
     }
-    // In a setup row the expression inputs are x1 = p and y1 = a. Modulo p,
-    // lambda = a, so the fixed postimage is (a^2, -a^3-a).
-    let x = (&curve.a * &curve.a) % &curve.modulus;
-    let neg_y = ((&x * &curve.a) + &curve.a) % &curve.modulus;
-    let y = if neg_y == Default::default() {
-        Default::default()
-    } else {
-        &curve.modulus - neg_y
+    // Setup encodes (p, a, b) as the projective input. Evaluate the same field-expression
+    // program used by execution so the static postflight write stays tied to the configured
+    // curve, including nonzero-a curves.
+    let config = ExprBuilderConfig {
+        modulus: curve.modulus.clone(),
+        num_limbs: coordinate_bytes,
+        limb_bits: 8,
     };
-    let mut bytes = vec![0u8; 2 * coordinate_bytes];
-    for (index, value) in [x, y].iter().enumerate() {
+    let program = ec_double_proj_program(
+        config,
+        openvm_riscv_circuit::adapters::U16_BITS,
+        curve.a.clone(),
+        curve.b.clone(),
+    );
+    let mut input = vec![0u8; 3 * coordinate_bytes];
+    for (index, value) in [&curve.modulus, &curve.a, &curve.b].iter().enumerate() {
         let value = value.to_bytes_le();
-        bytes[index * coordinate_bytes..index * coordinate_bytes + value.len()]
+        input[index * coordinate_bytes..index * coordinate_bytes + value.len()]
             .copy_from_slice(&value);
     }
-    Ok(bytes
+    let output = run_field_expression_precomputed::<true>(&program, program.num_flags(), &input).0;
+    if output.len() != 3 * coordinate_bytes {
+        return Err(GpuPostflightError::InvalidAccessSchedule(format!(
+            "invalid projective setup output width for curve {}",
+            curve.struct_name
+        )));
+    }
+    Ok(output
         .chunks_exact(std::mem::size_of::<u64>())
         .map(|word| u64::from_le_bytes(word.try_into().unwrap()))
         .collect())
@@ -93,19 +108,40 @@ fn ec_double_setup_words(
 
 #[cfg(all(test, feature = "rvr"))]
 mod checkpoint_tests {
+    use num_bigint::BigUint;
+
     use super::*;
     use crate::{P256_CONFIG, SECP256K1_CONFIG};
 
     #[test]
     fn ec_double_setup_words_match_configured_expression() {
-        assert_eq!(
-            ec_double_setup_words(&P256_CONFIG, NUM_LIMBS_32).unwrap(),
-            [9, 0, 0, 0, 30, 0, 0, 0]
-        );
-        assert_eq!(
-            ec_double_setup_words(&SECP256K1_CONFIG, NUM_LIMBS_32).unwrap(),
-            [0; ECC_BLOCKS_32]
-        );
+        let p256 = ec_double_setup_words(&P256_CONFIG, NUM_LIMBS_32).unwrap();
+        let secp256k1 = ec_double_setup_words(&SECP256K1_CONFIG, NUM_LIMBS_32).unwrap();
+        assert_eq!(p256.len(), ECC_BLOCKS_32);
+        assert_eq!(secp256k1.len(), ECC_BLOCKS_32);
+
+        // For secp256k1, setup evaluates the a=0 doubling formula at (p, a, b), which is
+        // equivalent to (0, 0, 7) modulo p. Algorithm 9 yields (0, p - 3*(3b*z^2)^2, 0).
+        let t2 = BigUint::from(3u8) * &SECP256K1_CONFIG.b * &SECP256K1_CONFIG.b.pow(2);
+        let expected_y = &SECP256K1_CONFIG.modulus - BigUint::from(3u8) * t2.pow(2);
+        let mut expected = [0u8; 3 * NUM_LIMBS_32];
+        let expected_y = expected_y.to_bytes_le();
+        expected[NUM_LIMBS_32..NUM_LIMBS_32 + expected_y.len()].copy_from_slice(&expected_y);
+        let expected = expected
+            .chunks_exact(std::mem::size_of::<u64>())
+            .map(|word| u64::from_le_bytes(word.try_into().unwrap()))
+            .collect::<Vec<_>>();
+        assert_eq!(secp256k1, expected);
+    }
+
+    #[test]
+    fn ec_double_setup_words_reject_noncanonical_coefficients() {
+        let mut curve = SECP256K1_CONFIG.clone();
+        curve.b = curve.modulus.clone();
+        assert!(matches!(
+            ec_double_setup_words(&curve, NUM_LIMBS_32),
+            Err(GpuPostflightError::InvalidAccessSchedule(_))
+        ));
     }
 }
 
@@ -141,12 +177,12 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
     fn local_opcodes() -> Result<[usize; 2], GpuPostflightError> {
         match NUM_READS {
             2 => Ok([
-                WeierstrassOpcode::EC_ADD_NE as usize,
-                WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                WeierstrassOpcode::SW_EC_ADD_PROJ as usize,
+                WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ as usize,
             ]),
             1 => Ok([
-                WeierstrassOpcode::EC_DOUBLE as usize,
-                WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+                WeierstrassOpcode::SW_EC_DOUBLE_PROJ as usize,
+                WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ as usize,
             ]),
             _ => Err(GpuPostflightError::InvalidTranscript(format!(
                 "unsupported Weierstrass replay read count {NUM_READS}"
@@ -254,8 +290,8 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 spans: &add_spans,
             };
             for local in [
-                WeierstrassOpcode::EC_ADD_NE,
-                WeierstrassOpcode::SETUP_EC_ADD_NE,
+                WeierstrassOpcode::SW_EC_ADD_PROJ,
+                WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ,
             ] {
                 registry.register(opcode(local)?, add_schedule)?;
             }
@@ -278,10 +314,13 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 memory_as_operand: 5,
                 spans: &double_spans,
             };
-            registry.register(opcode(WeierstrassOpcode::EC_DOUBLE)?, double_schedule)?;
+            registry.register(
+                opcode(WeierstrassOpcode::SW_EC_DOUBLE_PROJ)?,
+                double_schedule,
+            )?;
             let setup_words = ec_double_setup_words(
                 curve,
-                blocks * openvm_circuit::arch::MEMORY_BLOCK_BYTES / 2,
+                blocks * openvm_circuit::arch::MEMORY_BLOCK_BYTES / 3,
             )?;
             let setup_double_spans = [
                 PostflightAccessSpan::read_fixed(
@@ -296,7 +335,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 )?,
             ];
             registry.register(
-                opcode(WeierstrassOpcode::SETUP_EC_DOUBLE)?,
+                opcode(WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ)?,
                 PostflightAccessSchedule {
                     spans: &setup_double_spans,
                     ..double_schedule
@@ -517,27 +556,26 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                 };
 
                 inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_32>(
+                let ec_add = get_ec_add_chip::<F, ECC_BLOCKS_32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
+                    curve.a.clone(),
+                    curve.b.clone(),
                 );
-                let addne = HybridWeierstrassChip::new_with_replay(
-                    addne,
+                let ec_add = HybridWeierstrassChip::new_with_replay(
+                    ec_add,
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
                 )
                 .map_err(|source| {
-                    ChipInventoryError::prover_chip_initialization(
-                        "Weierstrass add-ne replay",
-                        source,
-                    )
+                    ChipInventoryError::prover_chip_initialization("Weierstrass add replay", source)
                 })?;
-                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(ec_add, move |chip, postflight| {
                     let trace =
-                        generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                        generate_add_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
                         AirProvingContext::simple_no_pis(trace),
                         &chip.device_ctx,
@@ -551,6 +589,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     range_checker.clone(),
                     byte_ptr_max_bits,
                     curve.a.clone(),
+                    curve.b.clone(),
                 );
                 let double = HybridWeierstrassChip::new_with_replay(
                     double,
@@ -580,27 +619,26 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                 };
 
                 inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_48>(
+                let ec_add = get_ec_add_chip::<F, ECC_BLOCKS_48>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
+                    curve.a.clone(),
+                    curve.b.clone(),
                 );
-                let addne = HybridWeierstrassChip::new_with_replay(
-                    addne,
+                let ec_add = HybridWeierstrassChip::new_with_replay(
+                    ec_add,
                     device_ctx.clone(),
                     opcode_base,
                     range_checker_gpu.clone(),
                 )
                 .map_err(|source| {
-                    ChipInventoryError::prover_chip_initialization(
-                        "Weierstrass add-ne replay",
-                        source,
-                    )
+                    ChipInventoryError::prover_chip_initialization("Weierstrass add replay", source)
                 })?;
-                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
+                inventory.add_executor_chip_with_tracegen(ec_add, move |chip, postflight| {
                     let trace =
-                        generate_add_ne_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
+                        generate_add_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
                     Ok(cpu_proving_ctx_to_gpu(
                         AirProvingContext::simple_no_pis(trace),
                         &chip.device_ctx,
@@ -614,6 +652,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     range_checker.clone(),
                     byte_ptr_max_bits,
                     curve.a.clone(),
+                    curve.b.clone(),
                 );
                 let double = HybridWeierstrassChip::new_with_replay(
                     double,

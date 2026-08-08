@@ -352,6 +352,7 @@ struct FieldExprReplayChipGpu<const NUM_READS: usize, const BLOCKS: usize> {
     pointer_max_bits: u32,
     timestamp_max_bits: u32,
     width: usize,
+    field_u32_limbs: usize,
     aux_words_per_thread: usize,
     /// Device-dependent occupancy and kernel attributes, queried once at construction.
     kernel_config: ValidatedFieldExprKernelConfig,
@@ -426,6 +427,12 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
                 "field-expression trace width overflow".to_string(),
             )
         })?;
+        let field_u32_limbs = chip
+            .inner
+            .expr
+            .program()
+            .canonical_num_limbs()
+            .div_ceil(size_of::<u32>());
         set_device_by_id(range_checker.device_ctx.device_id as i32)?;
         let program = serialized
             .blob
@@ -434,7 +441,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
         let kernel_config = validate_kernel_config(cuda_abi::field_expr_replay_kernel_config::<
             NUM_READS,
             BLOCKS,
-        >()?)?;
+        >(field_u32_limbs)?)?;
         Ok(Self {
             range_checker,
             program,
@@ -443,6 +450,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
             pointer_max_bits,
             timestamp_max_bits,
             width,
+            field_u32_limbs,
             aux_words_per_thread: serialized.aux_words_per_thread,
             kernel_config,
         })
@@ -508,6 +516,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> FieldExprReplayChipGpu<NUM_REA
                 &self.program,
                 &delta,
                 &scratch,
+                self.field_u32_limbs,
                 self.aux_words_per_thread,
                 launch,
                 self.pointer_max_bits,

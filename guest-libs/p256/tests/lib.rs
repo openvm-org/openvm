@@ -225,10 +225,106 @@ mod guest_tests {
 }
 
 mod host_tests {
+    use elliptic_curve::subtle::ConstantTimeEq;
     use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
-    use p256::{P256Coord, P256Point, P256Scalar};
+    use openvm_ecc_guest::{
+        msm,
+        weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
+        CyclicGroup, Group,
+    };
+    #[cfg(feature = "ecdsa-core")]
+    use p256::ecdsa::VerifyingKey;
+    use p256::{NistP256, P256Coord, P256Point, P256Scalar};
+
+    #[test]
+    fn test_projective_coordinate_contracts() {
+        let generator = P256Point::GENERATOR;
+        let expected = generator.into_affine_coords().unwrap();
+        assert_eq!(expected.0, generator.x().clone());
+        assert_eq!(expected.1, generator.y().clone());
+
+        let scale = P256Coord::from_u32(7);
+        let scaled = unsafe {
+            P256Point::from_xyz_unchecked(
+                generator.x() * &scale,
+                generator.y() * &scale,
+                generator.z() * &scale,
+            )
+        };
+        assert_eq!(scaled.into_affine_coords(), Some(expected));
+        assert!(<P256Point as WeierstrassPoint>::IDENTITY
+            .into_affine_coords()
+            .is_none());
+
+        let malformed_identity = unsafe {
+            P256Point::from_xyz_unchecked(P256Coord::ZERO, P256Coord::ZERO, P256Coord::ZERO)
+        };
+        assert_ne!(malformed_identity, generator);
+        assert!(!bool::from(malformed_identity.ct_eq(&generator)));
+
+        let encoded = serde_json::to_vec(&malformed_identity).unwrap();
+        let decoded: P256Point = serde_json::from_slice(&encoded).unwrap();
+        assert!(Group::is_identity(&decoded));
+        assert_ne!(decoded, generator);
+        assert_eq!(decoded, <P256Point as WeierstrassPoint>::IDENTITY);
+        assert_eq!(decoded + generator, generator);
+
+        #[cfg(feature = "ecdsa-core")]
+        {
+            let verifying_key = VerifyingKey::from_affine(scaled).unwrap();
+            assert_eq!(verifying_key.as_affine().z(), &P256Coord::ONE);
+        }
+    }
+
+    #[test]
+    fn test_cached_mul_table_matches_msm() {
+        let bases = [P256Point::GENERATOR];
+        let table = CachedMulTable::<NistP256>::new_with_prime_order(&bases, 4);
+        for scalar in [0, 1, 2, 3, 7, 15, 16, 255] {
+            let scalar = P256Scalar::from_u32(scalar);
+            assert_eq!(table.windowed_mul(&[scalar]), msm(&[scalar], &bases));
+        }
+    }
+
+    #[test]
+    fn test_fixed_generator_lincomb_matches_msm() {
+        let point = P256Point::GENERATOR.double();
+        let wide = P256Scalar::from_le_bytes_unchecked(&hex!(
+            "efcdab896745230fefcdab896745230fefcdab896745230fefcdab896745230f"
+        ));
+        let scalars = [
+            (P256Scalar::from_u32(0), P256Scalar::from_u32(0)),
+            (P256Scalar::from_u32(1), P256Scalar::from_u32(1)),
+            (P256Scalar::from_u32(7), P256Scalar::from_u32(15)),
+            (P256Scalar::from_u32(255), P256Scalar::from_u32(65_537)),
+            (wide, P256Scalar::from_u32(3)),
+        ];
+        for (generator_scalar, point_scalar) in scalars {
+            assert_eq!(
+                <NistP256 as IntrinsicCurve>::lincomb_generator(
+                    &generator_scalar,
+                    &point_scalar,
+                    &point,
+                ),
+                msm(
+                    &[generator_scalar, point_scalar],
+                    &[P256Point::GENERATOR, point]
+                )
+            );
+            assert_eq!(
+                <NistP256 as IntrinsicCurve>::lincomb_neg_generator(
+                    &generator_scalar,
+                    &point_scalar,
+                    &point,
+                ),
+                msm(
+                    &[generator_scalar, point_scalar],
+                    &[P256Point::NEG_GENERATOR, point]
+                )
+            );
+        }
+    }
 
     #[test]
     fn test_host_p256() {
@@ -246,18 +342,20 @@ mod host_tests {
 
         // Generic add can handle equal or unequal points.
         #[allow(clippy::op_ref)]
-        let p3 = &p1 + &p2;
+        let p3 = (&p1 + &p2).normalize();
         #[allow(clippy::op_ref)]
-        let p4 = &p2 + &p2;
+        let p4 = (&p2 + &p2).normalize();
 
         // Add assign and double assign
         let mut sum = unsafe { P256Point::from_xy(x1, y1).unwrap() };
         sum += &p2;
+        let sum = sum.normalize();
         if sum.x() != p3.x() || sum.y() != p3.y() {
             panic!();
         }
         let mut double = unsafe { P256Point::from_xy(x2, y2).unwrap() };
         double.double_assign();
+        let double = double.normalize();
         if double.x() != p4.x() || double.y() != p4.y() {
             panic!();
         }
@@ -266,8 +364,8 @@ mod host_tests {
         let p1 = unsafe { P256Point::from_xy(x1, y1).unwrap() };
         let scalar = P256Scalar::from_u32(3);
         #[allow(clippy::op_ref)]
-        let p2 = &p1.double() + &p1;
-        let result = msm(&[scalar], &[p1]);
+        let p2 = (&p1.double() + &p1).normalize();
+        let result = msm(&[scalar], &[p1]).normalize();
         if result.x() != p2.x() || result.y() != p2.y() {
             panic!();
         }

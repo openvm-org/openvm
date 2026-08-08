@@ -49,12 +49,13 @@ The crate provides two macros: `sw_declare!` and `sw_init!`. The signatures are:
 
 What happens under the hood:
 
-1. `sw_declare!` macro creates a struct with two field `x` and `y` of type `mod_type`. This struct denotes a point on the corresponding elliptic curve. In the example it would be
+1. `sw_declare!` creates a struct with three fields `x`, `y`, and `z` of type `mod_type`. The fields store a projective point `(X, Y, Z)`, representing the affine point `(X/Z, Y/Z)` when `Z` is nonzero. In the example it would be
 
 ```rust
 struct Secp256k1Point {
     x: Secp256k1Coord,
     y: Secp256k1Coord,
+    z: Secp256k1Coord,
 }
 ```
 
@@ -62,8 +63,8 @@ Similar to `moduli_declare!`, this macro also creates extern functions for arith
 
 ```rust
 extern "C" {
-    fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
-    fn sw_double_extern_func_Secp256k1Point(rd: usize, rs1: usize);
+    fn sw_add_proj_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
+    fn sw_double_proj_extern_func_Secp256k1Point(rd: usize, rs1: usize);
     fn sw_setup_extern_func_Secp256k1Point(
         uninit: *mut core::ffi::c_void,
         p1: *const u8,
@@ -76,12 +77,12 @@ extern "C" {
 
 ```rust
 #[allow(non_snake_case)]
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 mod openvm_intrinsics_ffi_2 {
     use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
     #[no_mangle]
-    extern "C" fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize) {
+    extern "C" fn sw_add_proj_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize) {
         // ...
     }
     // other externs
@@ -92,7 +93,7 @@ mod openvm_intrinsics_ffi_2 {
         p1: *const u8,
         p2: *const u8,
     ) {
-        #[cfg(target_os = "zkvm")]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
         {
             // ...
         }
@@ -120,7 +121,7 @@ sw_init! {
 }
 ```
 
-The reason is that, for example, the function `sw_add_ne_extern_func_Secp256k1Point` remains unimplemented, but we implement `sw_add_ne_extern_func_Sw`.
+The reason is that, for example, the function `sw_add_proj_extern_func_Secp256k1Point` remains unimplemented, but we implement `sw_add_proj_extern_func_Sw`.
 
 6. `cargo openvm build` will automatically generate a call to `sw_init!` based on `openvm.toml`.
 Note that `openvm.toml` must contain the name of each struct created by `sw_declare!` as a string (in the example at the top of this document, its `"Secp256k1Point"`).

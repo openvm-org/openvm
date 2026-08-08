@@ -6,7 +6,7 @@ use halo2curves_axiom::bls12_381::{
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
+use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint, CyclicGroup};
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
@@ -25,6 +25,55 @@ use crate::{
     },
     operations::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign},
 };
+
+#[test]
+fn test_projective_to_affine_adapter() {
+    use crate::bls12_381::G1Affine as OpenVmG1Affine;
+
+    let generator = OpenVmG1Affine::GENERATOR;
+    let expected = openvm_pairing_guest::projective_to_affine(generator.clone());
+    assert!(!expected.is_infinity());
+
+    let scale = Fp::from_u8(7);
+    let scaled = unsafe {
+        OpenVmG1Affine::from_xyz_unchecked(
+            generator.x() * &scale,
+            generator.y() * &scale,
+            generator.z() * &scale,
+        )
+    };
+    assert_eq!(openvm_pairing_guest::projective_to_affine(scaled), expected);
+    assert!(openvm_pairing_guest::projective_to_affine(OpenVmG1Affine::IDENTITY).is_infinity());
+}
+
+#[test]
+fn test_bls12_381_msm_matches_pippenger_for_small_inputs() {
+    use openvm_ecc_guest::{msm, weierstrass::IntrinsicCurve, Group};
+
+    use crate::bls12_381::{Bls12_381, G1Affine as OpenVmG1Affine, Scalar};
+
+    let check = |scalars: &[Scalar], bases: &[OpenVmG1Affine]| {
+        assert_eq!(
+            <Bls12_381 as IntrinsicCurve>::msm(scalars, bases),
+            msm(scalars, bases),
+        );
+    };
+
+    let g = OpenVmG1Affine::GENERATOR;
+    let g2 = g.double();
+    let g3 = &g2 + &g;
+    let s = Scalar::from_u32;
+
+    let just_g = core::slice::from_ref(&g);
+    check(&[s(0)], just_g);
+    check(&[s(1)], just_g);
+    check(&[s(15)], just_g);
+    check(&[s(255)], just_g);
+    check(&[s(65_537)], just_g);
+    check(&[s(7)], &[<OpenVmG1Affine as WeierstrassPoint>::IDENTITY]);
+    check(&[s(3), s(5)], &[g.clone(), g2.clone()]);
+    check(&[s(1), s(0), s(9)], &[g, g2, g3]);
+}
 
 #[test]
 fn test_bls12381_frobenius_coeffs() {
@@ -257,7 +306,10 @@ fn test_bls12381_g2_affine() {
             (expected_neg, r_neg),
             (expected_double, r_double),
         ] {
-            assert_eq!(convert_g2_affine_halo2_to_openvm(expected), actual);
+            assert_eq!(
+                convert_g2_affine_halo2_to_openvm(expected),
+                actual.normalize()
+            );
         }
     }
 }

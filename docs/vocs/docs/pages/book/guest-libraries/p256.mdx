@@ -7,7 +7,7 @@ The P256 guest library uses [`openvm-ecc-guest`](/book/acceleration-using-extens
 :::
 
 :::warning
-`P256Point` stores raw affine coordinates. Deserializing a `P256Point` does not check that the point is on the P-256 curve. Validate points from untrusted input before using point addition, scalar multiplication, or MSM.
+`P256Point` stores raw projective `(X, Y, Z)` coordinates. Deserializing a `P256Point` does not check that the coordinates are canonical or represent a point on the P-256 curve. Validate points from untrusted input before using point addition, scalar multiplication, or MSM.
 :::
 
 ## Example ECDSA verification

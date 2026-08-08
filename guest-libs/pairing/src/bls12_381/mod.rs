@@ -1,10 +1,12 @@
 extern crate alloc;
 
-use core::ops::Neg;
-
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{
+    weierstrass::{CachedMulTable, IntrinsicCurve},
+    CyclicGroup, Group,
+};
 
 mod fp12;
 mod fp2;
@@ -60,6 +62,7 @@ impl CyclicGroup for G1Affine {
         y: Bls12_381Fp::from_const_bytes(hex!(
             "E1E7C5462923AA0CE48A88A244C73CD0EDB3042CCB18DB00F60AD0D595E0F5FCE48A1D74ED309EA0F1A0AAE381F4B308"
         )),
+        z: Bls12_381Fp::from_const_u8(1),
     };
     const NEG_GENERATOR: Self = G1Affine {
         x: Bls12_381Fp::from_const_bytes(hex!(
@@ -68,6 +71,7 @@ impl CyclicGroup for G1Affine {
         y: Bls12_381Fp::from_const_bytes(hex!(
             "CAC239B9D6DC54AD1B75CB0EBA386F4E3642ACCAD5B95566C907B51DEF6A8167F2212ECFC8767DAAA845D555681D4D11"
         )),
+        z: Bls12_381Fp::from_const_u8(1),
     };
 }
 
@@ -78,23 +82,28 @@ impl IntrinsicCurve for Bls12_381 {
     type Point = G1Affine;
 
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        openvm_ecc_guest::msm(coeffs, bases)
+        if coeffs.len() < 25 {
+            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            openvm_ecc_guest::msm(coeffs, bases)
+        }
     }
 }
 
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
 // but not special E(Fp2) intrinsics.
 mod g2 {
+    // Required by `impl_sw_proj!` macro expansion (`Field::ZERO`, `Field::ONE`),
+    // but clippy doesn't see through macro usage.
+    #[allow(unused_imports)]
     use openvm_algebra_guest::Field;
-    use openvm_ecc_guest::{
-        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
-    };
+    use openvm_ecc_guest::{impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group};
 
     use super::{Fp, Fp2};
 
-    const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
     const B: Fp2 = Fp2::new(Fp::from_const_u8(4), Fp::from_const_u8(4));
-    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_proj!(G2Affine, Fp2, B);
     impl_sw_group_ops!(G2Affine, Fp2);
 }
 

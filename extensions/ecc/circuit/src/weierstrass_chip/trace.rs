@@ -292,7 +292,7 @@ fn generate_trace_from_postflights<
     Ok(trace)
 }
 
-pub(crate) fn generate_add_ne_trace_from_postflight<
+pub(crate) fn generate_add_trace_from_postflight<
     F: PrimeField32 + Send + Sync + Clone,
     const BLOCKS: usize,
 >(
@@ -305,14 +305,14 @@ pub(crate) fn generate_add_ne_trace_from_postflight<
         std::slice::from_ref(postflight),
         opcode_base,
         &[
-            WeierstrassOpcode::EC_ADD_NE,
-            WeierstrassOpcode::SETUP_EC_ADD_NE,
+            WeierstrassOpcode::SW_EC_ADD_PROJ,
+            WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ,
         ],
     )
 }
 
 #[cfg(test)]
-pub(crate) fn generate_add_ne_trace_from_postflights<
+pub(crate) fn generate_add_trace_from_postflights<
     F: PrimeField32 + Send + Sync + Clone,
     const BLOCKS: usize,
 >(
@@ -325,8 +325,8 @@ pub(crate) fn generate_add_ne_trace_from_postflights<
         postflights,
         opcode_base,
         &[
-            WeierstrassOpcode::EC_ADD_NE,
-            WeierstrassOpcode::SETUP_EC_ADD_NE,
+            WeierstrassOpcode::SW_EC_ADD_PROJ,
+            WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ,
         ],
     )
 }
@@ -344,8 +344,8 @@ pub(crate) fn generate_double_trace_from_postflight<
         std::slice::from_ref(postflight),
         opcode_base,
         &[
-            WeierstrassOpcode::EC_DOUBLE,
-            WeierstrassOpcode::SETUP_EC_DOUBLE,
+            WeierstrassOpcode::SW_EC_DOUBLE_PROJ,
+            WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ,
         ],
     )
 }
@@ -364,8 +364,8 @@ pub(crate) fn generate_double_trace_from_postflights<
         postflights,
         opcode_base,
         &[
-            WeierstrassOpcode::EC_DOUBLE,
-            WeierstrassOpcode::SETUP_EC_DOUBLE,
+            WeierstrassOpcode::SW_EC_DOUBLE_PROJ,
+            WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ,
         ],
     )
 }

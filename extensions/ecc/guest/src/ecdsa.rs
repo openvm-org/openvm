@@ -82,7 +82,7 @@ pub struct VerifyingKey<C: IntrinsicCurve> {
 #[repr(C)]
 #[derive(Clone)]
 pub struct PublicKey<C: IntrinsicCurve> {
-    /// Affine point
+    /// Normalized point.
     point: AffinePoint<C>,
 }
 
@@ -98,12 +98,15 @@ where
     /// This does not check that `point` is on the curve. Use this only with points that have
     /// already been checked. For public keys from untrusted bytes, use [`Self::from_sec1_bytes`].
     pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
-        // Internally this calls `is_eq` on `x` and `y` coordinates, which will assert `x, y` are
-        // reduced.
-        if point.is_identity() {
+        point.x().assert_reduced();
+        point.y().assert_reduced();
+        point.z().assert_reduced();
+        if Group::is_identity(&point) {
             Err(Error::new())
         } else {
-            Ok(Self { point })
+            Ok(Self {
+                point: point.normalize(),
+            })
         }
     }
 
@@ -155,11 +158,11 @@ where
     }
 
     pub fn to_sec1_bytes(&self, compress: bool) -> Vec<u8> {
-        if self.point.is_identity() {
+        if Group::is_identity(&self.point) {
             return vec![0x00];
         }
 
-        let (x, y) = self.point.clone().into_coords();
+        let (x, y, _) = self.point.normalize().into_coords();
 
         if compress {
             let mut bytes = Vec::<u8>::with_capacity(1 + Coordinate::<C>::NUM_LIMBS);
@@ -498,8 +501,7 @@ where
 
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
-        let NEG_G = C::Point::NEG_GENERATOR;
-        let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
+        let point = <C as IntrinsicCurve>::lincomb_neg_generator(&neg_u1, &u2, &R);
         let vk = VerifyingKey::from_affine(point)?;
 
         Ok(vk)
@@ -518,7 +520,7 @@ where
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
 {
-    if pubkey.is_identity() {
+    if Group::is_identity(&pubkey) {
         return Err(Error::new());
     }
 
@@ -548,16 +550,15 @@ where
     let u1 = z.div_unsafe(&s);
     let u2 = (&r).div_unsafe(&s);
 
-    let G = C::Point::GENERATOR;
     // public key
     let Q = pubkey;
-    let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
-    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert x, y
-    // coordinates of R are both reduced.
-    if R.is_identity() {
+    let R = <C as IntrinsicCurve>::lincomb_generator(&u1, &u2, &Q);
+    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert z
+    // coordinate of R is reduced.
+    if Group::is_identity(&R) {
         return Err(Error::new());
     }
-    let (x_1, _) = R.into_coords();
+    let (x_1, _, _) = R.normalize().into_coords();
     // Scalar and Coordinate may be different byte lengths, so we use an inefficient reduction
     let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
     if x_mod_n == r {
