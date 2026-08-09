@@ -17,21 +17,21 @@ use super::SBOX_REGISTERS;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct Poseidon2PermuteCols<T> {
+pub struct Poseidon2PeripheryCols<T> {
     pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,
     pub mult: T,
 }
 
-pub struct Poseidon2PermuteAir<F: Field> {
+pub struct Poseidon2PeripheryAir<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub bus: LookupBus,
 }
 
-// No columns provided: `Poseidon2PermuteCols` embeds external `Poseidon2SubCols` which doesn't
+// No columns provided: `Poseidon2PeripheryCols` embeds external `Poseidon2SubCols` which doesn't
 // derive `StructReflection`.
-impl<F: Field> ColumnsAir for Poseidon2PermuteAir<F> {}
+impl<F: Field> ColumnsAir for Poseidon2PeripheryAir<F> {}
 
-impl<F: Field> Poseidon2PermuteAir<F> {
+impl<F: Field> Poseidon2PeripheryAir<F> {
     pub fn new(config: Poseidon2Config<F>, bus: LookupBus) -> Self {
         Self {
             subair: Arc::new(Poseidon2SubAir::new(config.constants.into())),
@@ -40,21 +40,21 @@ impl<F: Field> Poseidon2PermuteAir<F> {
     }
 }
 
-impl<F: Field> BaseAir<F> for Poseidon2PermuteAir<F> {
+impl<F: Field> BaseAir<F> for Poseidon2PeripheryAir<F> {
     fn width(&self) -> usize {
-        Poseidon2PermuteCols::<F>::width()
+        Poseidon2PeripheryCols::<F>::width()
     }
 }
-impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2PermuteAir<F> {}
-impl<F: Field> PartitionedBaseAir<F> for Poseidon2PermuteAir<F> {}
+impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2PeripheryAir<F> {}
+impl<F: Field> PartitionedBaseAir<F> for Poseidon2PeripheryAir<F> {}
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Poseidon2PermuteAir<AB::F> {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Poseidon2PeripheryAir<AB::F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main
             .row_slice(0)
             .expect("window should have at least one row");
-        let local: &Poseidon2PermuteCols<AB::Var> = (*local).borrow();
+        let local: &Poseidon2PeripheryCols<AB::Var> = (*local).borrow();
 
         let mut sub_builder =
             SubAirBuilder::<AB, Poseidon2SubAir<AB::F, SBOX_REGISTERS>, AB::F>::new(

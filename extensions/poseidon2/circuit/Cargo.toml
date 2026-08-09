@@ -14,11 +14,17 @@ openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-poseidon2-transpiler = { workspace = true }
 
 openvm-poseidon2-air = { workspace = true }
 
 dashmap.workspace = true
+derive-new.workspace = true
+itertools.workspace = true
 rustc-hash.workspace = true
 rand.workspace = true
 
@@ -30,8 +36,8 @@ openvm-circuit = { path = "../../../crates/vm", default-features = false, featur
 default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
-tco = ["openvm-circuit/tco"]
-aot = ["openvm-circuit/aot"]
+tco = ["openvm-rv32im-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

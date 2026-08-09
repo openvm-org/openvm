@@ -16,11 +16,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::RngCore;
 
-use crate::periphery::{Poseidon2PermuteAir, Poseidon2PermuteChip};
+use crate::periphery::{Poseidon2PeripheryAir, Poseidon2PeripheryChip};
 
-fn create_test_chip() -> (AirRef<TestSC>, Poseidon2PermuteChip<BabyBear>) {
-    let chip = Poseidon2PermuteChip::<BabyBear>::new(Poseidon2Config::default());
-    let air = Arc::new(Poseidon2PermuteAir::<BabyBear>::new(
+fn create_test_chip() -> (AirRef<TestSC>, Poseidon2PeripheryChip<BabyBear>) {
+    let chip = Poseidon2PeripheryChip::<BabyBear>::new(Poseidon2Config::default());
+    let air = Arc::new(Poseidon2PeripheryAir::<BabyBear>::new(
         Poseidon2Config::default(),
         LookupBus::new(POSEIDON2_DIRECT_BUS),
     ));
@@ -29,13 +29,13 @@ fn create_test_chip() -> (AirRef<TestSC>, Poseidon2PermuteChip<BabyBear>) {
 
 #[test]
 fn poseidon2_periphery_empty_trace() {
-    let chip = Poseidon2PermuteChip::<BabyBear>::new(Poseidon2Config::default());
+    let chip = Poseidon2PeripheryChip::<BabyBear>::new(Poseidon2Config::default());
     for _ in 0..2 {
         let ctx: AirProvingContext<CpuBackend<TestSC>> = chip.generate_proving_ctx(());
         assert_eq!(
             ctx.common_main.height(),
             0,
-            "Poseidon2PermuteChip with no records should return an empty trace",
+            "Poseidon2PeripheryChip with no records should return an empty trace",
         );
     }
 }

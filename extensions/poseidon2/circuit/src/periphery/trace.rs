@@ -14,16 +14,16 @@ use openvm_stark_backend::{
 };
 use rustc_hash::FxBuildHasher;
 
-use super::{Poseidon2PermuteCols, SBOX_REGISTERS};
+use super::{Poseidon2PeripheryCols, SBOX_REGISTERS};
 
 #[derive(Debug)]
-pub struct Poseidon2PermuteChip<F: VmField> {
+pub struct Poseidon2PeripheryChip<F: VmField> {
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub records: DashMap<[F; POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,
     pub nonempty: AtomicBool,
 }
 
-impl<F: VmField> Poseidon2PermuteChip<F> {
+impl<F: VmField> Poseidon2PeripheryChip<F> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
@@ -57,7 +57,7 @@ impl<F: VmField> Poseidon2PermuteChip<F> {
     }
 }
 
-impl<RA, SC: StarkProtocolConfig> Chip<RA, CpuBackend<SC>> for Poseidon2PermuteChip<Val<SC>>
+impl<RA, SC: StarkProtocolConfig> Chip<RA, CpuBackend<SC>> for Poseidon2PeripheryChip<Val<SC>>
 where
     Val<SC>: VmField,
 {
@@ -68,7 +68,7 @@ where
     /// recording during this read-then-clear would silently drop entries, so callers must ensure
     /// recording has quiesced beforehand.
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let width = Poseidon2PermuteCols::<Val<SC>>::width();
+        let width = Poseidon2PeripheryCols::<Val<SC>>::width();
         if !self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
             let trace = RowMajorMatrix::new(vec![], width);
             return AirProvingContext::simple_no_pis(trace);
@@ -101,9 +101,9 @@ where
             .zip(inner_trace.values.par_chunks(inner_width))
             .zip(multiplicities)
             .for_each(|((row, inner_row), mult)| {
-                // WARNING: Poseidon2SubCols must be the first field in Poseidon2PermuteCols.
+                // WARNING: Poseidon2SubCols must be the first field in Poseidon2PeripheryCols.
                 row[..inner_width].copy_from_slice(inner_row);
-                let cols: &mut Poseidon2PermuteCols<Val<SC>> = row.borrow_mut();
+                let cols: &mut Poseidon2PeripheryCols<Val<SC>> = row.borrow_mut();
                 cols.mult = Val::<SC>::from_u32(mult);
             });
         self.records.clear();

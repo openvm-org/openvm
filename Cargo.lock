@@ -5298,10 +5298,16 @@ name = "openvm-poseidon2-circuit"
 version = "2.0.1"
 dependencies = [
  "dashmap",
+ "derive-new 0.6.0",
+ "itertools 0.14.0",
  "openvm-circuit",
  "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
+ "openvm-instructions",
  "openvm-poseidon2-air",
+ "openvm-poseidon2-transpiler",
+ "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
