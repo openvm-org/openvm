@@ -21,9 +21,10 @@ trace_write_public_values_u64(
 #pragma clang unsafe_buffer_usage begin
 
 static constexpr uint32_t NO_LAST_PAGE = UINT32_MAX;
-/* AS_MEMORY uses byte pointers, so one eight-cell U16 leaf spans 16 bytes. */
+/* Number of bytes in one Merkle leaf of the main-memory address space. */
 static constexpr uint32_t TRACER_MEMORY_LEAF_BYTES =
     1u << TRACER_MEMORY_LEAF_BYTE_BITS;
+/* Mask for the byte offset within one main-memory Merkle leaf. */
 static constexpr uint32_t TRACER_MEMORY_LEAF_BYTE_MASK =
     TRACER_MEMORY_LEAF_BYTES - 1u;
 

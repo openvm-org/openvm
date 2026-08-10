@@ -9,9 +9,9 @@ use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 use rvr_openvm_lift::MAIN_MEMORY_PAGE_BYTES;
 use rvr_state::PREFLIGHT_DIRTY_PAGE_BYTES;
 
-// Public-values and deferral pointers count cells; every leaf contains VM_DIGEST_WIDTH cells.
+// Number of pointer values in one Merkle leaf for cell-addressed public-values and deferral spaces.
 const CELLS_PER_LEAF: usize = VM_DIGEST_WIDTH;
-// Main-memory callbacks count bytes over U16 cells.
+// Number of byte addresses in one Merkle leaf for U16-backed main memory.
 const MEMORY_LEAF_BYTES: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
 
 // Extension page bounds are declared against this page size and feed the
