@@ -16,7 +16,8 @@ extern bool rvr_ext_setup_ec_add_ne_k256(RvState*, uint64_t rd_ptr, uint64_t rs1
 extern __attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState*, uint64_t rd_ptr,
                                                                   uint64_t rs1_ptr);
 extern bool rvr_ext_setup_ec_double_k256(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr);
-extern void rvr_ext_ec_mul_k256(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern __attribute__((preserve_most)) void rvr_ext_ec_mul_k256(RvState*, uint64_t rd_ptr,
+                                                              uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern bool rvr_ext_setup_ec_mul_k256(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr,
                                       uint64_t rs2_ptr);
 
