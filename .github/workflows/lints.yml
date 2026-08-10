@@ -1,7 +1,7 @@
 name: Lint Workspace
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
   pull_request:
     branches: ["**"]
   workflow_call:

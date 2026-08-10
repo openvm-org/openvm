@@ -22,7 +22,7 @@ on:
         description: Runner instance family, or multiple families joined with "+" (e.g. g7.4xlarge+g6e.2xlarge)
         default: g7.4xlarge+g6e.2xlarge
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
   pull_request:
     branches: ["**"]
     paths:

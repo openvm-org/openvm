@@ -2,7 +2,7 @@ name: Recursion Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
   pull_request:
     branches: ["**"]
     paths:

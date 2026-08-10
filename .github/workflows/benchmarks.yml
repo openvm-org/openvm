@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     paths: &benchmark_paths
       - "benchmarks/prove/**"
       - "benchmarks/guest/**"

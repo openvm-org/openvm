@@ -3,7 +3,7 @@ name: Guest Library Tests
 on:
   workflow_call:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     paths: &guest_lib_test_paths
       - "crates/circuits/**"
       - "crates/vm/**"

@@ -3,7 +3,7 @@ name: Extension Tests (CUDA)
 on:
   workflow_call:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     paths: &extension_cuda_test_paths
       - "crates/circuits/**"
       - "crates/vm/**"

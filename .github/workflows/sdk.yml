@@ -16,7 +16,7 @@ on:
         type: string
         default: "m8a.24xlarge+m8i.24xlarge"
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
   pull_request:
     types: [opened, synchronize, reopened]
     branches: ["**"]
