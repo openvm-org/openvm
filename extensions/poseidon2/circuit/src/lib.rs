@@ -5,6 +5,8 @@
 
 /// Sub-AIR constraining that a 4-byte decomposition canonically represents a field element.
 pub mod canonicity;
+/// Poseidon2 extension, config, builder and prover extension.
+pub mod extension;
 /// Wrapper around the `openvm-poseidon2-air` permutation AIR with a direct lookup bus for
 /// interaction with `Poseidon2PermuteAir`.
 pub mod periphery;

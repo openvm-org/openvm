@@ -16,6 +16,7 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
+openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-poseidon2-transpiler = { workspace = true }
@@ -24,9 +25,12 @@ openvm-poseidon2-air = { workspace = true }
 
 dashmap.workspace = true
 derive-new.workspace = true
+derive_more = { workspace = true, features = ["from"] }
 itertools.workspace = true
 rustc-hash.workspace = true
 rand.workspace = true
+serde.workspace = true
+strum.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }

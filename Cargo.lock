@@ -5299,8 +5299,10 @@ version = "2.0.1"
 dependencies = [
  "dashmap",
  "derive-new 0.6.0",
+ "derive_more 1.0.0",
  "itertools 0.14.0",
  "openvm-circuit",
+ "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
@@ -5312,6 +5314,8 @@ dependencies = [
  "openvm-stark-sdk",
  "rand 0.9.2",
  "rustc-hash 2.1.1",
+ "serde",
+ "strum",
 ]
 
 [[package]]
