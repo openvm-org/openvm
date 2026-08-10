@@ -52,26 +52,16 @@ pub struct PostflightReplay<'a, 'history, F> {
     timestamp: u32,
 }
 
-pub struct U8Access {
-    pub value: [u8; BLOCK_FE_WIDTH],
-    pub previous_value: [u8; BLOCK_FE_WIDTH],
+pub struct MemoryAccess<T> {
+    pub value: [T; BLOCK_FE_WIDTH],
+    pub previous_value: [T; BLOCK_FE_WIDTH],
     pub previous_timestamp: u32,
     pub timestamp: u32,
 }
 
-pub struct U16Access {
-    pub value: [u16; BLOCK_FE_WIDTH],
-    pub previous_value: [u16; BLOCK_FE_WIDTH],
-    pub previous_timestamp: u32,
-    pub timestamp: u32,
-}
-
-pub struct Field32Access<F> {
-    pub value: [F; BLOCK_FE_WIDTH],
-    pub previous_value: [F; BLOCK_FE_WIDTH],
-    pub previous_timestamp: u32,
-    pub timestamp: u32,
-}
+pub type U8Access = MemoryAccess<u8>;
+pub type U16Access = MemoryAccess<u16>;
+pub type Field32Access<F> = MemoryAccess<F>;
 
 /// Fills one contiguous range of trace rows from independent preflight steps.
 ///
