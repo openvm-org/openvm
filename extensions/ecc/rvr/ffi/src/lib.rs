@@ -507,10 +507,6 @@ ecc_double_setup_entry!(
     POINT_256_BYTES,
     CurveType::K256
 );
-ecc_mul_entry!(
-    rvr_ext_ec_mul_k256,
-    halo2curves_axiom::secp256k1::Secp256k1Affine
-);
 ecc_mul_setup_entry!(rvr_ext_setup_ec_mul_k256, POINT_256_BYTES, CurveType::K256);
 
 ecc_add_ne_entry!(rvr_ext_ec_add_ne_p256, halo2curves_axiom::secp256r1::Fp);
