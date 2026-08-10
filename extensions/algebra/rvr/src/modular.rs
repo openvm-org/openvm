@@ -277,8 +277,8 @@ impl RvrExtension for ModularRvrExtension {
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![
             (
-                "rvr_ext_modular.c",
-                include_str!("../ffi/modular/c/rvr_ext_modular.c"),
+                "rvr_ext_secp256k1.c",
+                include_str!("../ffi/modular/c/rvr_ext_secp256k1.c"),
             ),
             (
                 "rvr_ext_bls12_381.c",
@@ -345,7 +345,7 @@ impl RvrExtension for ModularRvrExtension {
             "-isystem".to_string(),
             "blst".to_string(),
             // ENABLE_MODULE_RECOVERY keeps the ECC modules compiled in so the
-            // k256 EC ops in rvr_ext_modular.c can call into libsecp256k1.
+            // k256 EC ops in rvr_ext_secp256k1.c can call into libsecp256k1.
             // (-DSECP256K1_BUILD is not set here — secp256k1.c defines it
             // internally.)
             "-DENABLE_MODULE_RECOVERY".to_string(),
