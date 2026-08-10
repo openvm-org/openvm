@@ -5,9 +5,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
-    riscv::{BYTE_BITS, REGISTER_AS},
-    LocalOpcode, PUBLIC_VALUES_AS,
+    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
@@ -104,10 +102,10 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         chip.inner
             .range_checker_chip
             .add_count(dst_ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);
-        for &byte in &src_bytes {
+        for bytes in src_bytes.chunks_exact(2) {
             chip.inner
-                .range_checker_chip
-                .add_count(u32::from(byte), BYTE_BITS);
+                .bitwise_lookup_chip
+                .request_range(u32::from(bytes[0]), u32::from(bytes[1]));
         }
 
         let cols: &mut RevealCols<F> = row.borrow_mut();

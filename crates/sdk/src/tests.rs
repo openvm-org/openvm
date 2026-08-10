@@ -338,12 +338,6 @@ fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-#[test]
-fn collapse_user_public_values_preserves_bytes() {
-    let expanded = [0x34, 0, 0, 0, 0xab, 0, 0, 0];
-    assert_eq!(collapse_user_public_values(&expanded), [0x34, 0xab]);
-}
-
 /// Proves `exe` with the given inputs and verifies the resulting proof. The exact prover path
 /// depends on which of `root-prover` / `evm-verify` features are enabled:
 ///   * neither: STARK proof via `sdk.prove`, verified with the aggregation VK

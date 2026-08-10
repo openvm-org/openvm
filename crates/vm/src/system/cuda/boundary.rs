@@ -18,7 +18,7 @@ pub struct BoundaryChipGPU {
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
     /// don't own. TODO: use `Arc<DeviceBuffer>` instead?
     pub initial_leaves: Vec<*const std::ffi::c_void>,
-    pub(super) cell_kinds: Vec<u8>,
+    pub(super) cell_types: Vec<u8>,
     pub records: Option<DeviceBuffer<u32>>,
     pub num_records: Option<usize>,
     pub trace_width: Option<usize>,
@@ -41,13 +41,13 @@ impl BoundaryChipGPU {
     pub fn new(
         poseidon2_buffer: SharedBuffer<F>,
         device_ctx: GpuDeviceCtx,
-        cell_kinds: Vec<u8>,
+        cell_types: Vec<u8>,
     ) -> Self {
         Self {
             device_ctx,
             poseidon2_buffer,
             initial_leaves: Vec::new(),
-            cell_kinds,
+            cell_types,
             records: None,
             num_records: None,
             trace_width: None,
@@ -113,7 +113,7 @@ impl Chip<GpuBackend> for BoundaryChipGPU {
             DeviceMatrix::<F>::with_capacity_on(trace_height, self.trace_width(), &self.device_ctx);
         // The tracegen kernel initializes every active and padding row.
         let mem_ptrs = self.initial_leaves.to_device_on(&self.device_ctx).unwrap();
-        let cell_kinds = self.cell_kinds.to_device_on(&self.device_ctx).unwrap();
+        let cell_types = self.cell_types.to_device_on(&self.device_ctx).unwrap();
         let poseidon2_records = self.poseidon2_buffer.records();
         unsafe {
             persistent_boundary_tracegen(
@@ -121,7 +121,7 @@ impl Chip<GpuBackend> for BoundaryChipGPU {
                 trace.height(),
                 trace.width(),
                 &mem_ptrs,
-                &cell_kinds,
+                &cell_types,
                 self.records.as_ref().unwrap(),
                 num_records,
                 &poseidon2_records,

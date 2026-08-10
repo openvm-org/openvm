@@ -63,7 +63,7 @@ __device__ inline bool same_output_block(
 __device__ inline void read_initial_leaf(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
-    uint8_t const *cell_kinds,
+    uint8_t const *cell_types,
     uint32_t address_space,
     uint32_t ptr
 ) {
@@ -76,7 +76,7 @@ __device__ inline void read_initial_leaf(
         }
         return;
     }
-    switch (cell_kinds[addr_space_idx]) {
+    switch (cell_types[addr_space_idx]) {
         case CELL_U8:
 #pragma unroll
             for (int i = 0; i < DIGEST_WIDTH; ++i) {
@@ -98,7 +98,7 @@ __device__ inline void read_initial_leaf(
             break;
         }
         default:
-            assert(false && "unsupported memory cell kind");
+            assert(false && "unsupported memory cell type");
             break;
     }
 }
@@ -108,7 +108,7 @@ __global__ void cukernel_build_candidates(
     size_t in_num_records,
     size_t address_height,
     uint8_t const *const *initial_mem,
-    uint8_t const *cell_kinds,
+    uint8_t const *cell_types,
     OutRec *tmp_out,
     uint32_t *flags,
     uint64_t *touched_path_sum
@@ -150,7 +150,7 @@ __global__ void cukernel_build_candidates(
     }
 
     // Fill all values with Montgomery-encoded initial memory
-    read_initial_leaf(rec.values, initial_mem, cell_kinds, rec.address_space, rec.ptr);
+    read_initial_leaf(rec.values, initial_mem, cell_types, rec.address_space, rec.ptr);
 
     // Overwrite touched block's values (already Montgomery-encoded in input records)
     uint32_t block_idx = (in[row_idx].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
@@ -261,7 +261,7 @@ extern "C" int _inventory_merge_records(
     size_t in_num_records,
     size_t address_height,
     uint8_t const *const *d_initial_mem,
-    uint8_t const *d_cell_kinds,
+    uint8_t const *d_cell_types,
     uint32_t *d_tmp_records,
     uint32_t *d_out_records,
     uint32_t *d_flags,
@@ -282,7 +282,7 @@ extern "C" int _inventory_merge_records(
         in_num_records,
         address_height,
         d_initial_mem,
-        d_cell_kinds,
+        d_cell_types,
         tmp_out,
         d_flags,
         collect_merkle_metadata ? &metadata->touched_path_sum : nullptr

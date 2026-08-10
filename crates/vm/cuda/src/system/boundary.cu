@@ -34,7 +34,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
     size_t height,
     size_t width,
     uint8_t const *const *initial_mem,
-    uint8_t const *cell_kinds,
+    uint8_t const *cell_types,
     BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> *records,
     size_t num_records,
     FpArray<POSEIDON2_WIDTH> *poseidon2_buffer,
@@ -62,7 +62,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
         FpArray<DIGEST_WIDTH> init_values{};
         uint32_t addr_space_idx = record.address_space - 1;
         if (initial_mem[addr_space_idx]) {
-            switch (cell_kinds[addr_space_idx]) {
+            switch (cell_types[addr_space_idx]) {
                 case CELL_U8: {
                     uint8_t cells[DIGEST_WIDTH];
 #pragma unroll
@@ -90,7 +90,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
                     );
                     break;
                 default:
-                    assert(false && "unsupported memory cell kind");
+                    assert(false && "unsupported memory cell type");
                     break;
             }
         } else {
@@ -130,7 +130,7 @@ extern "C" int _persistent_boundary_tracegen(
     size_t height,
     size_t width,
     uint8_t const *const *d_initial_mem,
-    uint8_t const *d_cell_kinds,
+    uint8_t const *d_cell_types,
     uint32_t *d_raw_records,
     size_t num_records,
     Fp *d_poseidon2_raw_buffer,
@@ -154,7 +154,7 @@ extern "C" int _persistent_boundary_tracegen(
         height,
         width,
         d_initial_mem,
-        d_cell_kinds,
+        d_cell_types,
         d_records,
         num_records,
         d_poseidon2_buffer,

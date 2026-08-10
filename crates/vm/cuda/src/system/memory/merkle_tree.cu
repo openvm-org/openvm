@@ -22,13 +22,13 @@ enum MemoryMerkleSubTreeLayout : uint8_t {
 
 __device__ __forceinline__ void hash_raw_memory_leaf(
     uint8_t const *__restrict__ data,
-    uint8_t const cell_kind,
+    uint8_t const cell_type,
     size_t const leaf_label,
     digest_t *out
 ) {
     Fp cells[CELLS] = {0};
     size_t const cell_start = DIGEST_WIDTH * leaf_label;
-    switch (cell_kind) {
+    switch (cell_type) {
         case CELL_U8:
 #pragma unroll
             for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
@@ -51,7 +51,7 @@ __device__ __forceinline__ void hash_raw_memory_leaf(
             }
             break;
         default:
-            assert(false && "unsupported memory cell kind");
+            assert(false && "unsupported memory cell type");
             break;
     }
 
@@ -60,19 +60,19 @@ __device__ __forceinline__ void hash_raw_memory_leaf(
 }
 
 __global__ void merkle_tree_init(
-    uint8_t *__restrict__ data, digest_t *__restrict__ out, uint8_t const cell_kind
+    uint8_t *__restrict__ data, digest_t *__restrict__ out, uint8_t const cell_type
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
 
     digest_t digest;
-    hash_raw_memory_leaf(data, cell_kind, gid, &digest);
+    hash_raw_memory_leaf(data, cell_type, gid, &digest);
 
     COPY_DIGEST(&out[gid], &digest);
 }
 
 __device__ void recompute_omitted_node(
     uint8_t const *__restrict__ data,
-    uint8_t const cell_kind,
+    uint8_t const cell_type,
     uint32_t const node_height,
     // label is the index of the node within its level `node_height` (label 0 = leftmost). 
     // the node roots a subtree of `2^node_height` leaves, 
@@ -91,7 +91,7 @@ __device__ void recompute_omitted_node(
     size_t const first_leaf = label << node_height;
 
     for (size_t i = 0; i < num_leaves; ++i) {
-        hash_raw_memory_leaf(data, cell_kind, first_leaf + i, &layer[i]);
+        hash_raw_memory_leaf(data, cell_type, first_leaf + i, &layer[i]);
     }
 
     // cells is a 2-to-1 compression buffer
@@ -110,10 +110,10 @@ __device__ void recompute_omitted_node(
 __global__ void merkle_tree_init_omitted(
     uint8_t *__restrict__ data,
     digest_t *__restrict__ out,
-    uint8_t const cell_kind
+    uint8_t const cell_type
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
-    recompute_omitted_node(data, cell_kind, OMITTED_BOTTOM_LEVELS, gid, &out[gid]);
+    recompute_omitted_node(data, cell_type, OMITTED_BOTTOM_LEVELS, gid, &out[gid]);
 }
 
 __global__ void merkle_tree_compress(
@@ -389,7 +389,7 @@ __device__ void load_virtual_node(
     digest_t const *subtree,
     digest_t const *zero_hash,
     uint8_t const layout,
-    uint8_t const cell_kind,
+    uint8_t const cell_type,
     uint8_t const *initial_data,
     uint32_t const subtree_height,
     uint32_t const actual_height,
@@ -403,7 +403,7 @@ __device__ void load_virtual_node(
     }
 
     if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
-        recompute_omitted_node(initial_data, cell_kind, node_height, label, out);
+        recompute_omitted_node(initial_data, cell_type, node_height, label, out);
         return;
     }
 
@@ -462,7 +462,7 @@ __global__ void update_merkle_layer(
     digest_t const *zero_hash,
     size_t const *actual_subtree_heights,
     uint8_t const *subtree_layouts,
-    uint8_t const *cell_kinds,
+    uint8_t const *cell_types,
     uintptr_t const *initial_data_ptrs,
     uint32_t const subtree_height,
     LabeledDigest *layer,
@@ -500,7 +500,7 @@ __global__ void update_merkle_layer(
     auto const subtree = subtrees[address_space_idx];
     uint32_t const actual_height = actual_subtree_heights[address_space_idx];
     uint8_t const layout = subtree_layouts[address_space_idx];
-    uint8_t const cell_kind = cell_kinds[address_space_idx];
+    uint8_t const cell_type = cell_types[address_space_idx];
     auto const initial_data = reinterpret_cast<uint8_t const *>(initial_data_ptrs[address_space_idx]);
     Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
@@ -510,7 +510,7 @@ __global__ void update_merkle_layer(
         subtree,
         zero_hash,
         layout,
-        cell_kind,
+        cell_type,
         initial_data,
         subtree_height,
         actual_height,
@@ -523,7 +523,7 @@ __global__ void update_merkle_layer(
         subtree,
         zero_hash,
         layout,
-        cell_kind,
+        cell_type,
         initial_data,
         subtree_height,
         actual_height,
@@ -778,21 +778,21 @@ extern "C" int _build_merkle_subtree(
     const size_t size,
     digest_t *buffer,
     const size_t tree_offset,
-    const uint8_t cell_kind,
+    const uint8_t cell_type,
     const uint8_t layout,
     cudaStream_t stream
 ) {
-    if (cell_kind < CELL_U8 || cell_kind > CELL_FIELD32) return -1;
+    if (cell_type < CELL_U8 || cell_type > CELL_FIELD32) return -1;
     digest_t *tree = buffer + tree_offset;
     assert((size & (size - 1)) == 0);
     {
         auto [grid, block] = kernel_launch_params(size);
         if (layout == OMIT_BOTTOM_LEVELS) {
             merkle_tree_init_omitted<<<grid, block, 0, stream>>>(
-                data, tree + (size - 1), cell_kind
+                data, tree + (size - 1), cell_type
             );
         } else {
-            merkle_tree_init<<<grid, block, 0, stream>>>(data, tree + (size - 1), cell_kind);
+            merkle_tree_init<<<grid, block, 0, stream>>>(data, tree + (size - 1), cell_type);
         }
     }
     for (auto i = size / 2; i > 0; i /= 2) {
@@ -864,7 +864,7 @@ extern "C" int _update_merkle_tree(
     digest_t const *zero_hash,
     size_t const *actual_subtree_heights,
     uint8_t const *subtree_layouts,
-    uint8_t const *cell_kinds,
+    uint8_t const *cell_types,
     uintptr_t const *initial_data_ptrs,
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
@@ -981,7 +981,7 @@ extern "C" int _update_merkle_tree(
             zero_hash,
             actual_subtree_heights,
             subtree_layouts,
-            cell_kinds,
+            cell_types,
             initial_data_ptrs,
             subtree_height,
             layer,

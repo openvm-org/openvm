@@ -8,13 +8,12 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
+    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus, ColumnsAir,
+    StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
-    riscv::{BYTE_BITS, REGISTER_AS},
-    LocalOpcode, PUBLIC_VALUES_AS,
+    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{
@@ -66,6 +65,7 @@ pub struct RevealAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
+    pub bitwise_bus: BitwiseOperationLookupBus,
     pub pointer_max_bits: usize,
 }
 
@@ -136,9 +136,9 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
                 &cols.src_aux,
             )
             .eval(builder, is_valid.clone());
-        for &byte in &cols.src_bytes {
-            self.range_bus
-                .range_check(byte, BYTE_BITS)
+        for bytes in cols.src_bytes.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
                 .eval(builder, is_valid.clone());
         }
 

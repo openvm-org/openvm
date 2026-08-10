@@ -73,13 +73,13 @@ const _: () = assert!(size_of::<GpuReplayInstruction>() == size_of::<[u32; 8]>()
 #[derive(Clone, Copy, Debug)]
 struct GpuMemoryAddressSpace {
     num_cells: u64,
-    cell_kind: GpuMemoryCellKind,
+    cell_type: GpuMemoryCellType,
     _padding: u32,
 }
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum GpuMemoryCellKind {
+enum GpuMemoryCellType {
     Unsupported = 0,
     U8 = 1,
     U16 = 2,
@@ -108,20 +108,20 @@ impl GpuMemoryDimensions {
 
 // Keep address-space metadata byte-compatible with its CUDA mirror.
 const _: () = {
-    assert!(size_of::<GpuMemoryCellKind>() == size_of::<u32>());
+    assert!(size_of::<GpuMemoryCellType>() == size_of::<u32>());
     assert!(size_of::<GpuMemoryAddressSpace>() == 16);
     assert!(align_of::<GpuMemoryAddressSpace>() == align_of::<u64>());
     assert!(offset_of!(GpuMemoryAddressSpace, num_cells) == 0);
-    assert!(offset_of!(GpuMemoryAddressSpace, cell_kind) == 8);
+    assert!(offset_of!(GpuMemoryAddressSpace, cell_type) == 8);
     assert!(offset_of!(GpuMemoryAddressSpace, _padding) == 12);
 };
 
-fn memory_cell_kind(layout: MemoryCellType) -> GpuMemoryCellKind {
+fn gpu_memory_cell_type(layout: MemoryCellType) -> GpuMemoryCellType {
     match layout {
-        MemoryCellType::U8 => GpuMemoryCellKind::U8,
-        MemoryCellType::U16 => GpuMemoryCellKind::U16,
-        MemoryCellType::FIELD32 => GpuMemoryCellKind::Field32,
-        _ => GpuMemoryCellKind::Unsupported,
+        MemoryCellType::U8 => GpuMemoryCellType::U8,
+        MemoryCellType::U16 => GpuMemoryCellType::U16,
+        MemoryCellType::FIELD32 => GpuMemoryCellType::Field32,
+        _ => GpuMemoryCellType::Unsupported,
     }
 }
 
@@ -486,7 +486,7 @@ impl GpuPostflightProgram {
             .iter()
             .map(|config| GpuMemoryAddressSpace {
                 num_cells: config.num_cells as u64,
-                cell_kind: memory_cell_kind(config.layout),
+                cell_type: gpu_memory_cell_type(config.layout),
                 _padding: 0,
             })
             .collect::<Vec<_>>();

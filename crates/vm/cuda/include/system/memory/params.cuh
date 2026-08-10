@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-enum MemoryCellKind : uint8_t {
+enum MemoryCellType : uint8_t {
     CELL_UNSUPPORTED = 0,
     CELL_U8 = 1,
     CELL_U16 = 2,

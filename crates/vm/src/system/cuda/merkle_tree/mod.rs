@@ -15,7 +15,7 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::AirProvingContext};
 use p3_field::PrimeCharacteristicRing;
 
-use super::{poseidon2::SharedBuffer, MemoryCellKind, Poseidon2PeripheryChipGPU};
+use super::{poseidon2::SharedBuffer, GpuMemoryCellType, Poseidon2PeripheryChipGPU};
 
 pub mod cuda;
 use cuda::merkle_tree::*;
@@ -85,7 +85,7 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
-    cell_kind: MemoryCellKind,
+    cell_type: GpuMemoryCellType,
     /// Shared handle to the initial-memory buffer (`d_data`) from [`Self::build_async`], or
     /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: under
     /// `OmitBottomLevels` the omitted levels aren't in `buf` and are recomputed from this buffer
@@ -136,7 +136,7 @@ impl MemoryMerkleSubTree {
     fn new(
         addr_space_size: usize,
         max_size: usize,
-        cell_kind: MemoryCellKind,
+        cell_type: GpuMemoryCellType,
         device_ctx: &GpuDeviceCtx,
     ) -> Self {
         assert!(
@@ -154,7 +154,7 @@ impl MemoryMerkleSubTree {
              `pointer_max_bits`"
         );
         assert!(
-            addr_space_size == 0 || cell_kind != MemoryCellKind::Unsupported,
+            addr_space_size == 0 || cell_type != GpuMemoryCellType::Unsupported,
             "nonempty CUDA memory address spaces require U8, U16, or Field32 cells"
         );
         if addr_space_size == 0 {
@@ -179,7 +179,7 @@ impl MemoryMerkleSubTree {
             buf,
             path_len,
             layout,
-            cell_kind,
+            cell_type,
             initial_data: None,
         }
     }
@@ -191,7 +191,7 @@ impl MemoryMerkleSubTree {
             buf: DeviceBuffer::new(),
             path_len: 0,
             layout: MemoryMerkleSubTreeLayout::Full,
-            cell_kind: MemoryCellKind::Unsupported,
+            cell_type: GpuMemoryCellType::Unsupported,
             initial_data: None,
         }
     }
@@ -238,7 +238,7 @@ impl MemoryMerkleSubTree {
                     1 << self.stored_heap_height(),
                     &self.buf,
                     self.path_len,
-                    self.cell_kind as u8,
+                    self.cell_type as u8,
                     self.layout_tag(),
                     device_ctx.stream.as_raw(),
                 )
@@ -432,10 +432,10 @@ impl MemoryMerkleTree {
                 .iter()
                 .map(|s| s.layout_tag())
                 .collect::<Vec<_>>();
-            let cell_kinds = self
+            let cell_types = self
                 .subtrees
                 .iter()
-                .map(|s| s.cell_kind as u8)
+                .map(|s| s.cell_type as u8)
                 .collect::<Vec<_>>();
             let initial_data_ptrs = self
                 .subtrees
@@ -459,7 +459,7 @@ impl MemoryMerkleTree {
                     self.height - log2_ceil_usize(self.subtrees.len()),
                     &actual_heights,
                     &subtree_layouts,
-                    &cell_kinds,
+                    &cell_types,
                     &initial_data_ptrs,
                     unpadded_height,
                     &self.hasher_buffer,
@@ -536,7 +536,7 @@ mod tests {
     use rand::Rng;
 
     use super::{
-        MemoryCellKind, MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree,
+        GpuMemoryCellType, MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree,
         SpanningNodeCounter, OMITTED_BOTTOM_LEVELS,
     };
     use crate::{
@@ -599,7 +599,7 @@ mod tests {
         let below = MemoryMerkleSubTree::new(
             1 << (OMITTED_BOTTOM_LEVELS - 1),
             max_size,
-            MemoryCellKind::U16,
+            GpuMemoryCellType::U16,
             &device_ctx,
         );
         assert_eq!(below.layout, MemoryMerkleSubTreeLayout::Full);
@@ -611,7 +611,7 @@ mod tests {
         let equal = MemoryMerkleSubTree::new(
             1 << OMITTED_BOTTOM_LEVELS,
             max_size,
-            MemoryCellKind::U16,
+            GpuMemoryCellType::U16,
             &device_ctx,
         );
         assert_eq!(equal.layout, MemoryMerkleSubTreeLayout::Full);
@@ -623,7 +623,7 @@ mod tests {
         let above = MemoryMerkleSubTree::new(
             1 << (OMITTED_BOTTOM_LEVELS + 1),
             max_size,
-            MemoryCellKind::U16,
+            GpuMemoryCellType::U16,
             &device_ctx,
         );
         let full_len = above.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS + 1)) - 1);
@@ -643,7 +643,7 @@ mod tests {
         let _ = MemoryMerkleSubTree::new(
             1,
             1 << OMITTED_BOTTOM_LEVELS,
-            MemoryCellKind::Unsupported,
+            GpuMemoryCellType::Unsupported,
             &device_ctx,
         );
     }

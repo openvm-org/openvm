@@ -9,13 +9,14 @@ use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 use rvr_openvm_lift::MAIN_MEMORY_PAGE_BYTES;
 use rvr_state::PREFLIGHT_DIRTY_PAGE_BYTES;
 
-const U8_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
-const U16_BYTE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
-const FIELD32_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
+// Public-values and deferral pointers count cells; every leaf contains VM_DIGEST_WIDTH cells.
+const CELLS_PER_LEAF: usize = VM_DIGEST_WIDTH;
+// Main-memory callbacks count bytes over U16 cells.
+const MEMORY_LEAF_BYTES: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
 
 // Extension page bounds are declared against this page size and feed the
 // unchecked main-memory page buffer.
-const _: () = assert!(U16_BYTE_PTRS_PER_LEAF << PAGE_MASK_LEAF_BITS == MAIN_MEMORY_PAGE_BYTES);
+const _: () = assert!(MEMORY_LEAF_BYTES << PAGE_MASK_LEAF_BITS == MAIN_MEMORY_PAGE_BYTES);
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
@@ -47,9 +48,8 @@ pub fn constants_header(
     max_mem_pages_per_insn: usize,
 ) -> String {
     let memory_mask = MEM_SIZE as u64 - 1;
-    let u8_ptrs_per_leaf_bits = U8_PTRS_PER_LEAF.ilog2();
-    let u16_byte_ptrs_per_leaf_bits = U16_BYTE_PTRS_PER_LEAF.ilog2();
-    let field32_ptrs_per_leaf_bits = FIELD32_PTRS_PER_LEAF.ilog2();
+    let cells_per_leaf_bits = CELLS_PER_LEAF.ilog2();
+    let memory_leaf_byte_bits = MEMORY_LEAF_BYTES.ilog2();
     let preflight_dirty_page_bits = PREFLIGHT_DIRTY_PAGE_BYTES.ilog2();
 
     let mut header = format!(
@@ -68,9 +68,8 @@ static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {VM_DIGEST_WIDTH};
 static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
 static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;
 static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;
-static constexpr uint32_t TRACER_U8_PTRS_PER_LEAF_BITS = {u8_ptrs_per_leaf_bits};
-static constexpr uint32_t TRACER_U16_BYTE_PTRS_PER_LEAF_BITS = {u16_byte_ptrs_per_leaf_bits};
-static constexpr uint32_t TRACER_FIELD32_PTRS_PER_LEAF_BITS = {field32_ptrs_per_leaf_bits};
+static constexpr uint32_t TRACER_CELLS_PER_LEAF_BITS = {cells_per_leaf_bits};
+static constexpr uint32_t TRACER_MEMORY_LEAF_BYTE_BITS = {memory_leaf_byte_bits};
 static constexpr uint32_t TRACER_PAGE_BITS = {PAGE_MASK_LEAF_BITS};
 static constexpr uint32_t PREFLIGHT_DIRTY_PAGE_BITS = {preflight_dirty_page_bits};
 static_assert((1u << PREFLIGHT_DIRTY_PAGE_BITS) == {PREFLIGHT_DIRTY_PAGE_BYTES}u);

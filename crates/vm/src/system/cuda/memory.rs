@@ -29,7 +29,7 @@ use tracing::instrument;
 use super::{
     boundary::BoundaryChipGPU,
     merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
-    MemoryCellKind, Poseidon2PeripheryChipGPU,
+    GpuMemoryCellType, Poseidon2PeripheryChipGPU,
 };
 use crate::{
     arch::cuda::postflight::{GpuPostflightError, GpuPostflightTranscript},
@@ -166,17 +166,17 @@ impl MemoryInventoryGPU {
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
         device_ctx: GpuDeviceCtx,
     ) -> Self {
-        let cell_kinds = config
+        let cell_types = config
             .addr_spaces
             .iter()
             .skip(ADDR_SPACE_OFFSET as usize)
             .map(|config| {
-                let kind = MemoryCellKind::from(config.layout);
+                let cell_type = GpuMemoryCellType::from(config.layout);
                 assert!(
-                    config.num_cells == 0 || kind != MemoryCellKind::Unsupported,
+                    config.num_cells == 0 || cell_type != GpuMemoryCellType::Unsupported,
                     "nonempty CUDA address space has an unsupported memory layout"
                 );
-                kind as u8
+                cell_type as u8
             })
             .collect();
         Self {
@@ -184,7 +184,7 @@ impl MemoryInventoryGPU {
             boundary: BoundaryChipGPU::new(
                 hasher_chip.shared_buffer(),
                 device_ctx.clone(),
-                cell_kinds,
+                cell_types,
             ),
             merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone(), device_ctx),
             hasher_chip,
@@ -469,9 +469,9 @@ impl MemoryInventoryGPU {
                 .initial_leaves
                 .to_device_on(&self.device_ctx)
                 .unwrap();
-            let d_cell_kinds = self
+            let d_cell_types = self
                 .boundary
-                .cell_kinds
+                .cell_types
                 .to_device_on(&self.device_ctx)
                 .unwrap();
             let mut temp_bytes = 0usize;
@@ -496,7 +496,7 @@ impl MemoryInventoryGPU {
                     in_num_records,
                     memory_dimensions.address_height,
                     &d_initial_mem,
-                    &d_cell_kinds,
+                    &d_cell_types,
                     &d_tmp_records,
                     &d_out_records,
                     &d_flags,
@@ -597,7 +597,7 @@ impl MemoryInventoryGPU {
                 d_flags,
                 d_positions,
                 d_initial_mem,
-                d_cell_kinds,
+                d_cell_types,
                 d_temp_storage,
             ));
             {

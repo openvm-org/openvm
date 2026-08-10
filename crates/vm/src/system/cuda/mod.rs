@@ -29,14 +29,14 @@ pub mod program;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-enum MemoryCellKind {
+enum GpuMemoryCellType {
     Unsupported = 0,
     U8 = 1,
     U16 = 2,
     Field32 = 3,
 }
 
-impl From<MemoryCellType> for MemoryCellKind {
+impl From<MemoryCellType> for GpuMemoryCellType {
     fn from(layout: MemoryCellType) -> Self {
         match layout {
             MemoryCellType::Null => Self::Unsupported,
