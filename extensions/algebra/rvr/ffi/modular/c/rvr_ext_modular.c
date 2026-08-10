@@ -227,6 +227,10 @@ __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
 __attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
                                                            uint64_t rd_ptr,
                                                            uint64_t rs1_ptr);
+__attribute__((preserve_most)) void rvr_ext_ec_mul_k256(RvState* state,
+                                                        uint64_t rd_ptr,
+                                                        uint64_t rs1_ptr,
+                                                        uint64_t rs2_ptr);
 
 __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
                                                            uint64_t rd_ptr,
@@ -284,4 +288,38 @@ __attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
 
   fe_write(state, rd_ptr, &x3);
   fe_write(state, rd_ptr + SECP256K1_ELEM_BYTES, &y3);
+}
+
+__attribute__((preserve_most)) void rvr_ext_ec_mul_k256(RvState* state,
+                                                        uint64_t rd_ptr,
+                                                        uint64_t rs1_ptr,
+                                                        uint64_t rs2_ptr) {
+  secp256k1_fe x = fe_read(state, rs1_ptr);
+  secp256k1_fe y = fe_read(state, rs1_ptr + SECP256K1_ELEM_BYTES);
+
+  /* (0, 0) results in (0, 0). */
+  if (fe_is_zero(&x) && fe_is_zero(&y)) {
+    secp256k1_fe zero;
+    secp256k1_fe_set_int(&zero, 0);
+    fe_write(state, rd_ptr, &zero);
+    fe_write(state, rd_ptr + SECP256K1_ELEM_BYTES, &zero);
+    return;
+  }
+
+  /* EC_MUL requires an odd scalar: the chip's digits are all +-1, whose sum is never even. */
+  secp256k1_scalar q = scalar_read(state, rs2_ptr);
+  debug_assume(!secp256k1_scalar_is_even(&q));
+
+  secp256k1_ge base;
+  secp256k1_ge_set_xy(&base, &x, &y);
+  secp256k1_gej base_jacobian;
+  secp256k1_gej_set_ge(&base_jacobian, &base);
+
+  secp256k1_gej product;
+  secp256k1_ecmult(&product, &base_jacobian, &q, NULL);
+
+  secp256k1_ge affine;
+  secp256k1_ge_set_gej(&affine, &product);
+  fe_write(state, rd_ptr, &affine.x);
+  fe_write(state, rd_ptr + SECP256K1_ELEM_BYTES, &affine.y);
 }
