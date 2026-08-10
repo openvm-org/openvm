@@ -21,19 +21,13 @@ static constexpr uint32_t ERROR_MEMORY_CHRONOLOGY = 110;
 static constexpr uint32_t ERROR_FIELD_VALUE = 118;
 static constexpr uint32_t ERROR_FIELD_REFERENCE = 119;
 
-enum class GpuMemoryCellType : uint32_t {
-    Unsupported = 0,
-    U8 = 1,
-    U16 = 2,
-    Field32 = 3,
-};
 static constexpr uint8_t FIELD_FULL_WRITE_MASK = 0xff;
 static constexpr int BLOCK_KEY_BEGIN_BIT = 32;
 static constexpr int BLOCK_KEY_END_BIT = 64;
 
 struct GpuMemoryAddressSpace {
     uint64_t num_cells;
-    GpuMemoryCellType cell_type;
+    MemoryCellType cell_type;
     uint32_t padding;
 };
 
@@ -88,7 +82,7 @@ __device__ bool compact_block_key(
     bool allow_field,
     uint32_t &out
 ) {
-    // Pointers here count AS-native cells, so the
+    // Pointers here count cells in their address space, so the
     // per-AS `num_cells` check below is the authoritative pointer-domain bound;
     // `pointer_limit` only guarantees the packed key fits `block_pointer_bits`.
     uint64_t address_space_limit =
@@ -99,9 +93,9 @@ __device__ bool compact_block_key(
         return false;
     }
     auto const &config = address_spaces[address_space];
-    if ((config.cell_type != GpuMemoryCellType::U8 &&
-         config.cell_type != GpuMemoryCellType::U16 &&
-         !(allow_field && config.cell_type == GpuMemoryCellType::Field32)) ||
+    if ((config.cell_type != CELL_U8 &&
+         config.cell_type != CELL_U16 &&
+         !(allow_field && config.cell_type == CELL_FIELD32)) ||
         static_cast<uint64_t>(pointer) + 4 > config.num_cells) {
         return false;
     }
@@ -123,11 +117,11 @@ __device__ bool initial_quad(
     }
     auto const &config = address_spaces[address_space];
     uint32_t cell_bytes;
-    if (config.cell_type == GpuMemoryCellType::U8) {
+    if (config.cell_type == CELL_U8) {
         cell_bytes = 1;
-    } else if (config.cell_type == GpuMemoryCellType::U16) {
+    } else if (config.cell_type == CELL_U16) {
         cell_bytes = 2;
-    } else if (config.cell_type == GpuMemoryCellType::Field32) {
+    } else if (config.cell_type == CELL_FIELD32) {
         cell_bytes = 4;
     } else {
         return false;
@@ -216,10 +210,10 @@ __global__ void prepare_chronology_entries(
     }
     bool is_write = preflight_is_write(event);
     if (is_write != (mask != 0)) preflight_set_error(error, ERROR_MEMORY_MASK);
-    GpuMemoryCellType cell_type = address_valid
-                                       ? address_spaces[preflight_address_space(event)].cell_type
-                                       : GpuMemoryCellType::U16;
-    if (cell_type == GpuMemoryCellType::Field32) {
+    MemoryCellType cell_type = address_valid
+                                   ? address_spaces[preflight_address_space(event)].cell_type
+                                   : CELL_UNSUPPORTED;
+    if (cell_type == CELL_FIELD32) {
         if (preflight_address_space(event) != field_address_space) {
             preflight_set_error(error, ERROR_MEMORY_ADDRESS);
         }
@@ -232,13 +226,14 @@ __global__ void prepare_chronology_entries(
         } else if (!field_block_is_valid(field_values[reference])) {
             preflight_set_error(error, ERROR_FIELD_VALUE);
         }
-    } else if (cell_type == GpuMemoryCellType::U8) {
+    } else if (cell_type == CELL_U8) {
         uint8_t expected_mask = is_write ? 0x0f : 0;
         if (mask != expected_mask) preflight_set_error(error, ERROR_MEMORY_MASK);
         if (event.value[2] != 0 || event.value[3] != 0) {
             preflight_set_error(error, ERROR_MEMORY_MASK);
         }
-    } else if (is_write && preflight_address_space(event) != address_space_offset) {
+    } else if (cell_type == CELL_U16 && is_write &&
+               preflight_address_space(event) != address_space_offset) {
         auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
 #pragma unroll
         for (uint32_t lane = 0; lane < 8; ++lane) {
@@ -402,7 +397,7 @@ __global__ void scatter_chronology_metadata(
             seed.address_space = preflight_address_space(event);
             seed.pointer = event.pointer;
             auto const &config = address_spaces[preflight_address_space(event)];
-            if (config.cell_type == GpuMemoryCellType::Field32) {
+            if (config.cell_type == CELL_FIELD32) {
                 if (seed_index < field_seed_base ||
                     seed_index - field_seed_base >= num_field_seeds) {
                     preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
@@ -424,7 +419,7 @@ __global__ void scatter_chronology_metadata(
                 set_field_reference(seed.initial_value, field_seed_index);
             } else {
                 uint8_t initial[8] = {};
-                uint32_t num_quads = config.cell_type == GpuMemoryCellType::U8 ? 1 : 2;
+                uint32_t num_quads = config.cell_type == CELL_U8 ? 1 : 2;
 #pragma unroll
                 for (uint32_t quad = 0; quad < num_quads; ++quad) {
                     uint8_t bytes[4];
@@ -502,7 +497,7 @@ __global__ void prepare_value_chunks(
     auto const &config = address_spaces[preflight_address_space(event)];
     ValueChunk chunk{0, 0, 0};
     if (head) {
-        uint32_t num_quads = config.cell_type == GpuMemoryCellType::U8 ? 1 : 2;
+        uint32_t num_quads = config.cell_type == CELL_U8 ? 1 : 2;
 #pragma unroll
         for (uint32_t quad = 0; quad < num_quads; ++quad) {
             uint8_t initial[4];
@@ -528,7 +523,7 @@ __global__ void prepare_value_chunks(
     uint8_t mask;
     uint8_t const *patch;
     GpuFieldBlock raw_field_patch;
-    if (config.cell_type == GpuMemoryCellType::Field32) {
+    if (config.cell_type == CELL_FIELD32) {
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len()) {
             preflight_set_error(error, ERROR_FIELD_REFERENCE);
@@ -589,7 +584,7 @@ __global__ void scatter_value_chunks(
     uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
     auto const &event = memory[ordinal];
     auto const &config = address_spaces[preflight_address_space(event)];
-    if (config.cell_type == GpuMemoryCellType::Field32) {
+    if (config.cell_type == CELL_FIELD32) {
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len()) {
             preflight_set_error(error, ERROR_FIELD_REFERENCE);
@@ -687,7 +682,7 @@ __global__ void finalize_chronology_touched(
         return;
     }
     auto const &config = address_spaces[preflight_address_space(event)];
-    if (config.cell_type == GpuMemoryCellType::Field32) {
+    if (config.cell_type == CELL_FIELD32) {
         uint32_t reference = field_reference(event);
         if (reference >= field_values.len() || !field_block_is_valid(field_values[reference])) {
             preflight_set_error(error, ERROR_FIELD_VALUE);
@@ -697,7 +692,7 @@ __global__ void finalize_chronology_touched(
         for (uint32_t lane = 0; lane < 4; ++lane) {
             record.values[lane] = Fp(field_values[reference].values[lane]).asRaw();
         }
-    } else if (config.cell_type == GpuMemoryCellType::U8) {
+    } else if (config.cell_type == CELL_U8) {
         uint8_t bytes[4];
         preflight_decode_u8_block(event.value, bytes);
 #pragma unroll

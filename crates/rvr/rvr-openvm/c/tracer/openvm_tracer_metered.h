@@ -87,7 +87,10 @@ static __attribute__((always_inline)) inline uint32_t addr_to_local_leaf(
   if (likely(addr_space == AS_MEMORY)) {
     return memory_byte_pointer_to_local_leaf(ptr);
   }
-  return cell_pointer_to_local_leaf(ptr);
+  if (addr_space == AS_PUBLIC_VALUES || addr_space == AS_DEFERRAL) {
+    return cell_pointer_to_local_leaf(ptr);
+  }
+  __builtin_trap();
 }
 
 static __attribute__((always_inline)) inline uint64_t leaf_mask(uint32_t leaf) {
@@ -239,7 +242,7 @@ static __attribute__((always_inline)) inline void record_deferral_page_range(
 }
 
 /* Record a single page access. `addr_space` is a compile-time constant at
- * every direct call site in generated C, so the branches below fold away. */
+ * direct generated-C call sites, so the branches below fold away. */
 static __attribute__((always_inline)) inline void record_page(
     MeteringState* metering, uint32_t addr_space, uint64_t ptr, uint32_t size) {
   uint32_t first_leaf = addr_to_local_leaf(addr_space, ptr);
@@ -261,6 +264,7 @@ static __attribute__((always_inline)) inline void record_page(
       record_pv_page_range(metering, first_leaf, last_leaf);
     }
   } else {
+    /* addr_to_local_leaf rejected unsupported address spaces above. */
     if (first_page == last_page) {
       record_deferral_page(metering, first_page,
                            leaf_mask_range(first_leaf, last_leaf));
@@ -282,6 +286,7 @@ static __attribute__((always_inline)) inline void record_page_range(
   } else if (addr_space == AS_PUBLIC_VALUES) {
     record_pv_page_range(metering, first_leaf, last_leaf);
   } else {
+    /* addr_to_local_leaf rejected unsupported address spaces above. */
     record_deferral_page_range(metering, first_leaf, last_leaf);
   }
 }

@@ -1,11 +1,9 @@
 use std::mem::size_of;
 
-#[cfg(test)]
-use openvm_instructions::riscv::MEMORY_AS;
 use openvm_instructions::{
     exe::SparseMemoryImage,
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
-    riscv::{NUM_REGISTERS, REGISTER_AS, REGISTER_NUM_LIMBS},
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_NUM_LIMBS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 
@@ -25,10 +23,10 @@ const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 // range accesses; this avoids preallocating the worst-case per-instruction page
 // count for the common scalar-access path.
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
-// Shift amounts from address-space pointer units to memory Merkle leaves.
-const U8_PTRS_PER_LEAF_BITS: u32 = VM_DIGEST_WIDTH.ilog2();
-const U16_BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * VM_DIGEST_WIDTH).ilog2();
-const FIELD32_PTRS_PER_LEAF_BITS: u32 = VM_DIGEST_WIDTH.ilog2();
+// Public-values and deferral callbacks use cell pointers.
+const CELLS_PER_LEAF_BITS: u32 = VM_DIGEST_WIDTH.ilog2();
+// Register and main-memory accounting uses byte pointers over U16 cells.
+const MEMORY_LEAF_BYTE_BITS: u32 = (U16_CELL_SIZE * VM_DIGEST_WIDTH).ilog2();
 const FIELD_ELEMENT_BYTES: u32 = size_of::<u32>() as u32;
 
 /// Tracks which parts of memory contribute rows to the current segment.
@@ -119,9 +117,9 @@ impl MemoryCtx {
     fn leaf_id_range(&self, address_space: u32, ptr: u32, size: u32) -> (u32, u32) {
         let end_ptr = ptr + size - 1;
         let leaf_bits = match address_space {
-            PUBLIC_VALUES_AS => U8_PTRS_PER_LEAF_BITS,
-            DEFERRAL_AS => FIELD32_PTRS_PER_LEAF_BITS,
-            _ => U16_BYTE_PTRS_PER_LEAF_BITS,
+            PUBLIC_VALUES_AS | DEFERRAL_AS => CELLS_PER_LEAF_BITS,
+            REGISTER_AS | MEMORY_AS => MEMORY_LEAF_BYTE_BITS,
+            _ => panic!("unsupported metered address space {address_space}"),
         };
         let leaf_label = ptr >> leaf_bits;
         let end_leaf_label = end_ptr >> leaf_bits;
@@ -156,8 +154,8 @@ impl MemoryCtx {
     }
 
     /// Records the memory-tree pages touched by `[ptr, ptr + size)`.
-    /// For metered callbacks, public-value and deferral ranges use address-space-native cells;
-    /// U16 address-space ranges use bytes.
+    /// Public-value and deferral ranges use cell pointers; register and main-memory ranges use
+    /// byte pointers.
     #[inline(always)]
     pub(crate) fn update_boundary_merkle_heights(
         &mut self,
@@ -432,7 +430,7 @@ mod tests {
         let block_size = MEMORY_BLOCK_BYTES as u32;
 
         for width in [1, 2, 4, 8] {
-            for ptr in 0..2 * (1 << U16_BYTE_PTRS_PER_LEAF_BITS) {
+            for ptr in 0..2 * (1 << MEMORY_LEAF_BYTE_BITS) {
                 let block_ptr = ptr / block_size * block_size;
                 let block_span = if ptr - block_ptr + width > block_size {
                     2 * block_size
@@ -474,6 +472,15 @@ mod tests {
         assert_ne!(memory_page, public_values_page);
         assert_ne!(memory_page, deferral_page);
         assert_ne!(public_values_page, deferral_page);
+    }
+
+    #[test]
+    #[should_panic(expected = "unsupported metered address space 5")]
+    fn custom_address_space_is_not_metered_as_main_memory() {
+        let system_config = test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config);
+
+        ctx.update_boundary_merkle_heights(DEFERRAL_AS + 1, 0, 1);
     }
 
     #[test]

@@ -62,6 +62,28 @@ fn initial_memory_must_match_every_configured_address_space() {
     ));
 }
 
+#[test]
+fn history_write_masks_reject_unsupported_cell_types() {
+    let mut config = MemoryConfig::default();
+    config.addr_spaces[MEMORY_AS as usize].layout = MemoryCellType::U32;
+    let mut history = PreflightHistory {
+        program: vec![PreflightProgramEvent {
+            pc: 0,
+            timestamp: 1,
+        }],
+        ..Default::default()
+    };
+    history
+        .memory
+        .accesses
+        .push(event_value(1, MEMORY_AS, 0, true, [0; 4]));
+
+    assert!(matches!(
+        validated_history_write_masks(&history, &config),
+        Err(GpuPostflightError::InvalidTranscript(_))
+    ));
+}
+
 fn event_value(
     timestamp: u32,
     address_space: u32,
@@ -422,7 +444,7 @@ fn gpu_chronology_keeps_narrow_u16_only_path() {
 }
 
 #[test]
-fn gpu_chronology_handles_u8_blocks_as_native_cells() {
+fn gpu_chronology_handles_u8_cell_blocks() {
     let mut config = MemoryConfig::default();
     for address_space in &mut config.addr_spaces {
         address_space.num_cells = 0;

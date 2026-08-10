@@ -60,6 +60,13 @@ __device__ inline bool same_output_block(
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
 /// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
 ///
+__device__ inline void clear_initial_leaf(uint32_t *out_values) {
+#pragma unroll
+    for (int i = 0; i < DIGEST_WIDTH; ++i) {
+        out_values[i] = 0;
+    }
+}
+
 __device__ inline void read_initial_leaf(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
@@ -70,10 +77,7 @@ __device__ inline void read_initial_leaf(
     uint32_t addr_space_idx = address_space - 1;
     uint8_t const *mem = initial_mem[addr_space_idx];
     if (!mem) {
-        #pragma unroll
-        for (int i = 0; i < DIGEST_WIDTH; ++i) {
-            out_values[i] = 0;
-        }
+        clear_initial_leaf(out_values);
         return;
     }
     switch (cell_types[addr_space_idx]) {
@@ -98,6 +102,7 @@ __device__ inline void read_initial_leaf(
             break;
         }
         default:
+            clear_initial_leaf(out_values);
             assert(false && "unsupported memory cell type");
             break;
     }

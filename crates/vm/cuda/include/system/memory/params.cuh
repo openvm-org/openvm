@@ -2,7 +2,8 @@
 
 #include <cstdint>
 
-enum MemoryCellType : uint8_t {
+// System metadata stores these tags as u8; postflight structs store them as u32.
+enum MemoryCellType : uint32_t {
     CELL_UNSUPPORTED = 0,
     CELL_U8 = 1,
     CELL_U16 = 2,
@@ -22,7 +23,7 @@ enum MemoryCellType : uint8_t {
 //           BLOCKS_PER_LEAF blocks.
 //
 // U8-celled AS layout (public values): one block is 4 bytes and one leaf is 8 bytes.
-// The AS-native pointer is also the byte pointer.
+// The pointer counts U8 cells and is therefore also a byte pointer.
 //
 // U16-celled AS layout (RV64 register/memory).
 // One merkle leaf = 16 bytes = 8 u16 cells = 2 bus blocks:
@@ -51,7 +52,7 @@ enum MemoryCellType : uint8_t {
 //
 //   byte_ptr = size_of::<F>() * ptr
 //
-// In every AS, ptr is AS-native. Block k starts at ptr k * BLOCK_FE_WIDTH, and
+// In every AS, ptr counts cells. Block k starts at ptr k * BLOCK_FE_WIDTH, and
 // merkle leaf l starts at ptr l * DIGEST_WIDTH.
 
 #include "poseidon2.cuh" // brings in CELLS / CELLS_OUT from stark-backend

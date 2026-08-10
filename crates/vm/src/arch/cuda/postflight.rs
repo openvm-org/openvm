@@ -423,7 +423,11 @@ fn validated_history_write_masks(
         let full_write_mask = match layout {
             MemoryCellType::U8 => 0x0f,
             MemoryCellType::U16 | MemoryCellType::FIELD32 => u8::MAX,
-            _ => 0,
+            _ => {
+                return Err(GpuPostflightError::InvalidTranscript(format!(
+                    "memory event address space {address_space} must use u8, u16, or field32 cells"
+                )));
+            }
         };
         write_masks.push(if event.is_write() { full_write_mask } else { 0 });
         if layout == MemoryCellType::field32() {
