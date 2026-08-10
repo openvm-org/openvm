@@ -11,11 +11,9 @@ use halo2curves_axiom::{
     group::{Curve, Group as _},
     CurveAffine,
 };
-use num_bigint::BigUint;
 use openvm_circuit_primitives::U16_BITS;
 use openvm_ecc_circuit::{
     ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, setup_row_inputs, CurveType,
-    EC_MUL_COMPUTE_ROWS, EC_MUL_STEPS_PER_ROW,
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilderConfig, FieldExpressionProgram,
@@ -161,58 +159,6 @@ where
         .unwrap_or((C::Base::ZERO, C::Base::ZERO));
     write_field_256(state, rd_ptr, &rx);
     write_field_256(state, rd_ptr + BN254_FQ_BYTES, &ry);
-}
-
-/// Execute `EC_MUL` by interpreting the circuit's own step expression, one evaluation per row,
-/// selecting the same one-hot sign flag the AIR does.
-///
-/// Used for BLS12-381, whose 48-byte coordinates the native 256-bit path cannot represent. Driving
-/// the circuit's program keeps the two byte-identical; the cost is one field-expression evaluation
-/// per bit instead of one projective step, which is acceptable because no guest library exposes
-/// scalar multiplication on a curve with a cofactor, so only `SETUP_EC_MUL` is reached in practice.
-unsafe fn ec_mul_via_expr(
-    state: *mut c_void,
-    rd_ptr: u64,
-    rs1_ptr: u64,
-    rs2_ptr: u64,
-    point_bytes: u32,
-    program: &FieldExpressionProgram,
-) {
-    let coord_bytes = (point_bytes / 2) as usize;
-    let point = trace_read_bytes(state, rs1_ptr, point_bytes);
-    let px = BigUint::from_bytes_le(&point[..coord_bytes]);
-    let py = BigUint::from_bytes_le(&point[coord_bytes..]);
-    let scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
-
-    let outs = program.output_indices();
-    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
-    let mut rx = px.clone();
-    let mut ry = py.clone();
-
-    for row in 0..EC_MUL_COMPUTE_ROWS {
-        // Digit `i` is bit `i + 1` of the scalar: the ladder's value is `2B + 1`.
-        let mut pattern = 0usize;
-        for step in 0..EC_MUL_STEPS_PER_ROW {
-            let i = SCALAR_BITS - 1 - (row * EC_MUL_STEPS_PER_ROW + step);
-            let j = i + 1;
-            let bit = j < SCALAR_BITS && (scalar[j / 8] >> (j % 8)) & 1 == 1;
-            pattern |= (bit as usize) << (EC_MUL_STEPS_PER_ROW - 1 - step);
-        }
-        let mut flags = vec![false; program.num_flags()];
-        flags[pattern] = true;
-        let vars = program.execute(&[px.clone(), py.clone(), rx, ry], &flags);
-        rx = vars[outs[0]].clone();
-        ry = vars[outs[1]].clone();
-    }
-
-    let mut output = vec![0u8; point_bytes as usize];
-    for (dst, byte) in output[..coord_bytes].iter_mut().zip(rx.to_bytes_le()) {
-        *dst = byte;
-    }
-    for (dst, byte) in output[coord_bytes..].iter_mut().zip(ry.to_bytes_le()) {
-        *dst = byte;
-    }
-    trace_write_bytes(state, rd_ptr, &output);
 }
 
 // ── Curve constants ──────────────────────────────────────────────────────────
@@ -566,28 +512,6 @@ ecc_double_setup_entry!(
     CurveType::BLS12_381
 );
 
-/// # Safety
-///
-/// `state` must point to a valid native tracer state for this execution.
-/// Pointer parameters must point to valid affine point coordinates.
-#[no_mangle]
-pub unsafe extern "C" fn rvr_ext_ec_mul_bls12_381(
-    state: *mut c_void,
-    rd_ptr: u64,
-    rs1_ptr: u64,
-    rs2_ptr: u64,
-) {
-    static PROGRAM: LazyLock<FieldExpressionProgram> =
-        LazyLock::new(|| ec_mul_setup_program(CurveType::BLS12_381, BLS12_381_ELEM_BYTES));
-    ec_mul_via_expr(
-        state,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        POINT_BLS12_381_BYTES,
-        &PROGRAM,
-    );
-}
 
 ecc_mul_setup_entry!(
     rvr_ext_setup_ec_mul_bls12_381,
@@ -598,7 +522,6 @@ ecc_mul_setup_entry!(
 #[cfg(test)]
 mod tests {
     use halo2curves_axiom::group::prime::PrimeCurveAffine;
-    use num_bigint::BigUint;
 
     use super::*;
 
@@ -707,6 +630,7 @@ mod tests {
         }
     }
 
+    use num_bigint::BigUint;
     use openvm_ecc_circuit::SETUP_ACC;
 
     fn write_le(value: &BigUint, out: &mut [u8]) {
