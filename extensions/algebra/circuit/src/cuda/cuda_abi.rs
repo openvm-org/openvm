@@ -146,6 +146,33 @@ unsafe extern "C" {
         d_error: *mut u32,
         stream: cudaStream_t,
     ) -> i32;
+
+    fn _ec_mul_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        num_limbs: usize,
+        blocks: usize,
+        d_projection: *const std::ffi::c_void,
+        num_instructions: usize,
+        d_blob: *const u32,
+        blob_words: usize,
+        d_vars: *mut u32,
+        vars_words: usize,
+        d_dummy_expr: *mut F,
+        d_range_counts: *mut u32,
+        range_bins: usize,
+        d_discarded_counts: *mut u32,
+        d_scratch: *mut u32,
+        scratch_words: usize,
+        aux_words: usize,
+        fill_grid_blocks: usize,
+        fill_block_threads: usize,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
+        d_error: *mut u32,
+        stream: cudaStream_t,
+    ) -> i32;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -425,6 +452,71 @@ pub unsafe fn replay_tracegen(
         d_range_checker.len(),
         pointer_max_bits,
         timestamp_max_bits,
+        stream,
+    ))
+}
+
+/// Launch dimensions for the row-filling pass, whose scratch is bounded by its thread count.
+#[derive(Clone, Copy, Debug)]
+pub struct EcMulFillLaunchConfig {
+    pub grid_blocks: usize,
+    pub block_threads: usize,
+    pub scratch_words: usize,
+}
+
+/// Generates one curve's `EC_MUL` trace from already-gathered projections.
+///
+/// `T` is the caller's projection type; this crate cannot name it, since the `EC_MUL` chip lives
+/// downstream. Both sides assert the element size independently, as for [`gather_ec_mul`].
+///
+/// # Safety
+///
+/// `T` must have the layout of the kernel's `EcMulTraceInput<BLOCKS>` for the given `blocks`, and
+/// every device view must belong to `stream`'s context.
+pub unsafe fn ec_mul_tracegen<T>(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    width: usize,
+    num_limbs: usize,
+    blocks: usize,
+    d_projection: &DeviceBuffer<T>,
+    d_blob: &DeviceBuffer<u32>,
+    d_vars: &DeviceBuffer<u32>,
+    d_dummy_expr: &DeviceBuffer<F>,
+    d_range_counts: &DeviceBuffer<F>,
+    d_discarded_counts: &DeviceBuffer<F>,
+    d_scratch: &DeviceBuffer<u32>,
+    aux_words: usize,
+    launch: EcMulFillLaunchConfig,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
+    d_error: *mut u32,
+    stream: cudaStream_t,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_ec_mul_tracegen(
+        d_trace.as_mut_ptr(),
+        height,
+        width,
+        num_limbs,
+        blocks,
+        d_projection.as_ptr().cast(),
+        d_projection.len(),
+        d_blob.as_ptr(),
+        d_blob.len(),
+        d_vars.as_mut_ptr(),
+        d_vars.len(),
+        d_dummy_expr.as_mut_ptr(),
+        d_range_counts.as_mut_ptr().cast(),
+        d_range_counts.len(),
+        d_discarded_counts.as_mut_ptr().cast(),
+        d_scratch.as_mut_ptr(),
+        launch.scratch_words,
+        aux_words,
+        launch.grid_blocks,
+        launch.block_threads,
+        pointer_max_bits,
+        timestamp_max_bits,
+        d_error,
         stream,
     ))
 }

@@ -28,7 +28,8 @@ fn main() {
             .file("cuda/src/modular_is_eq.cu")
             .file("cuda/src/modular_addsub_replay.cu")
             .file("cuda/src/vec_heap_projection.cu")
-            .file("cuda/src/ec_mul_projection.cu");
+            .file("cuda/src/ec_mul_projection.cu")
+            .file("cuda/src/ec_mul_tracegen.cu");
 
         builder.emit_link_directives();
         builder.build();
