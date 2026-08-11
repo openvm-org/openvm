@@ -40,6 +40,15 @@ use super::{ec_mul_width, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MU
 const MAX_EC_MUL_SCRATCH_BYTES: usize = 128 << 20;
 const EC_MUL_FILL_BLOCK_THREADS: usize = 128;
 
+/// Scratch the device's Jacobian point operations need, in slots of `u32_limbs` words.
+///
+/// Mirrors `EC_MUL_JACOBIAN_TEMPS` in `algebra/ec_mul_projective.cuh`. The device revalidates the
+/// buffer this sizes before writing to it, so a drift here fails the launch rather than corrupting
+/// memory.
+const EC_MUL_JACOBIAN_TEMPS: usize = 14;
+/// Mirrors `EC_MUL_MONT_WORKSPACE_WORDS`: the leading slots reserved for Montgomery multiplication.
+const EC_MUL_MONT_WORKSPACE_WORDS: usize = 2;
+
 /// Gathers every `EC_MUL` and `SETUP_EC_MUL` projection for one curve, in execution order.
 ///
 /// The replay plan partitions steps by opcode, so the two opcodes arrive concatenated rather than
@@ -283,9 +292,15 @@ impl EcMulTracegenGpu {
             num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS,
             device_ctx,
         );
-        // Jacobian accumulators plus the prefix products the batch inversion consumes. Pass 1 only.
+        // Per instruction: Jacobian accumulators, the prefix products the batch inversion consumes,
+        // then that thread's Montgomery workspace. Pass 1 only. Kept off the kernel's stack, where
+        // it would cost occupancy for nothing.
+        let ladder_slice_words = EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs
+            + EC_MUL_MONT_WORKSPACE_WORDS * self.u32_limbs
+            + 2
+            + EC_MUL_JACOBIAN_TEMPS * self.u32_limbs;
         let ladder = DeviceBuffer::<u32>::with_capacity_on(
-            num_instructions * EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs,
+            num_instructions * ladder_slice_words,
             device_ctx,
         );
         let dummy_expr = DeviceBuffer::<F>::with_capacity_on(self.expr_width, device_ctx);
