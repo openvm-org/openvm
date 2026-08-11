@@ -21,6 +21,10 @@ enum MemoryMerkleSubTreeLayout : uint8_t {
     SPARSE_PAGES = 2,
 };
 
+// Selects one height's contiguous range in the flat sparse-node arrays.
+// `labels[start .. start + count]` contains the node labels at this height, and the same range in
+// the digest buffer contains their hashes. Kernels use this range to binary-search a node label
+// without considering labels from other heights.
 struct SparseLevel {
     uint32_t start;
     uint32_t count;
