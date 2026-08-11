@@ -1326,6 +1326,14 @@ mod tests {
     /// initial root, final root, and full trace against the CPU reference.
     #[test]
     fn test_cuda_merkle_tree_sparse_pages_cpu_gpu_equivalence() {
+        // The address spaces filled to `max_cells`, spanning all three cell types: u16
+        // (MEMORY_AS), Field32 (DEFERRAL_AS), and u8 (PUBLIC_VALUES_AS).
+        const LARGE_AS: [usize; 3] = [
+            MEMORY_AS as usize,
+            DEFERRAL_AS as usize,
+            PUBLIC_VALUES_AS as usize,
+        ];
+
         let mut rng = create_seeded_rng();
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
@@ -1333,8 +1341,9 @@ mod tests {
             let max_cells = 1 << max_ptr_bits;
             // REGISTER_AS uses u16 storage cells.
             addr_spaces[REGISTER_AS as usize].num_cells = 32 * size_of::<u64>() / U16_CELL_SIZE;
-            addr_spaces[MEMORY_AS as usize].num_cells = max_cells;
-            addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
+            for addr_space in LARGE_AS {
+                addr_spaces[addr_space].num_cells = max_cells;
+            }
             MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
         };
 
@@ -1376,9 +1385,7 @@ mod tests {
                         }
                     }
                 }
-                if (idx == MEMORY_AS as usize || idx == DEFERRAL_AS as usize)
-                    && space.num_cells != 0
-                {
+                if LARGE_AS.contains(&idx) && space.num_cells != 0 {
                     let ptr = (space.num_cells - 1) as u32;
                     match space.layout {
                         MemoryCellType::U8 => initial_memory.write::<u8, 1>(idx as u32, ptr, [1]),
@@ -1429,7 +1436,7 @@ mod tests {
         }
         // The large address spaces must actually select page sparsity, or this test degenerates
         // into the dense equivalence tests.
-        for addr_space in [MEMORY_AS as usize, DEFERRAL_AS as usize] {
+        for addr_space in LARGE_AS {
             let subtree = &gpu_merkle_tree.subtrees[addr_space - 1];
             assert_eq!(subtree.layout, MemoryMerkleSubTreeLayout::SparsePages);
         }
@@ -1460,8 +1467,7 @@ mod tests {
                 let mut ptrs = Vec::new();
                 let num_leaves = cnf.num_cells / VM_DIGEST_WIDTH;
                 for j in 0..num_leaves {
-                    let is_last_large = j + 1 == num_leaves
-                        && (i == MEMORY_AS as usize || i == DEFERRAL_AS as usize);
+                    let is_last_large = j + 1 == num_leaves && LARGE_AS.contains(&i);
                     if is_last_large || rng.random_bool(0.333) {
                         ptrs.push((i as u32, (j * VM_DIGEST_WIDTH) as u32));
                     }
