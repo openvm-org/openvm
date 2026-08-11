@@ -203,6 +203,26 @@ impl LinearMemory for GuardedMemory {
         }
     }
 
+    fn sparse_clone(&self, ranges: &[(usize, usize)]) -> Self {
+        let mut cloned = Self::new(self.memory_size);
+        for &(start, end) in ranges {
+            assert!(
+                start <= end && end <= self.memory_size,
+                "sparse clone range out of bounds"
+            );
+            // SAFETY: both mappings are valid for `memory_size` bytes and the checked range is
+            // within them. The mappings are distinct.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    self.as_ptr().add(start),
+                    cloned.as_mut_ptr().add(start),
+                    end - start,
+                );
+            }
+        }
+        cloned
+    }
+
     fn size(&self) -> usize {
         self.memory_size
     }

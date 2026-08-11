@@ -28,7 +28,9 @@ use tracing::instrument;
 
 use super::{
     boundary::BoundaryChipGPU,
-    merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
+    merkle_tree::{
+        initial_merkle_build, MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH,
+    },
     GpuMemoryCellType, Poseidon2PeripheryChipGPU,
 };
 use crate::{
@@ -203,8 +205,12 @@ impl MemoryInventoryGPU {
             self.clear_initial_memory();
         }
         // Only transfer pages that may contain non-zero data; the rest are zero-filled
-        // on-device. The merkle kernel reads the full address-space region, so the device
-        // buffer is full-size and the skipped pages must read as zero.
+        // on-device. Execution and boundary kernels index the full address-space region, so the
+        // device buffer is full-size and the skipped pages must read as zero. Replacing this
+        // allocation requires sparse-aware CUDA execution kernels; the CPU sparse-snapshot path
+        // cannot safely be reused here. The Merkle build uses touched pages to choose either a
+        // dense prefix or page-dense sparse subtrees whose gaps are covered by precomputed zero
+        // hashes (see `initial_merkle_build`).
         let per_as: Vec<_> = initial_memory
             .get_memory()
             .iter()
@@ -221,6 +227,11 @@ impl MemoryInventoryGPU {
             .sum();
         let staging = self.upload_staging.ensure(total);
         let mut offset = 0usize;
+        let address_height = self
+            .merkle_tree
+            .mem_config()
+            .memory_dimensions()
+            .address_height;
         for (addr_sp, (raw_mem, runs)) in per_as.into_iter().enumerate() {
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
@@ -274,8 +285,11 @@ impl MemoryInventoryGPU {
                 }
                 buf
             }));
-            self.merkle_tree
-                .build_async(self.initial_memory[addr_sp].clone(), addr_sp);
+            self.merkle_tree.build_async(
+                self.initial_memory[addr_sp].clone(),
+                addr_sp,
+                initial_merkle_build(initial_memory, addr_sp, address_height),
+            );
         }
         self.boundary.initial_leaves = self
             .initial_memory
@@ -833,11 +847,6 @@ mod tests {
             memory.write_bytes::<MEMORY_BLOCK_BYTES>(REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
             memory.write_bytes::<MEMORY_BLOCK_BYTES>(MEMORY_AS, 0, [9, 10, 11, 12, 0, 0, 0, 0]);
         }
-        // `write_bytes` doesn't mark pages; mark them so `set_initial_memory` transfers them
-        // (see `AddressMap::touched_pages`).
-        for addr_space in [REGISTER_AS, MEMORY_AS] {
-            memory.memory.touched_pages[addr_space as usize].mark_byte_range(0, MEMORY_BLOCK_BYTES);
-        }
         (mem_config, memory)
     }
 
@@ -1116,9 +1125,10 @@ mod tests {
     fn test_set_initial_memory_rejects_nonzero_unmarked_page() {
         let (mem_config, _) = single_block_setup();
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
-        unsafe {
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(MEMORY_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-        }
+        // Raw mutable access is the documented escape hatch that does NOT mark touched pages
+        // (see `AddressMap::touched_pages`); tracked writers like `write_bytes` mark them.
+        memory.memory.get_memory_mut()[MEMORY_AS as usize].as_mut_slice()[..MEMORY_BLOCK_BYTES]
+            .copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
         assert!(memory.memory.touched_pages[MEMORY_AS as usize]
             .touched_byte_ranges(MEMORY_BLOCK_BYTES)
             .is_empty());
