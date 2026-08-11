@@ -240,14 +240,22 @@ unsafe fn execute_e12_impl<
 
     if IS_SETUP {
         // The point operand carries (modulus, a), as for SETUP_EC_ADD_NE and SETUP_EC_DOUBLE.
-        // FieldExpr's setup constraint checks the same values; this mirrors it during execution so
-        // a mismatch reports a clear error rather than an unsatisfiable trace. The scalar
-        // operand is unused by setup.
-        let input_prime = BigUint::from_bytes_le(point_data[..BLOCKS / 2].as_flattened());
+        // `FieldExpr`'s setup constraint pins both, and the AIR links them to this read, so both
+        // are checked here too: a mismatch reports a clear error rather than an unsatisfiable
+        // trace, and the rvr path rejects the same inputs. The scalar operand is unused by setup.
+        let coord_bytes = BLOCKS / 2;
+        let input_prime = BigUint::from_bytes_le(point_data[..coord_bytes].as_flattened());
         if &input_prime != pre_compute.program.prime() {
             return Err(ExecutionError::Fail {
                 pc,
                 msg: "EcMul: mismatched prime",
+            });
+        }
+        let input_a = BigUint::from_bytes_le(point_data[coord_bytes..].as_flattened());
+        if input_a != pre_compute.program.setup_values()[0] {
+            return Err(ExecutionError::Fail {
+                pc,
+                msg: "EcMul: mismatched curve coefficient a",
             });
         }
     }
