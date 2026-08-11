@@ -156,23 +156,44 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             c_sum += record.c[i];
             r_sum += r[i];
         }
-        if (c_sum == 0) {
-            COL_WRITE_VALUE(row, Cols, c_sum_inv, 0);
-        } else {
-            COL_WRITE_VALUE(row, Cols, c_sum_inv, inv(Fp(c_sum)));
-        }
-
-        if (r_sum == 0) {
-            COL_WRITE_VALUE(row, Cols, r_sum_inv, 0);
-        } else {
-            COL_WRITE_VALUE(row, Cols, r_sum_inv, inv(Fp(r_sum)));
-        }
-
         COL_WRITE_ARRAY(row, Cols, r_prime, r_prime);
+        Fp product = Fp(1);
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
-            Fp r_inv = inv(Fp(r_prime[i]) - Fp(256));
-            COL_WRITE_VALUE(row, Cols, r_inv[i], r_inv);
+            // Use the final r_inv trace cells as prefix-product scratch. Keeping a second pair of
+            // eight-element Fp arrays live here materially increases GPU register pressure.
+            COL_WRITE_VALUE(row, Cols, r_inv[i], product);
+            product *= Fp(r_prime[i]) - Fp(256);
+        }
+        Fp c_sum_prefix = product;
+        Fp c_sum_f = Fp(c_sum);
+        if (c_sum != 0) {
+            product *= c_sum_f;
+        }
+        Fp r_sum_prefix = product;
+        Fp r_sum_f = Fp(r_sum);
+        if (r_sum != 0) {
+            product *= r_sum_f;
+        }
+
+        // Batch all ten per-row inverses. Prefixes for the eight limb inverses live temporarily in
+        // their final trace cells, avoiding two register-resident arrays.
+        Fp product_inv = inv(product);
+        COL_WRITE_VALUE(row, Cols, r_sum_inv,
+                        r_sum == 0 ? Fp(0) : product_inv * r_sum_prefix);
+        if (r_sum != 0) {
+            product_inv *= r_sum_f;
+        }
+        COL_WRITE_VALUE(row, Cols, c_sum_inv,
+                        c_sum == 0 ? Fp(0) : product_inv * c_sum_prefix);
+        if (c_sum != 0) {
+            product_inv *= c_sum_f;
+        }
+#pragma unroll
+        for (int i = NUM_LIMBS - 1; i >= 0; i--) {
+            Fp prefix = row[COL_INDEX(Cols, r_inv) + i];
+            COL_WRITE_VALUE(row, Cols, r_inv[i], product_inv * prefix);
+            product_inv *= Fp(r_prime[i]) - Fp(256);
         }
 
         COL_FILL_ZERO(row, Cols, lt_marker);

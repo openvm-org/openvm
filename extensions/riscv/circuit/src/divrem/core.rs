@@ -464,14 +464,49 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemFiller<A, NUM_LIMB
         }
 
         let r_prime_f = r_prime.map(F::from_u32);
-        core_row.r_inv = r_prime_f.map(|r| (r - F::from_u32(1 << LIMB_BITS)).inverse());
+        let radix = F::from_u32(1 << LIMB_BITS);
+        let r_inv_inputs = r_prime_f.map(|r| r - radix);
+        let r_sum = r.iter().fold(0, |acc, r| acc + *r);
+        let c_sum = c.iter().fold(0, |acc, c| acc + *c as u32);
+        let r_sum_f = F::from_u32(r_sum);
+        let c_sum_f = F::from_u32(c_sum);
+
+        // All of these inverses are independent witness values. Batch them within the row so
+        // RV64 DIV/REM needs one base-field inversion instead of NUM_LIMBS + 2 inversions.
+        // Zero sum markers are excluded from the product and retain the existing zero witness.
+        let mut prefixes = [F::ONE; NUM_LIMBS];
+        let mut product = F::ONE;
+        for i in 0..NUM_LIMBS {
+            prefixes[i] = product;
+            product *= r_inv_inputs[i];
+        }
+        let c_sum_prefix = product;
+        product *= if c_sum == 0 { F::ONE } else { c_sum_f };
+        let r_sum_prefix = product;
+        product *= if r_sum == 0 { F::ONE } else { r_sum_f };
+
+        let mut product_inv = product.inverse();
+        core_row.r_sum_inv = if r_sum == 0 {
+            F::ZERO
+        } else {
+            product_inv * r_sum_prefix
+        };
+        if r_sum != 0 {
+            product_inv *= r_sum_f;
+        }
+        core_row.c_sum_inv = if c_sum == 0 {
+            F::ZERO
+        } else {
+            product_inv * c_sum_prefix
+        };
+        if c_sum != 0 {
+            product_inv *= c_sum_f;
+        }
+        for i in (0..NUM_LIMBS).rev() {
+            core_row.r_inv[i] = product_inv * prefixes[i];
+            product_inv *= r_inv_inputs[i];
+        }
         core_row.r_prime = r_prime_f;
-
-        let r_sum_f = r.iter().fold(F::ZERO, |acc, r| acc + F::from_u32(*r));
-        core_row.r_sum_inv = r_sum_f.try_inverse().unwrap_or(F::ZERO);
-
-        let c_sum_f = F::from_u32(c.iter().fold(0, |acc, c| acc + *c as u32));
-        core_row.c_sum_inv = c_sum_f.try_inverse().unwrap_or(F::ZERO);
 
         core_row.sign_xor = F::from_bool(sign_xor);
         core_row.q_sign = F::from_bool(q_sign);
