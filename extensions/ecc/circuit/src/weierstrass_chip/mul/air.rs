@@ -1,16 +1,6 @@
 //! AIR for the `EC_MUL` chip.
 //!
-//! Constrains the ladder across [`EC_MUL_COMPUTE_ROWS`] rows, and the memory accesses on the digest
-//! row that follows them.
-//!
-//! Transition constraints are gated by degree-1 selectors so the AIR stays at the same maximum
-//! constraint degree as the chips around it. That bound is not local: `log_blowup` comes from the
-//! configuration's `max_constraint_degree` and applies to every AIR in the application.
-//! `tests/ecmul_air.rs` asserts it. [`EcMulHeaderCols::is_ladder`] and
-//! [`EcMulHeaderCols::is_real_digest`] are stored rather than formed inline for the same reason;
-//! the conjunctions they stand for are degree 2.
-//!
-//! # Binding the digits to the scalar
+//! Constrains the ladder across rows, and the memory accesses on the digest row that follows them.
 //!
 //! Two accumulators run together: the point `R = m*P` in the expression, and the bits `B` of the
 //! signs chosen so far in [`EcMulHeaderCols::scalar_acc`]. `B` is never a multiplier, only
@@ -31,7 +21,7 @@
 //!   formulas never degenerate needs this. Callers enforce it, as they do for `EC_ADD_NE`.
 //! - The guest called `SETUP_EC_MUL`. Under continuations only the first segment sees the setup
 //!   row, so this is enforced at the program level.
-//! - The base point is on the curve. The chip constrains the group law, not membership.
+//! - The base point is on the curve.
 
 use std::borrow::Borrow;
 
@@ -204,6 +194,10 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             .when_first_row()
             .when(local.is_compute)
             .assert_one(local.is_first_compute);
+        // A digest must be preceded by the ladder it summarises. The rule below is a transition
+        // constraint, so it says nothing about row zero; without this, a digest there would fire
+        // every memory and execution interaction with no compute predecessor at all.
+        builder.when_first_row().assert_zero(local.is_digest);
         // A compute row is either the start of an instruction or a continuation of the previous
         // row. Summing also forbids both at once, so an instruction cannot begin directly after a
         // ladder row without an intervening digest row.
@@ -262,6 +256,15 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
                 * (AB::Expr::ONE - local.is_setup)
                 * (AB::Expr::ONE - local.is_first_compute),
         );
+        // Both stored selectors must be *defined*, not merely written by trace generation. Without
+        // this, `is_real_digest` is a free column: clearing it on a real digest row disables the
+        // result link and the scalar binding below while the memory and execution interactions,
+        // gated by `is_digest`, still fire. A prover could then read any point and scalar, write
+        // any result, and prove nothing connects them to the ladder.
+        builder.assert_eq(
+            local.is_real_digest,
+            local.is_digest * (AB::Expr::ONE - local.is_setup),
+        );
         let to_digest: AB::Expr = next.is_digest.into();
         let in_instruction = continuation.clone() + to_digest.clone();
 
@@ -304,15 +307,20 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         }
 
         // ==== Compute → digest handoff ======================================================
+        // Gated on `is_digest`, not `is_real_digest`: a setup instruction's operands need binding
+        // just as much as a multiplication's. On a setup row `FieldExpr` pins `inputs[IN_PX]` and
+        // `inputs[IN_PY]` to the prime and `a`, so linking them to the point read is what ties the
+        // memory operand to the values the setup check enforces. Only the scalar binding below is
+        // genuinely setup-specific, since a setup row's scalar operand is a placeholder.
         let mut when_to_digest = builder.when_transition();
-        let mut when_to_digest = when_to_digest.when(next.is_real_digest);
+        let mut when_to_digest = when_to_digest.when(next.is_digest);
 
         for i in 0..NUM_LIMBS {
-            // The result written to memory is the last step's output.
+            // The result written to memory is the last row's output.
             when_to_digest.assert_eq(next_digest.result_x[i], out_x[i]);
             when_to_digest.assert_eq(next_digest.result_y[i], out_y[i]);
-            // The point read from memory is the base point the ladder used. `P` is constant
-            // across compute rows, so linking it once here propagates to all of them.
+            // The point read from memory is what the rows consumed. It is constant across compute
+            // rows, so linking it once here propagates to all of them.
             when_to_digest.assert_eq(next_digest.point_x[i], inputs[IN_PX][i]);
             when_to_digest.assert_eq(next_digest.point_y[i], inputs[IN_PY][i]);
         }
