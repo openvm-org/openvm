@@ -295,6 +295,28 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
     let mut acc_limbs = [0u8; SCALAR_ACC_LIMBS];
     let outs = expr.program().output_indices();
 
+    let setup_subrow = (input.is_setup != 0).then(|| {
+        let scratch = VariableRangeCheckerChip::new(range_checker.bus());
+        let mut sub = F::zero_vec(digest_offset - header_width);
+        expr.generate_subrow(
+            (
+                &scratch,
+                setup_row_inputs(expr.program()),
+                vec![false; EC_MUL_SIGN_PATTERNS],
+            ),
+            &mut sub,
+        );
+        // The AIR emits these range checks on every compute row, so one row's counts have to be
+        // scaled by the number of rows that will carry them.
+        for (dst, src) in range_checker.count.iter().zip(&scratch.count) {
+            let n = src.load(Ordering::Relaxed);
+            if n != 0 {
+                dst.fetch_add(n * EC_MUL_COMPUTE_ROWS as u32, Ordering::Relaxed);
+            }
+        }
+        sub
+    });
+
     for row_idx in 0..EC_MUL_COMPUTE_ROWS {
         let pattern = sign_pattern_for_row(&scalar_bytes, row_idx);
 
@@ -320,19 +342,19 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             }
         }
 
-        let inputs = if input.is_setup != 0 {
-            setup_row_inputs(expr.program())
+        if let Some(setup) = &setup_subrow {
+            row[header_width..digest_offset].copy_from_slice(setup);
         } else {
-            vec![px.clone(), py.clone(), rx.clone(), ry.clone()]
-        };
+            expr.generate_subrow(
+                (
+                    range_checker,
+                    vec![px.clone(), py.clone(), rx.clone(), ry.clone()],
+                    flags,
+                ),
+                &mut row[header_width..digest_offset],
+            );
 
-        expr.generate_subrow(
-            (range_checker, inputs, flags),
-            &mut row[header_width..digest_offset],
-        );
-
-        // Carry the accumulator to the next row.
-        let vars = {
+            // Carry the accumulator to the next row.
             let sub = &row[header_width..digest_offset];
             let cols = expr.load_vars(sub);
             let read_limbs = |limbs: &[F]| {
@@ -342,13 +364,9 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
                     .collect();
                 BigUint::from_bytes_le(&bytes)
             };
-            (
-                read_limbs(&cols.vars[outs[0]]),
-                read_limbs(&cols.vars[outs[1]]),
-            )
-        };
-        rx = vars.0;
-        ry = vars.1;
+            rx = read_limbs(&cols.vars[outs[0]]);
+            ry = read_limbs(&cols.vars[outs[1]]);
+        }
 
         if input.is_setup == 0 {
             // B <- 2^EC_MUL_STEPS_PER_ROW * B + digits, a shift.
