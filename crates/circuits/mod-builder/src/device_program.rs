@@ -517,17 +517,49 @@ impl Serializer<'_> {
     }
 }
 
+/// Where the device interpreter gets an expression's output variables.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeviceOutputSource {
+    /// Load them from the instruction's logged memory writes, letting the constraint tape check
+    /// them against the inputs. Correct whenever every evaluated row writes its result to memory.
+    Logged,
+    /// Compute them from the inputs, like every other variable. Required when the output is not in
+    /// memory, as for a chip whose rows chain and only write the last row's result.
+    Computed,
+}
+
 /// Serializes the expression and already-normalized opcode metadata held by `filler`.
 pub fn serialize_field_expr<A>(
     filler: &FieldExpressionFiller<A>,
 ) -> Result<SerializedFieldExpr, FieldExpressionTraceError> {
-    let program = build_device_program(filler)?;
-    let blob = program.to_blob()?;
-    Ok(SerializedFieldExpr {
-        blob,
-        core_width: program.core_width,
-        aux_words_per_thread: program.aux_words_per_thread,
-    })
+    build_device_program(filler)?.serialize()
+}
+
+/// Serializes an expression that no [`FieldExpressionFiller`] owns.
+///
+/// A chip using the adapter/core split holds its opcode metadata in a filler and should use
+/// [`serialize_field_expr`]. This entry point is for one whose row layout is its own, which holds a
+/// bare [`FieldExpr`] and supplies the metadata separately.
+///
+/// `local_opcode_idx` and `opcode_flag_idx` must satisfy the layout rule the filler enforces: with
+/// setup, one trailing setup opcode carrying no flag; without it, exactly one opcode and no flags.
+/// A caller driving the flags per row must still declare a legal table, since the device validates
+/// its shape before running.
+pub fn serialize_field_expr_from_parts(
+    expr: &FieldExpr,
+    local_opcode_idx: &[usize],
+    opcode_flag_idx: &[usize],
+    should_finalize: bool,
+    outputs: DeviceOutputSource,
+) -> Result<SerializedFieldExpr, FieldExpressionTraceError> {
+    build_device_program_inner(
+        expr,
+        local_opcode_idx,
+        opcode_flag_idx,
+        should_finalize,
+        outputs,
+    )?
+    .serialize()
 }
 
 fn build_device_program<A>(
@@ -538,6 +570,7 @@ fn build_device_program<A>(
         &filler.local_opcode_idx,
         &filler.opcode_flag_idx,
         filler.should_finalize,
+        DeviceOutputSource::Logged,
     )
 }
 
@@ -546,6 +579,7 @@ fn build_device_program_inner(
     local_opcode_idx: &[usize],
     opcode_flag_idx: &[usize],
     should_finalize: bool,
+    outputs: DeviceOutputSource,
 ) -> Result<DeviceFieldExprProgram, FieldExpressionTraceError> {
     let builder = expr.program().builder();
     let opcode_metadata = normalize_opcode_metadata(
@@ -642,17 +676,22 @@ fn build_device_program_inner(
         serializer.next_value_slot = serializer.value_slot_base;
         // Output variables are already present in the read-only execution transcript.
         // Load them directly; the constraint tape below validates their relation to the inputs.
-        let source = if let Some(output_position) = output_positions[variable] {
-            let source = serializer.allocate_value_slot()?;
-            serializer.value_ops.push(ValueOp {
-                opcode: ValueOpcode::LoadOutput as u32,
-                dst: source,
-                a: output_position,
-                ..Default::default()
-            });
-            source
-        } else {
-            serializer.emit_value(compute, ValueGuard::default())?
+        let load_output = output_positions[variable]
+            .filter(|_| outputs == DeviceOutputSource::Logged)
+            .map(|output_position| {
+                let source = serializer.allocate_value_slot()?;
+                serializer.value_ops.push(ValueOp {
+                    opcode: ValueOpcode::LoadOutput as u32,
+                    dst: source,
+                    a: output_position,
+                    ..Default::default()
+                });
+                Ok::<_, FieldExpressionTraceError>(source)
+            })
+            .transpose()?;
+        let source = match load_output {
+            Some(source) => source,
+            None => serializer.emit_value(compute, ValueGuard::default())?,
         };
         let slot = builder
             .num_input
@@ -944,6 +983,14 @@ const H_OUTPUT_INDICES_OFFSET: usize = 32;
 const H_MONTGOMERY_INVERSE: usize = 33;
 
 impl DeviceFieldExprProgram {
+    fn serialize(self) -> Result<SerializedFieldExpr, FieldExpressionTraceError> {
+        Ok(SerializedFieldExpr {
+            blob: self.to_blob()?,
+            core_width: self.core_width,
+            aux_words_per_thread: self.aux_words_per_thread,
+        })
+    }
+
     fn to_blob(&self) -> Result<Vec<u32>, FieldExpressionTraceError> {
         let mut blob = vec![0; HEADER_WORDS];
         blob[H_NUM_LIMBS] = to_u32(self.num_limbs)?;
@@ -1040,7 +1087,8 @@ mod tests {
     use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 
     use super::{
-        biguint_to_u32_limbs, build_device_program, serialize_field_expr, ValueOpcode,
+        biguint_to_u32_limbs, build_device_program, build_device_program_inner,
+        serialize_field_expr, serialize_field_expr_from_parts, DeviceOutputSource, ValueOpcode,
         H_AUX_WORDS_PER_THREAD, H_CORE_WIDTH, H_MAX_QUOTIENT_LIMBS, H_NUM_OPCODE_METADATA,
         H_NUM_OUTPUTS, H_NUM_SETUP_VALUES, H_OPCODE_METADATA_OFFSET, H_OUTPUT_INDICES_OFFSET,
         H_SETUP_VALUES_OFFSET, NO_FLAG,
@@ -1119,8 +1167,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn loads_output_without_replaying_its_division() {
+    /// A filler whose one output variable is a flag-selected multiplication or division.
+    fn division_output_filler() -> FieldExpressionFiller<()> {
         let prime = secp256k1_coord_prime();
         let (range_checker, builder) = setup(&prime);
         let lhs = ExprBuilder::new_input(builder.clone());
@@ -1147,16 +1195,19 @@ mod tests {
         output.save_output();
         let program = FieldExpressionProgram::new(builder.borrow().clone(), true);
         let expr = FieldExpr::new(program, range_checker.bus());
-        let filler = FieldExpressionFiller::new(
+        FieldExpressionFiller::new(
             (),
             expr,
             vec![2, 3, 4],
             vec![mul_flag, div_flag],
             range_checker,
             true,
-        );
+        )
+    }
 
-        let program = build_device_program(&filler).unwrap();
+    #[test]
+    fn loads_output_without_replaying_its_division() {
+        let program = build_device_program(&division_output_filler()).unwrap();
         assert!(program
             .value_ops
             .iter()
@@ -1167,6 +1218,42 @@ mod tests {
             .find(|op| op.opcode == ValueOpcode::LoadOutput as u32)
             .unwrap();
         assert_eq!(load.a, 0);
+    }
+
+    /// With no logged write to load from, the output's division is replayed like any other value.
+    #[test]
+    fn computed_outputs_replay_their_division_and_load_nothing() {
+        let filler = division_output_filler();
+        let program = build_device_program_inner(
+            &filler.expr,
+            &filler.local_opcode_idx,
+            &filler.opcode_flag_idx,
+            filler.should_finalize,
+            DeviceOutputSource::Computed,
+        )
+        .unwrap();
+        assert!(program
+            .value_ops
+            .iter()
+            .any(|op| op.opcode == ValueOpcode::Div as u32));
+        assert!(program
+            .value_ops
+            .iter()
+            .all(|op| op.opcode != ValueOpcode::LoadOutput as u32));
+
+        // The output index is unchanged, so a chained caller can still find the value to seed the
+        // next row.
+        let serialized = serialize_field_expr_from_parts(
+            &filler.expr,
+            &filler.local_opcode_idx,
+            &filler.opcode_flag_idx,
+            filler.should_finalize,
+            DeviceOutputSource::Computed,
+        )
+        .unwrap();
+        assert_eq!(serialized.blob[H_NUM_OUTPUTS], 1);
+        let output_offset = serialized.blob[H_OUTPUT_INDICES_OFFSET] as usize;
+        assert_eq!(serialized.blob[output_offset], 0);
     }
 
     #[test]
