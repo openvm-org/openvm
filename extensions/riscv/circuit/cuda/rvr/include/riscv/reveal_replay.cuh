@@ -16,11 +16,11 @@ struct ReplayRevealInput {
     uint32_t base_value;
     uint32_t base_prev_timestamp;
     uint32_t src_prev_timestamp;
-    uint32_t write_prev_timestamp;
+    uint32_t write_prev_timestamp[2];
     uint16_t imm;
     uint8_t imm_sign;
-    uint16_t src_data[BLOCK_FE_WIDTH];
-    uint16_t write_prev_data[BLOCK_FE_WIDTH];
+    uint8_t src_bytes[REGISTER_NUM_LIMBS];
+    uint8_t write_prev_data[2][BLOCK_FE_WIDTH];
 };
 
 static __device__ bool replay_reveal(
@@ -44,7 +44,7 @@ static __device__ bool replay_reveal(
             pc_base,
             program,
             step.program_index,
-            3u,
+            4u,
             ReplayPcEffect::Sequential,
             transition,
             error,
@@ -70,16 +70,18 @@ static __device__ bool replay_reveal(
     }
 
     size_t base_index = step.memory_start;
-    if (base_index >= memory.len() || memory.len() - base_index < 3 ||
-        base_index >= predecessors.len() || predecessors.len() - base_index < 3) {
+    if (base_index >= memory.len() || memory.len() - base_index < 4 ||
+        base_index >= predecessors.len() || predecessors.len() - base_index < 4) {
         preflight_set_error(error, REVEAL_REPLAY_ERROR + 2);
         return false;
     }
     size_t src_index = base_index + 1;
     size_t write_index = base_index + 2;
+    size_t write_second_index = base_index + 3;
     auto const &base_read = memory[base_index];
     auto const &src_read = memory[src_index];
     auto const &write = memory[write_index];
+    auto const &write_second = memory[write_second_index];
     if (base_read.timestamp != from.timestamp || preflight_is_write(base_read) ||
         preflight_address_space(base_read) != register_as ||
         base_read.pointer != base_ptr / U16_CELL_SIZE ||
@@ -87,11 +89,13 @@ static __device__ bool replay_reveal(
         preflight_address_space(src_read) != register_as ||
         src_read.pointer != src_ptr / U16_CELL_SIZE ||
         write.timestamp != from.timestamp + 2 || !preflight_is_write(write) ||
-        preflight_address_space(write) != public_values_as) {
+        preflight_address_space(write) != public_values_as ||
+        write_second.timestamp != from.timestamp + 3 || !preflight_is_write(write_second) ||
+        preflight_address_space(write_second) != public_values_as) {
         preflight_set_error(error, REVEAL_REPLAY_ERROR + 2);
         return false;
     }
-    size_t next_index = write_index + 1;
+    size_t next_index = write_second_index + 1;
     if (next_index < memory.len() && memory[next_index].timestamp < to.timestamp) {
         preflight_set_error(error, REVEAL_REPLAY_ERROR + 2);
         return false;
@@ -99,10 +103,11 @@ static __device__ bool replay_reveal(
 
     uint16_t base[BLOCK_FE_WIDTH];
     uint16_t src[BLOCK_FE_WIDTH];
-    uint16_t logged_post[BLOCK_FE_WIDTH];
+    uint8_t logged_post[2][BLOCK_FE_WIDTH];
     replay_u16_block(base_read.value, base);
     replay_u16_block(src_read.value, src);
-    replay_u16_block(write.value, logged_post);
+    preflight_decode_u8_block(write.value, logged_post[0]);
+    preflight_decode_u8_block(write_second.value, logged_post[1]);
     if (base[PTR_U16_LIMBS] != 0 || base[PTR_U16_LIMBS + 1] != 0) {
         preflight_set_error(error, REVEAL_REPLAY_ERROR + 3);
         return false;
@@ -122,21 +127,23 @@ static __device__ bool replay_reveal(
         pointer_max_bits < 32 ? (uint64_t(1) << pointer_max_bits) : (uint64_t(1) << 32);
     uint32_t reveal_ptr = static_cast<uint32_t>(effective);
     if (static_cast<uint64_t>(reveal_ptr) + MEMORY_BLOCK_BYTES > domain_end ||
-        write.pointer != reveal_ptr / U16_CELL_SIZE) {
+        write.pointer != reveal_ptr || write_second.pointer != reveal_ptr + BLOCK_FE_WIDTH) {
         preflight_set_error(error, REVEAL_REPLAY_ERROR + 4);
         return false;
     }
 #pragma unroll
-    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-        if (logged_post[i] != src[i]) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
+        uint8_t byte = uint8_t(src[i / U16_CELL_SIZE] >> ((i % U16_CELL_SIZE) * 8));
+        if (logged_post[i / BLOCK_FE_WIDTH][i % BLOCK_FE_WIDTH] != byte) {
             preflight_set_error(error, REVEAL_REPLAY_ERROR + 5);
             return false;
         }
+        out.src_bytes[i] = byte;
     }
 
     ReplayPreviousValue base_previous;
     ReplayPreviousValue src_previous;
-    ReplayPreviousValue write_previous;
+    ReplayPreviousValue write_previous[2];
     if (!replay_previous_value(
             base_index, base_read, predecessors[base_index], memory, seeds, base_previous
         ) ||
@@ -144,7 +151,15 @@ static __device__ bool replay_reveal(
             src_index, src_read, predecessors[src_index], memory, seeds, src_previous
         ) ||
         !replay_previous_value(
-            write_index, write, predecessors[write_index], memory, seeds, write_previous
+            write_index, write, predecessors[write_index], memory, seeds, write_previous[0]
+        ) ||
+        !replay_previous_value(
+            write_second_index,
+            write_second,
+            predecessors[write_second_index],
+            memory,
+            seeds,
+            write_previous[1]
         )) {
         preflight_set_error(error, REVEAL_REPLAY_ERROR + 6);
         return false;
@@ -157,13 +172,11 @@ static __device__ bool replay_reveal(
     out.base_value = base_value;
     out.base_prev_timestamp = base_previous.timestamp;
     out.src_prev_timestamp = src_previous.timestamp;
-    out.write_prev_timestamp = write_previous.timestamp;
     out.imm = static_cast<uint16_t>(imm);
     out.imm_sign = imm_sign;
-#pragma unroll
-    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-        out.src_data[i] = src[i];
-        out.write_prev_data[i] = write_previous.value[i];
+    for (size_t block = 0; block < 2; block++) {
+        out.write_prev_timestamp[block] = write_previous[block].timestamp;
+        preflight_decode_u8_block(write_previous[block].value, out.write_prev_data[block]);
     }
     return true;
 }

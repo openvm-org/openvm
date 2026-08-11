@@ -11,18 +11,10 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
-    arch::{hasher::Hasher, MemoryCellType, SystemConfig, ADDR_SPACE_OFFSET, U16_CELL_SIZE},
+    arch::{hasher::Hasher, MemoryCellType, SystemConfig, ADDR_SPACE_OFFSET},
     system::memory::{dimensions::MemoryDimensions, online::LinearMemory, MemoryImage},
 };
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = PUBLIC_VALUES_AS - ADDR_SPACE_OFFSET;
-
-pub const fn public_values_cells_from_bytes(num_public_values_bytes: usize) -> usize {
-    assert!(
-        num_public_values_bytes.is_multiple_of(U16_CELL_SIZE),
-        "num_public_values_bytes must be a multiple of U16_CELL_SIZE"
-    );
-    num_public_values_bytes / U16_CELL_SIZE
-}
 
 /// Validates that public values occupy a power-of-two number of complete merkle leaves.
 #[inline(always)]
@@ -216,29 +208,20 @@ fn compute_merkle_proof_to_user_public_values_root<const DIGEST_WIDTH: usize, F:
     proof
 }
 
-/// Extracts the first `num_public_values_bytes` bytes from `PUBLIC_VALUES_AS`.
-pub fn extract_public_values(
-    num_public_values_bytes: usize,
-    final_memory: &MemoryImage,
-) -> Vec<u8> {
-    let mut public_values: Vec<u8> = {
-        assert_eq!(
-            final_memory.config[PUBLIC_VALUES_AS as usize].layout,
-            MemoryCellType::U16
-        );
-        final_memory.mem[PUBLIC_VALUES_AS as usize]
-            .as_slice()
-            .to_vec()
-    };
-
-    assert!(
-        public_values.len() >= num_public_values_bytes,
-        "Public values address space has {} bytes of storage, but configuration has num_public_values_bytes={}",
-        public_values.len(),
-        num_public_values_bytes
+/// Extracts the first `num_public_values` bytes from `PUBLIC_VALUES_AS`.
+pub fn extract_public_values(num_public_values: usize, final_memory: &MemoryImage) -> Vec<u8> {
+    assert_eq!(
+        final_memory.config[PUBLIC_VALUES_AS as usize].layout,
+        MemoryCellType::U8
     );
-    public_values.truncate(num_public_values_bytes);
-    public_values
+    let storage = final_memory.mem[PUBLIC_VALUES_AS as usize].as_slice();
+    assert!(
+        storage.len() >= num_public_values,
+        "Public values storage has {} bytes, but {} bytes are required",
+        storage.len(),
+        num_public_values,
+    );
+    storage[..num_public_values].to_vec()
 }
 
 fn extract_public_value_cells<F: Field>(
@@ -247,20 +230,20 @@ fn extract_public_value_cells<F: Field>(
 ) -> Vec<F> {
     assert_eq!(
         final_memory.config[PUBLIC_VALUES_AS as usize].layout,
-        MemoryCellType::U16
+        MemoryCellType::U8
     );
     let storage = final_memory.mem[PUBLIC_VALUES_AS as usize].as_slice();
     assert!(
-        storage.len() >= num_public_values * U16_CELL_SIZE,
-        "Public values storage has {} bytes, but {} u16 cells ({} bytes) are required",
+        storage.len() >= num_public_values,
+        "Public values storage has {} bytes, but {} bytes are required",
         storage.len(),
         num_public_values,
-        num_public_values * U16_CELL_SIZE
     );
     storage
-        .chunks_exact(U16_CELL_SIZE)
+        .iter()
         .take(num_public_values)
-        .map(|bytes| F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]])))
+        .copied()
+        .map(F::from_u8)
         .collect()
 }
 
@@ -291,15 +274,11 @@ mod tests {
         let mut memory = GuestMemory {
             memory: AddressMap::new(addr_spaces_config),
         };
-        // Write the byte sequence [0, 0, 0, 1] at byte_ptr = 12. With u16 LE
-        // storage this corresponds to u16 cells at ptr 6 = {0x0000} and
-        // ptr 7 = {0x0100}, so when lifted to F the last cell is
-        // F::from_u16(0x0100) = F::from_u16(256).
         unsafe {
-            memory.write_bytes::<4>(PUBLIC_VALUES_AS, 12, [0, 0, 0, 1]);
+            memory.write::<u8, 4>(PUBLIC_VALUES_AS, 4, [0, 0, 0, 1]);
         }
         let mut expected_pvs = F::zero_vec(num_public_values);
-        expected_pvs[7] = F::from_u16(0x0100);
+        expected_pvs[7] = F::ONE;
 
         let hasher = vm_poseidon2_hasher();
         let tree = MerkleTree::from_memory(&memory.memory, &memory_dimensions, &hasher);

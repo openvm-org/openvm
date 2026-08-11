@@ -57,14 +57,19 @@ impl<F: VmField> MemoryTester<F> {
         let t = memory.timestamp();
         let cell_layout = memory.data().memory.config[addr_space].layout;
         let (t_prev, data) = match cell_layout {
-            MemoryCellType::F { .. } => unsafe {
-                memory.read::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32)
-            },
+            MemoryCellType::U8 => {
+                let (t_prev, data) =
+                    unsafe { memory.read::<u8, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32) };
+                (t_prev, data.map(F::from_u8))
+            }
             MemoryCellType::U16 => {
                 let (t_prev, data) =
                     unsafe { memory.read::<u16, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32) };
                 (t_prev, data.map(F::from_u16))
             }
+            MemoryCellType::F { .. } => unsafe {
+                memory.read::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32)
+            },
             other => panic!("MemoryTester::read unsupported cell type {other:?}"),
         };
         self.chip
@@ -81,9 +86,23 @@ impl<F: VmField> MemoryTester<F> {
         let t = memory.timestamp();
         let cell_layout = memory.data().memory.config[addr_space].layout;
         let (t_prev, data_prev) = match cell_layout {
-            MemoryCellType::F { .. } => unsafe {
-                memory.write::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32, data)
-            },
+            MemoryCellType::U8 => {
+                let (t_prev, data_prev) = unsafe {
+                    memory.write::<u8, BLOCK_FE_WIDTH>(
+                        addr_space as u32,
+                        ptr as u32,
+                        data.map(|x| {
+                            let v = x.as_canonical_u32();
+                            assert!(
+                                v <= u8::MAX as u32,
+                                "MemoryTester::write got F value {v} outside u8 range",
+                            );
+                            v as u8
+                        }),
+                    )
+                };
+                (t_prev, data_prev.map(F::from_u8))
+            }
             MemoryCellType::U16 => {
                 let (t_prev, data_prev) = unsafe {
                     memory.write::<u16, BLOCK_FE_WIDTH>(
@@ -101,6 +120,9 @@ impl<F: VmField> MemoryTester<F> {
                 };
                 (t_prev, data_prev.map(F::from_u16))
             }
+            MemoryCellType::F { .. } => unsafe {
+                memory.write::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32, data)
+            },
             other => panic!("MemoryTester::write unsupported cell type {other:?}"),
         };
         self.chip

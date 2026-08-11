@@ -15,7 +15,7 @@ mod hint_stream;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 mod postflight;
-mod preflight;
+pub(crate) mod preflight;
 #[cfg(feature = "rvr")]
 pub mod rvr;
 /// VM state definitions

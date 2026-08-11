@@ -38,16 +38,11 @@ bool openvm_hint_buffer(uint64_t dest_addr, uint32_t num_words) {
 bool openvm_reveal(RvState* state, uint64_t src_val, uint64_t base_addr,
                    uint64_t effective_addr) {
   void* ctx = openvm_get_io_ctx();
-  RevealPlan plan;
-  if (unlikely(!g_rv64io_host_callbacks.reveal_prepare(
-          ctx, src_val, base_addr, effective_addr, &plan))) {
+  if (unlikely(!g_rv64io_host_callbacks.reveal(
+          ctx, src_val, base_addr, effective_addr))) {
     return false;
   }
 
-  trace_write_other_block_u64(
-      state, AS_PUBLIC_VALUES, (uint32_t)(plan.address >> 1), plan.post,
-      plan.previous);
-
-  g_rv64io_host_callbacks.reveal_commit(ctx, &plan);
+  trace_write_public_values_u64(state, (uint32_t)effective_addr);
   return true;
 }

@@ -91,39 +91,53 @@ impl DeviceMemoryTester {
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         let (t_prev, data) = match cell_layout {
-            MemoryCellType::F { .. } => unsafe {
-                self.memory
-                    .read::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32)
-            },
+            MemoryCellType::U8 => {
+                let (t_prev, data) =
+                    unsafe { self.memory.read::<u8, N>(addr_space as u32, ptr as u32) };
+                (t_prev, data.map(F::from_u8))
+            }
             MemoryCellType::U16 => {
-                let (t_prev, data) = unsafe {
-                    self.memory
-                        .read::<u16, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32)
-                };
+                let (t_prev, data) =
+                    unsafe { self.memory.read::<u16, N>(addr_space as u32, ptr as u32) };
                 (t_prev, data.map(F::from_u16))
             }
+            MemoryCellType::F { .. } => unsafe {
+                self.memory.read::<F, N>(addr_space as u32, ptr as u32)
+            },
             other => panic!("DeviceMemoryTester::read unsupported cell type {other:?}"),
         };
         self.chip
             .receive(addr_space as u32, ptr as u32, &data, t_prev);
         self.chip.send(addr_space as u32, ptr as u32, &data, t);
-        std::array::from_fn(|i| data[i])
+        data
     }
 
     /// Writes one AS-native cell block at `ptr`.
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
         const { assert!(N == BLOCK_FE_WIDTH) };
-        let data: [F; BLOCK_FE_WIDTH] = std::array::from_fn(|i| data[i]);
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         let (t_prev, data_prev) = match cell_layout {
-            MemoryCellType::F { .. } => unsafe {
-                self.memory
-                    .write::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32, data)
-            },
+            MemoryCellType::U8 => {
+                let (t_prev, data_prev) = unsafe {
+                    self.memory.write::<u8, N>(
+                        addr_space as u32,
+                        ptr as u32,
+                        data.map(|x| {
+                            let v = x.as_canonical_u32();
+                            assert!(
+                                v <= u8::MAX as u32,
+                                "DeviceMemoryTester::write got F value {v} outside u8 range",
+                            );
+                            v as u8
+                        }),
+                    )
+                };
+                (t_prev, data_prev.map(F::from_u8))
+            }
             MemoryCellType::U16 => {
                 let (t_prev, data_prev) = unsafe {
-                    self.memory.write::<u16, BLOCK_FE_WIDTH>(
+                    self.memory.write::<u16, N>(
                         addr_space as u32,
                         ptr as u32,
                         data.map(|x| {
@@ -138,6 +152,10 @@ impl DeviceMemoryTester {
                 };
                 (t_prev, data_prev.map(F::from_u16))
             }
+            MemoryCellType::F { .. } => unsafe {
+                self.memory
+                    .write::<F, N>(addr_space as u32, ptr as u32, data)
+            },
             other => panic!("DeviceMemoryTester::write unsupported cell type {other:?}"),
         };
         self.chip

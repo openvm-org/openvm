@@ -1,18 +1,31 @@
 #pragma once
 
+#include <cstdint>
+
+// System metadata stores these tags as u8; postflight structs store them as u32.
+enum MemoryCellType : uint32_t {
+    CELL_UNSUPPORTED = 0,
+    CELL_U8 = 1,
+    CELL_U16 = 2,
+    CELL_FIELD32 = 3,
+};
+
 // Memory-layout constants on the CUDA side. Mirrors the CPU-side constants in
 // `openvm_circuit::arch::config` and `openvm_circuit::system::memory::controller`.
 //
 // Terminology:
 //   Cell    one storage word in an address space.
-//   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
-//           MEMORY_BLOCK_BYTES bytes.
+//   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells. Its host byte width
+//           depends on the cell layout (4 for U8, 8 for U16, 16 for Field32).
 //   Digest  the output of one Poseidon2 compression (DIGEST_WIDTH cells); also
 //           one merkle leaf.
 //   Leaf    one merkle-tree leaf = one Poseidon2 half = DIGEST_WIDTH cells =
 //           BLOCKS_PER_LEAF blocks.
 //
-// u16-celled AS layout (RV64 register/memory/public-values).
+// U8-celled AS layout (public values): one block is 4 bytes and one leaf is 8 bytes.
+// The pointer counts U8 cells and is therefore also a byte pointer.
+//
+// U16-celled AS layout (RV64 register/memory).
 // One merkle leaf = 16 bytes = 8 u16 cells = 2 bus blocks:
 //
 //   byte_ptr:     0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15
@@ -26,7 +39,7 @@
 //
 //   byte_ptr = U16_CELL_SIZE * ptr
 //
-// F-celled AS layout (DEFERRAL_AS). Each cell holds one Fp element
+// Field32-celled AS layout. Each cell holds one Fp element
 // (size_of::<F>() bytes on host; 4 for BabyBear).
 //
 //   byte_ptr:       0       4       8       12      16      20      24      28
@@ -39,7 +52,7 @@
 //
 //   byte_ptr = size_of::<F>() * ptr
 //
-// In every AS, ptr is AS-native. Block k starts at ptr k * BLOCK_FE_WIDTH, and
+// In every AS, ptr counts cells. Block k starts at ptr k * BLOCK_FE_WIDTH, and
 // merkle leaf l starts at ptr l * DIGEST_WIDTH.
 
 #include "poseidon2.cuh" // brings in CELLS / CELLS_OUT from stark-backend
@@ -49,20 +62,15 @@ inline constexpr size_t DIGEST_WIDTH = CELLS_OUT;
 // Cells per Poseidon2 permutation input.
 inline constexpr size_t POSEIDON2_WIDTH = CELLS;
 
-// Bytes per memory-bus block.
-inline constexpr size_t MEMORY_BLOCK_BYTES = 8;
-
 // Host byte width of one u16-celled storage cell.
 inline constexpr size_t U16_CELL_SIZE = 2;
 
 // Cells per memory-bus block.
-inline constexpr size_t BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+inline constexpr size_t BLOCK_FE_WIDTH = 4;
+// Byte width of one RV64 u16 register/memory block.
+inline constexpr size_t MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 // Blocks per merkle leaf.
 inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
 // Number of bottom merkle levels omitted from large GPU subtree buffers.
 inline constexpr size_t OMITTED_BOTTOM_LEVELS = 3;
-
-// Address space ID for the F-celled deferral AS. Matches
-// `openvm_instructions::DEFERRAL_AS`.
-inline constexpr uint32_t DEFERRAL_AS = 4;
