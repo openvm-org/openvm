@@ -7,6 +7,11 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v2.0.2 (2026-08-07)
+
+### Changed
+- Improved the Halo2 GPU prover to achieve sub-5-second SNARK proving.
+
 ## v2.0.1 (2026-07-15)
 
 ### Changed
