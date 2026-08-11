@@ -278,6 +278,4 @@ sha2 = { version = "0.10", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
 
 [workspace.metadata.cargo-shear]
-# openvm-poseidon2-{circuit,transpiler} are declared ahead of their consumers;
-# they are wired into openvm-sdk-config once the extension is complete.
-ignored = ["cargo-openvm", "openvm-poseidon2-circuit", "openvm-poseidon2-transpiler"]
+ignored = ["cargo-openvm"]

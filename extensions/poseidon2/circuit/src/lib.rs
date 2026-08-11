@@ -13,6 +13,7 @@ pub mod periphery;
 /// The AIR that handles interactions with the VM ExecutionBus and MemoryBus for handling of the
 /// `PERMUTE` opcode.
 pub mod permute;
+pub use extension::*;
 
 // ==== VM-specific constants ====
 /// Number of cells to read/write in a single memory access

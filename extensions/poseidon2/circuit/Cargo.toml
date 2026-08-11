@@ -46,12 +46,18 @@ aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+# NOTE: there is no Poseidon2 CUDA prover extension yet, so `cuda` here only forwards to the
+# dependencies whose CUDA code paths this crate compiles against (it depends on
+# openvm-rv32im-circuit for the shared memory adapter helpers). The `dep:openvm-cuda-*` entries
+# that keccak256/sha2 carry belong here once a `Poseidon2GpuProverExt` lands.
 cuda = [
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
+    "openvm-rv32im-circuit/cuda",
 ]
 touchemall = [
     "cuda",
     "openvm-circuit/touchemall",
     "openvm-circuit-primitives/touchemall",
+    "openvm-rv32im-circuit/touchemall",
 ]

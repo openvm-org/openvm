@@ -5552,6 +5552,8 @@ dependencies = [
  "openvm-keccak256-transpiler",
  "openvm-pairing-circuit",
  "openvm-pairing-transpiler",
+ "openvm-poseidon2-circuit",
+ "openvm-poseidon2-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-sha2-circuit",

@@ -17,6 +17,8 @@ use openvm_keccak256_circuit::*;
 use openvm_keccak256_transpiler::*;
 use openvm_pairing_circuit::*;
 use openvm_pairing_transpiler::*;
+use openvm_poseidon2_circuit::*;
+use openvm_poseidon2_transpiler::*;
 use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::*;
 use openvm_sha2_circuit::*;
@@ -66,6 +68,7 @@ pub struct SdkVmConfig {
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
+    pub poseidon2: Option<UnitStruct>,
 
     /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv32m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
@@ -96,6 +99,14 @@ impl SdkVmConfig {
     /// ```toml
     #[doc = include_str!("openvm_standard.toml")]
     /// ```
+    /// 
+    /// This set must not depend on cargo features: it determines the app `MultiStarkVerifyingKey`,
+    /// and cargo unifies features across a build graph, so a feature-gated entry here would make
+    /// the app commitment differ between builds of the same source tree.
+    ///
+    /// Note that the `poseidon2` extension is deliberately *not* part of this set. It is opt-in via
+    /// `[app_vm_config.poseidon2]` until it ships a guest library and a CUDA prover extension; on
+    /// the CUDA backend, opting in fails at `SdkVmGpuBuilder::create_chip_complex`.
     pub fn standard() -> SdkVmConfig {
         let bn_config = PairingCurve::Bn254.curve_config();
         let bls_config = PairingCurve::Bls12_381.curve_config();
@@ -190,6 +201,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.sha2.is_some() {
             transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
+        if self.poseidon2.is_some() {
+            transpiler = transpiler.with_extension(Poseidon2TranspilerExtension);
+        }
         if self.rv32m.is_some() {
             transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
         }
@@ -268,6 +282,7 @@ impl SdkVmConfig {
         let io = config.io.map(|_| Rv32Io);
         let keccak = config.keccak.map(|_| Keccak256);
         let sha2 = config.sha2.map(|_| Sha2);
+        let poseidon2 = config.poseidon2.map(|_| Poseidon2);
         let rv32m = config.rv32m;
         let bigint = config.bigint;
         let modular = config.modular.clone();
@@ -282,6 +297,7 @@ impl SdkVmConfig {
             io,
             keccak,
             sha2,
+            poseidon2,
             rv32m,
             bigint,
             modular,
@@ -313,6 +329,8 @@ pub struct SdkVmConfigInner {
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha2Executor")]
     pub sha2: Option<Sha2>,
+    #[extension(executor = "Poseidon2Executor")]
+    pub poseidon2: Option<Poseidon2>,
 
     #[extension(executor = "Rv32MExecutor")]
     pub rv32m: Option<Rv32M>,
@@ -395,6 +413,13 @@ where
         if let Some(sha2) = &config.sha2 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
         }
+        if let Some(poseidon2) = &config.poseidon2 {
+            VmProverExtension::<E, _, _>::extend_prover(
+                &Poseidon2CpuProverExt,
+                poseidon2,
+                inventory,
+            )?;
+        }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
         }
@@ -446,6 +471,11 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         type E = BabyBearPoseidon2GpuEngine;
 
         let config = config.to_inner();
+        if config.poseidon2.is_some() {
+            return Err(ChipInventoryError::CudaUnsupported {
+                extension: "openvm-poseidon2-circuit".to_string(),
+            });
+        }
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
@@ -575,6 +605,12 @@ impl From<Sha2> for UnitStruct {
     }
 }
 
+impl From<Poseidon2> for UnitStruct {
+    fn from(_: Poseidon2) -> Self {
+        UnitStruct {}
+    }
+}
+
 #[derive(Deserialize)]
 struct SdkVmConfigWithDefaultDeser {
     #[serde(default)]
@@ -584,6 +620,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
+    pub poseidon2: Option<UnitStruct>,
 
     pub rv32m: Option<Rv32M>,
     pub bigint: Option<Int256>,
@@ -603,6 +640,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             io: config.io,
             keccak: config.keccak,
             sha2: config.sha2,
+            poseidon2: config.poseidon2,
             rv32m: config.rv32m,
             bigint: config.bigint,
             modular: config.modular,

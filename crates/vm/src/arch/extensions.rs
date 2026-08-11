@@ -678,6 +678,8 @@ pub enum ChipInventoryError {
     MissingChip { actual: usize, expected: usize },
     #[error("Missing executor chip. Number of executors with associated chips is {actual}, expected number is {expected}")]
     MissingExecutor { actual: usize, expected: usize },
+    #[error("No CUDA prover extension for {extension}; CUDA support is not implemented yet")]
+    CudaUnsupported { extension: String },
 }
 
 // ======================= VM Chip Complex Implementation =============================

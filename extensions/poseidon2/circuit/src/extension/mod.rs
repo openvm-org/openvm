@@ -1,3 +1,6 @@
+#[cfg(test)]
+pub mod tests;
+
 use std::{result::Result, sync::Arc};
 
 use derive_more::derive::From;
