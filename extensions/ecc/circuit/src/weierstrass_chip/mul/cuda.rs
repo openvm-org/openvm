@@ -173,7 +173,6 @@ pub(crate) struct EcMulTracegenGpu {
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     aux_words: usize,
     expr_width: usize,
-    num_vars: usize,
     u32_limbs: usize,
     pointer_max_bits: u32,
     timestamp_max_bits: u32,
@@ -219,7 +218,6 @@ impl EcMulTracegenGpu {
             program,
             aux_words: serialized.aux_words_per_thread,
             expr_width,
-            num_vars: chip.expr.program().num_vars(),
             // Canonical limbs are bytes, so a `u32` limb spans four of them.
             u32_limbs: NUM_LIMBS.div_ceil(4),
             pointer_max_bits: u32::try_from(chip.ptr_max_bits).map_err(|_| {
@@ -280,8 +278,14 @@ impl EcMulTracegenGpu {
 
         let projection = inputs.as_slice().to_device_on(device_ctx)?;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
-        let vars = DeviceBuffer::<u32>::with_capacity_on(
-            num_instructions * EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs,
+        // The accumulator entering each compute row, as the affine bytes pass 2 reads as input.
+        let affine = DeviceBuffer::<u8>::with_capacity_on(
+            num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS,
+            device_ctx,
+        );
+        // Jacobian accumulators plus the prefix products the batch inversion consumes. Pass 1 only.
+        let ladder = DeviceBuffer::<u32>::with_capacity_on(
+            num_instructions * EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs,
             device_ctx,
         );
         let dummy_expr = DeviceBuffer::<F>::with_capacity_on(self.expr_width, device_ctx);
@@ -305,7 +309,8 @@ impl EcMulTracegenGpu {
                 BLOCKS,
                 &projection,
                 &self.program,
-                &vars,
+                &affine,
+                &ladder,
                 &dummy_expr,
                 &delta,
                 &discarded,
@@ -328,7 +333,8 @@ impl EcMulTracegenGpu {
         // Dropped after their kernels are enqueued on the owning stream, before proving starts.
         drop(discarded);
         drop(scratch);
-        drop(vars);
+        drop(ladder);
+        drop(affine);
         drop(dummy_expr);
         drop(projection);
 
