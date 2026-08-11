@@ -17,7 +17,8 @@ use crate::{
     wrapper::Halo2WrapperProvingKey,
 };
 
-const MAX_JSON_SECTION_LEN: usize = 64 * 1024 * 1024;
+// The default graph program is currently about 143 MiB when serialized as JSON.
+const MAX_JSON_SECTION_LEN: usize = 256 * 1024 * 1024;
 
 impl Encode for StaticVerifierProvingKey {
     fn encode<W: Write>(&self, writer: &mut W) -> io::Result<()> {
