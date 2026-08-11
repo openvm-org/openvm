@@ -33,6 +33,32 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + VM_DIGEST_WIDTH;
 pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
 
+/// Chooses between the fast dense-prefix builder and a page-dense, upper-level-sparse builder.
+///
+/// The sparse representation starts at height [`OMITTED_BOTTOM_LEVELS`], so each base node is the
+/// root of eight raw-memory leaves. Touched 4 KiB pages therefore remain dense and coalesced while
+/// gaps between pages are represented by precomputed zero hashes. Dense-prefix construction stays
+/// preferable for the ordinary contiguous guest image because it avoids sparse labels and lookups.
+///
+/// An update path through a sparse subtree looks like this (illustrated for
+/// `OMITTED_BOTTOM_LEVELS = 3`):
+///
+/// stored root
+///       |
+/// sparse stored ancestors
+///       |
+/// stored height-4 ancestor
+/// /                       \
+/// stored height-3 node       zero_hash[3]
+/// |
+/// omitted heights 0, 1, and 2
+/// reconstructed from raw memory
+/// |
+/// touched 4 KiB page
+///
+/// `labels` stores only the left-hand nodes shown on this path (and analogous nodes for other
+/// touched pages). When a sibling label is absent, the CUDA update kernel substitutes the zero
+/// hash for that sibling's height.
 #[derive(Debug)]
 pub(crate) enum InitialMerkleBuild {
     DensePrefix(usize),
@@ -70,32 +96,6 @@ pub(crate) fn touched_leaf_watermark(memory: &AddressMap, addr_sp: usize) -> usi
         .next_power_of_two()
 }
 
-/// Chooses between the fast dense-prefix builder and a page-dense, upper-level-sparse builder.
-///
-/// The sparse representation starts at height [`OMITTED_BOTTOM_LEVELS`], so each base node is the
-/// root of eight raw-memory leaves. Touched 4 KiB pages therefore remain dense and coalesced while
-/// gaps between pages are represented by precomputed zero hashes. Dense-prefix construction stays
-/// preferable for the ordinary contiguous guest image because it avoids sparse labels and lookups.
-///
-/// An update path through a sparse subtree looks like this (illustrated for
-/// `OMITTED_BOTTOM_LEVELS = 3`):
-///
-/// stored root
-///       |
-/// sparse stored ancestors
-///       |
-/// stored height-4 ancestor
-/// /                       \
-/// stored height-3 node       zero_hash[3]
-/// |
-/// omitted heights 0, 1, and 2
-/// reconstructed from raw memory
-/// |
-/// touched 4 KiB page
-///
-/// `labels` stores only the left-hand nodes shown on this path (and analogous nodes for other
-/// touched pages). When a sibling label is absent, the CUDA update kernel substitutes the zero
-/// hash for that sibling's height.
 pub(crate) fn initial_merkle_build(
     memory: &AddressMap,
     addr_sp: usize,
