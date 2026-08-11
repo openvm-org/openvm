@@ -13,7 +13,9 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+    program::DEFAULT_PC_STEP,
+    riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
 use openvm_stark_backend::{
@@ -45,8 +47,8 @@ pub struct RevealCols<T> {
     pub base_aux: MemoryReadAuxCols<T>,
     /// Byte pointer to the source-value register.
     pub src_ptr: T,
-    /// Source register value as byte limbs.
-    pub src_bytes: [T; MEMORY_BLOCK_BYTES],
+    /// Byte decomposition of the source register value.
+    pub src_bytes: [T; REGISTER_NUM_LIMBS],
     /// Witness for the source-register read.
     pub src_aux: MemoryReadAuxCols<T>,
     /// Low 16 bits of the signed address offset.

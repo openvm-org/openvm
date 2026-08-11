@@ -19,7 +19,7 @@ struct ReplayRevealInput {
     uint32_t write_prev_timestamp[2];
     uint16_t imm;
     uint8_t imm_sign;
-    uint8_t src_bytes[MEMORY_BLOCK_BYTES];
+    uint8_t src_bytes[REGISTER_NUM_LIMBS];
     uint8_t write_prev_data[2][BLOCK_FE_WIDTH];
 };
 
@@ -132,7 +132,7 @@ static __device__ bool replay_reveal(
         return false;
     }
 #pragma unroll
-    for (size_t i = 0; i < MEMORY_BLOCK_BYTES; i++) {
+    for (size_t i = 0; i < REGISTER_NUM_LIMBS; i++) {
         uint8_t byte = uint8_t(src[i / U16_CELL_SIZE] >> ((i % U16_CELL_SIZE) * 8));
         if (logged_post[i / BLOCK_FE_WIDTH][i % BLOCK_FE_WIDTH] != byte) {
             preflight_set_error(error, REVEAL_REPLAY_ERROR + 5);
