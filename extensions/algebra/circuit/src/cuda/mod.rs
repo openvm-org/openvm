@@ -20,8 +20,8 @@ use crate::modular_chip::ModularIsEqualCoreCols;
 
 mod cuda_abi;
 /// Exposed for the `EC_MUL` chip, whose projection shape the vec-heap gather cannot describe
-/// and whose crate has no CUDA build of its own.
-pub use cuda_abi::gather_ec_mul;
+/// and whose crate has no CUDA build of its own, so its kernels are compiled here.
+pub use cuda_abi::{ec_mul_tracegen, gather_ec_mul, merge_range_counts, EcMulFillLaunchConfig};
 pub mod field_expr;
 pub(crate) mod modular_addsub;
 pub(crate) mod vec_heap;
