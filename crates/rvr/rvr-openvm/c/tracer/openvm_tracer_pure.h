@@ -6,10 +6,8 @@
 #include "openvm_state.h"
 
 static __attribute__((always_inline)) inline void
-trace_write_other_block_u64(
-    RvState* restrict state [[maybe_unused]],
-    uint32_t address_space [[maybe_unused]], uint32_t pointer [[maybe_unused]],
-    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {}
+trace_write_public_values_u64(
+    RvState* restrict state [[maybe_unused]], uint32_t pointer [[maybe_unused]]) {}
 
 /* Extension memory operations use one interface in every execution mode.
  * Pure execution performs only the requested memory access. */

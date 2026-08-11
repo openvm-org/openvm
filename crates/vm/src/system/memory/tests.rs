@@ -27,7 +27,8 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
     // and intersecting/overlapping blocks,
     // by limiting the space of valid pointers.
     let max_ptr = 10;
-    let value_bounds = [u16::MAX as u32 + 1; 3];
+    // REGISTER_AS and MEMORY_AS are U16; PUBLIC_VALUES_AS is U8.
+    let value_bounds = [u16::MAX as u32 + 1, u16::MAX as u32 + 1, u8::MAX as u32 + 1];
     for _ in 0..its {
         let addr_sp = rng.random_range(1..=value_bounds.len());
         let value_bound: u32 = value_bounds[addr_sp - 1];

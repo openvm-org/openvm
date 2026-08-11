@@ -34,6 +34,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
     size_t height,
     size_t width,
     uint8_t const *const *initial_mem,
+    uint8_t const *cell_types,
     BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> *records,
     size_t num_records,
     FpArray<POSEIDON2_WIDTH> *poseidon2_buffer,
@@ -58,27 +59,39 @@ __global__ void cukernel_persistent_boundary_tracegen(
             record.ptr / DIGEST_WIDTH
         );
 
-        FpArray<DIGEST_WIDTH> init_values;
+        FpArray<DIGEST_WIDTH> init_values{};
         uint32_t addr_space_idx = record.address_space - 1;
         if (initial_mem[addr_space_idx]) {
-            // `ptr` is an address-space pointer:
-            //   - DEFERRAL_AS: pointer into F cells; initial memory is already raw Montgomery Fp.
-            //   - Non-deferral ASes: pointer into u16 cells; initial memory is little-endian bytes,
-            //     so convert the pointer to a byte offset with `U16_CELL_SIZE`.
-            if (record.address_space == DEFERRAL_AS) {
-                init_values = FpArray<DIGEST_WIDTH>::from_raw_array(
-                    reinterpret_cast<uint32_t const *>(initial_mem[addr_space_idx]) +
-                    record.ptr
-                );
-            } else {
-                uint8_t const *bytes =
-                    initial_mem[addr_space_idx] + U16_CELL_SIZE * record.ptr;
-                uint16_t cells[DIGEST_WIDTH];
-                #pragma unroll
-                for (int i = 0; i < DIGEST_WIDTH; ++i) {
-                    cells[i] = u16_from_bytes_le(bytes + U16_CELL_SIZE * i);
+            switch (cell_types[addr_space_idx]) {
+                case CELL_U8: {
+                    uint8_t cells[DIGEST_WIDTH];
+#pragma unroll
+                    for (int i = 0; i < DIGEST_WIDTH; ++i) {
+                        cells[i] = initial_mem[addr_space_idx][record.ptr + i];
+                    }
+                    init_values = FpArray<DIGEST_WIDTH>::from_u8_array(cells);
+                    break;
                 }
-                init_values = FpArray<DIGEST_WIDTH>::from_u16_array(cells);
+                case CELL_U16: {
+                    uint8_t const *bytes =
+                        initial_mem[addr_space_idx] + U16_CELL_SIZE * record.ptr;
+                    uint16_t cells[DIGEST_WIDTH];
+#pragma unroll
+                    for (int i = 0; i < DIGEST_WIDTH; ++i) {
+                        cells[i] = u16_from_bytes_le(bytes + U16_CELL_SIZE * i);
+                    }
+                    init_values = FpArray<DIGEST_WIDTH>::from_u16_array(cells);
+                    break;
+                }
+                case CELL_FIELD32:
+                    init_values = FpArray<DIGEST_WIDTH>::from_raw_array(
+                        reinterpret_cast<uint32_t const *>(initial_mem[addr_space_idx]) +
+                        record.ptr
+                    );
+                    break;
+                default:
+                    assert(false && "unsupported memory cell type");
+                    break;
             }
         } else {
             #pragma unroll
@@ -117,6 +130,7 @@ extern "C" int _persistent_boundary_tracegen(
     size_t height,
     size_t width,
     uint8_t const *const *d_initial_mem,
+    uint8_t const *d_cell_types,
     uint32_t *d_raw_records,
     size_t num_records,
     Fp *d_poseidon2_raw_buffer,
@@ -140,6 +154,7 @@ extern "C" int _persistent_boundary_tracegen(
         height,
         width,
         d_initial_mem,
+        d_cell_types,
         d_records,
         num_records,
         d_poseidon2_buffer,

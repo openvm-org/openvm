@@ -5,6 +5,25 @@ pub use rvr_state::{
 use super::{AddressSpaceHostLayout, VmState, BLOCK_FE_WIDTH};
 use crate::system::memory::online::GuestMemory;
 
+/// Packs one U8 memory-bus block into the low four bytes of the inline history payload.
+#[inline]
+pub(crate) const fn encode_u8_block(value: [u8; BLOCK_FE_WIDTH]) -> [u16; BLOCK_FE_WIDTH] {
+    [
+        u16::from_le_bytes([value[0], value[1]]),
+        u16::from_le_bytes([value[2], value[3]]),
+        0,
+        0,
+    ]
+}
+
+/// Unpacks one U8 memory-bus block from the low four bytes of a validated history payload.
+#[inline]
+pub(crate) const fn decode_u8_block(value: [u16; BLOCK_FE_WIDTH]) -> [u8; BLOCK_FE_WIDTH] {
+    let low = value[0].to_le_bytes();
+    let high = value[1].to_le_bytes();
+    [low[0], low[1], high[0], high[1]]
+}
+
 /// Append-only memory history produced during serial preflight execution.
 ///
 /// Integer blocks are stored inline in `accesses` and `initial_writes`.

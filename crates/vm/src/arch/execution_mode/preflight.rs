@@ -9,8 +9,8 @@ use rvr_state::{
 
 use crate::{
     arch::{
-        AddressSpaceHostLayout, ExecutionCtxTrait, MemoryCellType, PreflightHistory,
-        PreflightMemoryLog, BLOCK_FE_WIDTH,
+        preflight::encode_u8_block, AddressSpaceHostLayout, ExecutionCtxTrait, MemoryCellType,
+        PreflightHistory, PreflightMemoryLog, BLOCK_FE_WIDTH,
     },
     system::memory::online::{GuestMemory, PagedVec, PAGE_SIZE},
 };
@@ -118,6 +118,9 @@ impl PreflightCtx {
     ) -> [u16; BLOCK_FE_WIDTH] {
         let pointer = block_index * BLOCK_FE_WIDTH as u32;
         match memory.memory.config[address_space as usize].layout {
+            MemoryCellType::U8 => unsafe {
+                encode_u8_block(memory.read::<u8, BLOCK_FE_WIDTH>(address_space, pointer))
+            },
             MemoryCellType::U16 => unsafe {
                 memory.read::<u16, BLOCK_FE_WIDTH>(address_space, pointer)
             },
@@ -137,7 +140,7 @@ impl PreflightCtx {
                     u32::try_from(reference).expect("field preflight log exceeds u32::MAX blocks");
                 [index as u16, (index >> 16) as u16, 0, 0]
             }
-            _ => panic!("preflight memory log requires u16 or 32-bit field cells"),
+            _ => panic!("preflight memory log requires u8, u16, or 32-bit field cells"),
         }
     }
 

@@ -4,19 +4,12 @@
 #include <stdint.h>
 
 typedef struct {
-  uint64_t address;
-  uint64_t previous;
-  uint64_t post;
-} RevealPlan;
-
-typedef struct {
   bool (*hint_prepare)(void* ctx, uint64_t dest_addr, uint32_t num_words);
   void (*hint_read_words)(void* ctx, uint64_t* words, uint32_t num_words);
   bool (*hint_storew)(void* ctx, uint64_t dest_addr);
   bool (*hint_buffer)(void* ctx, uint64_t dest_addr, uint32_t num_words);
-  bool (*reveal_prepare)(void* ctx, uint64_t src_val, uint64_t base_addr,
-                         uint64_t effective_addr, RevealPlan* plan);
-  void (*reveal_commit)(void* ctx, const RevealPlan* plan);
+  bool (*reveal)(void* ctx, uint64_t src_val, uint64_t base_addr,
+                 uint64_t effective_addr);
 } Rv64IoHostCallbacks;
 
 /* Callbacks and forwarding stubs return false for invalid guest operands. */

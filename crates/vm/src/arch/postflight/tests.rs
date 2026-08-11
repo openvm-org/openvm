@@ -1,12 +1,14 @@
-use openvm_instructions::{program::Program, riscv::REGISTER_AS, SystemOpcode, DEFERRAL_AS};
+use openvm_instructions::{
+    program::Program, riscv::REGISTER_AS, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::PREFLIGHT_WRITE_BIT;
 
 use super::*;
 use crate::arch::{
-    PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PreflightMemoryLog,
-    PreflightProgramEvent,
+    preflight::encode_u8_block, PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent,
+    PreflightMemoryLog, PreflightProgramEvent,
 };
 
 #[test]
@@ -182,6 +184,56 @@ fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
 }
 
 #[test]
+fn u8_history_replays_packed_event_and_seed() {
+    let instruction =
+        Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
+    let program =
+        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let initial = [1, 2, 3, 4];
+    let written = [5, 6, 7, 8];
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 2,
+            },
+        ],
+        memory: PreflightMemoryLog {
+            accesses: vec![PreflightMemoryEvent {
+                timestamp: 1,
+                address_space_and_kind: PUBLIC_VALUES_AS | PREFLIGHT_WRITE_BIT,
+                pointer: 0,
+                value: encode_u8_block(written),
+            }],
+            initial_writes: vec![PreflightInitialWrite {
+                address_space: PUBLIC_VALUES_AS,
+                pointer: 0,
+                initial_value: encode_u8_block(initial),
+            }],
+            ..Default::default()
+        },
+    };
+
+    let postflight = Postflight::new(&program, &history, &MemoryConfig::default(), None).unwrap();
+    let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
+    let mut replay = postflight.replay(step);
+    let access = replay.write_u8(PUBLIC_VALUES_AS, 0, written).unwrap();
+    assert_eq!(access.previous_value, initial);
+    replay.finish(4).unwrap();
+
+    let touched = &postflight.touched_memory()[0];
+    assert_eq!(touched.address_space, PUBLIC_VALUES_AS);
+    assert_eq!(
+        touched.values.map(|value| value.as_canonical_u32()),
+        written.map(u32::from)
+    );
+}
+
+#[test]
 fn rejects_invalid_program_boundaries() {
     let memory_config = MemoryConfig::default();
     let (program, mut history) = mixed_history();
@@ -351,6 +403,26 @@ fn rejects_invalid_memory_domains_and_field_sidecars() {
         .unwrap()
         .to_string()
         .contains("misaligned"));
+
+    let (program, mut history) = mixed_history();
+    history.memory.accesses[0].address_space_and_kind = PUBLIC_VALUES_AS;
+    history.memory.accesses[0].value = encode_u8_block([1, 2, 3, 4]);
+    history.memory.accesses[0].value[2] = 1;
+    assert!(Postflight::new(&program, &history, &memory_config, None)
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("u8 memory event has nonzero padding"));
+
+    let (program, mut history) = mixed_history();
+    history.memory.initial_writes[0].address_space = PUBLIC_VALUES_AS;
+    history.memory.initial_writes[0].initial_value = encode_u8_block([1, 2, 3, 4]);
+    history.memory.initial_writes[0].initial_value[3] = 1;
+    assert!(Postflight::new(&program, &history, &memory_config, None)
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("u8 initial-write seed has nonzero padding"));
 
     let (program, mut history) = mixed_history();
     history.memory.accesses[2].value = compact_reference(1);

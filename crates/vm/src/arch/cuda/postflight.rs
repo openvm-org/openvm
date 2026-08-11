@@ -73,16 +73,17 @@ const _: () = assert!(size_of::<GpuReplayInstruction>() == size_of::<[u32; 8]>()
 #[derive(Clone, Copy, Debug)]
 struct GpuMemoryAddressSpace {
     num_cells: u64,
-    cell_kind: GpuMemoryCellKind,
+    cell_type: GpuMemoryCellType,
     _padding: u32,
 }
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum GpuMemoryCellKind {
+enum GpuMemoryCellType {
     Unsupported = 0,
-    U16 = 1,
-    Field32 = 2,
+    U8 = 1,
+    U16 = 2,
+    Field32 = 3,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -107,19 +108,20 @@ impl GpuMemoryDimensions {
 
 // Keep address-space metadata byte-compatible with its CUDA mirror.
 const _: () = {
-    assert!(size_of::<GpuMemoryCellKind>() == size_of::<u32>());
+    assert!(size_of::<GpuMemoryCellType>() == size_of::<u32>());
     assert!(size_of::<GpuMemoryAddressSpace>() == 16);
     assert!(align_of::<GpuMemoryAddressSpace>() == align_of::<u64>());
     assert!(offset_of!(GpuMemoryAddressSpace, num_cells) == 0);
-    assert!(offset_of!(GpuMemoryAddressSpace, cell_kind) == 8);
+    assert!(offset_of!(GpuMemoryAddressSpace, cell_type) == 8);
     assert!(offset_of!(GpuMemoryAddressSpace, _padding) == 12);
 };
 
-fn memory_cell_kind(layout: MemoryCellType) -> GpuMemoryCellKind {
+fn gpu_memory_cell_type(layout: MemoryCellType) -> GpuMemoryCellType {
     match layout {
-        MemoryCellType::U16 => GpuMemoryCellKind::U16,
-        MemoryCellType::FIELD32 => GpuMemoryCellKind::Field32,
-        _ => GpuMemoryCellKind::Unsupported,
+        MemoryCellType::U8 => GpuMemoryCellType::U8,
+        MemoryCellType::U16 => GpuMemoryCellType::U16,
+        MemoryCellType::FIELD32 => GpuMemoryCellType::Field32,
+        _ => GpuMemoryCellType::Unsupported,
     }
 }
 
@@ -418,7 +420,16 @@ fn validated_history_write_masks(
                 ))
             })?
             .layout;
-        write_masks.push(if event.is_write() { u8::MAX } else { 0 });
+        let full_write_mask = match layout {
+            MemoryCellType::U8 => 0x0f,
+            MemoryCellType::U16 | MemoryCellType::FIELD32 => u8::MAX,
+            _ => {
+                return Err(GpuPostflightError::InvalidTranscript(format!(
+                    "memory event address space {address_space} must use u8, u16, or field32 cells"
+                )));
+            }
+        };
+        write_masks.push(if event.is_write() { full_write_mask } else { 0 });
         if layout == MemoryCellType::field32() {
             let reference =
                 usize::try_from(u32::from(event.value[0]) | (u32::from(event.value[1]) << 16))
@@ -479,7 +490,7 @@ impl GpuPostflightProgram {
             .iter()
             .map(|config| GpuMemoryAddressSpace {
                 num_cells: config.num_cells as u64,
-                cell_kind: memory_cell_kind(config.layout),
+                cell_type: gpu_memory_cell_type(config.layout),
                 _padding: 0,
             })
             .collect::<Vec<_>>();
