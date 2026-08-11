@@ -327,6 +327,7 @@ impl<A> FieldExpressionFiller<A> {
             writes,
             inputs,
             flags,
+            vars,
         } = run_field_expression_checked(
             self.expr.program(),
             &self.local_opcode_idx,
@@ -338,7 +339,7 @@ impl<A> FieldExpressionFiller<A> {
             return Err(FieldExpressionTraceError::OutputMismatch);
         }
         self.expr
-            .generate_subrow((range_checker, inputs, flags), core_row);
+            .generate_subrow_from_vars(range_checker, inputs, flags, vars, core_row);
         Ok(())
     }
 }
@@ -347,6 +348,7 @@ struct FieldExpressionRun {
     writes: DynArray<u8>,
     inputs: Vec<BigUint>,
     flags: Vec<bool>,
+    vars: Vec<BigUint>,
 }
 
 fn run_field_expression_checked(
@@ -444,6 +446,7 @@ fn run_field_expression_checked(
         writes,
         inputs,
         flags,
+        vars,
     })
 }
 

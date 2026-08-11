@@ -536,31 +536,61 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         (range_checker, inputs, flags): (&'a VariableRangeCheckerChip, Vec<BigUint>, Vec<bool>),
         sub_row: &'a mut [F],
     ) {
-        let program = &self.program;
-        let expr = &program.builder;
+        let expr = &self.program.builder;
         assert!(expr.is_finalized());
         assert_eq!(inputs.len(), expr.num_input);
         assert_eq!(expr.num_variables, expr.constraints.len());
+        assert_eq!(flags.len(), expr.num_flags);
+        let mut vars = vec![BigUint::zero(); expr.num_variables];
 
+        for i in 0..expr.constraints.len() {
+            vars[i] = expr.computes[i].compute(&inputs, &vars, &flags, &expr.prime);
+        }
+        self.generate_subrow_from_vars(range_checker, inputs, flags, vars, sub_row);
+    }
+}
+
+impl FieldExpr {
+    /// Generates a witness row from variables already computed while replaying the expression.
+    ///
+    /// Postflight validation computes every variable to compare the recorded output. Reusing those
+    /// values avoids evaluating the expression, including any modular inversions, a second time.
+    pub fn generate_subrow_from_vars<F: PrimeField64>(
+        &self,
+        range_checker: &VariableRangeCheckerChip,
+        inputs: Vec<BigUint>,
+        flags: Vec<bool>,
+        vars: Vec<BigUint>,
+        sub_row: &mut [F],
+    ) {
+        let expr = &self.program.builder;
+        assert!(expr.is_finalized());
+        assert_eq!(inputs.len(), expr.num_input);
+        assert_eq!(vars.len(), expr.num_variables);
+        assert_eq!(expr.num_variables, expr.constraints.len());
         assert_eq!(flags.len(), expr.num_flags);
 
         let limb_bits = expr.limb_bits;
-        let mut vars = vec![BigUint::zero(); expr.num_variables];
 
         // BigInt type is required for computing the quotient.
         let input_bigint = inputs
             .iter()
             .map(|x| BigInt::from_biguint(Sign::Plus, x.clone()))
             .collect::<Vec<BigInt>>();
-        let mut vars_bigint = vec![BigInt::zero(); expr.num_variables];
+        let vars_bigint = vars
+            .iter()
+            .map(|x| BigInt::from_biguint(Sign::Plus, x.clone()))
+            .collect::<Vec<_>>();
 
         // OverflowInt type is required for computing the carries.
         let input_overflow = inputs
             .iter()
             .map(|x| OverflowInt::<isize>::from_biguint(x, expr.limb_bits, Some(expr.num_limbs)))
             .collect::<Vec<_>>();
-        let zero = OverflowInt::<isize>::from_unsigned_limbs(vec![0], limb_bits);
-        let mut vars_overflow = vec![zero; expr.num_variables];
+        let vars_overflow = vars
+            .iter()
+            .map(|x| OverflowInt::<isize>::from_biguint(x, expr.limb_bits, Some(expr.num_limbs)))
+            .collect::<Vec<_>>();
         // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller
         // number of limbs.
         let prime_overflow = OverflowInt::<isize>::from_biguint(&expr.prime, expr.limb_bits, None);
@@ -576,13 +606,6 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
 
         let mut all_q = vec![];
         let mut all_carry = vec![];
-        for i in 0..expr.constraints.len() {
-            let r = expr.computes[i].compute(&inputs, &vars, &flags, &expr.prime);
-            vars[i] = r.clone();
-            vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
-            vars_overflow[i] =
-                OverflowInt::<isize>::from_biguint(&vars[i], expr.limb_bits, Some(expr.num_limbs));
-        }
         // We need to have all variables computed first because, e.g. constraints[2] might need
         // variables[3].
         for i in 0..expr.constraints.len() {
@@ -644,9 +667,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .concat(),
         );
     }
-}
 
-impl FieldExpr {
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
         let expr = &self.program.builder;
         assert!(expr.is_finalized());
