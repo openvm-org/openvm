@@ -17,6 +17,7 @@ __global__ void reveal_replay_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup,
     uint32_t timestamp_max_bits
 ) {
     size_t idx = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
@@ -47,6 +48,7 @@ __global__ void reveal_replay_tracegen(
     auto reveal = Reveal(
         pointer_max_bits,
         VariableRangeChecker(range_checker, range_checker_num_bins),
+        BitwiseOperationLookup(bitwise_lookup),
         timestamp_max_bits
     );
     reveal.fill_trace_row(row, input);
@@ -72,6 +74,7 @@ extern "C" int _reveal_replay_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -100,6 +103,7 @@ extern "C" int _reveal_replay_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

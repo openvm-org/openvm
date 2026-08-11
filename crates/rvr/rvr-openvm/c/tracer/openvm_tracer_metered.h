@@ -13,20 +13,20 @@
 #include "openvm_state.h"
 
 static __attribute__((always_inline)) inline void
-trace_write_other_block_u64(
-    RvState* restrict state [[maybe_unused]],
-    uint32_t address_space [[maybe_unused]], uint32_t pointer [[maybe_unused]],
-    uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {}
+trace_write_public_values_u64(
+    RvState* restrict state [[maybe_unused]], uint32_t pointer [[maybe_unused]]) {}
 
 /* The metering state checks the lengths of these fixed-capacity page buffers,
  * but Clang cannot prove those bounds. */
 #pragma clang unsafe_buffer_usage begin
 
 static constexpr uint32_t NO_LAST_PAGE = UINT32_MAX;
-static constexpr uint32_t TRACER_BYTES_PER_LEAF =
-    1u << TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS;
-static constexpr uint32_t TRACER_LEAF_BYTE_OFFSET_MASK =
-    TRACER_BYTES_PER_LEAF - 1u;
+/* Number of bytes in one Merkle leaf of the main-memory address space. */
+static constexpr uint32_t TRACER_MEMORY_LEAF_BYTES =
+    1u << TRACER_MEMORY_LEAF_BYTE_BITS;
+/* Mask for the byte offset within one main-memory Merkle leaf. */
+static constexpr uint32_t TRACER_MEMORY_LEAF_BYTE_MASK =
+    TRACER_MEMORY_LEAF_BYTES - 1u;
 
 static_assert(
     TRACER_MEM_PAGE_BUF_CAP >=
@@ -72,22 +72,25 @@ typedef struct TraceMemory {
 
 /* Valid VM pointers fit in uint32_t. Check full RV64 operands before calling
  * these helpers. */
-static __attribute__((always_inline)) inline uint32_t byte_addr_to_local_leaf(
+static __attribute__((always_inline)) inline uint32_t cell_pointer_to_local_leaf(
     uint64_t ptr) {
-  return (uint32_t)(ptr >> TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS);
+  return (uint32_t)(ptr >> TRACER_CELLS_PER_LEAF_BITS);
 }
 
 static __attribute__((always_inline)) inline uint32_t
-deferral_addr_to_local_leaf(uint64_t ptr) {
-  return (uint32_t)(ptr >> TRACER_DEFERRAL_PTRS_PER_LEAF_BITS);
+memory_byte_pointer_to_local_leaf(uint64_t ptr) {
+  return (uint32_t)(ptr >> TRACER_MEMORY_LEAF_BYTE_BITS);
 }
 
 static __attribute__((always_inline)) inline uint32_t addr_to_local_leaf(
     uint32_t addr_space, uint64_t ptr) {
-  if (likely(addr_space == AS_MEMORY || addr_space == AS_PUBLIC_VALUES)) {
-    return byte_addr_to_local_leaf(ptr);
+  if (likely(addr_space == AS_MEMORY)) {
+    return memory_byte_pointer_to_local_leaf(ptr);
   }
-  return deferral_addr_to_local_leaf(ptr);
+  if (addr_space == AS_PUBLIC_VALUES || addr_space == AS_DEFERRAL) {
+    return cell_pointer_to_local_leaf(ptr);
+  }
+  __builtin_trap();
 }
 
 static __attribute__((always_inline)) inline uint64_t leaf_mask(uint32_t leaf) {
@@ -239,7 +242,7 @@ static __attribute__((always_inline)) inline void record_deferral_page_range(
 }
 
 /* Record a single page access. `addr_space` is a compile-time constant at
- * every direct call site in generated C, so the branches below fold away. */
+ * direct generated-C call sites, so the branches below fold away. */
 static __attribute__((always_inline)) inline void record_page(
     MeteringState* metering, uint32_t addr_space, uint64_t ptr, uint32_t size) {
   uint32_t first_leaf = addr_to_local_leaf(addr_space, ptr);
@@ -261,6 +264,7 @@ static __attribute__((always_inline)) inline void record_page(
       record_pv_page_range(metering, first_leaf, last_leaf);
     }
   } else {
+    /* addr_to_local_leaf rejected unsupported address spaces above. */
     if (first_page == last_page) {
       record_deferral_page(metering, first_page,
                            leaf_mask_range(first_leaf, last_leaf));
@@ -282,6 +286,7 @@ static __attribute__((always_inline)) inline void record_page_range(
   } else if (addr_space == AS_PUBLIC_VALUES) {
     record_pv_page_range(metering, first_leaf, last_leaf);
   } else {
+    /* addr_to_local_leaf rejected unsupported address spaces above. */
     record_deferral_page_range(metering, first_leaf, last_leaf);
   }
 }
@@ -348,7 +353,7 @@ static __attribute__((always_inline)) inline void trace_memory_access_page_impl(
 
 static __attribute__((always_inline)) inline void trace_memory_access_leaf_impl(
     TraceMemory* restrict memory, TraceMemoryCache cache, uint64_t addr) {
-  uint32_t leaf = byte_addr_to_local_leaf(addr);
+  uint32_t leaf = memory_byte_pointer_to_local_leaf(addr);
   trace_memory_access_page_impl(memory, cache, leaf >> TRACER_PAGE_BITS,
                                 leaf_mask(leaf));
 }
@@ -368,21 +373,21 @@ static __attribute__((always_inline)) inline void trace_sp_memory_access_leaf(
 static __attribute__((always_inline)) inline void trace_memory_access_span_impl(
     TraceMemory* restrict memory, TraceMemoryCache cache, uint64_t addr,
     uint32_t size) {
-  assume(size != 0u && size <= TRACER_BYTES_PER_LEAF);
+  assume(size != 0u && size <= TRACER_MEMORY_LEAF_BYTES);
   assume((size & (size - 1u)) == 0u);
   if (likely((addr & (size - 1u)) == 0u)) {
     trace_memory_access_leaf_impl(memory, cache, addr);
     return;
   }
 
-  uint32_t leaf_offset = addr & TRACER_LEAF_BYTE_OFFSET_MASK;
-  uint32_t bytes_until_next_leaf = TRACER_BYTES_PER_LEAF - leaf_offset;
+  uint32_t leaf_offset = addr & TRACER_MEMORY_LEAF_BYTE_MASK;
+  uint32_t bytes_until_next_leaf = TRACER_MEMORY_LEAF_BYTES - leaf_offset;
   if (likely(size <= bytes_until_next_leaf)) {
     trace_memory_access_leaf_impl(memory, cache, addr);
     return;
   }
 
-  uint32_t first_leaf = byte_addr_to_local_leaf(addr);
+  uint32_t first_leaf = memory_byte_pointer_to_local_leaf(addr);
   uint32_t last_leaf = first_leaf + 1u;
   uint32_t first_page = first_leaf >> TRACER_PAGE_BITS;
   uint32_t last_page = last_leaf >> TRACER_PAGE_BITS;

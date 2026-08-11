@@ -19,6 +19,22 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             let event = self.history.memory.accesses[event_index];
             let previous_timestamp = self.previous_timestamp(event_index);
             match self.memory_config.addr_spaces[event.address_space() as usize].layout {
+                MemoryCellType::U8 => {
+                    let value = self.u8_value(event_index).map(F::from_u8);
+                    let previous = self.previous_u8(event_index).map(F::from_u8);
+                    chip.send(
+                        event.address_space(),
+                        event.pointer,
+                        &previous,
+                        previous_timestamp,
+                    );
+                    chip.receive(
+                        event.address_space(),
+                        event.pointer,
+                        &value,
+                        event.timestamp,
+                    );
+                }
                 MemoryCellType::U16 => {
                     let value = event.value.map(F::from_u16);
                     let previous = self.previous_u16(event_index).map(F::from_u16);
@@ -91,6 +107,13 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
         for event_index in first_writes.into_values() {
             let event = self.history.memory.accesses[event_index];
             match self.memory_config.addr_spaces[event.address_space() as usize].layout {
+                MemoryCellType::U8 => unsafe {
+                    memory.tracing_memory().data.write::<u8, BLOCK_FE_WIDTH>(
+                        event.address_space(),
+                        event.pointer,
+                        self.previous_u8(event_index),
+                    );
+                },
                 MemoryCellType::U16 => unsafe {
                     memory.tracing_memory().data.write::<u16, BLOCK_FE_WIDTH>(
                         event.address_space(),
@@ -115,6 +138,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             }
             let value = match self.memory_config.addr_spaces[event.address_space() as usize].layout
             {
+                MemoryCellType::U8 => self.u8_value(event_index).map(F::from_u8),
                 MemoryCellType::U16 => event.value.map(F::from_u16),
                 MemoryCellType::FIELD32 => self.field_value(event_index),
                 _ => unreachable!("postflight validates every accessed memory layout"),

@@ -31,8 +31,8 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::public_values::{assert_public_values_shape, public_values_cells_from_bytes},
-            num_memory_airs, DEFAULT_POINTER_MAX_BITS,
+            merkle::public_values::assert_public_values_shape, num_memory_airs,
+            DEFAULT_POINTER_MAX_BITS,
         },
         SystemChipComplex,
     },
@@ -62,8 +62,9 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 //
 // Terminology:
 //   Cell    one storage word in an address space.
-//   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
-//           MEMORY_BLOCK_BYTES bytes.
+//   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells. Its host byte width
+//           depends on the cell layout (4 for U8, 8 for U16, 16 for Field32).
+//   MEMORY_BLOCK_BYTES is the byte width of one RV64 U16 register/memory block.
 //   Digest  the output of one Poseidon2 compression (VM_DIGEST_WIDTH cells); also
 //           one merkle leaf.
 
@@ -226,7 +227,7 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        // RV64 register, memory, and public-values address spaces use u16 storage cells.
+        // RV64 register and memory address spaces use u16 storage cells. Public values are bytes.
         addr_spaces[REGISTER_AS as usize].num_cells =
             NUM_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
         addr_spaces[MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
@@ -246,8 +247,7 @@ impl MemoryConfig {
 
         addr_spaces[MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
-        addr_spaces[PUBLIC_VALUES_AS as usize] =
-            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
+        addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
         addr_spaces
     }
@@ -270,7 +270,7 @@ pub struct SystemConfig {
     pub max_constraint_degree: usize,
     /// Memory configuration
     pub memory_config: MemoryConfig,
-    /// Number of cells in the user public-values address space.
+    /// Number of bytes in the user public-values address space.
     pub num_public_values: usize,
     /// Max memory in bytes used across all chips for triggering segmentation.
     /// This field is skipped in serde as it's only used in execution and
@@ -313,10 +313,6 @@ impl SystemConfig {
         self.num_public_values = num_public_values;
         self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         self
-    }
-
-    pub fn with_public_values_bytes(self, num_public_values_bytes: usize) -> Self {
-        self.with_public_values(public_values_cells_from_bytes(num_public_values_bytes))
     }
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.

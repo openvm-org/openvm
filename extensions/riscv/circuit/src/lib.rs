@@ -136,8 +136,8 @@ impl Default for Rv64IConfig {
 }
 
 impl Rv64IConfig {
-    pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
-        let system = SystemConfig::default().with_public_values_bytes(num_public_values_bytes);
+    pub fn with_public_values(num_public_values: usize) -> Self {
+        let system = SystemConfig::default().with_public_values(num_public_values);
         Self {
             system,
             base: Default::default(),
@@ -147,9 +147,9 @@ impl Rv64IConfig {
 }
 
 impl Rv64ImConfig {
-    pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
+    pub fn with_public_values(num_public_values: usize) -> Self {
         Self {
-            rv64i: Rv64IConfig::with_public_values_bytes(num_public_values_bytes),
+            rv64i: Rv64IConfig::with_public_values(num_public_values),
             mul: Default::default(),
         }
     }

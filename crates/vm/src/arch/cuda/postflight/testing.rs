@@ -129,7 +129,7 @@ impl GpuPostflightProgram {
             .iter()
             .map(|config| GpuMemoryAddressSpace {
                 num_cells: config.num_cells as u64,
-                cell_kind: memory_cell_kind(config.layout),
+                cell_type: gpu_memory_cell_type(config.layout),
                 _padding: 0,
             })
             .collect::<Vec<_>>();
@@ -283,7 +283,7 @@ pub(super) fn build_memory_chronology_for_test(
         .iter()
         .map(|config| GpuMemoryAddressSpace {
             num_cells: config.num_cells as u64,
-            cell_kind: memory_cell_kind(config.layout),
+            cell_type: gpu_memory_cell_type(config.layout),
             _padding: 0,
         })
         .collect::<Vec<_>>();

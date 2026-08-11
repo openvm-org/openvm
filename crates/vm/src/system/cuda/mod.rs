@@ -3,7 +3,7 @@ use std::sync::Arc;
 use connector::VmConnectorChipGPU;
 use memory::MemoryInventoryGPU;
 use openvm_circuit::{
-    arch::SystemConfig,
+    arch::{MemoryCellType, SystemConfig},
     system::{connector::VmConnectorChip, memory::online::GuestMemory, SystemChipComplex},
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
@@ -26,6 +26,27 @@ pub mod merkle_tree;
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+enum GpuMemoryCellType {
+    Unsupported = 0,
+    U8 = 1,
+    U16 = 2,
+    Field32 = 3,
+}
+
+impl From<MemoryCellType> for GpuMemoryCellType {
+    fn from(layout: MemoryCellType) -> Self {
+        match layout {
+            MemoryCellType::Null => Self::Unsupported,
+            MemoryCellType::U8 => Self::U8,
+            MemoryCellType::U16 => Self::U16,
+            MemoryCellType::FIELD32 => Self::Field32,
+            _ => Self::Unsupported,
+        }
+    }
+}
 
 pub struct SystemChipInventoryGPU {
     pub program: ProgramChipGPU,
