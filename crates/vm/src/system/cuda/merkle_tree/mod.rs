@@ -43,18 +43,19 @@ pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
 /// An update path through a sparse subtree looks like this (illustrated for
 /// `OMITTED_BOTTOM_LEVELS = 3`):
 ///
-/// stored root
-///       |
-/// sparse stored ancestors
-///       |
-/// stored height-4 ancestor
-/// /                       \
-/// stored height-3 node       zero_hash[3]
-/// |
-/// omitted heights 0, 1, and 2
-/// reconstructed from raw memory
-/// |
-/// touched 4 KiB page
+/// ```text
+///               stored root                   height = full_height
+///                    |
+///                    ⋮                        sparse stored ancestors
+///                    |
+///               stored node                   height 4
+///                /        \
+///       stored node      zero_hash[3]         height 3 = OMITTED_BOTTOM_LEVELS
+///            /\                               heights 2, 1, and 0 are never stored;
+///           /  \                              the update kernel rehashes them from
+///          /____\                             the raw memory of the touched page
+///    8 raw-memory leaves
+/// ```
 ///
 /// `labels` stores only the left-hand nodes shown on this path (and analogous nodes for other
 /// touched pages). When a sibling label is absent, the CUDA update kernel substitutes the zero
