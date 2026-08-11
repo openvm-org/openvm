@@ -385,7 +385,15 @@ impl MemoryMerkleSubTree {
         cell_type: GpuMemoryCellType,
         device_ctx: &GpuDeviceCtx,
     ) -> Self {
-        debug_assert_eq!(plan.levels[full_height], [0, 1]);
+        // The subtree root is read from index 0, so the plan must terminate in exactly one node
+        // at `full_height`. This holds for every configured address space
+        // (`MemoryMerkleTree::new` bounds each leaf count by `1 << address_height`); check it
+        // unconditionally anyway, since the cost is one comparison per subtree build.
+        assert_eq!(
+            plan.levels[full_height],
+            [0, 1],
+            "sparse plan must have a single root at the full height"
+        );
         assert!(
             cell_type != GpuMemoryCellType::Unsupported,
             "nonempty CUDA memory address spaces require U8, U16, or Field32 cells"
@@ -521,6 +529,8 @@ impl MemoryMerkleTree {
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
         device_ctx: GpuDeviceCtx,
     ) -> Self {
+        let label_max_bits = mem_config.memory_dimensions().address_height;
+
         let addr_space_sizes = mem_config
             .addr_spaces
             .iter()
@@ -529,7 +539,27 @@ impl MemoryMerkleTree {
                     ashc.num_cells % VM_DIGEST_WIDTH == 0,
                     "the number of cells must be divisible by `VM_DIGEST_WIDTH`"
                 );
-                ashc.num_cells / VM_DIGEST_WIDTH
+                let leaves = ashc.num_cells / VM_DIGEST_WIDTH;
+                // Both builders address raw memory in whole base nodes of
+                // `1 << OMITTED_BOTTOM_LEVELS` leaves, and the sparse planner rounds its last
+                // touched range up to one, so a leaf count that is not a power of two would let a
+                // base node read past the device buffer. Leaf counts below one base node are safe
+                // because such an address space fits in a single page, which
+                // `initial_merkle_build` always resolves to a dense prefix whose layout stores
+                // every level (see `MemoryMerkleSubTreeLayout::dense`).
+                assert!(
+                    leaves == 0 || leaves.is_power_of_two(),
+                    "address space needs {leaves} leaf digests, which must be a power of two; \
+                     check that every address space's `num_cells` is `VM_DIGEST_WIDTH` times a \
+                     power of two"
+                );
+                assert!(
+                    leaves <= 1 << label_max_bits,
+                    "address space needs {leaves} leaf digests but the tree supports at most {}; \
+                     check that every address space's `num_cells` fits within `pointer_max_bits`",
+                    1usize << label_max_bits
+                );
+                leaves
             })
             .collect::<Vec<_>>();
         assert!(!(addr_space_sizes.is_empty()), "Invalid config");
@@ -545,8 +575,6 @@ impl MemoryMerkleTree {
                 "The first `ADDR_SPACE_OFFSET` address spaces are assumed to be empty"
             );
         }
-
-        let label_max_bits = mem_config.memory_dimensions().address_height;
 
         let zero_hash = DeviceBuffer::<H>::with_capacity_on(label_max_bits + 1, &device_ctx);
         let top_roots = DeviceBuffer::<H>::with_capacity_on(2 * num_addr_spaces - 1, &device_ctx);
@@ -923,6 +951,39 @@ mod tests {
             GpuMemoryCellType::Unsupported,
             &device_ctx,
         );
+    }
+
+    /// Builds a tree over `mem_config`, which is only reached if every leaf count passes the
+    /// shape checks in [`MemoryMerkleTree::new`].
+    fn build_merkle_tree_for(mem_config: MemoryConfig) {
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
+        let _ = MemoryMerkleTree::new(mem_config, hasher_chip, device_ctx);
+    }
+
+    /// A leaf count that is not a power of two would let the sparse planner round its last touched
+    /// range up to a base node that reads past the address space's device buffer.
+    #[test]
+    #[should_panic(expected = "leaf digests, which must be a power of two")]
+    fn test_non_power_of_two_leaf_count_is_rejected() {
+        let max_ptr_bits = 16;
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        addr_spaces[MEMORY_AS as usize].num_cells = VM_DIGEST_WIDTH * ((1 << 10) + 1);
+        build_merkle_tree_for(MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17));
+    }
+
+    /// An address space larger than the configured tree would plan more than one node at the full
+    /// height, leaving the subtree root ambiguous.
+    #[test]
+    #[should_panic(expected = "but the tree supports at most")]
+    fn test_leaf_count_above_address_height_is_rejected() {
+        let max_ptr_bits = 16;
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        addr_spaces[MEMORY_AS as usize].num_cells = VM_DIGEST_WIDTH << (max_ptr_bits + 1);
+        build_merkle_tree_for(MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17));
     }
 
     #[test]
