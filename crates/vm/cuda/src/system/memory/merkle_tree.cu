@@ -15,9 +15,21 @@ struct alignas(32) digest_t {
 
 #define COPY_DIGEST(dst, src) memcpy(dst, src, sizeof(digest_t))
 
-enum MemoryMerkleSubTreeLayout : uint8_t {
-    FULL = 0,
-    OMIT_BOTTOM_LEVELS = 1,
+// How a subtree's stored nodes are indexed within its digest buffer. Orthogonal to the subtree's
+// `base_height`, the lowest height it stores at all; nodes below that height are recomputed from
+// raw memory under either indexing.
+enum SubTreeIndexing : uint8_t {
+    DENSE = 0,  // heap-ordered; a node's slot is computed from its (height, label)
+    SPARSE = 1, // sorted per-height label index; a node's slot is found by binary search
+};
+
+// Selects one height's contiguous range in the flat sparse-node arrays.
+// `labels[start .. start + count]` contains the node labels at this height, and the same range in
+// the digest buffer contains their hashes. Kernels use this range to binary-search a node label
+// without considering labels from other heights.
+struct SparseLevel {
+    uint32_t start;
+    uint32_t count;
 };
 
 __device__ __forceinline__ void hash_raw_memory_leaf(
@@ -81,9 +93,9 @@ __device__ void recompute_omitted_node(
     size_t const label,
     digest_t *out
 ) {
-    // layer is a fixed-size, thread-local scratch buffer of 2^OMITTED_BOTTOM_LEVELS 
+    // layer is a fixed-size, thread-local scratch buffer of 2^MAX_OMITTED_LEVELS
     // digests, used to rebuild an omitted subtree bottom-up.
-    digest_t layer[1 << OMITTED_BOTTOM_LEVELS];
+    digest_t layer[1 << MAX_OMITTED_LEVELS];
     // num_leaves denote the number of leaves of the subtree rooted at this node 
     size_t const num_leaves = 1 << node_height;
     // recall again that node_height is counted starting from the bottom
@@ -110,10 +122,75 @@ __device__ void recompute_omitted_node(
 __global__ void merkle_tree_init_omitted(
     uint8_t *__restrict__ data,
     digest_t *__restrict__ out,
+    uint8_t const cell_type,
+    uint32_t const base_height
+) {
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+    recompute_omitted_node(data, cell_type, base_height, gid, &out[gid]);
+}
+
+__global__ void sparse_merkle_init(
+    uint8_t const *__restrict__ data,
+    digest_t *__restrict__ out,
+    uint32_t const *__restrict__ labels,
+    uint32_t const start,
+    uint32_t const count,
+    uint32_t const base_height,
     uint8_t const cell_type
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
-    recompute_omitted_node(data, cell_type, OMITTED_BOTTOM_LEVELS, gid, &out[gid]);
+    if (gid >= count) {
+        return;
+    }
+    auto const idx = start + gid;
+    recompute_omitted_node(data, cell_type, base_height, labels[idx], &out[idx]);
+}
+
+__device__ __forceinline__ uint32_t sparse_find_label(
+    uint32_t const *__restrict__ labels,
+    SparseLevel const level,
+    uint32_t const needle
+) {
+    uint32_t lo = 0;
+    uint32_t hi = level.count;
+    while (lo < hi) {
+        uint32_t const mid = lo + (hi - lo) / 2;
+        uint32_t const value = labels[level.start + mid];
+        if (value < needle) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < level.count && labels[level.start + lo] == needle
+        ? level.start + lo
+        : UINT_MAX;
+}
+
+__global__ void sparse_merkle_compress(
+    digest_t *__restrict__ nodes,
+    uint32_t const *__restrict__ labels,
+    SparseLevel const children,
+    SparseLevel const parents,
+    digest_t const *__restrict__ zero_hash,
+    uint32_t const child_height
+) {
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+    if (gid >= parents.count) {
+        return;
+    }
+    auto const parent_idx = parents.start + gid;
+    auto const parent_label = labels[parent_idx];
+    Fp cells[CELLS];
+    auto const left_idx = sparse_find_label(labels, children, 2 * parent_label);
+    auto const right_idx = sparse_find_label(labels, children, 2 * parent_label + 1);
+    COPY_DIGEST(cells, left_idx == UINT_MAX ? &zero_hash[child_height] : &nodes[left_idx]);
+    COPY_DIGEST(
+        cells + CELLS_OUT,
+        right_idx == UINT_MAX ? &zero_hash[child_height] : &nodes[right_idx]
+    );
+    poseidon2_mix(cells);
+    COPY_DIGEST(&nodes[parent_idx], cells);
 }
 
 __global__ void merkle_tree_compress(
@@ -351,9 +428,9 @@ __device__ void fill_merkle_trace_row(
 //   1. Non-existent: `label` lies beyond the touched layer (higher memory
 //      addresses that were never written). It is not stored at all; its value
 //      is the precomputed constant `zero_hash[node_height]`.
-//   2. Omitted bottom level: under the OMIT_BOTTOM_LEVELS layout, nodes with
-//      `node_height < OMITTED_BOTTOM_LEVELS` are not stored either; they are
-//      recomputed on demand from `initial_data`.
+//   2. Omitted bottom level: nodes with `node_height < base_height` are not
+//      stored either, under either indexing; they are recomputed on demand from
+//      `initial_data`.
 //   3. On the vertical path (`node_height > actual_height`): a stored node
 //      above the touched subtree, indexed linearly by height.
 //   4. Inside the actual touched subtree (`node_height <= actual_height`): a
@@ -388,21 +465,44 @@ __device__ __forceinline__ size_t stored_node_index(
 __device__ void load_virtual_node(
     digest_t const *subtree,
     digest_t const *zero_hash,
-    uint8_t const layout,
+    uint8_t const indexing,
+    uint32_t const base_height,
     uint8_t const cell_type,
     uint8_t const *initial_data,
     uint32_t const subtree_height,
     uint32_t const actual_height,
     uint32_t const node_height,
     size_t const label,
+    uint32_t const *sparse_labels,
+    SparseLevel const *sparse_levels,
     digest_t *out
 ) {
+    // The two indexings differ in how a node's absence is detected -- a sparse index reports it as
+    // a lookup miss, a dense heap as a label past the stored prefix -- so the check stays inside
+    // each branch. Recomputing the levels below `base_height` is common to both.
+    if (indexing == SPARSE) {
+        if (node_height < base_height) {
+            recompute_omitted_node(initial_data, cell_type, node_height, label, out);
+            return;
+        }
+        auto const idx = sparse_find_label(
+            sparse_labels, sparse_levels[node_height], static_cast<uint32_t>(label)
+        );
+        if (idx == UINT_MAX) {
+            COPY_DIGEST(out, &zero_hash[node_height]);
+        } else {
+            COPY_DIGEST(out, &subtree[idx]);
+        }
+        return;
+    }
+    // Dense: the bounds check must precede the recompute, since a label past the stored prefix has
+    // no raw memory to rebuild from.
     if (!virtual_node_exists(node_height, actual_height, label)) {
         COPY_DIGEST(out, &zero_hash[node_height]);
         return;
     }
 
-    if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
+    if (node_height < base_height) {
         recompute_omitted_node(initial_data, cell_type, node_height, label, out);
         return;
     }
@@ -413,14 +513,27 @@ __device__ void load_virtual_node(
 
 __device__ void store_virtual_node(
     digest_t *subtree,
-    uint8_t const layout,
+    uint8_t const indexing,
+    uint32_t const base_height,
     uint32_t const subtree_height,
     uint32_t const actual_height,
     uint32_t const node_height,
     size_t const label,
     digest_t const *value
 ) {
-    if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
+    // A sparse index is an immutable index of the segment-start tree. Updated values propagate
+    // through `layer`; missing siblings continue to read from this initial index.
+    if (indexing == SPARSE) {
+        return;
+    }
+    // Non-existent nodes (labels beyond the stored `actual_height` prefix) have no slot:
+    // the heap region has no entry for them and `stored_node_index` would alias the
+    // vertical-path slot of the label-0 node at path levels. Their updated digests still
+    // propagate through the layer records, so the store can be skipped.
+    if (!virtual_node_exists(node_height, actual_height, label)) {
+        return;
+    }
+    if (node_height < base_height) {
         return;
     }
     auto const idx = stored_node_index(subtree_height, actual_height, node_height, label);
@@ -461,9 +574,12 @@ __global__ void update_merkle_layer(
     uint32_t layer_height,
     digest_t const *zero_hash,
     size_t const *actual_subtree_heights,
-    uint8_t const *subtree_layouts,
+    uint8_t const *subtree_indexings,
+    uint8_t const *subtree_base_heights,
     uint8_t const *cell_types,
     uintptr_t const *initial_data_ptrs,
+    uintptr_t const *sparse_label_ptrs,
+    uintptr_t const *sparse_level_ptrs,
     uint32_t const subtree_height,
     LabeledDigest *layer,
     uint32_t const *child_ptrs,
@@ -499,9 +615,14 @@ __global__ void update_merkle_layer(
     uint32_t const parent_label = layer[parent_ptr].label >> layer_height;
     auto const subtree = subtrees[address_space_idx];
     uint32_t const actual_height = actual_subtree_heights[address_space_idx];
-    uint8_t const layout = subtree_layouts[address_space_idx];
+    uint8_t const indexing = subtree_indexings[address_space_idx];
+    uint32_t const base_height = subtree_base_heights[address_space_idx];
     uint8_t const cell_type = cell_types[address_space_idx];
     auto const initial_data = reinterpret_cast<uint8_t const *>(initial_data_ptrs[address_space_idx]);
+    auto const sparse_labels =
+        reinterpret_cast<uint32_t const *>(sparse_label_ptrs[address_space_idx]);
+    auto const sparse_levels =
+        reinterpret_cast<SparseLevel const *>(sparse_level_ptrs[address_space_idx]);
     Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
     );
@@ -509,26 +630,32 @@ __global__ void update_merkle_layer(
     load_virtual_node(
         subtree,
         zero_hash,
-        layout,
+        indexing,
+        base_height,
         cell_type,
         initial_data,
         subtree_height,
         actual_height,
         layer_height - 1,
         2 * parent_label,
+        sparse_labels,
+        sparse_levels,
         &old_left_digest
     );
     digest_t old_right_digest;
     load_virtual_node(
         subtree,
         zero_hash,
-        layout,
+        indexing,
+        base_height,
         cell_type,
         initial_data,
         subtree_height,
         actual_height,
         layer_height - 1,
         2 * parent_label + 1,
+        sparse_labels,
+        sparse_levels,
         &old_right_digest
     );
     bool const left_present = child_ptrs[2 * idx] != MISSING_CHILD;
@@ -572,7 +699,8 @@ __global__ void update_merkle_layer(
             COPY_DIGEST(cells, layer[child_ptrs[2 * idx]].digest_raw);
             store_virtual_node(
                 subtree,
-                layout,
+                indexing,
+                base_height,
                 subtree_height,
                 actual_height,
                 layer_height - 1,
@@ -586,7 +714,8 @@ __global__ void update_merkle_layer(
             COPY_DIGEST(cells + CELLS_OUT, layer[child_ptrs[2 * idx + 1]].digest_raw);
             store_virtual_node(
                 subtree,
-                layout,
+                indexing,
+                base_height,
                 subtree_height,
                 actual_height,
                 layer_height - 1,
@@ -779,17 +908,22 @@ extern "C" int _build_merkle_subtree(
     digest_t *buffer,
     const size_t tree_offset,
     const uint8_t cell_type,
-    const uint8_t layout,
+    const size_t base_height,
     cudaStream_t stream
 ) {
     if (cell_type < CELL_U8 || cell_type > CELL_FIELD32) return -1;
+    assert(base_height <= MAX_OMITTED_LEVELS);
     digest_t *tree = buffer + tree_offset;
     assert((size & (size - 1)) == 0);
     {
         auto [grid, block] = kernel_launch_params(size);
-        if (layout == OMIT_BOTTOM_LEVELS) {
+        // The stored heap bottoms out at `base_height`, so each of its leaves is a node over
+        // `2^base_height` raw-memory leaves. `merkle_tree_init` is the `base_height == 0`
+        // specialization: it hashes one raw leaf per thread without the recompute scratch, which
+        // matters because it runs over the whole dense image.
+        if (base_height > 0) {
             merkle_tree_init_omitted<<<grid, block, 0, stream>>>(
-                data, tree + (size - 1), cell_type
+                data, tree + (size - 1), cell_type, base_height
             );
         } else {
             merkle_tree_init<<<grid, block, 0, stream>>>(data, tree + (size - 1), cell_type);
@@ -800,6 +934,54 @@ extern "C" int _build_merkle_subtree(
         merkle_tree_compress<<<grid, block, 0, stream>>>(tree + (2 * i - 1), tree + (i - 1), i);
     }
     return CHECK_KERNEL();
+}
+
+extern "C" int _build_sparse_merkle_subtree(
+    uint8_t *data,
+    digest_t *nodes,
+    uint32_t const *labels,
+    size_t const *levels,
+    size_t const base_height,
+    size_t const tree_height,
+    uint8_t const cell_type,
+    digest_t const *zero_hash,
+    cudaStream_t stream
+) {
+    if (cell_type < CELL_U8 || cell_type > CELL_FIELD32) return -1;
+    assert(base_height <= MAX_OMITTED_LEVELS);
+    auto level = [levels](size_t height) {
+        return SparseLevel {
+            static_cast<uint32_t>(levels[2 * height]),
+            static_cast<uint32_t>(levels[2 * height + 1]),
+        };
+    };
+    auto const base = level(base_height);
+    {
+        auto [grid, block] = kernel_launch_params(base.count);
+        sparse_merkle_init<<<grid, block, 0, stream>>>(
+            data,
+            nodes,
+            labels,
+            base.start,
+            base.count,
+            base_height,
+            cell_type
+        );
+        if (int err = CHECK_KERNEL(); err) {
+            return err;
+        }
+    }
+    for (size_t height = base_height + 1; height <= tree_height; ++height) {
+        auto const parents = level(height);
+        auto [grid, block] = kernel_launch_params(parents.count);
+        sparse_merkle_compress<<<grid, block, 0, stream>>>(
+            nodes, labels, level(height - 1), parents, zero_hash, height - 1
+        );
+        if (int err = CHECK_KERNEL(); err) {
+            return err;
+        }
+    }
+    return 0;
 }
 
 extern "C" int _restore_merkle_subtree_path(
@@ -863,9 +1045,12 @@ extern "C" int _update_merkle_tree(
     digest_t *top_roots,
     digest_t const *zero_hash,
     size_t const *actual_subtree_heights,
-    uint8_t const *subtree_layouts,
+    uint8_t const *subtree_indexings,
+    uint8_t const *subtree_base_heights,
     uint8_t const *cell_types,
     uintptr_t const *initial_data_ptrs,
+    uintptr_t const *sparse_label_ptrs,
+    uintptr_t const *sparse_level_ptrs,
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
     size_t poseidon2_capacity,
@@ -980,9 +1165,12 @@ extern "C" int _update_merkle_tree(
             h,
             zero_hash,
             actual_subtree_heights,
-            subtree_layouts,
+            subtree_indexings,
+            subtree_base_heights,
             cell_types,
             initial_data_ptrs,
+            sparse_label_ptrs,
+            sparse_level_ptrs,
             subtree_height,
             layer,
             tmp_buf,

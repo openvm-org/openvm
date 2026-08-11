@@ -72,5 +72,8 @@ inline constexpr size_t MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 // Blocks per merkle leaf.
 inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-// Number of bottom merkle levels omitted from large GPU subtree buffers.
-inline constexpr size_t OMITTED_BOTTOM_LEVELS = 3;
+// Upper bound on a subtree's `base_height`, i.e. on the number of bottom merkle levels that may be
+// omitted from its buffer. Sizes the thread-local scratch of `recompute_omitted_node`, which
+// rebuilds an omitted node from `2^base_height` raw-memory leaves. The host picks the actual
+// number of omitted levels per subtree (`OMITTED_BOTTOM_LEVELS` in `merkle_tree/mod.rs`).
+inline constexpr size_t MAX_OMITTED_LEVELS = 3;
