@@ -138,7 +138,7 @@ pub(crate) fn initial_merkle_build(
     let sparse_nodes = by_height.iter().map(Vec::len).sum::<usize>();
     let dense_height = log2_ceil_usize(dense_size);
     let dense_path_len = full_height - dense_height;
-    let dense_layout = MemoryMerkleSubTree::layout_for_height(dense_height);
+    let dense_layout = MemoryMerkleSubTreeLayout::dense(dense_height);
     let dense_nodes = MemoryMerkleSubTree::buffer_len(dense_size, dense_path_len, dense_layout);
     // Sparse nodes carry a u32 label and use binary-search lookup during updates. Require a
     // meaningful reduction rather than selecting sparse storage for small holes in a dense image.
@@ -191,12 +191,62 @@ impl SpanningNodeCounter {
     }
 }
 
+/// How a subtree's stored nodes are indexed within its digest buffer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-enum MemoryMerkleSubTreeLayout {
-    Full = 0,
-    OmitBottomLevels = 1,
-    SparsePages = 2,
+enum SubTreeIndexing {
+    /// Heap-ordered: a node's slot is computed from its `(height, label)`.
+    Dense = 0,
+    /// Sorted per-height label index: a node's slot is found by binary search, and an absent label
+    /// means the node is the zero hash for its height.
+    Sparse = 1,
+}
+
+/// The two independent axes of a subtree's node storage: how the stored nodes are indexed, and how
+/// many bottom levels are left out of storage altogether.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MemoryMerkleSubTreeLayout {
+    indexing: SubTreeIndexing,
+    /// Lowest stored node height. Nodes below it are stored under neither indexing; they are
+    /// recomputed from `initial_data` on demand (`recompute_omitted_node` in `merkle_tree.cu`).
+    base_height: usize,
+}
+
+impl MemoryMerkleSubTreeLayout {
+    /// Layout of a dense subtree of conceptual height `height`. Bottom levels are omitted only
+    /// when the subtree is taller than the omitted region; a shorter one keeps every level, since
+    /// omitting them all would leave nothing but the root.
+    fn dense(height: usize) -> Self {
+        Self {
+            indexing: SubTreeIndexing::Dense,
+            base_height: if height > OMITTED_BOTTOM_LEVELS {
+                OMITTED_BOTTOM_LEVELS
+            } else {
+                0
+            },
+        }
+    }
+
+    fn sparse(base_height: usize) -> Self {
+        Self {
+            indexing: SubTreeIndexing::Sparse,
+            base_height,
+        }
+    }
+
+    /// Height of the stored heap of a dense subtree of conceptual height `height`.
+    fn stored_heap_height(&self, height: usize) -> usize {
+        debug_assert_eq!(
+            self.indexing,
+            SubTreeIndexing::Dense,
+            "sparse subtrees store no heap"
+        );
+        height - self.base_height
+    }
+
+    fn heap_len(&self, height: usize) -> usize {
+        2 * (1 << self.stored_heap_height(height)) - 1
+    }
 }
 
 /// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
@@ -205,11 +255,11 @@ enum MemoryMerkleSubTreeLayout {
 /// Memory layout:
 /// - The first `path_len` elements form a vertical path (one node per level), used when the actual
 ///   size is smaller than the max size.
-/// - `Full` subtrees store the remaining nodes as the complete subtree heap.
-/// - `OmitBottomLevels` subtrees omit the bottom `OMITTED_BOTTOM_LEVELS` levels and store only the
-///   retained heap whose leaves are the first stored hashes above the omitted levels.
-/// - `SparsePages` subtrees store sorted `(height, label) -> digest` levels for touched pages and
-///   their ancestors; absent labels resolve to the precomputed zero hash for that height.
+/// - `Dense` subtrees store the remaining nodes as a heap whose leaves are the nodes at
+///   `layout.base_height`; the levels below that height are not stored.
+/// - `Sparse` subtrees store sorted `(height, label) -> digest` levels for touched pages and their
+///   ancestors, down to `layout.base_height`; absent labels resolve to the precomputed zero hash
+///   for that height.
 ///
 /// All GPU work is issued on the subtree's `GpuDeviceCtx` stream.
 /// `build_completion_event` records when the build kernels finish so that downstream consumers can
@@ -232,10 +282,10 @@ pub struct MemoryMerkleSubTree {
     /// the same range indexes the matching sparse-node digests in `buf`.
     sparse_levels: DeviceBuffer<[u32; 2]>,
     /// Shared handle to the initial-memory buffer (`d_data`) from [`Self::build_async`], or
-    /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: under
-    /// `OmitBottomLevels` and `SparsePages`, the omitted levels aren't in `buf` and are recomputed
-    /// from this buffer during [`MemoryMerkleTree::update_with_touched_blocks`]
-    /// (`recompute_omitted_node` in `merkle_tree.cu`).
+    /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: when
+    /// `layout.base_height > 0`, the levels below it aren't in `buf` and are recomputed from this
+    /// buffer during [`MemoryMerkleTree::update_with_touched_blocks`] (`recompute_omitted_node` in
+    /// `merkle_tree.cu`).
     ///
     /// This only covers host-side ownership; the buffer also feeds GPU kernels on the stream, so
     /// drop the subtrees (releasing these handles) only after the `stream.synchronize()` in
@@ -244,32 +294,12 @@ pub struct MemoryMerkleSubTree {
 }
 
 impl MemoryMerkleSubTree {
-    fn layout_for_height(height: usize) -> MemoryMerkleSubTreeLayout {
-        if height > OMITTED_BOTTOM_LEVELS {
-            MemoryMerkleSubTreeLayout::OmitBottomLevels
-        } else {
-            MemoryMerkleSubTreeLayout::Full
-        }
-    }
-
-    fn heap_len(height: usize, layout: MemoryMerkleSubTreeLayout) -> usize {
-        let retained_height = match layout {
-            MemoryMerkleSubTreeLayout::Full => height,
-            MemoryMerkleSubTreeLayout::OmitBottomLevels => height - OMITTED_BOTTOM_LEVELS,
-            MemoryMerkleSubTreeLayout::SparsePages => {
-                unreachable!("sparse buffers are sized by SparseMerklePlan")
-            }
-        };
-        2 * (1 << retained_height) - 1
-    }
-
     fn buffer_len(
         addr_space_size: usize,
         path_len: usize,
         layout: MemoryMerkleSubTreeLayout,
     ) -> usize {
-        let height = log2_ceil_usize(addr_space_size);
-        path_len + Self::heap_len(height, layout)
+        path_len + layout.heap_len(log2_ceil_usize(addr_space_size))
     }
 
     /// Constructs a new Merkle subtree with a vertical path and heap-ordered tree.
@@ -312,7 +342,7 @@ impl MemoryMerkleSubTree {
         }
         let height = log2_ceil_usize(addr_space_size);
         let path_len = log2_ceil_usize(max_size).checked_sub(height).unwrap();
-        let layout = Self::layout_for_height(height);
+        let layout = MemoryMerkleSubTreeLayout::dense(height);
         let buffer_len = Self::buffer_len(addr_space_size, path_len, layout);
         tracing::debug!(
             "Creating a subtree buffer, size is {} (addr space size is {})",
@@ -340,7 +370,7 @@ impl MemoryMerkleSubTree {
             height: 0,
             buf: DeviceBuffer::new(),
             path_len: 0,
-            layout: MemoryMerkleSubTreeLayout::Full,
+            layout: MemoryMerkleSubTreeLayout::dense(0),
             cell_type: GpuMemoryCellType::Unsupported,
             sparse_labels: DeviceBuffer::new(),
             sparse_levels: DeviceBuffer::new(),
@@ -369,25 +399,11 @@ impl MemoryMerkleSubTree {
             buf: DeviceBuffer::<H>::with_capacity_on(plan.labels.len(), device_ctx),
             height: full_height,
             path_len: 0,
-            layout: MemoryMerkleSubTreeLayout::SparsePages,
+            layout: MemoryMerkleSubTreeLayout::sparse(plan.base_height),
             cell_type,
             sparse_labels: plan.labels.to_device_on(device_ctx).unwrap(),
             sparse_levels: plan.levels.to_device_on(device_ctx).unwrap(),
             initial_data: None,
-        }
-    }
-
-    fn layout_tag(&self) -> u8 {
-        self.layout as u8
-    }
-
-    fn stored_heap_height(&self) -> usize {
-        match self.layout {
-            MemoryMerkleSubTreeLayout::Full => self.height,
-            MemoryMerkleSubTreeLayout::OmitBottomLevels => self.height - OMITTED_BOTTOM_LEVELS,
-            MemoryMerkleSubTreeLayout::SparsePages => {
-                unreachable!("sparse subtrees do not use heap height")
-            }
         }
     }
 
@@ -400,8 +416,8 @@ impl MemoryMerkleSubTree {
         device_ctx: &GpuDeviceCtx,
     ) {
         let event = CudaEvent::new().unwrap();
-        // Co-own the buffer; it must outlive `update_with_touched_blocks`, which re-reads it under
-        // the `OmitBottomLevels` layout (see the `initial_data` field).
+        // Co-own the buffer; it must outlive `update_with_touched_blocks`, which re-reads it when
+        // the layout omits bottom levels (see the `initial_data` field).
         self.initial_data = Some(d_data.clone());
         if self.buf.is_empty() {
             self.buf = DeviceBuffer::with_capacity_on(1, device_ctx);
@@ -419,11 +435,11 @@ impl MemoryMerkleSubTree {
             unsafe {
                 build_merkle_subtree(
                     &d_data,
-                    1 << self.stored_heap_height(),
+                    1 << self.layout.stored_heap_height(self.height),
                     &self.buf,
                     self.path_len,
                     self.cell_type as u8,
-                    self.layout_tag(),
+                    self.layout.base_height,
                     device_ctx.stream.as_raw(),
                 )
                 .unwrap();
@@ -459,7 +475,7 @@ impl MemoryMerkleSubTree {
                 &self.buf,
                 &self.sparse_labels,
                 &plan.levels,
-                plan.base_height,
+                self.layout.base_height,
                 self.height,
                 self.cell_type as u8,
                 zero_hash,
@@ -563,11 +579,10 @@ impl MemoryMerkleTree {
     /// unrepresented leaf to be all-zero, as guaranteed by the touched-page metadata.
     ///
     /// **Note:** the caller MUST ENSURE that `d_data` lives long enough to be there
-    /// when the enqueued task actually starts. Moreover, when the subtree uses the
-    /// `OmitBottomLevels` or `SparsePages` layout, `d_data` is also re-read during
-    /// [`Self::update_with_touched_blocks`] to recompute the omitted bottom levels, so it must
-    /// remain valid until that update completes — not just until the build kernel runs. See
-    /// [`MemoryMerkleSubTree`]'s `initial_data` field for details.
+    /// when the enqueued task actually starts. Moreover, when the subtree's layout omits bottom
+    /// levels, `d_data` is also re-read during [`Self::update_with_touched_blocks`] to recompute
+    /// them, so it must remain valid until that update completes — not just until the build kernel
+    /// runs. See [`MemoryMerkleSubTree`]'s `initial_data` field for details.
     pub(crate) fn build_async(
         &mut self,
         d_data: Arc<DeviceBuffer<u8>>,
@@ -667,10 +682,15 @@ impl MemoryMerkleTree {
             output.buffer().fill_zero_on(&self.device_ctx).unwrap();
 
             let actual_heights = self.subtrees.iter().map(|s| s.height).collect::<Vec<_>>();
-            let subtree_layouts = self
+            let subtree_indexings = self
                 .subtrees
                 .iter()
-                .map(|s| s.layout_tag())
+                .map(|s| s.layout.indexing as u8)
+                .collect::<Vec<_>>();
+            let subtree_base_heights = self
+                .subtrees
+                .iter()
+                .map(|s| s.layout.base_height as u8)
                 .collect::<Vec<_>>();
             let cell_types = self
                 .subtrees
@@ -708,7 +728,8 @@ impl MemoryMerkleTree {
                     d_touched_blocks,
                     self.height - log2_ceil_usize(self.subtrees.len()),
                     &actual_heights,
-                    &subtree_layouts,
+                    &subtree_indexings,
+                    &subtree_base_heights,
                     &cell_types,
                     &initial_data_ptrs,
                     &sparse_label_ptrs,
@@ -789,7 +810,7 @@ mod tests {
 
     use super::{
         initial_merkle_build, GpuMemoryCellType, InitialMerkleBuild, MemoryMerkleSubTree,
-        MemoryMerkleSubTreeLayout, MemoryMerkleTree, SpanningNodeCounter, OMITTED_BOTTOM_LEVELS,
+        MemoryMerkleTree, SpanningNodeCounter, SubTreeIndexing, OMITTED_BOTTOM_LEVELS,
     };
     use crate::{
         arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
@@ -854,7 +875,8 @@ mod tests {
             GpuMemoryCellType::U16,
             &device_ctx,
         );
-        assert_eq!(below.layout, MemoryMerkleSubTreeLayout::Full);
+        assert_eq!(below.layout.indexing, SubTreeIndexing::Dense);
+        assert_eq!(below.layout.base_height, 0);
         assert_eq!(
             below.buf.len(),
             below.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS - 1)) - 1)
@@ -866,7 +888,8 @@ mod tests {
             GpuMemoryCellType::U16,
             &device_ctx,
         );
-        assert_eq!(equal.layout, MemoryMerkleSubTreeLayout::Full);
+        assert_eq!(equal.layout.indexing, SubTreeIndexing::Dense);
+        assert_eq!(equal.layout.base_height, 0);
         assert_eq!(
             equal.buf.len(),
             equal.path_len + (2 * (1 << OMITTED_BOTTOM_LEVELS) - 1)
@@ -880,7 +903,8 @@ mod tests {
         );
         let full_len = above.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS + 1)) - 1);
         let optimized_len = above.path_len + (2 * (1 << 1) - 1);
-        assert_eq!(above.layout, MemoryMerkleSubTreeLayout::OmitBottomLevels);
+        assert_eq!(above.layout.indexing, SubTreeIndexing::Dense);
+        assert_eq!(above.layout.base_height, OMITTED_BOTTOM_LEVELS);
         assert_eq!(above.buf.len(), optimized_len);
         assert!(above.buf.len() < full_len);
     }
@@ -983,18 +1007,11 @@ mod tests {
                 ),
             );
         }
-        assert_eq!(
-            gpu_merkle_tree.subtrees[REGISTER_AS as usize - 1].layout,
-            MemoryMerkleSubTreeLayout::OmitBottomLevels
-        );
-        assert_eq!(
-            gpu_merkle_tree.subtrees[MEMORY_AS as usize - 1].layout,
-            MemoryMerkleSubTreeLayout::OmitBottomLevels
-        );
-        assert_eq!(
-            gpu_merkle_tree.subtrees[DEFERRAL_AS as usize - 1].layout,
-            MemoryMerkleSubTreeLayout::OmitBottomLevels
-        );
+        for addr_space in [REGISTER_AS, MEMORY_AS, DEFERRAL_AS] {
+            let layout = gpu_merkle_tree.subtrees[addr_space as usize - 1].layout;
+            assert_eq!(layout.indexing, SubTreeIndexing::Dense);
+            assert_eq!(layout.base_height, OMITTED_BOTTOM_LEVELS);
+        }
         gpu_merkle_tree.finalize();
 
         let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
@@ -1110,7 +1127,7 @@ mod tests {
     /// produced by the CPU `MemoryMerkleChip`. The CPU trace is known to satisfy the
     /// `MemoryMerkleAir` constraints (covered by the CPU-side merkle tests), so matching every
     /// row content-for-content implies the GPU emits the correct merkle trace. This exercises the
-    /// `OmitBottomLevels` trace-generation path, whose row contents (the reconstructed omitted
+    /// omitted-bottom-levels trace-generation path, whose row contents (the reconstructed omitted
     /// levels) are not checked by the root-equivalence test.
     ///
     /// The comparison is order-independent: the `MemoryMerkleAir` permits more than one valid row
@@ -1438,7 +1455,8 @@ mod tests {
         // into the dense equivalence tests.
         for addr_space in LARGE_AS {
             let subtree = &gpu_merkle_tree.subtrees[addr_space - 1];
-            assert_eq!(subtree.layout, MemoryMerkleSubTreeLayout::SparsePages);
+            assert_eq!(subtree.layout.indexing, SubTreeIndexing::Sparse);
+            assert_eq!(subtree.layout.base_height, OMITTED_BOTTOM_LEVELS);
         }
         gpu_merkle_tree.finalize();
 

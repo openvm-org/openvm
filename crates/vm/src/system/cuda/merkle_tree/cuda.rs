@@ -22,7 +22,7 @@ pub mod merkle_tree {
             d_tree: *mut std::ffi::c_void,
             tree_offset: usize,
             cell_type: u8,
-            layout: u8,
+            base_height: usize,
             stream: cudaStream_t,
         ) -> i32;
 
@@ -82,7 +82,8 @@ pub mod merkle_tree {
             top_roots: *mut u32,         // are actually `H`s
             zero_hashes_end: *const u32, // are actually `H`s
             actual_subtree_heights: *const usize,
-            subtree_layouts: *const u8,
+            subtree_indexings: *const u8,
+            subtree_base_heights: *const u8,
             cell_types: *const u8,
             initial_data_ptrs: *const usize,
             sparse_label_ptrs: *const usize,
@@ -129,7 +130,7 @@ pub mod merkle_tree {
         d_tree: &DeviceBuffer<T>,
         tree_offset: usize,
         cell_type: u8,
-        layout: u8,
+        base_height: usize,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_build_merkle_subtree(
@@ -138,7 +139,7 @@ pub mod merkle_tree {
             d_tree.as_mut_raw_ptr(),
             tree_offset,
             cell_type,
-            layout,
+            base_height,
             stream,
         ))
     }
@@ -213,7 +214,8 @@ pub mod merkle_tree {
         touched_blocks: &DeviceBuffer<u32>,
         subtree_height: usize,
         actual_heights: &[usize],
-        subtree_layouts: &[u8],
+        subtree_indexings: &[u8],
+        subtree_base_heights: &[u8],
         cell_types: &[u8],
         initial_data_ptrs: &[usize],
         sparse_label_ptrs: &[usize],
@@ -237,7 +239,8 @@ pub mod merkle_tree {
         )?;
         let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, device_ctx);
         let actual_heights = actual_heights.to_device_on(device_ctx).unwrap();
-        let subtree_layouts = subtree_layouts.to_device_on(device_ctx).unwrap();
+        let subtree_indexings = subtree_indexings.to_device_on(device_ctx).unwrap();
+        let subtree_base_heights = subtree_base_heights.to_device_on(device_ctx).unwrap();
         let cell_types = cell_types.to_device_on(device_ctx).unwrap();
         let initial_data_ptrs = initial_data_ptrs.to_device_on(device_ctx).unwrap();
         let sparse_label_ptrs = sparse_label_ptrs.to_device_on(device_ctx).unwrap();
@@ -259,7 +262,8 @@ pub mod merkle_tree {
             top_roots.as_mut_ptr() as *mut u32,
             zero_hash.as_ptr() as *mut u32,
             actual_heights.as_ptr(),
-            subtree_layouts.as_ptr(),
+            subtree_indexings.as_ptr(),
+            subtree_base_heights.as_ptr(),
             cell_types.as_ptr(),
             initial_data_ptrs.as_ptr(),
             sparse_label_ptrs.as_ptr(),
