@@ -445,7 +445,6 @@ fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() 
     let field_index = history.memory.field_values.len() - 1;
     let original_value = history.memory.field_values[field_index].values[0];
     history.memory.field_values[field_index].values[0] = F::ORDER_U32;
-    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
     let counts_before = count
         .1
         .count
@@ -453,9 +452,10 @@ fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() 
         .map(|count| count.load(Ordering::Relaxed))
         .collect::<Vec<_>>();
     let poseidon_records_before = poseidon2.1.records.len();
-    let error = super::generate_trace_from_postflight(&harness.chip, &postflight)
-        .expect_err("noncanonical CALL field values must be rejected");
-    assert!(error.to_string().contains("outside field order"));
+    let error = Postflight::<F>::new(&program, history, &memory_config, None)
+        .err()
+        .expect("noncanonical CALL field values must be rejected");
+    assert!(error.to_string().contains("non-canonical raw field value"));
     assert_eq!(
         counts_before,
         count
@@ -466,7 +466,6 @@ fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() 
             .collect::<Vec<_>>()
     );
     assert_eq!(poseidon_records_before, poseidon2.1.records.len());
-    drop(postflight);
     history.memory.field_values[field_index].values[0] = original_value;
 
     let removed = history
