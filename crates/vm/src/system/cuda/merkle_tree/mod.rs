@@ -76,6 +76,26 @@ pub(crate) fn touched_leaf_watermark(memory: &AddressMap, addr_sp: usize) -> usi
 /// root of eight raw-memory leaves. Touched 4 KiB pages therefore remain dense and coalesced while
 /// gaps between pages are represented by precomputed zero hashes. Dense-prefix construction stays
 /// preferable for the ordinary contiguous guest image because it avoids sparse labels and lookups.
+///
+/// An update path through a sparse subtree looks like this (illustrated for
+/// `OMITTED_BOTTOM_LEVELS = 3`):
+///
+/// stored root
+///       |
+/// sparse stored ancestors
+///       |
+/// stored height-4 ancestor
+/// /                       \
+/// stored height-3 node       zero_hash[3]
+/// |
+/// omitted heights 0, 1, and 2
+/// reconstructed from raw memory
+/// |
+/// touched 4 KiB page
+///
+/// `labels` stores only the left-hand nodes shown on this path (and analogous nodes for other
+/// touched pages). When a sibling label is absent, the CUDA update kernel substitutes the zero
+/// hash for that sibling's height.
 pub(crate) fn initial_merkle_build(
     memory: &AddressMap,
     addr_sp: usize,
@@ -201,7 +221,15 @@ pub struct MemoryMerkleSubTree {
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
     cell_type: GpuMemoryCellType,
+    /// Flattened labels of every stored sparse node, grouped by descending height.
+    ///
+    /// For a given height, [`Self::sparse_levels`] selects the corresponding contiguous range.
+    /// The digest for each label is stored at the same index in `buf`.
     sparse_labels: DeviceBuffer<u32>,
+    /// Per-height index into [`Self::sparse_labels`], stored as `[start, count]`.
+    ///
+    /// This lets CUDA restrict its binary search for a `(height, label)` to that height's labels;
+    /// the same range indexes the matching sparse-node digests in `buf`.
     sparse_levels: DeviceBuffer<[u32; 2]>,
     /// Shared handle to the initial-memory buffer (`d_data`) from [`Self::build_async`], or
     /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: under
