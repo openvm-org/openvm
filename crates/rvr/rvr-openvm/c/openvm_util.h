@@ -15,7 +15,7 @@ static __attribute__((always_inline)) inline void assume(int x) {
   __builtin_assume(x);
 }
 
-static __attribute__((always_inline)) inline void debug_assume(int x) {
+static __attribute__((always_inline)) inline void assert_assume(int x) {
   assert(x);
   assume(x);
 }
