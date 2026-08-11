@@ -20,6 +20,12 @@ static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 static constexpr uint32_t EC_MUL_EXPR_NUM_INPUTS = 4;
 static constexpr uint32_t EC_MUL_EXPR_NUM_OUTPUTS = 2;
 
+// Per-instruction scratch for the ladder: Jacobian accumulators, batch-inversion prefix products,
+// then the Montgomery workspace.
+template <uint32_t K>
+static constexpr size_t EC_MUL_LADDER_SLICE_WORDS =
+    EC_MUL_COMPUTE_ROWS * 4 * K + EC_MUL_LADDER_WORKSPACE_WORDS<K>;
+
 // Trace generation runs in two passes, split where the row dependency ends.
 //
 // A ladder row's inputs are the previous row's outputs, so the accumulator must be advanced
@@ -86,8 +92,8 @@ static __device__ FieldExprRowMode ec_mul_row_mode(
 // A setup instruction has no ladder: every row carries `EC_MUL_SETUP_ACC`, which
 // `ec_mul_setup_inputs` supplies directly, so nothing is written here.
 //
-// `ladder` is `EC_MUL_COMPUTE_ROWS * 4 * K` words of scratch: the Jacobian accumulators followed by
-// the prefix products the batch inversion consumes.
+// `ladder` is `EC_MUL_LADDER_SLICE_WORDS` of scratch: the Jacobian accumulators, the prefix products
+// the batch inversion consumes, then the thread's Montgomery workspace.
 template <uint32_t K, size_t BLOCKS>
 static __device__ bool ec_mul_eval_instruction(
     const FieldExprProg &s,
@@ -221,5 +227,5 @@ static __device__ bool ec_mul_validate_trace_shape(
            width == EC_MUL_HEADER_WIDTH + s.width + EC_MUL_DIGEST_WIDTH<NUM_LIMBS, BLOCKS> &&
            num_instructions * EC_MUL_TOTAL_ROWS <= height &&
            affine_bytes >= num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS &&
-           ladder_words >= EC_MUL_COMPUTE_ROWS * 4 * K;
+           ladder_words >= num_instructions * EC_MUL_LADDER_SLICE_WORDS<K>;
 }

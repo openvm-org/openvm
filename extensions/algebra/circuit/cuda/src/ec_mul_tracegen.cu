@@ -62,13 +62,14 @@ static __global__ void ec_mul_eval(
 
     FieldExprProg s;
     load_prog(blob, s);
-    // The Montgomery temporaries are per-thread and small enough to keep off the global scratch.
-    uint32_t workspace[EC_MUL_MONT_WORKSPACE_WORDS * K + 2 + EC_MUL_JACOBIAN_TEMPS * K];
+    // Both the Jacobian scratch and the Montgomery temporaries come from the per-instruction slice,
+    // rather than a kernel-local array large enough to hurt occupancy.
     uint8_t *row_affine = affine + index * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS;
-    uint32_t *row_ladder = ladder + index * EC_MUL_COMPUTE_ROWS * 4 * K;
+    uint32_t *row_ladder = ladder + index * EC_MUL_LADDER_SLICE_WORDS<K>;
 
     ec_mul_eval_instruction<K, BLOCKS>(
-        s, projection[index], row_affine, row_ladder, workspace, error
+        s, projection[index], row_affine, row_ladder,
+        row_ladder + EC_MUL_COMPUTE_ROWS * 4 * K, error
     );
 }
 
@@ -165,7 +166,7 @@ static int launch_ec_mul_tracegen(
         return cudaErrorInvalidValue;
     }
     const size_t needed_affine = num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS;
-    const size_t needed_ladder = num_instructions * EC_MUL_COMPUTE_ROWS * 4 * K;
+    const size_t needed_ladder = num_instructions * EC_MUL_LADDER_SLICE_WORDS<K>;
     if (num_instructions > height / EC_MUL_TOTAL_ROWS ||
         fill_grid_blocks * fill_block_threads * aux_words > scratch_words ||
         affine_bytes < needed_affine || ladder_words < needed_ladder) {

@@ -23,15 +23,42 @@ static constexpr uint32_t EC_MUL_JACOBIAN_TEMPS = 14;
 // Leading `K`-word slots of the shared workspace, reserved for Montgomery multiplication.
 static constexpr uint32_t EC_MUL_MONT_WORKSPACE_WORDS = 2;
 
+// Total workspace one thread needs to run the ladder.
+template <uint32_t K>
+static constexpr uint32_t EC_MUL_LADDER_WORKSPACE_WORDS =
+    EC_MUL_MONT_WORKSPACE_WORDS * K + 2 + EC_MUL_JACOBIAN_TEMPS * K;
+
+// `__noinline__` wrappers around the field primitives.
+//
+// The point operations below call these from straight-line code, dozens of times per ladder step.
+// Inlined, each copy expands the primitive's K-by-K limb loops, and the resulting function is large
+// enough that nvcc's frontend gives up. One frame per call keeps it bounded; the call overhead is
+// negligible against the K-squared body.
+template <uint32_t K>
+static __device__ __noinline__ void ec_mul_mont_mul(
+    const FieldExprProg &s, const uint32_t *a, const uint32_t *b, uint32_t *r, uint32_t *ws
+) {
+    mont_mul<K>(s, a, b, r, ws);
+}
+
+template <uint32_t K>
+static __device__ __noinline__ void ec_mul_mont_inv(
+    const FieldExprProg &s, const uint32_t *a, uint32_t *r, uint32_t *ws
+) {
+    mont_inv<K>(s, a, r, ws);
+}
+
 // Montgomery arithmetic over the expression's prime, on `K`-word values.
 template <uint32_t K> struct EcMulMont {
     const FieldExprProg &s;
     uint32_t *ws; // 2K + 2 words
 
     __device__ void mul(const uint32_t *a, const uint32_t *b, uint32_t *r) const {
-        mont_mul<K>(s, a, b, r, ws);
+        ec_mul_mont_mul<K>(s, a, b, r, ws);
     }
-    __device__ void sqr(const uint32_t *a, uint32_t *r) const { mont_mul<K>(s, a, a, r, ws); }
+    __device__ void sqr(const uint32_t *a, uint32_t *r) const {
+        ec_mul_mont_mul<K>(s, a, a, r, ws);
+    }
     __device__ void add(const uint32_t *a, const uint32_t *b, uint32_t *r) const {
         add_mod<K>(s, a, b, r, ws);
     }
@@ -39,7 +66,9 @@ template <uint32_t K> struct EcMulMont {
         sub_mod<K>(s, a, b, r);
     }
     __device__ void twice(const uint32_t *a, uint32_t *r) const { add_mod<K>(s, a, a, r, ws); }
-    __device__ void invert(const uint32_t *a, uint32_t *r) const { mont_inv<K>(s, a, r, ws); }
+    __device__ void invert(const uint32_t *a, uint32_t *r) const {
+        ec_mul_mont_inv<K>(s, a, r, ws);
+    }
     __device__ void copy(const uint32_t *a, uint32_t *r) const {
         for (uint32_t i = 0; i < K; i++) r[i] = a[i];
     }
@@ -90,7 +119,7 @@ template <uint32_t K> struct EcMulJacobian {
 // Undefined when `P` is the identity or has order two. The `mul` module documents why the ladder
 // reaches neither.
 template <uint32_t K>
-static __device__ void ec_mul_jacobian_double(
+static __device__ __noinline__ void ec_mul_jacobian_double(
     const EcMulMont<K> &f,
     const EcMulJacobian<K> &p,
     const uint32_t *a_mont,
@@ -142,7 +171,7 @@ static __device__ void ec_mul_jacobian_double(
 // Requires `Q.x != P.x`, the same precondition as the chip's incomplete addition, so both are
 // undefined on exactly the same inputs.
 template <uint32_t K>
-static __device__ void ec_mul_jacobian_add_affine(
+static __device__ __noinline__ void ec_mul_jacobian_add_affine(
     const EcMulMont<K> &f,
     const EcMulJacobian<K> &p,
     const uint32_t *qx,
@@ -213,7 +242,7 @@ static __device__ bool ec_mul_load_curve_a(
 // being `+1`; each later entry is the previous one advanced by `EC_MUL_STEPS_PER_ROW` steps of
 // `R = 2R + sigma*P`.
 template <uint32_t K>
-static __device__ bool ec_mul_projective_accumulators(
+static __device__ __noinline__ bool ec_mul_projective_accumulators(
     const FieldExprProg &s,
     const uint8_t *point_bytes,
     const uint8_t *scalar_bytes,
@@ -267,7 +296,7 @@ static __device__ bool ec_mul_projective_accumulators(
 // `affine_out` receives `EC_MUL_COMPUTE_ROWS * 2 * num_limbs` bytes, each row's `x` then `y`, in
 // the little-endian form the interpreter reads inputs as.
 template <uint32_t K>
-static __device__ bool ec_mul_affine_from_jacobian(
+static __device__ __noinline__ bool ec_mul_affine_from_jacobian(
     const FieldExprProg &s,
     const EcMulJacobian<K> *jacobian,
     uint32_t *prefix, // EC_MUL_COMPUTE_ROWS * K
