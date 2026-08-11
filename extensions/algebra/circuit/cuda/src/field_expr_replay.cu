@@ -77,15 +77,18 @@ static __global__ void field_expr_replay_tracegen(
                 reinterpret_cast<const uint8_t *>(&input.heap_reads[0][0][0]);
             const uint8_t *logged_output =
                 reinterpret_cast<const uint8_t *>(&input.writes[0][0]);
+            FieldExprRowMode mode;
+            if (!field_expr_row_mode_from_opcode(s, input.local_opcode, mode, error)) {
+                return;
+            }
             if (!field_expr_fill_core_row<K>(
                     s,
                     row.slice_from(ADAPTER_WIDTH),
                     input_limbs,
                     logged_output,
-                    input.local_opcode,
+                    mode,
                     range_checker,
                     thread_scratch,
-                    false,
                     error
                 )) {
                 return;
@@ -100,10 +103,9 @@ static __global__ void field_expr_replay_tracegen(
                     row.slice_from(ADAPTER_WIDTH),
                     nullptr,
                     nullptr,
-                    UINT32_MAX,
+                    field_expr_dummy_row_mode(),
                     range_checker,
                     thread_scratch,
-                    true,
                     error
                 )) {
                 return;

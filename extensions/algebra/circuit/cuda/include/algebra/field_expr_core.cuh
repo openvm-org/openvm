@@ -9,10 +9,14 @@
 // count, or launch policy, so a chip whose trace is many rows per instruction can call it in a
 // loop, chaining one row's outputs into the next row's inputs.
 //
+// Such a caller supplies its own `FieldExprRowMode`, passes a null logged output, and reads each
+// row's results back through `field_expr_var_limbs`.
+//
 // The interpreter is validated bit-exact against `FieldExpressionFiller::fill_trace_row` (rows and
 // range-checker histograms) on EcAddNe, MulDiv (flags/Select/Div-under-Select/setup rows) and
 // IntMul/IntAdd expressions.
 
+#include "arch/rvr/preflight.cuh" // preflight_set_error
 #include "launcher.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
@@ -473,68 +477,89 @@ __device__ __forceinline__ uint32_t f_of_i64(int64_t v) {
     return static_cast<uint32_t>(m);
 }
 
-// Fill the core sub-row; CUDA tests compare it against FieldExpressionFiller.
-// `core_row` must point at the first core column. When `is_dummy`, inputs are zero,
-// flags false, range checks skipped, is_valid = 0 (mirrors fill_dummy_trace_row).
+// How one row is evaluated. Derived from the local opcode when each opcode selects one flag;
+// supplied directly when the flags vary between rows of one instruction.
+struct FieldExprRowMode {
+    // Flag mask. `FieldExpr` derives `is_setup = is_valid - sum(flags)` and asserts it boolean, so
+    // at most one bit may be set.
+    uint32_t flags;
+    // Validate the leading inputs against the prime and the program's setup values.
+    bool is_setup;
+    // Padding row, as `fill_dummy_trace_row`: zero inputs, no range checks, `is_valid = 0`.
+    bool is_dummy;
+};
+
+static __device__ __forceinline__ FieldExprRowMode field_expr_dummy_row_mode() {
+    return FieldExprRowMode{0, false, true};
+}
+
+// Resolves a row mode from an instruction's local opcode.
+static __device__ bool field_expr_row_mode_from_opcode(
+    const FieldExprProg &s, uint32_t opcode, FieldExprRowMode &mode, uint32_t *err
+) {
+    mode = FieldExprRowMode{0, false, false};
+    for (uint32_t index = 0; index < s.n_opcode_metadata; index++) {
+        const uint32_t *metadata = s.optab + 2 * index;
+        if (metadata[0] != opcode) continue;
+        mode.is_setup = s.needs_setup && metadata[1] == NO_FLAG;
+        if (metadata[1] != NO_FLAG) mode.flags |= uint32_t(1) << metadata[1];
+        return true;
+    }
+    preflight_set_error(err, FIELD_EXPR_BAD_OPCODE_OR_SETUP);
+    return false;
+}
+
+// Canonical limbs of variable `var`, `k` words wide. Saved variables sit at the front of `my_aux`,
+// so a chained caller reads its output variables (`s.outputs[i]`) here to seed the next row. Valid
+// until the next call reusing the same buffer.
+static __device__ __forceinline__ const uint32_t *field_expr_var_limbs(
+    const uint32_t *my_aux, uint32_t var, uint32_t k
+) {
+    return my_aux + var * k;
+}
+
+// Evaluates the expression, leaving every saved variable in `my_aux`. Writes no trace column and
+// counts no range check.
+//
+// `logged_output` holds the instruction's logged memory writes, which LoadOutput ops read and which
+// the computed outputs are checked against. Pass `nullptr` when the output is not in memory; the
+// blob must then be serialized with `DeviceOutputSource::Computed`, which emits no LoadOutput.
+//
+// Separate from the witness half so a chained caller can evaluate sequentially and generate
+// witnesses in parallel. `__noinline__` bounds per-thread register and local-memory use.
 template <uint32_t K>
-static __device__ bool field_expr_fill_core_row(
+static __device__ __noinline__ bool field_expr_eval_values(
     const FieldExprProg &s,
-    RowSlice core_row,
     const uint8_t *in_limbs,
     const uint8_t *logged_output,
-    uint32_t opcode,
-    VariableRangeChecker rc,
+    FieldExprRowMode mode,
     uint32_t *my_aux,
-    bool is_dummy,
     uint32_t *err) {
     constexpr uint32_t k = K;
     const uint32_t nl = s.num_limbs, lb = s.limb_bits;
+    const uint32_t flags = mode.flags;
+    const bool is_dummy = mode.is_dummy;
     uint32_t *var_canon = my_aux; // num_vars * k, retained for the witness phase
     uint32_t *workspace = var_canon + s.num_vars * k;
     uint32_t *slots = workspace; // num_slots * k
     uint32_t *mont_workspace = slots + s.num_slots * k; // 2k+2
     uint32_t *value_extra = mont_workspace + 2 * k + 2; // k
-    int32_t *scratch = reinterpret_cast<int32_t *>(workspace); // scratch_len
-    uint32_t *nacc = reinterpret_cast<uint32_t *>(scratch + s.scratch_len); // 2k
-    uint32_t *q512 = nacc + 2 * k;                              // 2k
 
-    uint32_t flags = 0;
-    bool opcode_found = is_dummy;
-    bool is_setup = false;
-    if (!is_dummy) {
-        for (uint32_t index = 0; index < s.n_opcode_metadata; index++) {
-            const uint32_t *metadata = s.optab + 2 * index;
-            if (metadata[0] == opcode) {
-                opcode_found = true;
-                is_setup = s.needs_setup && metadata[1] == NO_FLAG;
-                if (metadata[1] != NO_FLAG) flags |= uint32_t(1) << metadata[1];
-                break;
+    if (!is_dummy && mode.is_setup) {
+        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+            uint8_t expected = static_cast<uint8_t>(s.p[byte / 4] >> (8 * (byte % 4)));
+            if (in_limbs[byte] != expected) {
+                preflight_set_error(err, FIELD_EXPR_BAD_OPCODE_OR_SETUP);
+                return false;
             }
         }
-        if (!opcode_found) {
-            preflight_set_error(err, FIELD_EXPR_BAD_OPCODE_OR_SETUP);
-            return false;
-        }
-        if (is_setup) {
+        for (uint32_t value = 0; value < s.n_setup_values; value++) {
             for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
-                uint8_t expected =
-                    static_cast<uint8_t>(s.p[byte / 4] >> (8 * (byte % 4)));
-                if (in_limbs[byte] != expected) {
+                size_t input_offset = static_cast<size_t>(value + 1) * s.num_limbs + byte;
+                if (in_limbs[input_offset] !=
+                    static_cast<uint8_t>(s.setup_values[value * s.num_limbs + byte])) {
                     preflight_set_error(err, FIELD_EXPR_BAD_OPCODE_OR_SETUP);
                     return false;
-                }
-            }
-            for (uint32_t value = 0; value < s.n_setup_values; value++) {
-                for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
-                    size_t input_offset =
-                        static_cast<size_t>(value + 1) * s.num_limbs + byte;
-                    if (in_limbs[input_offset] !=
-                        static_cast<uint8_t>(
-                            s.setup_values[value * s.num_limbs + byte]
-                        )) {
-                        preflight_set_error(err, FIELD_EXPR_BAD_OPCODE_OR_SETUP);
-                        return false;
-                    }
                 }
             }
         }
@@ -613,6 +638,12 @@ static __device__ bool field_expr_fill_core_row(
                         value_extra[j] = s.dummy_outputs[a * k + j];
                     }
                 } else {
+                    // A null log requires a `DeviceOutputSource::Computed` blob, which emits no
+                    // LoadOutput.
+                    if (logged_output == nullptr) {
+                        preflight_set_error(err, FIELD_EXPR_BAD_PROGRAM_OP);
+                        return false;
+                    }
                     for (uint32_t j = 0; j < k; j++) value_extra[j] = 0;
                     const uint8_t *src = logged_output + a * nl;
                     for (uint32_t i = 0; i < nl; i++) {
@@ -633,10 +664,12 @@ static __device__ bool field_expr_fill_core_row(
         }
     }
 
-    if (!is_dummy) {
+    // Only a row whose result reached memory can be checked against it. A chained caller's
+    // intermediate outputs are pinned instead by the AIR's transition constraint.
+    if (!is_dummy && logged_output != nullptr) {
         size_t output_byte = 0;
         for (uint32_t output = 0; output < s.n_outputs; output++) {
-            const uint32_t *value = var_canon + s.outputs[output] * k;
+            const uint32_t *value = field_expr_var_limbs(var_canon, s.outputs[output], k);
             for (uint32_t byte = 0; byte < s.num_limbs; byte++, output_byte++) {
                 uint8_t expected =
                     static_cast<uint8_t>(value[byte / 4] >> (8 * (byte % 4)));
@@ -647,6 +680,33 @@ static __device__ bool field_expr_fill_core_row(
             }
         }
     }
+
+    return true;
+}
+
+// Writes the core columns, the quotients and carries proving each limb constraint, and their
+// range-check counts. `core_row` must point at the first core column.
+//
+// `my_aux` must hold the variables `field_expr_eval_values` left for this same row and mode; the
+// workspace above them is reused here as limb scratch.
+template <uint32_t K>
+static __device__ __noinline__ bool field_expr_fill_witness(
+    const FieldExprProg &s,
+    RowSlice core_row,
+    const uint8_t *in_limbs,
+    FieldExprRowMode mode,
+    VariableRangeChecker rc,
+    uint32_t *my_aux,
+    uint32_t *err) {
+    constexpr uint32_t k = K;
+    const uint32_t nl = s.num_limbs, lb = s.limb_bits;
+    const uint32_t flags = mode.flags;
+    const bool is_dummy = mode.is_dummy;
+    const uint32_t *var_canon = my_aux;
+    uint32_t *workspace = my_aux + s.num_vars * k;
+    int32_t *scratch = reinterpret_cast<int32_t *>(workspace); // scratch_len
+    uint32_t *nacc = reinterpret_cast<uint32_t *>(scratch + s.scratch_len); // 2k
+    uint32_t *q512 = nacc + 2 * k;                              // 2k
 
     // ---- trace columns: is_valid, inputs, vars ----
     size_t col = 0;
@@ -824,5 +884,20 @@ static __device__ bool field_expr_fill_core_row(
         return false;
     }
     return true;
+}
+
+// Both halves for one row.
+template <uint32_t K>
+static __device__ bool field_expr_fill_core_row(
+    const FieldExprProg &s,
+    RowSlice core_row,
+    const uint8_t *in_limbs,
+    const uint8_t *logged_output,
+    FieldExprRowMode mode,
+    VariableRangeChecker rc,
+    uint32_t *my_aux,
+    uint32_t *err) {
+    return field_expr_eval_values<K>(s, in_limbs, logged_output, mode, my_aux, err) &&
+           field_expr_fill_witness<K>(s, core_row, in_limbs, mode, rc, my_aux, err);
 }
 
