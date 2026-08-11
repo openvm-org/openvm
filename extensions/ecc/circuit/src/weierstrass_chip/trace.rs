@@ -72,8 +72,8 @@ fn add_byte_offset(
     Ok(pointer)
 }
 
-fn project_step<const NUM_READS: usize, const BLOCKS: usize>(
-    postflight: &Postflight<'_>,
+fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     local_opcode: usize,
     pointer_max_bits: usize,
@@ -179,7 +179,7 @@ fn generate_trace_from_postflights<
     const BLOCKS: usize,
 >(
     chip: &VmChipWrapper<F, FieldExpressionFiller<VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>>>,
-    postflights: &[Postflight<'_>],
+    postflights: &[Postflight<'_, F>],
     opcode_base: usize,
     local_opcodes: &[WeierstrassOpcode],
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -233,7 +233,7 @@ fn generate_trace_from_postflights<
         .par_chunks_exact_mut(width)
         .zip(selected_steps.par_iter().copied())
         .try_for_each(|(row, (postflight_index, step, local_opcode))| {
-            let input = project_step::<NUM_READS, BLOCKS>(
+            let input = project_step::<F, NUM_READS, BLOCKS>(
                 &postflights[postflight_index],
                 step,
                 local_opcode,
@@ -295,7 +295,7 @@ pub(crate) fn generate_add_ne_trace_from_postflight<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 2, BLOCKS>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(
@@ -315,7 +315,7 @@ pub(crate) fn generate_add_ne_trace_from_postflights<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 2, BLOCKS>,
-    postflights: &[Postflight<'_>],
+    postflights: &[Postflight<'_, F>],
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(
@@ -334,7 +334,7 @@ pub(crate) fn generate_double_trace_from_postflight<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 1, BLOCKS>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(
@@ -354,7 +354,7 @@ pub(crate) fn generate_double_trace_from_postflights<
     const BLOCKS: usize,
 >(
     chip: &WeierstrassChip<F, 1, BLOCKS>,
-    postflights: &[Postflight<'_>],
+    postflights: &[Postflight<'_, F>],
     opcode_base: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     generate_trace_from_postflights(

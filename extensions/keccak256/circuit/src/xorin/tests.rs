@@ -132,7 +132,7 @@ fn xorin_test_pointers(
     }
 }
 
-fn set_and_execute<E: Executor + Clone>(
+fn set_and_execute<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut TestPreflight,

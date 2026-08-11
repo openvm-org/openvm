@@ -9,6 +9,7 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode,
 };
 use openvm_riscv_transpiler::BranchLessThanOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BranchLessThanCoreExecutor;
 use crate::adapters::{decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS};
@@ -60,8 +61,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -104,8 +107,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLePreCompute>>()

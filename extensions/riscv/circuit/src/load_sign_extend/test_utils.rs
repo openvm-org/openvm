@@ -32,7 +32,7 @@ pub(crate) const MAX_INS_CAPACITY: usize = 128;
 pub(crate) type F = BabyBear;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
+pub(crate) fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,

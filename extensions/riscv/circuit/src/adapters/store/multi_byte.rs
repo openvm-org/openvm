@@ -262,7 +262,7 @@ type StoreMultiReplay = ([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2], usiz
 impl StoreMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const STORE_WIDTH: usize>(
         &self,
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut StoreMultiByteAdapterCols<F>,

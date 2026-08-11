@@ -19,7 +19,7 @@ use crate::{
 /// Generates the signed byte-load trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &LoadSignExtendByteChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(LOADB.global_opcode());
     let adapter_width = LoadByteAdapterCols::<F>::width();

@@ -63,7 +63,7 @@ const NUM_DEFERRALS: usize = 4;
 const DEFERRAL_COUNT_BUS: BusIndex = 20;
 const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 
-type Harness = TestChipHarness<F, DeferralCallExecutor<F>, DeferralCallAir, DeferralCallChip<F>>;
+type Harness = TestChipHarness<F, DeferralCallExecutor, DeferralCallAir, DeferralCallChip<F>>;
 type BitwisePeriphery = (
     BitwiseOperationLookupAir<BYTE_BITS>,
     SharedBitwiseOperationLookupChip<BYTE_BITS>,
@@ -74,7 +74,7 @@ type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
-    DeferralCallExecutor<F>,
+    DeferralCallExecutor,
     DeferralCallAir,
     DeferralCallChipGpu,
     DeferralCallChip<F>,
@@ -140,7 +140,7 @@ fn set_and_execute_call<E, T>(
     num_deferrals: usize,
 ) -> Instruction
 where
-    E: Executor + Clone,
+    E: Executor<F> + Clone,
     T: TestBuilder<F>,
 {
     let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);

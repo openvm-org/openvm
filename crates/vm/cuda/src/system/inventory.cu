@@ -157,12 +157,11 @@ __global__ void cukernel_build_candidates(
     // Fill all values with Montgomery-encoded initial memory
     read_initial_leaf(rec.values, initial_mem, cell_types, rec.address_space, rec.ptr);
 
-    // Convert canonical touched values to the Montgomery representation used
-    // by proof records.
+    // Overwrite touched block's values (already Montgomery-encoded in input records)
     uint32_t block_idx = (in[row_idx].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
     #pragma unroll
     for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
-        rec.values[block_idx * BLOCK_FE_WIDTH + i] = Fp(in[row_idx].values[i]).asRaw();
+        rec.values[block_idx * BLOCK_FE_WIDTH + i] = in[row_idx].values[i];
     }
     rec.timestamps[block_idx] = in[row_idx].timestamp;
 
@@ -171,8 +170,7 @@ __global__ void cukernel_build_candidates(
         uint32_t block_idx2 = (in[row_idx + 1].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
         #pragma unroll
         for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
-            rec.values[block_idx2 * BLOCK_FE_WIDTH + i] =
-                Fp(in[row_idx + 1].values[i]).asRaw();
+            rec.values[block_idx2 * BLOCK_FE_WIDTH + i] = in[row_idx + 1].values[i];
         }
         rec.timestamps[block_idx2] = in[row_idx + 1].timestamp;
         rec.is_dirty |= uint32_t(in[row_idx + 1].is_dirty != 0);

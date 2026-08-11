@@ -6,8 +6,8 @@ use openvm_circuit::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationProverBuilder, ContinuationVmProof, Executor, MeteredExecutor,
-        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmField,
-        VmFieldExecutionConfig, VmInstance, VmVerificationError,
+        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmExecutionConfig,
+        VmInstance, VmVerificationError,
     },
     system::{
         memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
@@ -15,7 +15,8 @@ use openvm_circuit::{
 };
 use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, prover::ProverBackend, StarkEngine, Val,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
+    StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use tracing::instrument;
@@ -31,7 +32,6 @@ use crate::{
 pub struct AppProver<E, VB>
 where
     E: StarkEngine,
-    Val<E::SC>: VmField,
     VB: ContinuationProverBuilder<E>,
 {
     pub program_name: Option<String>,
@@ -47,7 +47,7 @@ impl<E, VB> AppProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E>,
-    Val<E::SC>: VmField,
+    Val<E::SC>: PrimeField32,
 {
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
     /// If a cached version of the program already exists on device, then directly use the
@@ -124,8 +124,8 @@ where
     )]
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        <VB::VmConfig as VmFieldExecutionConfig<Val<E::SC>>>::Executor:
-            Executor + MeteredExecutor + 'static,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     {
         check_max_constraint_degrees(
             self.vm_config().as_ref(),

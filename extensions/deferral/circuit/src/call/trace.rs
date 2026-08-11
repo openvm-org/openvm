@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::BorrowMut, marker::PhantomData, sync::Arc};
+use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use itertools::Itertools;
 use openvm_circuit::{
@@ -69,9 +69,8 @@ struct FieldAccessReplay<F> {
 /// preflight, while the accumulator updates are recomputed deterministically.
 pub fn generate_trace_from_postflight<F: VmField>(
     chip: &DeferralCallChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
-    postflight.validate_field_values(F::ORDER_U32)?;
     let steps = postflight.steps(DeferralOpcode::CALL.global_opcode());
     let adapter_width = DeferralCallAdapterCols::<F>::width();
     let width = adapter_width + DeferralCallCoreCols::<F>::width();
@@ -139,9 +138,9 @@ pub fn generate_trace_from_postflight<F: VmField>(
                 "Deferral CALL input accumulator pointer overflow",
             )?;
             let access = replay.read_field32(DEFERRAL_AS, pointer)?;
-            old_input_acc_values.extend(access.value.map(F::from_u32));
+            old_input_acc_values.extend(access.value);
             old_input_acc_accesses.push(FieldAccessReplay {
-                previous_value: access.previous_value.map(F::from_u32),
+                previous_value: access.previous_value,
                 previous_timestamp: access.previous_timestamp,
                 timestamp: access.timestamp,
             });
@@ -159,9 +158,9 @@ pub fn generate_trace_from_postflight<F: VmField>(
                 "Deferral CALL output accumulator pointer overflow",
             )?;
             let access = replay.read_field32(DEFERRAL_AS, pointer)?;
-            old_output_acc_values.extend(access.value.map(F::from_u32));
+            old_output_acc_values.extend(access.value);
             old_output_acc_accesses.push(FieldAccessReplay {
-                previous_value: access.previous_value.map(F::from_u32),
+                previous_value: access.previous_value,
                 previous_timestamp: access.previous_timestamp,
                 timestamp: access.timestamp,
             });
@@ -219,10 +218,10 @@ pub fn generate_trace_from_postflight<F: VmField>(
             let access = replay.write_field32(
                 DEFERRAL_AS,
                 pointer,
-                f_memory_op_chunk(&new_input_acc, chunk_idx).map(|value| value.as_canonical_u32()),
+                f_memory_op_chunk(&new_input_acc, chunk_idx),
             )?;
             new_input_acc_accesses.push(FieldAccessReplay {
-                previous_value: access.previous_value.map(F::from_u32),
+                previous_value: access.previous_value,
                 previous_timestamp: access.previous_timestamp,
                 timestamp: access.timestamp,
             });
@@ -237,10 +236,10 @@ pub fn generate_trace_from_postflight<F: VmField>(
             let access = replay.write_field32(
                 DEFERRAL_AS,
                 pointer,
-                f_memory_op_chunk(&new_output_acc, chunk_idx).map(|value| value.as_canonical_u32()),
+                f_memory_op_chunk(&new_output_acc, chunk_idx),
             )?;
             new_output_acc_accesses.push(FieldAccessReplay {
-                previous_value: access.previous_value.map(F::from_u32),
+                previous_value: access.previous_value,
                 previous_timestamp: access.previous_timestamp,
                 timestamp: access.timestamp,
             });
@@ -449,19 +448,9 @@ fn fill_call_core<F: VmField>(
 
 // ========================= CORE ==============================
 
-#[derive(Clone)]
-pub struct DeferralCallCoreExecutor<F> {
+#[derive(Clone, derive_new::new)]
+pub struct DeferralCallCoreExecutor {
     pub(in crate::call) deferral_fns: Vec<Arc<DeferralFn>>,
-    _field: PhantomData<fn() -> F>,
-}
-
-impl<F> DeferralCallCoreExecutor<F> {
-    pub fn new(deferral_fns: Vec<Arc<DeferralFn>>) -> Self {
-        Self {
-            deferral_fns,
-            _field: PhantomData,
-        }
-    }
 }
 
 #[derive(Clone, derive_new::new)]

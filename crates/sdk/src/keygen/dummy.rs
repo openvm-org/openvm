@@ -20,7 +20,7 @@ use {
         SC,
     },
     openvm_circuit::arch::{
-        ContinuationProverBuilder, Executor, MeteredExecutor, VmFieldExecutionConfig,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
     },
     openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, Val},
 };
@@ -142,8 +142,8 @@ where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E> + Clone,
     Val<SC>: PrimeField32,
-    <VB::VmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor:
-        Executor + MeteredExecutor + 'static,
+    <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+        Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
 {
     let dummy_exe = dummy_terminate_exe();
 

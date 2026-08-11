@@ -7,6 +7,7 @@ use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
 use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{run_auipc, AuipcExecutor};
 use crate::adapters::byte_ptr_to_u16_ptr_value;
@@ -38,7 +39,10 @@ impl AuipcExecutor {
     }
 }
 
-impl InterpreterExecutor for AuipcExecutor {
+impl<F> InterpreterExecutor<F> for AuipcExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{AUIPC:?}")
     }
@@ -77,7 +81,10 @@ impl InterpreterExecutor for AuipcExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for AuipcExecutor {
+impl<F> InterpreterMeteredExecutor<F> for AuipcExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AuiPcPreCompute>>()
     }

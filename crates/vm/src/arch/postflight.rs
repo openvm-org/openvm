@@ -5,7 +5,9 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
-use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+};
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::instrument;
@@ -22,8 +24,8 @@ mod index;
 pub(crate) use index::validate_postflight_memory_config;
 pub use index::PostflightProgramIndex;
 use index::{
-    field_reference, memory_index, memory_starts, resolve_program_slot, validate_endpoint,
-    validate_memory_config, validate_step,
+    decode_field_block, field_reference, memory_index, memory_starts, resolve_program_slot,
+    validate_endpoint, validate_memory_config, validate_step,
 };
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -43,8 +45,8 @@ pub(crate) const fn memory_key(address_space: u32, pointer: u32) -> u64 {
 #[derive(Clone, Copy, Debug)]
 pub struct PostflightStep(u32);
 
-pub struct PostflightReplay<'a, 'history> {
-    postflight: &'a Postflight<'history>,
+pub struct PostflightReplay<'a, 'history, F> {
+    postflight: &'a Postflight<'history, F>,
     step: PostflightStep,
     memory_cursor: usize,
     timestamp: u32,
@@ -59,16 +61,7 @@ pub struct MemoryAccess<T> {
 
 pub type U8Access = MemoryAccess<u8>;
 pub type U16Access = MemoryAccess<u16>;
-
-/// Raw integer words logged for a field-width memory access.
-///
-/// Consumers must validate the postflight values for their target field before conversion.
-pub struct Field32Access {
-    pub value: [u32; BLOCK_FE_WIDTH],
-    pub previous_value: [u32; BLOCK_FE_WIDTH],
-    pub previous_timestamp: u32,
-    pub timestamp: u32,
-}
+pub type Field32Access<F> = MemoryAccess<F>;
 
 /// Fills one contiguous range of trace rows from independent preflight steps.
 ///
@@ -103,7 +96,7 @@ where
 /// Steps are grouped by opcode for parallel trace generation. Memory remains
 /// in chronological order; predecessor indexes resolve the value immediately
 /// before each timed access without reconstructing mutable RAM.
-pub struct Postflight<'a> {
+pub struct Postflight<'a, F> {
     program: &'a Program,
     history: &'a PreflightHistory,
     memory_config: MemoryConfig,
@@ -113,8 +106,7 @@ pub struct Postflight<'a> {
     opcode_ranges: BTreeMap<u32, Range<usize>>,
     filtered_exec_frequencies: Vec<u32>,
     memory_predecessors: Vec<u32>,
-    touched_memory: TouchedMemory,
-    max_field_value: Option<u32>,
+    touched_memory: TouchedMemory<F>,
 }
 
 #[derive(Debug, Error)]
@@ -127,7 +119,7 @@ impl PostflightError {
     }
 }
 
-impl<'a> Postflight<'a> {
+impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new(
         program: &'a Program,
         history: &'a PreflightHistory,
@@ -240,8 +232,7 @@ impl<'a> Postflight<'a> {
             *destination += 1;
         }
 
-        let (memory_predecessors, touched_memory, max_field_value) =
-            memory_index(history, memory_config)?;
+        let (memory_predecessors, touched_memory) = memory_index::<F>(history, memory_config)?;
         Ok(Self {
             program,
             history,
@@ -253,7 +244,6 @@ impl<'a> Postflight<'a> {
             filtered_exec_frequencies,
             memory_predecessors,
             touched_memory,
-            max_field_value,
         })
     }
 
@@ -320,24 +310,11 @@ impl<'a> Postflight<'a> {
         &self.filtered_exec_frequencies
     }
 
-    pub fn touched_memory(&self) -> &TouchedMemory {
+    pub fn touched_memory(&self) -> &TouchedMemory<F> {
         &self.touched_memory
     }
 
-    /// Checks that every raw field-memory word is canonical for `field_order`.
-    pub fn validate_field_values(&self, field_order: u32) -> Result<(), PostflightError> {
-        if self
-            .max_field_value
-            .is_some_and(|max_value| max_value >= field_order)
-        {
-            return Err(PostflightError::new(format!(
-                "field sidecar contains a value outside field order {field_order}",
-            )));
-        }
-        Ok(())
-    }
-
-    pub fn replay(&self, step: PostflightStep) -> PostflightReplay<'_, 'a> {
+    pub fn replay(&self, step: PostflightStep) -> PostflightReplay<'_, 'a, F> {
         let memory_cursor = self.memory_starts[step.0 as usize] as usize;
         PostflightReplay {
             postflight: self,
@@ -380,27 +357,30 @@ impl<'a> Postflight<'a> {
         }
     }
 
-    fn field_value(&self, event_index: usize) -> [u32; BLOCK_FE_WIDTH] {
-        self.history.memory.field_values
-            [field_reference(self.history.memory.accesses[event_index].value)]
-        .values
+    fn field_value(&self, event_index: usize) -> [F; BLOCK_FE_WIDTH] {
+        decode_field_block::<F>(
+            self.history.memory.field_values
+                [field_reference(self.history.memory.accesses[event_index].value)],
+        )
     }
 
-    fn previous_field32(&self, event_index: usize) -> [u32; BLOCK_FE_WIDTH] {
+    fn previous_field32(&self, event_index: usize) -> [F; BLOCK_FE_WIDTH] {
         let predecessor = self.memory_predecessors[event_index];
         if predecessor == 0 {
             self.field_value(event_index)
         } else if predecessor & PREDECESSOR_SEED_BIT != 0 {
             let seed =
                 self.history.memory.initial_writes[(predecessor & PREDECESSOR_INDEX_MASK) as usize];
-            self.history.memory.field_initial_values[field_reference(seed.initial_value)].values
+            decode_field_block::<F>(
+                self.history.memory.field_initial_values[field_reference(seed.initial_value)],
+            )
         } else {
             self.field_value(predecessor as usize - 1)
         }
     }
 }
 
-impl PostflightReplay<'_, '_> {
+impl<F: PrimeField32> PostflightReplay<'_, '_, F> {
     pub fn read_u8(
         &mut self,
         address_space: u32,
@@ -449,7 +429,7 @@ impl PostflightReplay<'_, '_> {
         &mut self,
         address_space: u32,
         pointer: u32,
-    ) -> Result<Field32Access, PostflightError> {
+    ) -> Result<Field32Access<F>, PostflightError> {
         self.access_field32(address_space, pointer, false, None)
     }
 
@@ -457,8 +437,8 @@ impl PostflightReplay<'_, '_> {
         &mut self,
         address_space: u32,
         pointer: u32,
-        expected_value: [u32; BLOCK_FE_WIDTH],
-    ) -> Result<Field32Access, PostflightError> {
+        expected_value: [F; BLOCK_FE_WIDTH],
+    ) -> Result<Field32Access<F>, PostflightError> {
         self.access_field32(address_space, pointer, true, Some(expected_value))
     }
 
@@ -594,8 +574,8 @@ impl PostflightReplay<'_, '_> {
         address_space: u32,
         pointer: u32,
         is_write: bool,
-        expected_write: Option<[u32; BLOCK_FE_WIDTH]>,
-    ) -> Result<Field32Access, PostflightError> {
+        expected_write: Option<[F; BLOCK_FE_WIDTH]>,
+    ) -> Result<Field32Access<F>, PostflightError> {
         let (event_index, event) =
             self.consume_event(address_space, pointer, is_write, MemoryCellType::field32())?;
         let value = self.postflight.field_value(event_index);

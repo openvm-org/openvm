@@ -24,7 +24,7 @@ use crate::{
 impl XorinVmFiller {
     fn replay_and_fill_trace_row<F: PrimeField32>(
         &self,
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         row_slice: &mut [F],
@@ -204,7 +204,7 @@ impl XorinVmFiller {
 /// Generates the XORIN trace directly from immutable preflight history.
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &XorinVmChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(XorinOpcode::XORIN.global_opcode());
     let width = XorinVmCols::<F>::width();

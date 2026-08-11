@@ -139,7 +139,7 @@ fn set_and_execute_output<E, T>(
     num_deferrals: usize,
 ) -> Instruction
 where
-    E: Executor + Clone,
+    E: Executor<F> + Clone,
     T: TestBuilder<F>,
 {
     let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);

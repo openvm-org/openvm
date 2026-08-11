@@ -58,7 +58,7 @@ fn run_phantom_test<E>(
     phantom_opcode: VmOpcode,
     num_nops: usize,
 ) where
-    E: Executor + Clone,
+    E: Executor<F> + Clone,
 {
     let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
     let mut pc = F::ZERO;

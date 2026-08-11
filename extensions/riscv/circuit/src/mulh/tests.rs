@@ -115,7 +115,7 @@ fn create_harness(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,

@@ -117,7 +117,7 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
 /// Generates the KeccakF operation trace directly from immutable preflight history.
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &KeccakfOpChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(KeccakfOpcode::KECCAKF.global_opcode());
     let width = KeccakfOpCols::<F>::width();
@@ -157,8 +157,8 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     Ok(trace)
 }
 
-fn replay_step(
-    postflight: &Postflight<'_>,
+fn replay_step<F: PrimeField32>(
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
 ) -> Result<KeccakfReplay, PostflightError> {

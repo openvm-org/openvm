@@ -186,7 +186,7 @@ pub struct CondRdWriteAdapterFiller;
 
 impl RdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut RdWriteAdapterCols<F>,
@@ -203,7 +203,7 @@ impl RdWriteAdapterFiller {
 
 impl CondRdWriteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut CondRdWriteAdapterCols<F>,
@@ -231,7 +231,7 @@ impl CondRdWriteAdapterFiller {
 }
 
 fn replay_rd_write<F: PrimeField32>(
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     mem_helper: &MemoryAuxColsFactory<F>,
     adapter_row: &mut RdWriteAdapterCols<F>,

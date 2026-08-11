@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LessThanImmOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LessThanImmCoreExecutor;
 use crate::adapters::{imm_to_u64, is_canonical_i12};
@@ -56,8 +57,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanImmCoreExecutor<NUM
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for LessThanImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", LessThanImmOpcode::from_usize(opcode - self.offset))
@@ -105,8 +108,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for LessThanImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

@@ -9,6 +9,7 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode,
 };
 use openvm_riscv_transpiler::BranchEqualOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BranchEqualCoreExecutor;
 use crate::adapters::{decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS};
@@ -58,7 +59,10 @@ macro_rules! dispatch {
     };
 }
 
-impl<const NUM_LIMBS: usize> InterpreterExecutor for BranchEqualCoreExecutor<NUM_LIMBS> {
+impl<F, const NUM_LIMBS: usize> InterpreterExecutor<F> for BranchEqualCoreExecutor<NUM_LIMBS>
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BranchEqualOpcode::from_usize(opcode - self.offset))
     }
@@ -97,7 +101,10 @@ impl<const NUM_LIMBS: usize> InterpreterExecutor for BranchEqualCoreExecutor<NUM
     }
 }
 
-impl<const NUM_LIMBS: usize> InterpreterMeteredExecutor for BranchEqualCoreExecutor<NUM_LIMBS> {
+impl<F, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F> for BranchEqualCoreExecutor<NUM_LIMBS>
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqualPreCompute>>()
     }

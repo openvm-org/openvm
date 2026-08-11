@@ -16,6 +16,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::bytes_to_u32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
@@ -57,7 +58,7 @@ impl KeccakfExecutor {
     }
 }
 
-impl InterpreterExecutor for KeccakfExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", KeccakfOpcode::KECCAKF)
     }
@@ -97,7 +98,7 @@ impl InterpreterExecutor for KeccakfExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for KeccakfExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<KeccakfPreCompute>>()
     }

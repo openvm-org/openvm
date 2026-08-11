@@ -377,9 +377,18 @@ fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order
             .collect::<Vec<_>>(),
         [(MEMORY_AS, 0, 5), (DEFERRAL_AS, 0, 4), (DEFERRAL_AS, 4, 7),]
     );
-    assert_eq!(touched[0].values, [0x00aa, 2, 3, 4]);
-    assert_eq!(touched[1].values, first_write.values);
-    assert_eq!(touched[2].values, second_write.values);
+    assert_eq!(
+        touched[0].values.map(|value| value.as_canonical_u32()),
+        [0x00aa, 2, 3, 4]
+    );
+    assert_eq!(
+        touched[1].values.map(|value| value.as_canonical_u32()),
+        first_write.values
+    );
+    assert_eq!(
+        touched[2].values.map(|value| value.as_canonical_u32()),
+        second_write.values
+    );
     assert_eq!(
         touched
             .iter()
@@ -670,7 +679,8 @@ fn gpu_program_index_matches_cpu_oracle_and_preserves_order() {
         0,
     );
     let expected =
-        Postflight::new(&cpu_program, &history, &MemoryConfig::default(), Some(0)).unwrap();
+        Postflight::<CudaField>::new(&cpu_program, &history, &MemoryConfig::default(), Some(0))
+            .unwrap();
     let actual = gpu_plan(&program, &history, endpoint).unwrap();
     let actual_steps = actual.steps_host().unwrap();
     let expected_steps = expected

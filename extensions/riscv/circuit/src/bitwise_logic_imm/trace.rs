@@ -17,7 +17,7 @@ use crate::{
 /// Generates the RV64 immediate bitwise trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &BitwiseLogicImmChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
         BaseAluImmOpcode::XORI,

@@ -39,7 +39,7 @@ struct DeferralCallPrecompute<'a> {
     deferral_fn: &'a DeferralFn,
 }
 
-impl<F: VmField> DeferralCallExecutor<F> {
+impl DeferralCallExecutor {
     #[inline(always)]
     fn pre_compute_impl<'a>(
         &'a self,
@@ -84,7 +84,7 @@ impl<F: VmField> DeferralCallExecutor<F> {
     }
 }
 
-impl<F: VmField> InterpreterExecutor for DeferralCallExecutor<F> {
+impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         format!("{:?}", DeferralOpcode::CALL)
     }
@@ -124,7 +124,7 @@ impl<F: VmField> InterpreterExecutor for DeferralCallExecutor<F> {
     }
 }
 
-impl<F: VmField> InterpreterMeteredExecutor for DeferralCallExecutor<F> {
+impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DeferralCallPrecompute>>()
     }

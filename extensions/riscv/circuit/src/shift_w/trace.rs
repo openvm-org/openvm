@@ -18,7 +18,7 @@ use crate::{
 /// Generates the SLLW/SRLW trace directly from immutable preflight history.
 pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftWLogicalChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftWOpcode::SLLW, ShiftWOpcode::SRLW];
     let rows_used = opcodes
@@ -113,7 +113,7 @@ pub fn generate_logical_trace_from_postflight<F: PrimeField32>(
 /// Generates the SRAW trace directly from immutable preflight history.
 pub fn generate_right_arithmetic_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftWRightArithmeticChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = ShiftWOpcode::SRAW.global_opcode();
     let rows_used = postflight.steps(opcode).len();

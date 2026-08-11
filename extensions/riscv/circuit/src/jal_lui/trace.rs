@@ -17,7 +17,7 @@ use crate::adapters::{CondRdWriteAdapterCols, CondRdWriteAdapterFiller, U16_BITS
 /// Generates the JAL/LUI trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &JalLuiChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [JAL, LUI];
     let rows_used = opcodes

@@ -19,7 +19,7 @@ use crate::adapters::{
 /// Generates the AUIPC trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &AuipcChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(AUIPC.global_opcode());
     let adapter_width = RdWriteAdapterCols::<F>::width();

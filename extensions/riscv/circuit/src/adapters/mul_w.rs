@@ -175,7 +175,7 @@ pub struct MultWAdapterFiller {
 impl MultWAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, M>(
         &self,
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut MultWAdapterCols<F>,

@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalrOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::JalrExecutor;
 use crate::adapters::{address_add_imm, bytes_to_u32};
@@ -55,7 +56,10 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for JalrExecutor {
+impl<F> InterpreterExecutor<F> for JalrExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -96,7 +100,10 @@ impl InterpreterExecutor for JalrExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for JalrExecutor {
+impl<F> InterpreterMeteredExecutor<F> for JalrExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<JalrPreCompute>>()
     }

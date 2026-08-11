@@ -23,6 +23,7 @@ use openvm_instructions::{
     PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::RevealOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{address_add_imm, bytes_to_u32, sign_extend_imm16};
 
@@ -118,7 +119,7 @@ impl RevealExecutor {
     }
 }
 
-impl InterpreterExecutor for RevealExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for RevealExecutor {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         "REVEAL".to_owned()
     }
@@ -152,7 +153,7 @@ impl InterpreterExecutor for RevealExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for RevealExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for RevealExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<RevealPreCompute>>()
     }

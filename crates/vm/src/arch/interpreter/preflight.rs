@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -15,8 +15,6 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-type PreflightCtxFactory = fn(&GuestMemory, Option<u64>) -> PreflightCtx;
-
 impl InterpretedInstance<'_, PreflightCtx> {
     /// Executes exactly one metered segment from its architectural start state.
     pub fn execute_segment<F: PrimeField32>(
@@ -24,20 +22,7 @@ impl InterpretedInstance<'_, PreflightCtx> {
         state: VmState<GuestMemory>,
         segment: &Segment,
     ) -> Result<PreflightOutput, ExecutionError> {
-        self.execute_segment_with_ctx_factory(state, segment, PreflightCtx::new_for_field::<F>)
-    }
-
-    fn execute_segment_with_ctx_factory(
-        &self,
-        state: VmState<GuestMemory>,
-        segment: &Segment,
-        ctx_factory: PreflightCtxFactory,
-    ) -> Result<PreflightOutput, ExecutionError> {
-        let mut output = self.execute_preflight_from_state_with_ctx_factory(
-            state,
-            Some(segment.num_insns),
-            ctx_factory,
-        )?;
+        let mut output = self.execute_preflight_from_state::<F>(state, Some(segment.num_insns))?;
         if let Some(exit_code) = output.exit_code {
             if exit_code != ExitCode::Success as u32 {
                 return Err(ExecutionError::FailedWithExitCode(exit_code));
@@ -53,20 +38,7 @@ impl InterpretedInstance<'_, PreflightCtx> {
         from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<PreflightOutput, ExecutionError> {
-        self.execute_preflight_from_state_with_ctx_factory(
-            from_state,
-            num_insns,
-            PreflightCtx::new_for_field::<F>,
-        )
-    }
-
-    fn execute_preflight_from_state_with_ctx_factory(
-        &self,
-        from_state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
-        ctx_factory: PreflightCtxFactory,
-    ) -> Result<PreflightOutput, ExecutionError> {
-        let ctx = ctx_factory(&from_state.memory, num_insns);
+        let ctx = PreflightCtx::new::<F>(&from_state.memory, num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
         let start_instret_left = exec_state.ctx.instret_left;
 
@@ -108,36 +80,22 @@ impl InterpretedInstance<'_, PreflightCtx> {
 /// pre-compute data may point into executors. Proving instances own both the VM
 /// and this interpreter, so this wrapper keeps the shared inventory alive for
 /// exactly as long as the borrowed interpreter.
-pub struct PreflightInterpretedInstance<E> {
+pub struct PreflightInterpretedInstance<F, E> {
     // Drop the interpreter before releasing the inventory that backs its
     // pre-compute pointers.
     inner: InterpretedInstance<'static, PreflightCtx>,
     _inventory: Arc<ExecutorInventory<E>>,
-    ctx_factory: PreflightCtxFactory,
+    _field: PhantomData<fn() -> F>,
 }
 
-impl<E> PreflightInterpretedInstance<E>
+impl<F, E> PreflightInterpretedInstance<F, E>
 where
-    E: Executor + 'static,
+    F: PrimeField32,
+    E: Executor<F> + 'static,
 {
     pub fn new(
         exe: &VmExe,
         inventory: Arc<ExecutorInventory<E>>,
-    ) -> Result<Self, StaticProgramError> {
-        Self::new_with_ctx_factory(exe, inventory, PreflightCtx::new)
-    }
-
-    pub fn new_for_field<F: PrimeField32>(
-        exe: &VmExe,
-        inventory: Arc<ExecutorInventory<E>>,
-    ) -> Result<Self, StaticProgramError> {
-        Self::new_with_ctx_factory(exe, inventory, PreflightCtx::new_for_field::<F>)
-    }
-
-    fn new_with_ctx_factory(
-        exe: &VmExe,
-        inventory: Arc<ExecutorInventory<E>>,
-        ctx_factory: PreflightCtxFactory,
     ) -> Result<Self, StaticProgramError> {
         let inventory_ref = unsafe {
             // SAFETY:
@@ -146,11 +104,11 @@ where
             // - moving the Arc does not move its allocation.
             &*Arc::as_ptr(&inventory)
         };
-        let inner = InterpretedInstance::new(inventory_ref, exe)?;
+        let inner = InterpretedInstance::new::<F, _>(inventory_ref, exe)?;
         Ok(Self {
             inner,
             _inventory: inventory,
-            ctx_factory,
+            _field: PhantomData,
         })
     }
 
@@ -164,8 +122,7 @@ where
         state: VmState<GuestMemory>,
         segment: &Segment,
     ) -> Result<PreflightOutput, ExecutionError> {
-        self.inner
-            .execute_segment_with_ctx_factory(state, segment, self.ctx_factory)
+        self.inner.execute_segment::<F>(state, segment)
     }
 
     /// Low-level interpreter entry point.
@@ -178,6 +135,6 @@ where
         num_insns: Option<u64>,
     ) -> Result<PreflightOutput, ExecutionError> {
         self.inner
-            .execute_preflight_from_state_with_ctx_factory(state, num_insns, self.ctx_factory)
+            .execute_preflight_from_state::<F>(state, num_insns)
     }
 }

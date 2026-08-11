@@ -15,7 +15,7 @@ use crate::adapters::{BranchAdapterCols, BranchAdapterFiller};
 /// Generates the RV64 equality-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &BranchEqualChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE];
     let rows_used = opcodes

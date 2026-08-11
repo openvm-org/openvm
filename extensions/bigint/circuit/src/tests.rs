@@ -326,7 +326,7 @@ fn blt_branch_fn(
 }
 
 #[allow(clippy::type_complexity)]
-fn set_and_execute_rand<E: Executor + Clone>(
+fn set_and_execute_rand<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut TestPreflight,

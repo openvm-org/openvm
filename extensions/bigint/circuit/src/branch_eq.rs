@@ -13,6 +13,7 @@ use openvm_riscv_circuit::adapters::{
     bytes_to_u32, decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS,
 };
 use openvm_riscv_transpiler::BranchEqualOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256},
@@ -42,7 +43,7 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for BranchEqual256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for BranchEqual256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -85,7 +86,7 @@ impl InterpreterExecutor for BranchEqual256Executor {
     }
 }
 
-impl InterpreterMeteredExecutor for BranchEqual256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BranchEqual256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqPreCompute>>()
     }

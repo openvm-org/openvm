@@ -16,7 +16,7 @@ use crate::{
     arch::{
         debug_proving_ctx, verify_segments, vm::VirtualMachine, Executor, ExitCode,
         MeteredExecutor, PostflightTracegen, Streams, VmBuilder, VmCircuitConfig, VmConfig,
-        VmField, VmFieldExecutionConfig,
+        VmExecutionConfig, VmField,
     },
     system::memory::MemoryImage,
 };
@@ -46,16 +46,17 @@ cfg_if::cfg_if! {
 }
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
-// VmFieldExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes
+// VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes
 // them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe>)
 where
     VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
-    VC: VmFieldExecutionConfig<BabyBear>
+    VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmFieldExecutionConfig<BabyBear>>::Executor: Executor + MeteredExecutor + 'static,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
     VB: PostflightTracegen<TestStarkEngine>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
@@ -71,10 +72,11 @@ pub fn air_test_with_min_segments<VB, VC>(
 ) -> Option<MemoryImage>
 where
     VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
-    VC: VmFieldExecutionConfig<BabyBear>
+    VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmFieldExecutionConfig<BabyBear>>::Executor: Executor + MeteredExecutor + 'static,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
     VB: PostflightTracegen<TestStarkEngine>,
 {
     let mut log_blowup = 1;
@@ -157,8 +159,8 @@ where
     E: StarkEngine,
     Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmFieldExecutionConfig<Val<E::SC>>>::Executor:
-        Executor + MeteredExecutor + 'static,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     /*
@@ -290,8 +292,8 @@ where
     E: StarkEngine,
     Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmFieldExecutionConfig<Val<E::SC>>>::Executor:
-        Executor + MeteredExecutor + 'static,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     VB: PostflightTracegen<E>,
     Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
@@ -365,7 +367,6 @@ fn validate_metered_estimates<E, VB>(
     seg_idx: usize,
 ) where
     E: StarkEngine,
-    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
 {
     let air_names: Vec<_> = vm.air_names().collect();

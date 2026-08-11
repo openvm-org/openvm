@@ -35,7 +35,7 @@ struct HintStoreReplayInput {
 /// Generates the RV64 hint-store trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &HintStoreChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [HINT_STORED, HINT_BUFFER];
     let mut rows_used = 0usize;
@@ -92,13 +92,13 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
     Ok(trace)
 }
 
-fn replay_header<'postflight, 'history>(
-    postflight: &'postflight Postflight<'history>,
+fn replay_header<'postflight, 'history, F: PrimeField32>(
+    postflight: &'postflight Postflight<'history, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
 ) -> Result<
     (
-        PostflightReplay<'postflight, 'history>,
+        PostflightReplay<'postflight, 'history, F>,
         HintStoreReplayInput,
     ),
     PostflightError,

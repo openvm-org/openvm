@@ -22,6 +22,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, LOADWU};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{load_width_for_opcode, LoadExecutor};
 use crate::adapters::{
@@ -97,7 +98,10 @@ macro_rules! dispatch {
     };
 }
 
-impl<const LOAD_WIDTH: usize> InterpreterExecutor for LoadExecutor<LOAD_WIDTH> {
+impl<F, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadExecutor<LOAD_WIDTH>
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", LoadStoreOpcode::from_usize(opcode - self.offset))
     }
@@ -136,7 +140,10 @@ impl<const LOAD_WIDTH: usize> InterpreterExecutor for LoadExecutor<LOAD_WIDTH> {
     }
 }
 
-impl<const LOAD_WIDTH: usize> InterpreterMeteredExecutor for LoadExecutor<LOAD_WIDTH> {
+impl<F, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F> for LoadExecutor<LOAD_WIDTH>
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<LoadPreCompute>>()
     }

@@ -5,6 +5,7 @@ use openvm_circuit::{
     },
     utils::{test_gpu_engine, test_system_config},
 };
+use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
@@ -159,7 +160,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =

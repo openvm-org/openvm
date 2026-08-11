@@ -141,7 +141,7 @@ pub type Handler<CTX> = unsafe fn(
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
-pub trait InterpreterExecutor {
+pub trait InterpreterExecutor<F> {
     /// Returns the display name for an absolute opcode supported by this executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
 
@@ -172,13 +172,13 @@ pub trait InterpreterExecutor {
         Ctx: ExecutionCtxTrait;
 }
 
-pub trait Executor: InterpreterExecutor {}
-impl<T> Executor for T where T: InterpreterExecutor {}
+pub trait Executor<F>: InterpreterExecutor<F> {}
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
-pub trait InterpreterMeteredExecutor {
+pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -209,8 +209,8 @@ pub trait InterpreterMeteredExecutor {
         Ctx: MeteredExecutionCtxTrait;
 }
 
-pub trait MeteredExecutor: InterpreterMeteredExecutor {}
-impl<T> MeteredExecutor for T where T: InterpreterMeteredExecutor {}
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 
 /// Global VM state accessible during instruction execution.
 /// The state is generic in guest memory `MEM` and execution context `CTX`.

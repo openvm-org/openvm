@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::MulHOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::MulHCoreExecutor;
 
@@ -51,8 +52,10 @@ macro_rules! dispatch {
     };
 }
 
-impl<const LIMB_BITS: usize> InterpreterExecutor
+impl<F, const LIMB_BITS: usize> InterpreterExecutor<F>
     for MulHCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -95,8 +98,10 @@ impl<const LIMB_BITS: usize> InterpreterExecutor
     }
 }
 
-impl<const LIMB_BITS: usize> InterpreterMeteredExecutor
+impl<F, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for MulHCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MulHPreCompute>>()

@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::DivRemWCoreExecutor;
 
@@ -59,7 +60,10 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for DivRemWCoreExecutor {
+impl<F> InterpreterExecutor<F> for DivRemWCoreExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
     }
@@ -98,7 +102,10 @@ impl InterpreterExecutor for DivRemWCoreExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for DivRemWCoreExecutor {
+impl<F> InterpreterMeteredExecutor<F> for DivRemWCoreExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DivRemWPreCompute>>()
     }

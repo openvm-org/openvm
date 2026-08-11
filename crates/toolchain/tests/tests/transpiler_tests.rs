@@ -23,9 +23,12 @@ use openvm_riscv_circuit::{
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
+
+type F = BabyBear;
 
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -73,7 +76,7 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv64IoTranspilerExtension),
     )?;
     let config = Rv64ImConfig::default();
-    let executor = VmExecutor::new(config)?;
+    let executor = VmExecutor::<F, _>::new(config)?;
     let instance = executor.instance(&exe)?;
     instance.execute(vec![])?;
     Ok(())
@@ -137,7 +140,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let executor = VmExecutor::new(config)?;
+    let executor = VmExecutor::<F, _>::new(config)?;
     let instance = executor.instance(&openvm_exe)?;
     instance.execute(vec![])?;
     Ok(())

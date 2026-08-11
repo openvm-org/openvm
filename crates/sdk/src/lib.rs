@@ -29,7 +29,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
         InitFileGenerator, MeteredExecutor, VirtualMachine, VirtualMachineError, VmBuilder,
-        VmFieldExecutionConfig, VmFieldExecutor, VmState,
+        VmExecutionConfig, VmExecutor, VmState,
     },
     system::memory::{merkle::public_values::extract_public_values, online::GuestMemory},
 };
@@ -145,7 +145,7 @@ pub struct GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmFieldExecutionConfig<F>,
+    VB::VmConfig: VmExecutionConfig<F>,
 {
     #[getset(get = "pub")]
     app_config: AppConfig<VB::VmConfig>,
@@ -172,7 +172,7 @@ where
     /// for more specific execution purposes. By default, it is recommended to use the
     /// [`execute`](GenericSdk::execute) method.
     #[getset(get = "pub")]
-    executor: VmFieldExecutor<F, VB::VmConfig>,
+    executor: VmExecutor<F, VB::VmConfig>,
 
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     agg_prover: OnceLock<Arc<AggProver>>,
@@ -487,7 +487,7 @@ impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E> + Clone,
-    <VB::VmConfig as VmFieldExecutionConfig<F>>::Executor: Executor + MeteredExecutor + 'static,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
 {
     fn app_vm(&self) -> Result<VirtualMachine<E, VB>, SdkError> {
         let app_pk = self.app_pk();

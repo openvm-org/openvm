@@ -29,7 +29,7 @@ use openvm_pairing_transpiler::{PairingPhantom, PairingTranspilerExtension};
 use openvm_riscv_transpiler::{
     HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
-use openvm_stark_sdk::openvm_stark_backend::StarkEngine;
+use openvm_stark_sdk::{openvm_stark_backend::StarkEngine, p3_baby_bear::BabyBear};
 use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -117,7 +117,7 @@ fn prove_pairing_checkpoint(
     input: Vec<Vec<u8>>,
 ) -> Result<()> {
     *config.as_mut() = test_system_config();
-    let executor = VmExecutor::new(config.clone())?;
+    let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
     let checkpoint = executor.preflight_instance(&exe)?;
     let pairing_pcs = exe
         .program

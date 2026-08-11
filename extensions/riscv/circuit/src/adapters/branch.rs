@@ -113,7 +113,7 @@ pub struct BranchAdapterFiller;
 
 impl BranchAdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut BranchAdapterCols<F>,

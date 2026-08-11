@@ -44,7 +44,7 @@ where
 /// generator.
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &KeccakfPermChip,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let preimages = std::mem::take(&mut *chip.shared_preimages.lock().unwrap());
     let expected_preimages = postflight

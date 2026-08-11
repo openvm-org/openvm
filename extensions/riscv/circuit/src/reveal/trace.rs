@@ -18,7 +18,7 @@ use crate::adapters::{
 
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &RevealChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(RevealOpcode::REVEAL.global_opcode());
     let width = RevealCols::<F>::width();

@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::AddICoreExecutor;
 use crate::adapters::{imm_to_u64, is_canonical_i12, U16_BITS};
@@ -46,7 +47,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> AddICoreExecutor<NUM_LIMBS,
     }
 }
 
-impl<const NUM_LIMBS: usize> InterpreterExecutor for AddICoreExecutor<NUM_LIMBS, U16_BITS> {
+impl<F, const NUM_LIMBS: usize> InterpreterExecutor<F> for AddICoreExecutor<NUM_LIMBS, U16_BITS>
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         if NUM_LIMBS * U16_BITS == 32 {
             format!("{:?}", BaseAluWImmOpcode::from_usize(opcode - self.offset))
@@ -91,7 +95,11 @@ impl<const NUM_LIMBS: usize> InterpreterExecutor for AddICoreExecutor<NUM_LIMBS,
     }
 }
 
-impl<const NUM_LIMBS: usize> InterpreterMeteredExecutor for AddICoreExecutor<NUM_LIMBS, U16_BITS> {
+impl<F, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F>
+    for AddICoreExecutor<NUM_LIMBS, U16_BITS>
+where
+    F: PrimeField32,
+{
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AddIPreCompute>>()

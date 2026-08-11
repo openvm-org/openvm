@@ -14,7 +14,7 @@ use crate::adapters::{JalrAdapterCols, JalrAdapterFiller, PTR_U16_LIMBS, U16_BIT
 /// Generates the RV64 JALR trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &JalrChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(JalrOpcode::JALR.global_opcode());
     let adapter_width = JalrAdapterCols::<F>::width();

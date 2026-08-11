@@ -15,6 +15,7 @@ use openvm_instructions::{
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::FieldExprVecHeapExecutor;
 use crate::fields::{
@@ -239,7 +240,7 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
     }
 }
 
-impl<const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor
+impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor<F>
     for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
     fn get_opcode_name(&self, _opcode: usize) -> String {
@@ -296,7 +297,7 @@ impl<const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor
     }
 }
 
-impl<const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor
+impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor<F>
     for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
     #[inline(always)]

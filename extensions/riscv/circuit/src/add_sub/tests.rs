@@ -80,7 +80,7 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     )
 }
 
-fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,

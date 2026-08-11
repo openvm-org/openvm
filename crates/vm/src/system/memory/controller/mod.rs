@@ -163,7 +163,7 @@ impl<F: VmField> MemoryController<F> {
     /// `(address_space, pointer)`, as produced by postflight.
     pub(crate) fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         &mut self,
-        final_memory: &TouchedMemory,
+        final_memory: &TouchedMemory<F>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let MemoryInterface {
             boundary_chip,

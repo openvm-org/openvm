@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftRightArithmeticImmCoreExecutor;
 
@@ -59,8 +60,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for ShiftRightArithmeticImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         if NUM_LIMBS * LIMB_BITS == 32 {
@@ -99,8 +102,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for ShiftRightArithmeticImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftRightArithmeticImmPreCompute>>()

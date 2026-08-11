@@ -139,7 +139,7 @@ pub struct MultAdapterFiller;
 
 impl MultAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, M>(
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut MultAdapterCols<F>,

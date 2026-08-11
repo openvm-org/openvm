@@ -94,7 +94,7 @@ impl WeierstrassExtension {
 }
 
 #[cfg(feature = "rvr")]
-impl VmRvrExtension for WeierstrassExtension {
+impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
         for curve in &self.supported_curves {
             if let Some(expected) = CurveType::from_struct_name(&curve.struct_name) {

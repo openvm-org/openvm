@@ -1485,9 +1485,7 @@ __device__ bool replay_chunk(
                 state.pc += 4;
                 state.timestamp++;
             } else if (opcode == PHANTOM_OPCODE_BASE) {
-                if (instruction->words[3] > UINT16_MAX ||
-                    instruction->words[4] > UINT16_MAX || instruction->words[5] != 0 ||
-                    instruction->words[6] != 0 || instruction->words[7] != 0) {
+                if (!replay_valid_phantom_instruction(*instruction, PHANTOM_OPCODE_BASE)) {
                     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
                     return false;
                 }

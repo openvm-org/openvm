@@ -168,7 +168,7 @@ impl<C: Sha2Config + 'static> TestHarness<C> {
 
 // execute one SHA2_UPDATE instruction
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_single_block<C: Sha2Config, E: Executor + Clone>(
+fn set_and_execute_single_block<C: Sha2Config, E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut TestPreflight,
@@ -379,7 +379,7 @@ fn rand_sha384_single_block_test() {
 /// Execute multiple SHA2_UPDATE instructions to hash an entire message
 ///////////////////////////////////////////////////////////////////////////////////////
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_full_message<C: Sha2Config + 'static, E: Executor + Clone>(
+fn set_and_execute_full_message<C: Sha2Config + 'static, E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut TestPreflight,

@@ -110,8 +110,8 @@ fn validate_alu_instruction(instruction: &Instruction) -> Result<(), PostflightE
     Ok(())
 }
 
-fn read_pointer_register(
-    replay: &mut openvm_circuit::arch::PostflightReplay<'_, '_>,
+fn read_pointer_register<F: PrimeField32>(
+    replay: &mut openvm_circuit::arch::PostflightReplay<'_, '_, F>,
     byte_pointer: u32,
     pointer_max_bits: usize,
 ) -> Result<(openvm_circuit::arch::U16Access, u32), PostflightError> {
@@ -154,7 +154,7 @@ fn split_byte_blocks(
 }
 
 fn replay_alu_u16<F: PrimeField32, M>(
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
@@ -240,7 +240,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
 }
 
 fn replay_alu_bytes<F: PrimeField32, M>(
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
@@ -330,7 +330,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
 }
 
 fn replay_branch<F: PrimeField32, M>(
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
@@ -397,7 +397,7 @@ fn replay_branch<F: PrimeField32, M>(
     })
 }
 
-fn opcodes_rows(postflight: &Postflight<'_>, opcodes: &[VmOpcode]) -> usize {
+fn opcodes_rows<F: PrimeField32>(postflight: &Postflight<'_, F>, opcodes: &[VmOpcode]) -> usize {
     opcodes
         .iter()
         .map(|&opcode| postflight.steps(opcode).len())
@@ -439,7 +439,7 @@ fn add_sub(
 
 pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
     chip: &AddSub256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BaseAluOpcode::ADD, BaseAluOpcode::SUB];
@@ -485,7 +485,7 @@ pub(crate) fn generate_add_sub_trace<F: PrimeField32>(
 
 pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
     chip: &BitwiseLogic256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
     range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -642,7 +642,7 @@ fn fill_less_than<F: PrimeField32>(
 
 pub(crate) fn generate_less_than_trace<F: PrimeField32>(
     chip: &LessThan256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [LessThanOpcode::SLT, LessThanOpcode::SLTU];
@@ -707,7 +707,7 @@ fn branch_eq(
 
 pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
     chip: &BranchEqual256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
     range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -788,7 +788,7 @@ fn branch_compare(
 
 pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
     chip: &BranchLessThan256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
@@ -940,7 +940,7 @@ fn mul_with_carry(x: &[u8; INT256_NUM_U8_LIMBS], y: &[u8; INT256_NUM_U8_LIMBS]) 
 
 pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
     chip: &Multiplication256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
     range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -1088,7 +1088,7 @@ fn fill_shift_decomposition<F: PrimeField32>(
 
 pub(crate) fn generate_shift_logical_trace<F: PrimeField32>(
     chip: &ShiftLogical256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftOpcode::SLL, ShiftOpcode::SRL];
@@ -1189,7 +1189,7 @@ fn shift_arithmetic(
 
 pub(crate) fn generate_shift_arithmetic_trace<F: PrimeField32>(
     chip: &ShiftRightArithmetic256Chip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = Shift256Opcode(ShiftOpcode::SRA).global_opcode();

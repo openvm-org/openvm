@@ -174,7 +174,7 @@ impl<A> StoreByteFiller<A> {
 impl StoreByteFiller<StoreByteAdapterFiller> {
     pub(super) fn replay<F: PrimeField32>(
         &self,
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut StoreByteAdapterCols<F>,

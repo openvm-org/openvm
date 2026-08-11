@@ -2,12 +2,11 @@ extern crate alloc;
 extern crate proc_macro;
 
 use itertools::{multiunzip, Itertools};
-use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
-    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields, Ident,
-    Meta, Token,
+    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields,
+    GenericParam, Ident, Meta, Token,
 };
 
 mod common;
@@ -40,9 +39,9 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause
-                .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterExecutor });
+            where_clause.predicates.push(
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterExecutor<F> },
+            );
 
             // We use the macro's feature to decide whether to generate the impl or not. This avoids
             // the target crate needing the "tco" feature defined.
@@ -63,7 +62,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor<F> for #name #ty_generics #where_clause {
                     fn get_opcode_name(&self, opcode: usize) -> String {
                         self.0.get_opcode_name(opcode)
                     }
@@ -103,25 +102,38 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
             let mut new_generics = generics.clone();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
             let (get_opcode_name_arms, pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let get_opcode_name_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor>::get_opcode_name(x, opcode)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::get_opcode_name(x, opcode)
                 };
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor>::pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::pre_compute_size(x)
                 };
                 let pre_compute_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor>::pre_compute(x, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
                 };
                 let handler_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor>::handler(x, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::handler(x, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::InterpreterExecutor
+                    #field_ty: ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>
                 };
                 (get_opcode_name_arm, pre_compute_size_arm, pre_compute_arm, handler_arm, where_predicate)
             }));
@@ -153,7 +165,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     fn get_opcode_name(&self, opcode: usize) -> String {
                         match self {
                             #(#get_opcode_name_arms,)*
@@ -214,9 +226,9 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             // crate.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause.predicates.push(
-                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterMeteredExecutor },
-            );
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterMeteredExecutor<F> });
 
             // We use the macro's feature to decide whether to generate the impl or not. This avoids
             // the target crate needing the "tco" feature defined.
@@ -238,7 +250,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             let metered_handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InterpreterMeteredExecutor for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterMeteredExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn metered_pre_compute_size(&self) -> usize {
                         self.0.metered_pre_compute_size()
@@ -274,22 +286,35 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
             let mut new_generics = generics.clone();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
             let (pre_compute_size_arms, metered_pre_compute_arms, _metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor>::metered_pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
                 };
                 let metered_pre_compute_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor>::metered_pre_compute(x, chip_idx, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
                 };
                 let metered_handler_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor>::metered_handler(x, chip_idx, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>>::metered_handler(x, chip_idx, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::InterpreterMeteredExecutor
+                    #field_ty: ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>
                 };
                 (pre_compute_size_arm, metered_pre_compute_arm, metered_handler_arm, where_predicate)
             }));
@@ -323,7 +348,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             let metered_handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InterpreterMeteredExecutor for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn metered_pre_compute_size(&self) -> usize {
                         match self {
@@ -439,7 +464,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
 
     match &ast.data {
         syn::Data::Struct(inner) => match generate_config_traits_impl(name, inner) {
-            Ok(tokens) => tokens.into(),
+            Ok(tokens) => tokens,
             Err(err) => err.to_compile_error().into(),
         },
         _ => syn::Error::new(name.span(), "Only structs are supported")
@@ -448,16 +473,13 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
     }
 }
 
-fn generate_config_traits_impl(
-    name: &Ident,
-    inner: &DataStruct,
-) -> syn::Result<proc_macro2::TokenStream> {
+fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<TokenStream> {
     let gen_name_with_uppercase_idents = |ident: &Ident| {
         let mut name = ident.to_string().chars().collect::<Vec<_>>();
         assert!(name[0].is_lowercase(), "Field name must not be capitalized");
-        let res_lower = Ident::new(&name.iter().collect::<String>(), Span::call_site());
+        let res_lower = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
         name[0] = name[0].to_ascii_uppercase();
-        let res_upper = Ident::new(&name.iter().collect::<String>(), Span::call_site());
+        let res_upper = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
         (res_lower, res_upper)
     };
 
@@ -495,10 +517,9 @@ fn generate_config_traits_impl(
     let mut create_executors = Vec::new();
     let mut create_airs = Vec::new();
     let mut extend_rvr = Vec::new();
-    let mut executor_uses_field = false;
-    let mut field_execution = false;
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
+    execution_where_predicates.push(parse_quote! { F: ::openvm_circuit::arch::VmField });
 
     let source_field_ty = source_field.ty.clone();
 
@@ -506,52 +527,24 @@ fn generate_config_traits_impl(
         let (ext_field_name, ext_name_upper) =
             gen_name_with_uppercase_idents(e.ident.as_ref().expect("field must be named"));
         let executor_type = parse_executor_type(e)?;
-        let field_extension = has_field_marker(e, "extension")?;
-        field_execution |= field_extension;
-        if token_stream_contains_ident(&executor_type, "F") && !field_extension {
-            return Err(syn::Error::new(
-                e.span(),
-                "field-dependent executor types require `#[extension(field, ...)]`",
-            ));
-        }
-        executor_uses_field |= token_stream_contains_ident(&executor_type, "F");
         executor_enum_fields.push(quote! {
             #[any_enum]
             #ext_name_upper(#executor_type),
         });
+        create_executors.push(quote! {
+            let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend::<_, _>(&self.#ext_field_name)?;
+        });
         let extension_ty = e.ty.clone();
-        if field_extension {
-            create_executors.push(quote! {
-                let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend_field::<F, _, _>(&self.#ext_field_name)?;
-            });
-            execution_where_predicates.push(parse_quote! {
-                #extension_ty: ::openvm_circuit::arch::VmFieldExecutionExtension<F, Executor = #executor_type>
-            });
-        } else {
-            create_executors.push(quote! {
-                let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend::<_, _>(&self.#ext_field_name)?;
-            });
-            execution_where_predicates.push(parse_quote! {
-                #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<Executor = #executor_type>
-            });
-        }
-        if field_extension {
-            extend_rvr.push(quote! {
-                <#extension_ty as ::rvr_openvm_lift::VmFieldRvrExtension<F>>::extend_rvr(
-                    &self.#ext_field_name,
-                    &mut extensions,
-                    ctx.as_ref(),
-                );
-            });
-        } else {
-            extend_rvr.push(quote! {
-                <#extension_ty as ::rvr_openvm_lift::VmRvrExtension>::extend_rvr(
-                    &self.#ext_field_name,
-                    &mut extensions,
-                    ctx.as_ref(),
-                );
-            });
-        }
+        execution_where_predicates.push(parse_quote! {
+            #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<Executor = #executor_type>
+        });
+        extend_rvr.push(quote! {
+            <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
+                &self.#ext_field_name,
+                &mut extensions,
+                ctx.as_ref(),
+            );
+        });
         create_airs.push(quote! {
             inventory.start_new_extension();
             ::openvm_circuit::arch::VmCircuitExtension::extend_circuit(&self.#ext_field_name, &mut inventory)?;
@@ -562,26 +555,9 @@ fn generate_config_traits_impl(
     }
 
     let source_executor_type = parse_executor_type(source_field)?;
-    let field_source = has_field_marker(source_field, "config")?;
-    let source_executor_uses_field = token_stream_contains_ident(&source_executor_type, "F");
-    if source_executor_uses_field && !field_source {
-        return Err(syn::Error::new(
-            source_field.span(),
-            "field-dependent executor types require `#[config(field, ...)]`",
-        ));
-    }
-    executor_uses_field |= source_executor_uses_field;
-    field_execution |= field_source;
-    if field_execution {
-        execution_where_predicates.insert(0, parse_quote! { F: ::openvm_circuit::arch::VmField });
-        execution_where_predicates.push(parse_quote! {
-            #source_field_ty: ::openvm_circuit::arch::VmFieldExecutionConfig<F, Executor = #source_executor_type>
-        });
-    } else {
-        execution_where_predicates.push(parse_quote! {
-            #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<Executor = #source_executor_type>
-        });
-    }
+    execution_where_predicates.push(parse_quote! {
+        #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<F, Executor = #source_executor_type>
+    });
     circuit_where_predicates.push(parse_quote! {
         #source_field_ty: ::openvm_circuit::arch::VmCircuitConfig<SC>
     });
@@ -589,108 +565,7 @@ fn generate_config_traits_impl(
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
 
     let executor_type = Ident::new(&format!("{name}Executor"), name.span());
-    let executor_decl_generics =
-        executor_uses_field.then(|| quote! { <F: ::openvm_circuit::arch::VmField> });
-    let executor_use_generics = executor_uses_field.then(|| quote! { <F> });
-    let execution_impl = if field_execution {
-        quote! {
-            impl<F: ::openvm_circuit::arch::VmField> ::openvm_circuit::arch::VmFieldExecutionConfig<F> for #name #execution_where_clause {
-                type Executor = #executor_type #executor_use_generics;
-
-                fn create_field_executors(
-                    &self,
-                ) -> Result<::openvm_circuit::arch::ExecutorInventory<Self::Executor>, ::openvm_circuit::arch::ExecutorInventoryError> {
-                    let inventory = <#source_field_ty as ::openvm_circuit::arch::VmFieldExecutionConfig<F>>::create_field_executors(&self.#source_name)?
-                        .transmute::<Self::Executor>();
-                    #(#create_executors)*
-                    Ok(inventory)
-                }
-
-                #[cfg(feature = "rvr")]
-                fn create_field_rvr_extensions(
-                    &self,
-                    air_idx: Option<&[usize]>,
-                ) -> ::rvr_openvm_lift::RvrExtensions
-                {
-                    let ctx = air_idx.map(|air_idx| {
-                        let inventory = <Self as ::openvm_circuit::arch::VmFieldExecutionConfig<F>>::create_field_executors(self)
-                            .expect("create_field_executors failed in create_field_rvr_extensions");
-                        let opcode_to_executor_idx = inventory
-                            .instruction_lookup
-                            .iter()
-                            .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
-                        ::rvr_openvm_lift::RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
-                    });
-                    let mut extensions = <#source_field_ty as ::openvm_circuit::arch::VmFieldExecutionConfig<F>>::create_field_rvr_extensions(
-                        &self.#source_name,
-                        air_idx,
-                    );
-                    #(#extend_rvr)*
-                    extensions
-                }
-            }
-        }
-    } else {
-        quote! {
-            impl ::openvm_circuit::arch::VmExecutionConfig for #name #execution_where_clause {
-                type Executor = #executor_type;
-
-                fn create_executors(
-                    &self,
-                ) -> Result<::openvm_circuit::arch::ExecutorInventory<Self::Executor>, ::openvm_circuit::arch::ExecutorInventoryError> {
-                    let inventory = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig>::create_executors(&self.#source_name)?
-                        .transmute::<Self::Executor>();
-                    #(#create_executors)*
-                    Ok(inventory)
-                }
-
-                #[cfg(feature = "rvr")]
-                fn create_rvr_extensions(
-                    &self,
-                    air_idx: Option<&[usize]>,
-                ) -> ::rvr_openvm_lift::RvrExtensions
-                {
-                    let ctx = air_idx.map(|air_idx| {
-                        let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig>::create_executors(self)
-                            .expect("create_executors failed in create_rvr_extensions");
-                        let opcode_to_executor_idx = inventory
-                            .instruction_lookup
-                            .iter()
-                            .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
-                        ::rvr_openvm_lift::RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
-                    });
-                    let mut extensions = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig>::create_rvr_extensions(
-                        &self.#source_name,
-                        air_idx,
-                    );
-                    #(#extend_rvr)*
-                    extensions
-                }
-            }
-
-            impl<F: ::openvm_circuit::arch::VmField> ::openvm_circuit::arch::VmFieldExecutionConfig<F> for #name
-            where
-                Self: ::openvm_circuit::arch::VmExecutionConfig,
-            {
-                type Executor = <Self as ::openvm_circuit::arch::VmExecutionConfig>::Executor;
-
-                fn create_field_executors(
-                    &self,
-                ) -> Result<::openvm_circuit::arch::ExecutorInventory<Self::Executor>, ::openvm_circuit::arch::ExecutorInventoryError> {
-                    <Self as ::openvm_circuit::arch::VmExecutionConfig>::create_executors(self)
-                }
-
-                #[cfg(feature = "rvr")]
-                fn create_field_rvr_extensions(
-                    &self,
-                    air_idx: Option<&[usize]>,
-                ) -> ::rvr_openvm_lift::RvrExtensions {
-                    <Self as ::openvm_circuit::arch::VmExecutionConfig>::create_rvr_extensions(self, air_idx)
-                }
-            }
-        }
-    };
-    let token_stream = quote! {
+    let token_stream = TokenStream::from(quote! {
         #[derive(
             Clone,
             ::derive_more::derive::From,
@@ -698,13 +573,46 @@ fn generate_config_traits_impl(
             ::openvm_circuit::derive::Executor,
             ::openvm_circuit::derive::MeteredExecutor,
         )]
-        pub enum #executor_type #executor_decl_generics {
+        pub enum #executor_type {
             #[any_enum]
             #source_name_upper(#source_executor_type),
             #(#executor_enum_fields)*
         }
 
-        #execution_impl
+        impl<F: ::openvm_circuit::arch::VmField> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
+            type Executor = #executor_type;
+
+            fn create_executors(
+                &self,
+            ) -> Result<::openvm_circuit::arch::ExecutorInventory<Self::Executor>, ::openvm_circuit::arch::ExecutorInventoryError> {
+                let inventory = self.#source_name.create_executors()?.transmute::<Self::Executor>();
+                #(#create_executors)*
+                Ok(inventory)
+            }
+
+            #[cfg(feature = "rvr")]
+            fn create_rvr_extensions(
+                &self,
+                air_idx: Option<&[usize]>,
+            ) -> ::rvr_openvm_lift::RvrExtensions
+            {
+                let ctx = air_idx.map(|air_idx| {
+                    let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_executors(self)
+                        .expect("create_executors failed in create_rvr_extensions");
+                    let opcode_to_executor_idx = inventory
+                        .instruction_lookup
+                        .iter()
+                        .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
+                    ::rvr_openvm_lift::RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
+                });
+                let mut extensions = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_rvr_extensions(
+                    &self.#source_name,
+                    air_idx,
+                );
+                #(#extend_rvr)*
+                extensions
+            }
+        }
 
         impl<SC: openvm_stark_backend::StarkProtocolConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
             fn create_airs(
@@ -727,31 +635,8 @@ fn generate_config_traits_impl(
                 self.#source_name.as_mut()
             }
         }
-    };
+    });
     Ok(token_stream)
-}
-
-fn token_stream_contains_ident(stream: &proc_macro2::TokenStream, expected: &str) -> bool {
-    stream.clone().into_iter().any(|token| match token {
-        proc_macro2::TokenTree::Ident(ident) => ident == expected,
-        proc_macro2::TokenTree::Group(group) => {
-            token_stream_contains_ident(&group.stream(), expected)
-        }
-        _ => false,
-    })
-}
-
-fn has_field_marker(f: &Field, attribute: &str) -> syn::Result<bool> {
-    let Some(attr) = f.attrs.iter().find(|attr| attr.path().is_ident(attribute)) else {
-        return Ok(false);
-    };
-    let Meta::List(_) = &attr.meta else {
-        return Ok(false);
-    };
-    let nested = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
-    Ok(nested
-        .iter()
-        .any(|meta| matches!(meta, Meta::Path(path) if path.is_ident("field"))))
 }
 
 // Parse the executor name as either
@@ -809,13 +694,8 @@ fn parse_executor_type(f: &Field) -> syn::Result<proc_macro2::TokenStream> {
                                 ));
                             }
                         }
-                        Meta::Path(path) if path.is_ident("field") => {
-                        }
                         _ => {
-                            return Err(syn::Error::new(
-                                meta.span(),
-                                "only the `field` marker and name = value format are supported",
-                            ));
+                            return Err(syn::Error::new(meta.span(), "only name = value format is supported"));
                         }
                     }
                 }
@@ -868,49 +748,5 @@ pub fn create_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(feature = "tco"))]
     {
         nontco::nontco_impl(item)
-    }
-}
-
-#[cfg(test)]
-mod vm_config_tests {
-    use syn::{parse_quote, Data, DeriveInput};
-
-    use super::generate_config_traits_impl;
-
-    fn derive_output(input: DeriveInput) -> String {
-        let Data::Struct(data) = input.data else {
-            panic!("test input must be a struct");
-        };
-        generate_config_traits_impl(&input.ident, &data)
-            .unwrap()
-            .to_string()
-    }
-
-    #[test]
-    fn ordinary_source_generates_fieldless_execution_config() {
-        let output = derive_output(parse_quote! {
-            struct ChildConfig {
-                #[config(executor = "ParentExecutor")]
-                parent: ParentConfig,
-            }
-        });
-
-        assert!(output.contains("VmExecutionConfig for ChildConfig"));
-        assert!(output.contains("ParentConfig : :: openvm_circuit :: arch :: VmExecutionConfig"));
-    }
-
-    #[test]
-    fn field_source_generates_field_execution_config_with_erased_executor() {
-        let output = derive_output(parse_quote! {
-            struct ChildConfig {
-                #[config(field, executor = "ParentExecutor")]
-                parent: ParentConfig,
-            }
-        });
-
-        assert!(output.contains("VmFieldExecutionConfig < F > for ChildConfig"));
-        assert!(output
-            .contains("ParentConfig : :: openvm_circuit :: arch :: VmFieldExecutionConfig < F"));
-        assert!(!output.contains("pub enum ChildConfigExecutor < F"));
     }
 }

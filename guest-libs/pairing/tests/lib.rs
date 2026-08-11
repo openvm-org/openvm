@@ -51,6 +51,8 @@ mod bn254 {
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::openvm_stark_backend::SystemParams;
+    #[cfg(feature = "rvr")]
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand08::SeedableRng;
@@ -478,7 +480,7 @@ mod bn254 {
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(get_testing_config())?;
+        let executor = VmExecutor::<BabyBear, _>::new(get_testing_config())?;
         let rvr = executor.instance(&exe)?;
 
         let cases = [

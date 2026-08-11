@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::AddSubCoreExecutor;
 
@@ -56,8 +57,10 @@ macro_rules! dispatch {
     };
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for AddSubCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
@@ -101,8 +104,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for AddSubCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

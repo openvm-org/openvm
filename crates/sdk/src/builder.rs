@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use eyre::eyre;
-use openvm_circuit::arch::{VmBuilder, VmFieldExecutionConfig, VmFieldExecutor};
+use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
 use openvm_sdk_config::{SdkVmConfig, TranspilerConfig};
 use openvm_stark_backend::StarkEngine;
 use openvm_transpiler::transpiler::Transpiler;
@@ -69,7 +69,7 @@ pub struct GenericSdkBuilder<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmFieldExecutionConfig<F>,
+    VB::VmConfig: VmExecutionConfig<F>,
 {
     app_source: Option<AppSource<VB::VmConfig>>,
     agg_source: Option<AggSource>,
@@ -88,7 +88,7 @@ impl<E, VB> GenericSdkBuilder<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmFieldExecutionConfig<F>,
+    VB::VmConfig: VmExecutionConfig<F>,
 {
     /// Creates an empty builder with no configured proving layers.
     pub fn new() -> Self {
@@ -351,7 +351,7 @@ where
         #[cfg(feature = "root-prover")]
         let (root_params, root_pk_seed) = Self::normalize_root_source(root_source);
 
-        let executor = VmFieldExecutor::<F, _>::new(app_config.app_vm_config.clone())
+        let executor = VmExecutor::<F, _>::new(app_config.app_vm_config.clone())
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_tree_config = agg_tree_config.unwrap_or_default();
 
@@ -548,7 +548,7 @@ impl<E, VB> Default for GenericSdkBuilder<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmFieldExecutionConfig<F>,
+    VB::VmConfig: VmExecutionConfig<F>,
 {
     fn default() -> Self {
         Self {
@@ -571,7 +571,7 @@ impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    VB::VmConfig: VmFieldExecutionConfig<F>,
+    VB::VmConfig: VmExecutionConfig<F>,
 {
     /// Returns a builder for constructing an immutable [`GenericSdk`].
     pub fn builder() -> GenericSdkBuilder<E, VB> {

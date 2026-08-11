@@ -94,8 +94,8 @@ fn write_u16_bytes<'a>(output: &mut Vec<u8>, limbs: impl IntoIterator<Item = &'a
     }
 }
 
-fn replay_vec_heap<const NUM_READS: usize, const BLOCKS: usize>(
-    postflight: &Postflight<'_>,
+fn replay_vec_heap<const NUM_READS: usize, const BLOCKS: usize, F: PrimeField32>(
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     local_opcode: usize,
     pointer_max_bits: usize,
@@ -193,7 +193,7 @@ pub(crate) fn generate_field_expression_trace_from_postflight<
     const BLOCKS: usize,
 >(
     chip: &VmChipWrapper<F, FieldExpressionFiller<VecHeapAdapterFiller<2, BLOCKS, BLOCKS>>>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     opcode_base: usize,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
@@ -238,8 +238,12 @@ pub(crate) fn generate_field_expression_trace_from_postflight<
             .par_chunks_exact_mut(width)
             .zip(steps.par_iter())
             .try_for_each(|(row, &step)| {
-                let input =
-                    replay_vec_heap::<2, BLOCKS>(postflight, step, local_opcode, pointer_max_bits)?;
+                let input = replay_vec_heap::<2, BLOCKS, F>(
+                    postflight,
+                    step,
+                    local_opcode,
+                    pointer_max_bits,
+                )?;
                 let (adapter_row, core_row) = row.split_at_mut(adapter_width);
                 let mut read_bytes = Vec::with_capacity(2 * BLOCKS * MEMORY_BLOCK_BYTES);
                 let mut write_bytes = Vec::with_capacity(BLOCKS * MEMORY_BLOCK_BYTES);
@@ -290,7 +294,7 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
     const TOTAL_LIMBS: usize,
 >(
     chip: &ModularIsEqualU16Chip<F, TOTAL_LIMBS>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
     opcode_base: usize,
     pointer_max_bits: usize,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {

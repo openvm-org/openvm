@@ -738,7 +738,7 @@ pub(crate) fn gpu_buffer<T>(len: usize, device_ctx: &GpuDeviceCtx) -> DeviceBuff
 
 struct GpuMemoryIndex {
     predecessors: DeviceBuffer<u32>,
-    touched_blocks: DeviceBuffer<TouchedBlock>,
+    touched_blocks: DeviceBuffer<TouchedBlock<CudaField>>,
     num_touched_blocks: usize,
 }
 
@@ -911,7 +911,7 @@ fn build_gpu_memory_chronology(
     let counts = GpuChronologyCounts::validated(&counts, num_entries, field_values.len())?;
     let seeds = gpu_buffer::<PreflightInitialWrite>(counts.num_seeds, device_ctx);
     let field_seeds = gpu_buffer::<PreflightFieldBlock>(counts.num_field_seeds, device_ctx);
-    let touched_blocks = gpu_buffer::<TouchedBlock>(counts.num_touched, device_ctx);
+    let touched_blocks = gpu_buffer::<TouchedBlock<CudaField>>(counts.num_touched, device_ctx);
     unsafe {
         postflight::memory_chronology_resolve(
             memory.view(),
@@ -971,7 +971,7 @@ pub struct GpuPostflightTranscript {
     field_values: DeviceBuffer<PreflightFieldBlock>,
     field_initial_values: DeviceBuffer<PreflightFieldBlock>,
     memory_predecessors: DeviceBuffer<u32>,
-    touched_blocks: DeviceBuffer<TouchedBlock>,
+    touched_blocks: DeviceBuffer<TouchedBlock<CudaField>>,
     num_touched_blocks: usize,
     error: DeviceBuffer<u32>,
     device_ctx: GpuDeviceCtx,
@@ -1042,7 +1042,7 @@ impl GpuPostflightTranscript {
     pub(crate) fn touched_blocks_on(
         &self,
         device_ctx: &GpuDeviceCtx,
-    ) -> Result<(&DeviceBuffer<TouchedBlock>, usize), GpuPostflightError> {
+    ) -> Result<(&DeviceBuffer<TouchedBlock<CudaField>>, usize), GpuPostflightError> {
         ensure_same_context(&self.device_ctx, device_ctx)?;
         debug_assert!(self.num_touched_blocks <= self.touched_blocks.len());
         Ok((&self.touched_blocks, self.num_touched_blocks))

@@ -59,9 +59,9 @@ pub struct TestPreflight {
 }
 
 type TestTraceGenerator<F, C> =
-    Box<dyn for<'a> Fn(&C, &Postflight<'a>) -> Result<RowMajorMatrix<F>, PostflightError>>;
+    Box<dyn for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>>;
 type TestBatchTraceGenerator<F, C> =
-    Box<dyn for<'a> Fn(&C, &[Postflight<'a>]) -> Result<RowMajorMatrix<F>, PostflightError>>;
+    Box<dyn for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>>;
 type TestTracePadding<F> = Box<dyn Fn(&mut [F])>;
 type TestTraceRows<F> = Box<dyn Fn(&RowMajorMatrix<F>) -> usize>;
 
@@ -86,7 +86,7 @@ pub(crate) fn execute_test_preflight<F, E>(
 ) -> PreflightOutput
 where
     F: VmField,
-    E: Executor,
+    E: Executor<F>,
 {
     let instruction = &program
         .get_instruction_and_debug_info(0)
@@ -103,7 +103,7 @@ where
     let handler = executor
         .pre_compute::<PreflightCtx>(state.pc(), instruction, pre_compute)
         .expect("test instruction must be statically valid");
-    let ctx = PreflightCtx::new_for_field::<F>(&state.memory, Some(1));
+    let ctx = PreflightCtx::new::<F>(&state.memory, Some(1));
     let mut exec_state = VmExecState::new(state, ctx);
     assert!(!PreflightCtx::should_suspend(&mut exec_state));
     let pc = exec_state.pc();
@@ -135,7 +135,7 @@ pub(crate) fn execute_test_preflight<F, E>(
 ) -> PreflightOutput
 where
     F: VmField,
-    E: Executor + Clone,
+    E: Executor<F> + Clone,
 {
     let instruction = &program
         .get_instruction_and_debug_info(0)
@@ -161,7 +161,8 @@ where
 {
     pub fn with_capacity<G>(executor: E, air: A, chip: C, height: usize, generate_trace: G) -> Self
     where
-        G: for<'a> Fn(&C, &Postflight<'a>) -> Result<RowMajorMatrix<F>, PostflightError> + 'static,
+        G: for<'a> Fn(&C, &Postflight<'a, F>) -> Result<RowMajorMatrix<F>, PostflightError>
+            + 'static,
     {
         Self {
             executor,
@@ -180,7 +181,7 @@ where
 
     pub fn with_batch_trace_generator(
         mut self,
-        generate_trace: impl for<'a> Fn(&C, &[Postflight<'a>]) -> Result<RowMajorMatrix<F>, PostflightError>
+        generate_trace: impl for<'a> Fn(&C, &[Postflight<'a, F>]) -> Result<RowMajorMatrix<F>, PostflightError>
             + 'static,
     ) -> Self {
         self.generate_batch_trace = Some(Box::new(generate_trace));
@@ -207,14 +208,14 @@ where
 }
 
 pub trait TestBuilder<F: PrimeField32> {
-    fn execute<E: Executor + Clone>(
+    fn execute<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
         preflight: &mut TestPreflight,
         instruction: &Instruction,
     );
 
-    fn execute_with_pc<E: Executor + Clone>(
+    fn execute_with_pc<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
         preflight: &mut TestPreflight,

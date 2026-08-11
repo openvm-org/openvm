@@ -442,7 +442,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
-        let executor = VmExecutor::new(config).unwrap();
+        let executor = VmExecutor::<F, _>::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
         instance.execute(input).unwrap();
     }
@@ -486,7 +486,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
 
         let exact_error = match preflight.execute_segment(
@@ -576,7 +576,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let checkpoint = executor.preflight_instance(&exe)?;
         let address = PAGE_SIZE as u64 + 8;
         let value = 0x0123_4567_89ab_cdef;
@@ -656,7 +656,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let loaded = 0x0123_4567_89ab_cdefu64;
         let x0_only = 0xfedc_ba98_7654_3210u64;
@@ -727,7 +727,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let hint_words = [
             0x0123_4567_89ab_cdef,
@@ -776,7 +776,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(config.clone())?;
+        let executor = VmExecutor::<F, _>::new(config.clone())?;
         let preflight = executor.preflight_instance(&exe)?;
         let registers = [
             (1, 0xa5a4_a3a2_a1a0_9998),
@@ -871,7 +871,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let execution = preflight.execute_for(
             Vec::<Vec<u8>>::new(),
@@ -895,7 +895,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_callback_phantoms_are_serial() -> Result<()> {
         let exe = callback_phantom_exe();
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let inputs = vec![b"first".to_vec(), b"second".to_vec()];
         let initial_state =
@@ -988,7 +988,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let word_counts = [1usize, 3, MAX_HINT_BUFFER_DWORDS];
         let destinations = [0u64, 16, 64];
@@ -1057,7 +1057,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let hint_words = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
         let initial = configure_hint_state(
@@ -1100,7 +1100,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let pure = executor.instance(&exe)?;
         let unaligned = configure_hint_state(
@@ -1197,7 +1197,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         let preflight = executor.preflight_instance(&exe)?;
         let initial = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
@@ -1248,7 +1248,7 @@ mod tests {
     fn test_rvr_reveal_preflight_fails_before_commit() -> Result<()> {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values(16);
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         // The effective address wraps to zero, but the non-u32 base still
         // fails closed in both execution modes.
         let address_exe = VmExe::from(Program::from_instructions(&[
@@ -1299,7 +1299,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
         let preflight = executor.preflight_instance(&exe)?;
         let preflight_error = match preflight.execute(
             Vec::<Vec<u8>>::new(),
@@ -1356,7 +1356,7 @@ mod tests {
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let mut config = test_rv64im_config();
         config.rv64i.system.memory_config.timestamp_max_bits = 2;
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         let preflight = executor.preflight_instance(&exe)?;
         let error = match preflight.execute(
             Vec::<Vec<u8>>::new(),
@@ -1387,7 +1387,7 @@ mod tests {
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(test_rv64im_config())?;
+        let executor = VmExecutor::<F, _>::new(test_rv64im_config())?;
 
         let pure = executor.instance(&exe)?.execute(Vec::<Vec<u8>>::new())?;
         assert_eq!(pure.pc(), 12);
@@ -1427,7 +1427,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         let state = executor.instance(&exe)?.execute(vec![])?;
         let public_values = extract_public_values(32, &state.memory.memory);
 
@@ -1460,7 +1460,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         let instance = executor.instance(&exe)?;
         let barrier = Barrier::new(NUM_THREADS);
         let expected_prefix = (0u8..32).collect::<Vec<_>>();
@@ -1520,7 +1520,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
-        let executor = VmExecutor::new(config).unwrap();
+        let executor = VmExecutor::<F, _>::new(config).unwrap();
         let result = executor.instance(&exe).unwrap().execute(input);
 
         match result {
@@ -1560,7 +1560,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
 
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         #[cfg(feature = "rvr")]
         let (end_state1, end_state2) = {
             let tracking_instance = executor.instret_tracking_instance(&exe, None)?;
@@ -1769,7 +1769,7 @@ mod tests {
         )
         .unwrap();
 
-        let executor = VmExecutor::new(config).unwrap();
+        let executor = VmExecutor::<F, _>::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![]).unwrap();
     }
@@ -1795,7 +1795,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
 
-        let executor = VmExecutor::new(config.clone())?;
+        let executor = VmExecutor::<F, _>::new(config.clone())?;
         let instance = executor.instance(&exe)?;
         let state = instance.execute(vec![])?;
         let final_memory = state.memory.memory;
@@ -1853,7 +1853,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
 
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         let instance = executor.instance(&exe)?;
         let input = vec![vec![0u8, 0, 0, 1]];
         match instance.execute(input.clone()) {
@@ -1945,7 +1945,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
-        let executor = VmExecutor::new(config).unwrap();
+        let executor = VmExecutor::<F, _>::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![]).unwrap();
     }

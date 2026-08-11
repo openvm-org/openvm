@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BitwiseLogicImmCoreExecutor;
 use crate::adapters::{imm_to_u64, is_canonical_i12};
@@ -58,8 +59,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BitwiseLogicImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
@@ -111,8 +114,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor
     }
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for BitwiseLogicImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

@@ -14,6 +14,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::bytes_to_u32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::{checked_deferral_index, DeferralOutputExecutor};
@@ -94,7 +95,7 @@ impl DeferralOutputExecutor {
     }
 }
 
-impl InterpreterExecutor for DeferralOutputExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         format!("{:?}", DeferralOpcode::OUTPUT)
     }
@@ -134,7 +135,7 @@ impl InterpreterExecutor for DeferralOutputExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for DeferralOutputExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DeferralOutputPrecompute>>()
     }

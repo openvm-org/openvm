@@ -14,7 +14,7 @@ use crate::adapters::{BaseAluRegU16AdapterCols, BaseAluRegU16AdapterFiller, U16_
 /// Generates the RV64 logical-shift trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftLogicalChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftOpcode::SLL, ShiftOpcode::SRL];
     let rows_used = opcodes

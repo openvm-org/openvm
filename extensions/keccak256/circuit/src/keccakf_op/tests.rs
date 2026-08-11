@@ -137,7 +137,7 @@ fn create_test_harness(tester: &mut VmChipTestBuilder<F>) -> TestHarness {
     }
 }
 
-fn set_and_execute_single_perm<E: Executor + Clone>(
+fn set_and_execute_single_perm<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut TestPreflight,

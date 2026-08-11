@@ -95,13 +95,16 @@ use crate::{
 
 #[cfg(feature = "rvr")]
 type CpuPostflightTraceGenerator<F, C> = Box<
-    dyn for<'a> Fn(&C, &Postflight<'a>) -> Result<RowMajorMatrix<F>, crate::arch::PostflightError>,
+    dyn for<'a> Fn(
+        &C,
+        &Postflight<'a, F>,
+    ) -> Result<RowMajorMatrix<F>, crate::arch::PostflightError>,
 >;
 #[cfg(feature = "rvr")]
 type CpuPostflightBatchTraceGenerator<F, C> = Box<
     dyn for<'a> Fn(
         &C,
-        &[Postflight<'a>],
+        &[Postflight<'a, F>],
     ) -> Result<RowMajorMatrix<F>, crate::arch::PostflightError>,
 >;
 #[cfg(feature = "rvr")]
@@ -171,7 +174,7 @@ where
     where
         CpuGenerate: for<'a> Fn(
                 &CpuChip,
-                &Postflight<'a>,
+                &Postflight<'a, F>,
             ) -> Result<RowMajorMatrix<F>, crate::arch::PostflightError>
             + 'static,
         GpuGenerate: Fn(
@@ -191,7 +194,7 @@ where
         mut self,
         generate_trace: impl for<'a> Fn(
                 &CpuChip,
-                &[Postflight<'a>],
+                &[Postflight<'a, F>],
             ) -> Result<RowMajorMatrix<F>, crate::arch::PostflightError>
             + 'static,
     ) -> Self {
@@ -225,7 +228,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         preflight: &mut TestPreflight,
         instruction: &Instruction,
     ) where
-        E: Executor + Clone,
+        E: Executor<F> + Clone,
     {
         let initial_pc = self.rng.random_range(0..(1 << PC_BITS));
         self.execute_with_pc(executor, preflight, instruction, initial_pc);
@@ -238,7 +241,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         instruction: &Instruction,
         initial_pc: u32,
     ) where
-        E: Executor + Clone,
+        E: Executor<F> + Clone,
     {
         let program =
             Program::new_without_debug_infos(std::slice::from_ref(instruction), initial_pc);
@@ -453,7 +456,7 @@ impl GpuChipTestBuilder {
         harness: &mut TestChipHarness<F, E, A, C>,
         instruction: &Instruction,
     ) where
-        E: Executor + Clone,
+        E: Executor<F> + Clone,
     {
         self.execute(&mut harness.executor, &mut harness.preflight, instruction);
     }
@@ -464,7 +467,7 @@ impl GpuChipTestBuilder {
         instruction: &Instruction,
         initial_pc: u32,
     ) where
-        E: Executor + Clone,
+        E: Executor<F> + Clone,
     {
         self.execute_with_pc(
             &mut harness.executor,

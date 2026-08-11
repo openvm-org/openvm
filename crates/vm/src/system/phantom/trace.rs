@@ -6,7 +6,6 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use super::PhantomCols;
 use crate::{
     arch::{Postflight, PostflightError},
-    system::program::trace::instruction_operand_to_field,
     utils::next_power_of_two_or_zero,
 };
 
@@ -15,7 +14,7 @@ use crate::{
 /// Phantom host callbacks have already run during serial preflight. Replay only
 /// validates the logged program transition and emits its execution-bus row.
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(SystemOpcode::PHANTOM.global_opcode());
     let width = PhantomCols::<F>::width();
@@ -24,25 +23,12 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 
     for (row_index, &step) in steps.iter().enumerate() {
         let instruction = postflight.instruction(step);
-        if [instruction.e, instruction.f, instruction.g]
-            .into_iter()
-            .any(|operand| !operand.is_zero())
-        {
-            return Err(PostflightError::new(format!(
-                "phantom instruction at PC {:#x} has nonzero unused operands",
-                postflight.pc(step)
-            )));
-        }
-        if instruction.a.as_i32() < 0
-            || instruction.b.as_i32() < 0
-            || !(0..=i32::from(u16::MAX)).contains(&instruction.c.as_i32())
-            || !(0..=i32::from(u16::MAX)).contains(&instruction.d.as_i32())
-        {
+        let Some(operands) = instruction.checked_phantom_operands() else {
             return Err(PostflightError::new(format!(
                 "phantom instruction at PC {:#x} has invalid operands",
                 postflight.pc(step)
             )));
-        }
+        };
 
         let pc = postflight.pc(step);
         let timestamp = postflight.timestamp(step);
@@ -53,8 +39,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         let row: &mut PhantomCols<F> =
             trace.values[row_index * width..(row_index + 1) * width].borrow_mut();
         row.pc = F::from_u32(pc);
-        row.operands = [instruction.a, instruction.b, instruction.c, instruction.d]
-            .map(instruction_operand_to_field);
+        row.operands = operands.map(F::from_u32);
         row.timestamp = F::from_u32(timestamp);
         row.is_valid = F::ONE;
     }

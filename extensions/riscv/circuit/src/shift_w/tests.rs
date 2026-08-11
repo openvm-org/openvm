@@ -166,7 +166,7 @@ fn create_right_arithmetic_harness(tester: &VmChipTestBuilder<F>) -> RightArithm
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,
@@ -191,7 +191,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
     expected
 }
 
-fn execute_boundary_shifts<E: openvm_circuit::arch::Executor + Clone>(
+fn execute_boundary_shifts<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,

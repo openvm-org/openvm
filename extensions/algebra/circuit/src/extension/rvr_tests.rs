@@ -20,6 +20,7 @@ use openvm_instructions::{
 };
 #[cfg(feature = "cuda")]
 use openvm_stark_backend::StarkEngine;
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
 use super::{modular_is_eq_x0_destination, Rv64ModularConfig, Rv64ModularCpuBuilder};
 #[cfg(feature = "cuda")]
@@ -303,7 +304,7 @@ fn field_expr_config(modulus: BigUint) -> Rv64ModularWithFp2Config {
 fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     let (program, exe) = field_expr_fixture(&modulus);
     let config = field_expr_config(modulus);
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
@@ -364,7 +365,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
 #[test]
 fn modular_checkpoint_executor_records_only_irreducible_results() {
     let (_, exe) = fixture();
-    let executor = VmExecutor::new(config()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let execution = checkpoint
@@ -418,7 +419,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
         ]);
         assert_eq!(modular_is_eq_x0_destination(&program, 1), Some(0));
         let exe = VmExe::new(program);
-        let executor = VmExecutor::new(config()).unwrap();
+        let executor = VmExecutor::<F, _>::new(config()).unwrap();
         assert!(executor.interpreter_instance(&exe).is_err());
         assert!(executor.preflight_instance(&exe).is_err());
     }
@@ -426,7 +427,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
 
 #[test]
 fn modular_heap_pointers_follow_the_eight_byte_memory_equipartition() {
-    let executor = VmExecutor::new(config()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config()).unwrap();
 
     for pointer_offset in [0, 8] {
         let (_, exe) = fixture_with_pointer_offset(pointer_offset);
@@ -460,7 +461,7 @@ fn modular_heap_pointers_follow_the_eight_byte_memory_equipartition() {
 fn modular_checkpoint_expansion_proves_without_records() {
     let (program, exe) = fixture();
     let config = config();
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(

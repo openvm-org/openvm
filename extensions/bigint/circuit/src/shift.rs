@@ -14,6 +14,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::ShiftOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
@@ -53,7 +54,7 @@ macro_rules! dispatch {
 
 macro_rules! impl_shift256_executor {
     ($executor:ty, $is_right_arithmetic:expr) => {
-        impl InterpreterExecutor for $executor {
+        impl<F: PrimeField32> InterpreterExecutor<F> for $executor {
             fn get_opcode_name(&self, opcode: usize) -> String {
                 format!(
                     "{:?}",
@@ -96,7 +97,7 @@ macro_rules! impl_shift256_executor {
             }
         }
 
-        impl InterpreterMeteredExecutor for $executor {
+        impl<F: PrimeField32> InterpreterMeteredExecutor<F> for $executor {
             fn metered_pre_compute_size(&self) -> usize {
                 size_of::<E2PreCompute<ShiftPreCompute>>()
             }

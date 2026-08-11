@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluWOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::AddSubWCoreExecutor;
 
@@ -55,7 +56,10 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for AddSubWCoreExecutor {
+impl<F> InterpreterExecutor<F> for AddSubWCoreExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluWOpcode::from_usize(opcode - self.offset))
     }
@@ -98,7 +102,10 @@ impl InterpreterExecutor for AddSubWCoreExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for AddSubWCoreExecutor {
+impl<F> InterpreterMeteredExecutor<F> for AddSubWCoreExecutor
+where
+    F: PrimeField32,
+{
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AddSubWPreCompute>>()

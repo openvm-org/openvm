@@ -16,6 +16,7 @@ use openvm_instructions::{
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::EcDoubleExecutor;
 use crate::weierstrass_chip::curves::{ec_double, get_curve_type, CurveType};
@@ -124,7 +125,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<const BLOCKS: usize> InterpreterExecutor for EcDoubleExecutor<BLOCKS> {
+impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleExecutor<BLOCKS> {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         self.inner.name.clone()
     }
@@ -167,7 +168,9 @@ impl<const BLOCKS: usize> InterpreterExecutor for EcDoubleExecutor<BLOCKS> {
     }
 }
 
-impl<const BLOCKS: usize> InterpreterMeteredExecutor for EcDoubleExecutor<BLOCKS> {
+impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
+    for EcDoubleExecutor<BLOCKS>
+{
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<EcDoublePreCompute>>()

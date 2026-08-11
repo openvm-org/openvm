@@ -5,6 +5,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::u16_block_to_bytes;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{Sha2Config, SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
@@ -27,12 +28,13 @@ pub(crate) struct Sha2ReplayRow {
     pub write_prev_data: Vec<[u8; SHA2_WRITE_SIZE]>,
 }
 
-pub(crate) fn replay_sha2_from_postflight<C>(
-    postflight: &Postflight<'_>,
+pub(crate) fn replay_sha2_from_postflight<F, C>(
+    postflight: &Postflight<'_, F>,
     step: PostflightStep,
     pointer_max_bits: usize,
 ) -> Result<Sha2ReplayRow, PostflightError>
 where
+    F: PrimeField32,
     C: Sha2Config,
 {
     let instruction = postflight.instruction(step);

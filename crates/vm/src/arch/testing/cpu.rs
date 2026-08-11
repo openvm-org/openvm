@@ -75,7 +75,7 @@ where
         preflight: &mut TestPreflight,
         instruction: &Instruction,
     ) where
-        E: Executor + Clone,
+        E: Executor<F> + Clone,
     {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(executor, preflight, instruction, initial_pc);
@@ -88,7 +88,7 @@ where
         instruction: &Instruction,
         initial_pc: u32,
     ) where
-        E: Executor + Clone,
+        E: Executor<F> + Clone,
     {
         let program =
             Program::new_without_debug_infos(std::slice::from_ref(instruction), initial_pc);

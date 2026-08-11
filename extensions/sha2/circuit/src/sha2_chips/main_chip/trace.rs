@@ -19,7 +19,7 @@ use crate::{Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
 
 pub(crate) fn generate_trace_from_postflight<F, C>(
     chip: &Sha2MainChip<F, C>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError>
 where
     F: PrimeField32,
@@ -41,8 +41,11 @@ where
         .zip(steps.par_iter().copied())
         .enumerate()
         .try_for_each(|(row_index, (row, step))| {
-            let replay =
-                crate::replay_sha2_from_postflight::<C>(postflight, step, chip.pointer_max_bits)?;
+            let replay = crate::replay_sha2_from_postflight::<F, C>(
+                postflight,
+                step,
+                chip.pointer_max_bits,
+            )?;
             chip.fill_trace_row_from_replay(
                 temporary_range_checker.as_ref(),
                 &mem_helper,
@@ -69,7 +72,7 @@ where
 #[cfg(test)]
 pub(crate) fn generate_trace_from_postflights<F, C>(
     chip: &Sha2MainChip<F, C>,
-    postflights: &[Postflight<'_>],
+    postflights: &[Postflight<'_, F>],
 ) -> Result<RowMajorMatrix<F>, PostflightError>
 where
     F: PrimeField32,
@@ -78,7 +81,7 @@ where
     let mut replay_rows = Vec::new();
     for postflight in postflights {
         for &step in postflight.steps(C::OPCODE.global_opcode()) {
-            replay_rows.push(crate::replay_sha2_from_postflight::<C>(
+            replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
                 postflight,
                 step,
                 chip.pointer_max_bits,

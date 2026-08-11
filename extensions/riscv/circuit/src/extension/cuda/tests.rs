@@ -386,7 +386,7 @@ fn preflight_gpu_tracegen_proves_system_and_rv64i_airs() {
         ..Default::default()
     };
 
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let interpreter = executor.test_preflight_interpreter_instance(&exe).unwrap();
@@ -458,7 +458,7 @@ fn preflight_gpu_replay_proves_a_suspended_segment() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -518,7 +518,7 @@ fn preflight_gpu_replay_expands_more_than_one_launch_block() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -577,7 +577,7 @@ fn preflight_gpu_replay_launches_high_register_m_kernels() {
         },
         mul: Default::default(),
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -623,7 +623,7 @@ fn preflight_gpu_replay_carries_a_register_across_segments() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -692,7 +692,7 @@ fn preflight_gpu_replay_proves_an_empty_suspended_segment() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -738,7 +738,7 @@ fn preflight_gpu_replay_rejects_terminate_in_a_suspended_segment() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -915,7 +915,7 @@ fn preflight_gpu_replay_proves_bounded_rv64i_slice() {
         },
         mul: Default::default(),
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let max_instructions = instructions.len();
     let preflight_state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
@@ -1050,7 +1050,7 @@ fn preflight_gpu_replay_proves_all_memory_intent_shapes() {
         },
         mul: Default::default(),
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut preflight_vm, preflight_pk) =
@@ -1176,7 +1176,7 @@ fn preflight_gpu_tracegen_proves_rv64m_airs() {
         },
         mul: Default::default(),
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -1237,7 +1237,7 @@ fn preflight_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups(
         },
         mul: Default::default(),
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -1342,7 +1342,7 @@ fn preflight_postflight_rejects_raw_x0_destination() {
         },
         mul: Default::default(),
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let preflight = executor.preflight_instance(&exe).unwrap();
     let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -1406,7 +1406,7 @@ fn preflight_gpu_replay_proves_hint_store() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let mut state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let hint_words = [
@@ -1529,7 +1529,7 @@ fn preflight_gpu_replay_proves_aligned_reveals() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
 

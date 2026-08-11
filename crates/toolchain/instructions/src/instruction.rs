@@ -1,3 +1,5 @@
+use std::{error::Error, fmt};
+
 use backtrace::Backtrace;
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 
@@ -19,13 +21,13 @@ pub struct InstructionOperand(i32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InstructionOperandOutOfRange;
 
-impl std::fmt::Display for InstructionOperandOutOfRange {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for InstructionOperandOutOfRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("instruction operand must fit in signed 30 bits")
     }
 }
 
-impl std::error::Error for InstructionOperandOutOfRange {}
+impl Error for InstructionOperandOutOfRange {}
 
 impl InstructionOperand {
     pub const MIN: i32 = -(1 << 29);
@@ -181,8 +183,8 @@ macro_rules! impl_infallible_operand_from {
 
 impl_infallible_operand_from!(i8, u8, i16, u16);
 
-impl std::fmt::Display for InstructionOperand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for InstructionOperand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
@@ -304,6 +306,23 @@ impl Instruction {
             c: InstructionOperand::from_u32(discriminant.0 as u32),
             ..Default::default()
         }
+    }
+
+    /// Returns validated system-phantom operands `[a, b, discriminant, c_upper]`.
+    ///
+    /// System phantoms require non-negative `a` and `b`, 16-bit `discriminant` and `c_upper`, and
+    /// zero for every unused operand.
+    pub fn checked_phantom_operands(&self) -> Option<[u32; 4]> {
+        if !self.e.is_zero() || !self.f.is_zero() || !self.g.is_zero() {
+            return None;
+        }
+        let a = self.a.checked_as_u32()?;
+        let b = self.b.checked_as_u32()?;
+        let discriminant = self.c.checked_as_u32()?;
+        let c_upper = self.d.checked_as_u32()?;
+        u16::try_from(discriminant).ok()?;
+        u16::try_from(c_upper).ok()?;
+        Some([a, b, discriminant, c_upper])
     }
 
     pub const fn operands(&self) -> [InstructionOperand; NUM_OPERANDS] {

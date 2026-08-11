@@ -15,7 +15,7 @@ use crate::adapters::{BranchAdapterCols, BranchAdapterFiller, U16_BITS};
 /// Generates the RV64 less-than-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &BranchLessThanChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [
         BranchLessThanOpcode::BLT,

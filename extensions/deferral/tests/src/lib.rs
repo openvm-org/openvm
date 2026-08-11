@@ -13,7 +13,7 @@ mod tests {
     };
     #[cfg(feature = "rvr")]
     use openvm_circuit::{
-        arch::{rvr::PreflightLimits, ExecutionError, VirtualMachine, VmFieldExecutor, VmState},
+        arch::{rvr::PreflightLimits, ExecutionError, VirtualMachine, VmExecutor, VmState},
         system::memory::online::{GuestMemory, LinearMemory, TouchedPages, PAGE_SIZE},
         utils::test_cpu_engine,
     };
@@ -214,7 +214,7 @@ mod tests {
             deferrals: vec![deferral],
             ..Default::default()
         };
-        let executor = VmFieldExecutor::<F, _>::new(config)?;
+        let executor = VmExecutor::<F, _>::new(config)?;
         let checkpoint = executor.preflight_instance(&exe)?;
         let mut initial = checkpoint.create_initial_vm_state(streams);
         let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
@@ -269,7 +269,7 @@ mod tests {
             );
         }
 
-        let executor = VmFieldExecutor::<F, _>::new(config.clone())?;
+        let executor = VmExecutor::<F, _>::new(config.clone())?;
         let pure_error = executor
             .instance(&exe)?
             .execute(Streams::default())

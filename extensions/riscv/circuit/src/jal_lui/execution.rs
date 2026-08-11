@@ -7,6 +7,7 @@ use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, riscv::REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::JalLuiOpcode::{self, JAL};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::{get_signed_imm, run_jal_lui, JalLuiExecutor};
 use crate::adapters::byte_ptr_to_u16_ptr_value;
@@ -53,7 +54,10 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for JalLuiExecutor {
+impl<F> InterpreterExecutor<F> for JalLuiExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -94,7 +98,10 @@ impl InterpreterExecutor for JalLuiExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for JalLuiExecutor {
+impl<F> InterpreterMeteredExecutor<F> for JalLuiExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<JalLuiPreCompute>>()
     }

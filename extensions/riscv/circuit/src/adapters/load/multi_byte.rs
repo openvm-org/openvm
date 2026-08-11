@@ -259,7 +259,7 @@ type LoadMultiReplay = ([[u16; BLOCK_FE_WIDTH]; 2], usize, [u16; BLOCK_FE_WIDTH]
 impl LoadMultiByteAdapterFiller {
     pub(crate) fn replay<F: PrimeField32, const LOAD_WIDTH: usize>(
         &self,
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut LoadMultiByteAdapterCols<F>,

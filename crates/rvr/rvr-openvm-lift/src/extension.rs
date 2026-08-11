@@ -275,27 +275,14 @@ pub trait RvrRuntimeExtension: Send + Sync {
 
 /// Trait implemented by OpenVM extension owner types to contribute their rvr
 /// lifting/codegen extensions during config assembly.
-pub trait VmRvrExtension {
+pub trait VmRvrExtension<F: PrimeField32> {
     fn extend_rvr(&self, _extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {}
 }
 
-impl<EXT: VmRvrExtension> VmRvrExtension for Option<EXT> {
+impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         if let Some(ext) = self {
-            <EXT as VmRvrExtension>::extend_rvr(ext, extensions, ctx);
-        }
-    }
-}
-
-/// RVR extension registration that depends on the VM field.
-pub trait VmFieldRvrExtension<F: PrimeField32> {
-    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>);
-}
-
-impl<F: PrimeField32, EXT: VmFieldRvrExtension<F>> VmFieldRvrExtension<F> for Option<EXT> {
-    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
-        if let Some(ext) = self {
-            <EXT as VmFieldRvrExtension<F>>::extend_rvr(ext, extensions, ctx);
+            ext.extend_rvr(extensions, ctx);
         }
     }
 }

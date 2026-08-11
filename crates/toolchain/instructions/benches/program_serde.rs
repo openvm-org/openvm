@@ -1,4 +1,4 @@
-use std::hint::black_box;
+use std::{array, hint::black_box};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use openvm_instructions::{
@@ -10,17 +10,12 @@ use rand::prelude::*;
 
 fn random_instruction(rng: &mut impl Rng) -> Instruction {
     let opcode = VmOpcode::from_usize(rng.random::<u16>() as usize);
-    let mut operand = || rng.random_range(InstructionOperand::MIN..=InstructionOperand::MAX);
-    Instruction::new(
-        opcode,
-        InstructionOperand::from_i32(operand()),
-        InstructionOperand::from_i32(operand()),
-        InstructionOperand::from_i32(operand()),
-        InstructionOperand::from_i32(operand()),
-        InstructionOperand::from_i32(operand()),
-        InstructionOperand::from_i32(operand()),
-        InstructionOperand::from_i32(operand()),
-    )
+    let [a, b, c, d, e, f, g] = array::from_fn(|_| {
+        InstructionOperand::from_i32(
+            rng.random_range(InstructionOperand::MIN..=InstructionOperand::MAX),
+        )
+    });
+    Instruction::new(opcode, a, b, c, d, e, f, g)
 }
 
 fn program_serde_bench(c: &mut Criterion) {

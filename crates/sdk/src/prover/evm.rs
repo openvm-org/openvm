@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, ContinuationProverBuilder, Executor, MeteredExecutor, VmField,
-    VmFieldExecutionConfig,
+    instructions::exe::VmExe, ContinuationProverBuilder, Executor, MeteredExecutor,
+    VmExecutionConfig,
 };
 use openvm_continuations::RootSC;
-use openvm_stark_backend::{proof::Proof, StarkEngine, Val};
+use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 use openvm_verify_stark_host::VmStarkProof;
 
 #[cfg(feature = "evm-prove")]
@@ -26,7 +26,6 @@ use crate::{
 pub struct EvmProver<E, VB>
 where
     E: StarkEngine,
-    Val<E::SC>: VmField,
     VB: ContinuationProverBuilder<E>,
 {
     pub stark_prover: StarkProver<E, VB>,
@@ -39,7 +38,7 @@ impl<E, VB> EvmProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: ContinuationProverBuilder<E> + Clone,
-    Val<SC>: VmField,
+    Val<SC>: PrimeField32,
 {
     pub fn new(
         vm_builder: VB,
@@ -70,8 +69,8 @@ where
         metadata: &mut InternalLayerMetadata,
     ) -> Result<Proof<RootSC>>
     where
-        <VB::VmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor:
-            Executor + MeteredExecutor + 'static,
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+            Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
     {
         #[cfg(test)]
         {
@@ -101,8 +100,8 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<Proof<RootSC>>
     where
-        <VB::VmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor:
-            Executor + MeteredExecutor + 'static,
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+            Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
     {
         let (stark_proof, mut internal_metadata) = self.stark_prover.prove(input, def_inputs)?;
         self.prove_root_from_vm_stark_proof(stark_proof, &mut internal_metadata)
@@ -115,8 +114,8 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<crate::types::EvmProof>
     where
-        <VB::VmConfig as VmFieldExecutionConfig<Val<SC>>>::Executor:
-            Executor + MeteredExecutor + 'static,
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+            Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
     {
         let root_proof = self.prove_root(input, def_inputs)?;
         let evm_proof = self

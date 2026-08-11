@@ -1,9 +1,6 @@
 //! OpenVM system instruction lifting and RVR extension dispatch.
 
-use openvm_instructions::{
-    instruction::{Instruction, InstructionOperand},
-    LocalOpcode, SysPhantom, SystemOpcode,
-};
+use openvm_instructions::{instruction::Instruction, LocalOpcode, SysPhantom, SystemOpcode};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator};
 
 use crate::{ExtensionError, ExtensionRegistry};
@@ -46,26 +43,14 @@ fn decode_system_phantom(
     insn: &Instruction,
     pc: u64,
 ) -> Result<Option<SysPhantom>, ExtensionError> {
-    let invalid = || ExtensionError::InvalidInstruction {
-        opcode: insn.opcode,
-        pc,
+    let Some([_, _, discriminant, _]) = insn.checked_phantom_operands() else {
+        return Err(ExtensionError::InvalidInstruction {
+            opcode: insn.opcode,
+            pc,
+        });
     };
-    let require_u32 = |operand: InstructionOperand| operand.checked_as_u32().ok_or_else(&invalid);
 
-    if [insn.e, insn.f, insn.g]
-        .into_iter()
-        .any(|operand| !operand.is_zero())
-    {
-        return Err(invalid());
-    }
-
-    require_u32(insn.a)?;
-    require_u32(insn.b)?;
-
-    let discriminant = u16::try_from(require_u32(insn.c)?).map_err(|_| invalid())?;
-    let _c_upper = u16::try_from(require_u32(insn.d)?).map_err(|_| invalid())?;
-
-    Ok(SysPhantom::from_repr(discriminant))
+    Ok(SysPhantom::from_repr(discriminant as u16))
 }
 
 fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {

@@ -15,6 +15,7 @@ use openvm_riscv_transpiler::{
     HintStoreOpcode,
     HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
 };
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{validate_hint_buffer_num_words, HintStoreExecutor};
 use crate::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
@@ -69,7 +70,10 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for HintStoreExecutor {
+impl<F> InterpreterExecutor<F> for HintStoreExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STORED.global_opcode().as_usize() {
             String::from("HINT_STORED")
@@ -113,7 +117,10 @@ impl InterpreterExecutor for HintStoreExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for HintStoreExecutor {
+impl<F> InterpreterMeteredExecutor<F> for HintStoreExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<HintStorePreCompute>>()
     }

@@ -15,6 +15,7 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
+use openvm_stark_backend::p3_field::PrimeField32;
 
 #[cfg(test)]
 use crate::arch::execution_mode::ExecutionCtx;
@@ -132,21 +133,25 @@ where
     Ctx: ExecutionCtxTrait,
 {
     /// Creates an interpreter for pure or preflight execution.
-    pub fn new<E>(
+    pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe,
     ) -> Result<Self, StaticProgramError>
     where
-        E: Executor,
+        F: PrimeField32,
+        E: Executor<F>,
     {
         let program = &exe.program;
-        let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
+        let pre_compute_max_size = get_pre_compute_max_size::<F, _>(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
         #[cfg(not(feature = "tco"))]
-        let pre_compute_insns =
-            get_pre_compute_instructions::<Ctx, E>(program, inventory, &mut split_pre_compute_buf)?;
+        let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
+            program,
+            inventory,
+            &mut split_pre_compute_buf,
+        )?;
         let pc_start = exe.pc_start;
         let init_memory = exe.init_memory.clone();
         #[cfg(feature = "tco")]
@@ -229,21 +234,22 @@ where
     Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates an interpreter for metered execution.
-    pub fn new_metered<E>(
+    pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
-        E: MeteredExecutor,
+        F: PrimeField32,
+        E: MeteredExecutor<F>,
     {
         let program = &exe.program;
-        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
+        let pre_compute_max_size = get_metered_pre_compute_max_size::<F, _>(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
         #[cfg(not(feature = "tco"))]
-        let pre_compute_insns = get_metered_pre_compute_instructions::<Ctx, E>(
+        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
             executor_idx_to_air_idx,
@@ -426,7 +432,7 @@ unsafe fn unreachable_tco_handler<CTX>(
     exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.vm_state.pc()));
 }
 
-pub(crate) fn get_pre_compute_max_size<E: Executor>(
+pub(crate) fn get_pre_compute_max_size<F, E: Executor<F>>(
     program: &Program,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -452,7 +458,7 @@ pub(crate) fn get_pre_compute_max_size<E: Executor>(
         .next_power_of_two()
 }
 
-pub(crate) fn get_metered_pre_compute_max_size<E: MeteredExecutor>(
+pub(crate) fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
     program: &Program,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -486,14 +492,15 @@ fn system_opcode_pre_compute_size(inst: &Instruction) -> Option<usize> {
 }
 
 #[cfg(not(feature = "tco"))]
-pub(crate) fn get_pre_compute_instructions<Ctx, E>(
+pub(crate) fn get_pre_compute_instructions<F, Ctx, E>(
     program: &Program,
     inventory: &ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
 where
+    F: PrimeField32,
     Ctx: ExecutionCtxTrait,
-    E: Executor,
+    E: Executor<F>,
 {
     let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
@@ -541,15 +548,16 @@ where
 }
 
 #[cfg(not(feature = "tco"))]
-pub(crate) fn get_metered_pre_compute_instructions<Ctx, E>(
+pub(crate) fn get_metered_pre_compute_instructions<F, Ctx, E>(
     program: &Program,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
 where
+    F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
-    E: MeteredExecutor,
+    E: MeteredExecutor<F>,
 {
     let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));

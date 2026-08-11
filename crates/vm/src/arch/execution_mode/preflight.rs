@@ -39,14 +39,7 @@ pub struct PreflightCtx {
 }
 
 impl PreflightCtx {
-    pub(crate) fn new(memory: &GuestMemory, instret_left: Option<u64>) -> Self {
-        Self::new_inner(memory, instret_left, reject_field_block)
-    }
-
-    pub(crate) fn new_for_field<F: PrimeField32>(
-        memory: &GuestMemory,
-        instret_left: Option<u64>,
-    ) -> Self {
+    pub(crate) fn new<F: PrimeField32>(memory: &GuestMemory, instret_left: Option<u64>) -> Self {
         assert!(
             memory
                 .memory
@@ -56,14 +49,6 @@ impl PreflightCtx {
                 || size_of::<F>() == size_of::<u32>(),
             "field32 memory requires a four-byte proof field"
         );
-        Self::new_inner(memory, instret_left, read_canonical_field_block::<F>)
-    }
-
-    fn new_inner(
-        memory: &GuestMemory,
-        instret_left: Option<u64>,
-        read_canonical_field_block: unsafe fn(&GuestMemory, u32, u32) -> [u32; BLOCK_FE_WIDTH],
-    ) -> Self {
         let block_byte_shifts = memory
             .memory
             .config
@@ -98,7 +83,7 @@ impl PreflightCtx {
             block_byte_shifts,
             seen_blocks,
             pending_writes: Vec::with_capacity(2),
-            read_canonical_field_block,
+            read_canonical_field_block: read_canonical_field_block::<F>,
             instret_left: instret_left.unwrap_or(u64::MAX),
         }
     }
@@ -260,22 +245,13 @@ impl PreflightCtx {
     }
 }
 
-unsafe fn reject_field_block(
-    _memory: &GuestMemory,
-    _address_space: u32,
-    _pointer: u32,
-) -> [u32; BLOCK_FE_WIDTH] {
-    unreachable!("fieldless preflight context cannot read field32 memory")
-}
-
 unsafe fn read_canonical_field_block<F: PrimeField32>(
     memory: &GuestMemory,
     address_space: u32,
     pointer: u32,
 ) -> [u32; BLOCK_FE_WIDTH] {
-    // SAFETY: PreflightCtx::new_for_field checks that F matches the configured
-    // four-byte field cell width, and block pointers come from validated memory
-    // accesses.
+    // SAFETY: PreflightCtx::new checks that F matches the configured four-byte
+    // field cell width, and block pointers come from validated memory accesses.
     unsafe { memory.read::<F, BLOCK_FE_WIDTH>(address_space, pointer) }
         .map(|value| value.as_canonical_u32())
 }
@@ -387,7 +363,7 @@ mod tests {
             memory.write(DEFERRAL_AS, 0, values);
         }
 
-        let mut ctx = PreflightCtx::new_for_field::<BabyBear>(&memory, None);
+        let mut ctx = PreflightCtx::new::<BabyBear>(&memory, None);
         ctx.log_read(
             &memory,
             DEFERRAL_AS,
@@ -403,23 +379,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "fieldless preflight context cannot read field32 memory")]
-    fn fieldless_context_rejects_field_access() {
-        let memory = GuestMemory::new(AddressMap::from_mem_config(&MemoryConfig::default()));
-        let mut ctx = PreflightCtx::new(&memory, None);
-
-        ctx.log_read(
-            &memory,
-            DEFERRAL_AS,
-            0,
-            (BLOCK_FE_WIDTH * size_of::<BabyBear>()) as u32,
-        );
-    }
-
-    #[test]
     fn repeated_writes_seed_a_block_once() {
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&MemoryConfig::default()));
-        let mut ctx = PreflightCtx::new(&memory, None);
+        let mut ctx = PreflightCtx::new::<BabyBear>(&memory, None);
 
         ctx.begin_write(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);
         unsafe {
@@ -448,7 +410,7 @@ mod tests {
         unsafe {
             memory.write(MEMORY_AS, 0, [7u16]);
         }
-        let mut ctx = PreflightCtx::new(&memory, None);
+        let mut ctx = PreflightCtx::new::<BabyBear>(&memory, None);
 
         ctx.log_read(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);
         ctx.begin_write(&memory, MEMORY_AS, 0, size_of::<u16>() as u32);

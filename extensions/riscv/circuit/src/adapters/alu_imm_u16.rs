@@ -125,7 +125,7 @@ pub struct BaseAluImmU16AdapterFiller;
 
 impl BaseAluImmU16AdapterFiller {
     pub(crate) fn replay<F: PrimeField32>(
-        postflight: &Postflight<'_>,
+        postflight: &Postflight<'_, F>,
         step: PostflightStep,
         mem_helper: &MemoryAuxColsFactory<F>,
         adapter_row: &mut BaseAluImmU16AdapterCols<F>,

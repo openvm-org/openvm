@@ -5,10 +5,10 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::{Instruction, InstructionOperand},
-    program::DEFAULT_PC_STEP,
-    PhantomDiscriminant, SysPhantom, SystemOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode,
 };
+use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
 #[cfg(not(feature = "tco"))]
@@ -41,7 +41,10 @@ struct PhantomPreCompute {
     sub_executor: *const dyn PhantomSubExecutor,
 }
 
-impl InterpreterExecutor for PhantomExecutor {
+impl<F> InterpreterExecutor<F> for PhantomExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", SystemOpcode::PHANTOM)
     }
@@ -97,25 +100,10 @@ impl PhantomExecutor {
         inst: &Instruction,
         data: &mut PhantomPreCompute,
     ) -> Result<(), StaticProgramError> {
-        if [inst.e, inst.f, inst.g]
-            .into_iter()
-            .any(|operand| !operand.is_zero())
-        {
+        let Some([a, b, c, d]) = inst.checked_phantom_operands() else {
             return Err(StaticProgramError::InvalidInstruction(pc));
-        }
-        let to_u32 = |operand: InstructionOperand| {
-            operand
-                .checked_as_u32()
-                .ok_or(StaticProgramError::InvalidInstruction(pc))
         };
-        let a = to_u32(inst.a)?;
-        let b = to_u32(inst.b)?;
-        let c = to_u32(inst.c)?;
-        let d = to_u32(inst.d)?;
-        let discriminant = u16::try_from(c)
-            .map(PhantomDiscriminant)
-            .map_err(|_| StaticProgramError::InvalidInstruction(pc))?;
-        let _c_upper = u16::try_from(d).map_err(|_| StaticProgramError::InvalidInstruction(pc))?;
+        let discriminant = PhantomDiscriminant(c as u16);
         let sub_executor = self
             .phantom_executors
             .get(&discriminant)
@@ -129,7 +117,10 @@ impl PhantomExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for PhantomExecutor {
+impl<F> InterpreterMeteredExecutor<F> for PhantomExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<PhantomPreCompute>>()
     }

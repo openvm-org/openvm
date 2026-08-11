@@ -441,8 +441,10 @@ macro_rules! dispatch {
     };
 }
 
-impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor
+impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor<F>
     for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -486,8 +488,10 @@ impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor
     }
 }
 
-impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterMeteredExecutor
+impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterMeteredExecutor<F>
     for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

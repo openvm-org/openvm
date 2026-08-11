@@ -12,7 +12,7 @@ use crate::{adapters::LoadMultiByteAdapterCols, load_sign_extend::core::LoadSign
 /// Generates the signed word-load trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &LoadSignExtendWordChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(LOADW.global_opcode());
     let width = LoadMultiByteAdapterCols::<F>::width()

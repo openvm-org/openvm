@@ -14,6 +14,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::bytes_to_u32;
 use openvm_riscv_transpiler::BaseAluOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
@@ -43,7 +44,7 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for AddSub256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for AddSub256Executor {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -88,7 +89,7 @@ impl InterpreterExecutor for AddSub256Executor {
     }
 }
 
-impl InterpreterMeteredExecutor for AddSub256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for AddSub256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AddSubPreCompute>>()
     }

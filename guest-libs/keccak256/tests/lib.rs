@@ -18,6 +18,7 @@ mod tests {
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sdk::StdIn;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -89,7 +90,7 @@ mod tests {
         if prove {
             air_test_with_min_segments(TestBuilder, config, openvm_exe, stdin, 1);
         } else {
-            let executor = VmExecutor::new(config.clone())?;
+            let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
             let instance = executor.instance(&openvm_exe)?;
             #[allow(unused_variables)]
             let state = instance.execute(stdin.clone())?;

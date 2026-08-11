@@ -800,7 +800,7 @@ mod ec_addne_tests {
 
         history.memory.accesses[0].value[2] = 0;
         history.memory.accesses[0].pointer += 1;
-        let error = Postflight::new_for_test(&execution.program, &history, &memory_config)
+        let error = Postflight::<F>::new_for_test(&execution.program, &history, &memory_config)
             .err()
             .expect("misaligned memory event must be rejected");
         assert!(error.to_string().contains("misaligned"), "{error}");
@@ -1198,7 +1198,7 @@ mod ec_addne_tests {
             crate::SECP256K1_CONFIG.clone(),
         ]);
         *vm_config.as_mut() = test_system_config();
-        let executor = VmExecutor::new(vm_config.clone()).unwrap();
+        let executor = VmExecutor::<F, _>::new(vm_config.clone()).unwrap();
         let state = executor
             .interpreter_instance(&exe)
             .unwrap()

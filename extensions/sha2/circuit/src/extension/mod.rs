@@ -25,6 +25,8 @@ use openvm_riscv_circuit::{
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Sha2Opcode;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_sha2::Sha2Extension;
@@ -114,7 +116,7 @@ where
 pub struct Sha2;
 
 #[cfg(feature = "rvr")]
-impl VmRvrExtension for Sha2 {
+impl<F: PrimeField32> VmRvrExtension<F> for Sha2 {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         let ext = Sha2Extension::new(ctx).expect("failed to construct rvr Sha2Extension");
         extensions.register_lifter(ext);

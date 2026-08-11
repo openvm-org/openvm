@@ -325,7 +325,7 @@ pub(crate) fn generate_trace_from_postflight<
     const NUM_VALUE_CELLS: usize,
 >(
     chip: &VmChipWrapper<F, StoreFiller<StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(store_opcode::<STORE_WIDTH>().global_opcode());
     let adapter_width = StoreMultiByteAdapterCols::<F>::width();

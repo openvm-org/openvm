@@ -52,6 +52,7 @@ use openvm_stark_sdk::{
         self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, EngineDeviceCtx,
         StarkEngine, StarkProtocolConfig, SystemParams, Val,
     },
+    p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
@@ -75,7 +76,7 @@ type Engine = BabyBearPoseidon2CpuEngine;
 
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
-static EXECUTOR: OnceLock<VmExecutor<ExecuteConfig>> = OnceLock::new();
+static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
 static SUCCESSFUL_EXECUTIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 type Cache<T> = OnceLock<Mutex<HashMap<String, Arc<T>>>>;
 
@@ -241,10 +242,10 @@ fn metered_cost_setup() -> &'static (MeteredCostCtx, Vec<usize>) {
     })
 }
 
-fn executor() -> &'static VmExecutor<ExecuteConfig> {
+fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     EXECUTOR.get_or_init(|| {
         let vm_config = ExecuteConfig::default();
-        VmExecutor::new(vm_config).unwrap()
+        VmExecutor::<BabyBear, _>::new(vm_config).unwrap()
     })
 }
 

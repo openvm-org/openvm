@@ -5,6 +5,7 @@ use openvm_circuit::{
     },
     utils::{test_gpu_engine, test_system_config},
 };
+use openvm_cuda_backend::prelude::F;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
@@ -252,7 +253,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -291,7 +292,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let state = executor
         .interpreter_instance(&exe)
         .unwrap()
@@ -331,7 +332,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let state = executor
         .interpreter_instance(&exe)
         .unwrap()

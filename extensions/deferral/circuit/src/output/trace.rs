@@ -52,7 +52,7 @@ struct DeferralOutputReplay {
 /// never reads deferral streams or invokes a host callback.
 pub fn generate_trace_from_postflight<F: VmField>(
     chip: &DeferralOutputChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(DeferralOpcode::OUTPUT.global_opcode());
     let width = DeferralOutputCols::<F>::width();

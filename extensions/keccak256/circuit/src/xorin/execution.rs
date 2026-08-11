@@ -16,6 +16,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::bytes_to_u32;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
 
@@ -59,7 +60,7 @@ impl XorinVmExecutor {
     }
 }
 
-impl InterpreterExecutor for XorinVmExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", XorinOpcode::XORIN)
     }
@@ -99,7 +100,7 @@ impl InterpreterExecutor for XorinVmExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for XorinVmExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<XorinPreCompute>>()
     }

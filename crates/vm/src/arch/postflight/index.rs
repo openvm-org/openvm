@@ -5,13 +5,17 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
+use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 
 use super::{
     decode_u8_block, memory_key, PostflightError, PREDECESSOR_INDEX_MASK, PREDECESSOR_SEED_BIT,
 };
 use crate::{
-    arch::{MemoryCellType, MemoryConfig, PreflightHistory, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    arch::{
+        MemoryCellType, MemoryConfig, PreflightFieldBlock, PreflightHistory, ADDR_SPACE_OFFSET,
+        BLOCK_FE_WIDTH,
+    },
     system::{TouchedBlock, TouchedMemory},
 };
 
@@ -292,16 +296,28 @@ fn validate_field_reference(
     Ok(())
 }
 
-fn update_max_field_value(max_field_value: &mut Option<u32>, values: [u32; BLOCK_FE_WIDTH]) {
-    for value in values {
-        *max_field_value = Some(max_field_value.map_or(value, |current| current.max(value)));
+fn validate_field_block<F: PrimeField32>(
+    block: PreflightFieldBlock,
+) -> Result<(), PostflightError> {
+    if block.values.iter().any(|&value| value >= F::ORDER_U32) {
+        return Err(PostflightError::new(
+            "field sidecar contains a non-canonical raw field value",
+        ));
     }
+    Ok(())
 }
 
-pub(super) fn memory_index(
+pub(super) fn decode_field_block<F: PrimeField32>(
+    block: PreflightFieldBlock,
+) -> [F; BLOCK_FE_WIDTH] {
+    debug_assert!(block.values.iter().all(|&value| value < F::ORDER_U32));
+    block.values.map(F::from_u32)
+}
+
+pub(super) fn memory_index<F: PrimeField32>(
     history: &PreflightHistory,
     config: &MemoryConfig,
-) -> Result<(Vec<u32>, TouchedMemory, Option<u32>), PostflightError> {
+) -> Result<(Vec<u32>, TouchedMemory<F>), PostflightError> {
     #[derive(Clone, Copy)]
     enum BlockState {
         Seed(u32),
@@ -320,7 +336,6 @@ pub(super) fn memory_index(
 
     let mut blocks = FxHashMap::with_capacity_and_hasher(seeds.len(), Default::default());
     let mut field_seed_cursor = 0usize;
-    let mut max_field_value = None;
     for (index, seed) in seeds.iter().enumerate() {
         if seed.address_space & rvr_state::PREFLIGHT_WRITE_BIT != 0 {
             return Err(PostflightError::new(
@@ -344,10 +359,7 @@ pub(super) fn memory_index(
                     history.memory.field_initial_values.len(),
                     "initial-write seed",
                 )?;
-                update_max_field_value(
-                    &mut max_field_value,
-                    history.memory.field_initial_values[field_seed_cursor].values,
-                );
+                validate_field_block::<F>(history.memory.field_initial_values[field_seed_cursor])?;
                 field_seed_cursor += 1;
             }
             _ => unreachable!("validate_memory_block rejects other layouts"),
@@ -389,10 +401,7 @@ pub(super) fn memory_index(
                     history.memory.field_values.len(),
                     "memory event",
                 )?;
-                update_max_field_value(
-                    &mut max_field_value,
-                    history.memory.field_values[field_event_cursor].values,
-                );
+                validate_field_block::<F>(history.memory.field_values[field_event_cursor])?;
                 field_event_cursor += 1;
             }
             _ => unreachable!("validate_memory_block rejects other layouts"),
@@ -467,11 +476,11 @@ pub(super) fn memory_index(
             };
             let event = history.memory.accesses[event_index as usize];
             let values = match config.addr_spaces[event.address_space() as usize].layout {
-                MemoryCellType::U8 => decode_u8_block(event.value).map(u32::from),
-                MemoryCellType::U16 => event.value.map(u32::from),
-                MemoryCellType::FIELD32 => {
-                    history.memory.field_values[field_reference(event.value)].values
-                }
+                MemoryCellType::U8 => decode_u8_block(event.value).map(F::from_u8),
+                MemoryCellType::U16 => event.value.map(F::from_u16),
+                MemoryCellType::FIELD32 => decode_field_block::<F>(
+                    history.memory.field_values[field_reference(event.value)],
+                ),
                 _ => unreachable!("memory layouts were validated above"),
             };
             TouchedBlock {
@@ -483,5 +492,5 @@ pub(super) fn memory_index(
             }
         })
         .collect();
-    Ok((predecessors, touched_memory, max_field_value))
+    Ok((predecessors, touched_memory))
 }

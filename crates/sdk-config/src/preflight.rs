@@ -418,7 +418,7 @@ mod tests {
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::{
         rvr::{PreflightEndpoint, PreflightLimits},
-        MemoryConfig, SystemConfig, VmFieldExecutor,
+        MemoryConfig, SystemConfig, VmExecutor,
     };
     #[cfg(feature = "rvr")]
     use openvm_cuda_backend::prelude::F;
@@ -455,7 +455,7 @@ mod tests {
         let exe = VmExe::new(program.clone());
         let mut config = SdkVmConfig::standard();
         config.system.config = small_system_config();
-        let executor = VmFieldExecutor::<F, _>::new(config.clone()).unwrap();
+        let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
         let preflight = executor.preflight_instance(&exe).unwrap();
         let state = preflight.create_initial_vm_state(Vec::<Vec<u8>>::new());
 

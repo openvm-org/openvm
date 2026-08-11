@@ -1,5 +1,4 @@
 use openvm_cuda_backend::prelude::F as CudaField;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::*;
 use crate::arch::Postflight;
@@ -16,8 +15,9 @@ impl GpuPostflightProgram {
         history: &PreflightHistory,
         exit_code: Option<u32>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let postflight = Postflight::new(program, history, &self.memory_config, exit_code)
-            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        let postflight =
+            Postflight::<CudaField>::new(program, history, &self.memory_config, exit_code)
+                .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         self.upload_validated_history_for_test(history, postflight)
     }
 
@@ -28,19 +28,17 @@ impl GpuPostflightProgram {
         program: &Program,
         history: &PreflightHistory,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let postflight = Postflight::new_for_test(program, history, &self.memory_config)
-            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        let postflight =
+            Postflight::<CudaField>::new_for_test(program, history, &self.memory_config)
+                .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         self.upload_validated_history_for_test(history, postflight)
     }
 
     fn upload_validated_history_for_test(
         &self,
         history: &PreflightHistory,
-        postflight: Postflight<'_>,
+        postflight: Postflight<'_, CudaField>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        postflight
-            .validate_field_values(CudaField::ORDER_U32)
-            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         let replay_steps = postflight
             .replay_steps_for_test()
             .map(|(program_index, memory_start)| GpuReplayStep {
@@ -241,7 +239,7 @@ impl GpuPostflightPlan {
             .collect())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub(super) const fn connector_boundary_for_test(&self) -> GpuPostflightBoundary {
         let (from, to, exit_code) = self.connector_boundary();
         GpuPostflightBoundary::new(from, to, exit_code)
@@ -261,7 +259,7 @@ pub type ChronologyOutputForTest = (
     Vec<PreflightFieldBlock>,
     Vec<PreflightFieldBlock>,
     Vec<u32>,
-    Vec<TouchedBlock>,
+    Vec<TouchedBlock<CudaField>>,
 );
 
 #[cfg(all(test, feature = "rvr"))]

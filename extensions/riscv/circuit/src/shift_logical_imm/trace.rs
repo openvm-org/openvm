@@ -20,7 +20,7 @@ use crate::{
 
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftLogicalImmChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftImmOpcode::SLLI, ShiftImmOpcode::SRLI];
     let rows_used = opcodes
@@ -89,7 +89,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
 pub fn generate_word_trace_from_postflight<F: PrimeField32>(
     chip: &ShiftWLogicalImmChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [ShiftWImmOpcode::SLLIW, ShiftWImmOpcode::SRLIW];
     let rows_used = opcodes

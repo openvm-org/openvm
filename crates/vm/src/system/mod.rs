@@ -26,9 +26,9 @@ use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, AirRefWithColumns, BusIndexManager,
         ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutorInventory,
-        ExecutorInventoryError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig,
-        VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField,
-        VmFieldExecutionConfig, BLOCK_FE_WIDTH, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        ExecutorInventoryError, PhantomSubExecutor, Postflight, SystemConfig, VmBuilder,
+        VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField, BLOCK_FE_WIDTH,
+        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -95,24 +95,22 @@ pub trait SystemWithFixedTraceHeights {
 /// timestamp at [BLOCK_FE_WIDTH] granularity. The touched-memory list is
 /// sorted by `(address_space, ptr)`.
 ///
-/// Values use canonical `u32` field representatives. Field conversion happens
-/// at the proof-system boundary, while the record itself stays independent of
-/// the proof field.
-///
-/// The struct is also the GPU memory-inventory input-record layout (8 u32
-/// words), so the device path can upload it without repacking. Keep in sync
-/// with `MemoryTouchedBlock` in `system/memory/touched_block.cuh`.
+/// `repr(C)` with 4-byte fields: for a 4-byte field type its bytes are plain
+/// data and the struct is exactly the GPU memory-inventory input-record
+/// layout (8 u32 words), so the device path uploads the vector's bytes
+/// without repacking. Keep in sync with `MemoryTouchedBlock` in
+/// `system/memory/touched_block.cuh`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TouchedBlock {
+pub struct TouchedBlock<F> {
     pub address_space: u32,
     pub ptr: u32,
     pub is_dirty: u32,
     pub timestamp: u32,
-    pub values: [u32; BLOCK_FE_WIDTH],
+    pub values: [F; BLOCK_FE_WIDTH],
 }
 
-pub type TouchedMemory = Vec<TouchedBlock>;
+pub type TouchedMemory<F> = Vec<TouchedBlock<F>>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, From)]
 pub enum SystemExecutor {
@@ -185,7 +183,7 @@ impl SystemAirInventory {
     }
 }
 
-impl VmExecutionConfig for SystemConfig {
+impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor;
 
     /// Creates the system executor inventory, including the executor that dispatches phantom
@@ -223,24 +221,6 @@ impl VmExecutionConfig for SystemConfig {
     #[cfg(feature = "rvr")]
     fn create_rvr_extensions(&self, _air_idx: Option<&[usize]>) -> rvr_openvm_lift::RvrExtensions {
         rvr_openvm_lift::RvrExtensions::new()
-    }
-}
-
-impl<F: VmField> VmFieldExecutionConfig<F> for SystemConfig {
-    type Executor = <Self as VmExecutionConfig>::Executor;
-
-    fn create_field_executors(
-        &self,
-    ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
-        <Self as VmExecutionConfig>::create_executors(self)
-    }
-
-    #[cfg(feature = "rvr")]
-    fn create_field_rvr_extensions(
-        &self,
-        air_idx: Option<&[usize]>,
-    ) -> rvr_openvm_lift::RvrExtensions {
-        <Self as VmExecutionConfig>::create_rvr_extensions(self, air_idx)
     }
 }
 
@@ -354,9 +334,8 @@ where
     /// memory boundary and Merkle traces.
     pub fn generate_proving_ctx_from_postflight(
         &mut self,
-        postflight: &Postflight<'_>,
-    ) -> Result<Vec<AirProvingContext<CpuBackend<SC>>>, PostflightError> {
-        postflight.validate_field_values(Val::<SC>::ORDER_U32)?;
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let program_ctx = self
             .program_chip
             .generate_proving_ctx_with_frequencies(postflight.filtered_exec_frequencies());
@@ -370,10 +349,10 @@ where
             .memory_controller
             .generate_proving_ctx(postflight.touched_memory());
 
-        Ok([program_ctx, connector_ctx]
+        [program_ctx, connector_ctx]
             .into_iter()
             .chain(memory_ctxs)
-            .collect())
+            .collect()
     }
 }
 

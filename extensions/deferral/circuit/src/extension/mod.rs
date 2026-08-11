@@ -5,8 +5,8 @@ use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
         ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
-        SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension, VmField,
-        VmFieldExecutionExtension, VmProverExtension,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
     utils::next_power_of_two_or_zero,
@@ -29,7 +29,7 @@ use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocol
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_deferral::{DeferralRuntimeHooks, DeferralRvrExtension};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmFieldRvrExtension};
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "rvr")]
@@ -76,7 +76,7 @@ pub struct DeferralExtension {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: VmField> VmFieldRvrExtension<F> for DeferralExtension {
+impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         let hash = make_deferral_hash::<F>();
         let compress = make_deferral_compress::<F>();
@@ -91,17 +91,17 @@ impl<F: VmField> VmFieldRvrExtension<F> for DeferralExtension {
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
-pub enum DeferralExecutor<F: VmField> {
-    Call(DeferralCallExecutor<F>),
+pub enum DeferralExecutor {
+    Call(DeferralCallExecutor),
     Output(DeferralOutputExecutor),
 }
 
-impl<F: VmField> VmFieldExecutionExtension<F> for DeferralExtension {
-    type Executor = DeferralExecutor<F>;
+impl VmExecutionExtension for DeferralExtension {
+    type Executor = DeferralExecutor;
 
-    fn extend_field_execution(
+    fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<DeferralExecutor<F>>,
+        inventory: &mut ExecutorInventoryBuilder<DeferralExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let call = DeferralCallExecutor::new(self.fns.clone());
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
@@ -268,7 +268,7 @@ pub struct Rv64DeferralConfig {
     #[extension]
     pub io: Rv64Io,
     #[serde(skip)]
-    #[extension(field, executor = "DeferralExecutor<F>")]
+    #[extension(executor = "DeferralExecutor")]
     pub deferral: DeferralExtension,
 }
 

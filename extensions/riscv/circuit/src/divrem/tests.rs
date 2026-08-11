@@ -131,7 +131,7 @@ fn create_harness(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,
@@ -174,7 +174,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor + Clone>(
 
 // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
 // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
-fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor + Clone>(
+fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     preflight: &mut openvm_circuit::arch::testing::TestPreflight,

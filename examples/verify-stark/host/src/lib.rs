@@ -9,7 +9,7 @@ use openvm_sdk::{
     openvm_circuit::arch::instructions::exe::VmExe,
     prover::{DeferralAggProver, MultiDeferralCircuitProver},
     types::VersionedVmStarkProof,
-    DefaultStarkEngine as E, DeferralInput, Sdk, StdIn, F, SC,
+    DefaultStarkEngine as E, DeferralInput, Sdk, StdIn, SC,
 };
 use openvm_sdk_config::{deferral::SupportedDeferral, SdkSystemConfig, SdkVmConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine};

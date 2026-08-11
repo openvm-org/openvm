@@ -17,7 +17,7 @@ use crate::adapters::{
 /// Generates the RV64 ADDI trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
     chip: &AddIChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(BaseAluImmOpcode::ADDI.global_opcode());
     let adapter_width = BaseAluImmU16AdapterCols::<F>::width();
@@ -61,7 +61,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 /// Generates the RV64 ADDIW trace directly from immutable preflight history.
 pub fn generate_w_trace_from_postflight<F: PrimeField32>(
     chip: &AddIWChip<F>,
-    postflight: &Postflight<'_>,
+    postflight: &Postflight<'_, F>,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let steps = postflight.steps(BaseAluWImmOpcode::ADDIW.global_opcode());
     let adapter_width = BaseAluWImmU16AdapterCols::<F>::width();

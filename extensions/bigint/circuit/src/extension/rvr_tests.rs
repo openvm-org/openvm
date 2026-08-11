@@ -11,6 +11,7 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{BaseAluOpcode, BranchEqualOpcode};
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
 use crate::Int256Rv64Config;
 
@@ -102,7 +103,7 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config).unwrap();
+    let executor = VmExecutor::<F, _>::new(config).unwrap();
     for (equal, expected_pc, expected_branch_replay_value) in [(false, 8, 0u64), (true, 12, 1u64)] {
         let checkpoint = executor.preflight_instance(&fixture(equal)).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
@@ -123,7 +124,7 @@ fn int256_heap_pointers_follow_the_eight_byte_memory_equipartition() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config).unwrap();
+    let executor = VmExecutor::<F, _>::new(config).unwrap();
 
     for pointer_offset in [0, 8] {
         let exe = fixture_with_pointer_offset(false, pointer_offset);

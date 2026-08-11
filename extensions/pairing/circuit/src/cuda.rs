@@ -11,6 +11,8 @@ use openvm_circuit::{
     },
     system::cuda::SystemChipInventoryGPU,
 };
+#[cfg(all(test, feature = "rvr"))]
+use openvm_cuda_backend::prelude::F;
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_ecc_circuit::{EccProverExt, WeierstrassPreflightGpuTracegen};
 use openvm_instructions::program::Program;
@@ -242,7 +244,7 @@ mod tests {
         let mut config =
             Rv64PairingConfig::new(vec![curve], vec![pairing_complex_name(curve).to_string()]);
         *config.as_mut() = test_system_config();
-        let executor = VmExecutor::new(config.clone()).unwrap();
+        let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
         let checkpoint = executor.preflight_instance(&exe).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
@@ -346,7 +348,7 @@ mod tests {
         );
         *config.as_mut() = test_system_config();
         let exe = VmExe::new(program.clone());
-        let executor = VmExecutor::new(config.clone()).unwrap();
+        let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
         let state = executor
             .interpreter_instance(&exe)
             .unwrap()

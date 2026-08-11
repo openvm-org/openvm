@@ -12,6 +12,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftWOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{ShiftWLogicalCoreExecutor, ShiftWRightArithmeticCoreExecutor};
 
@@ -87,7 +88,10 @@ macro_rules! dispatch {
     };
 }
 
-impl InterpreterExecutor for ShiftWLogicalCoreExecutor {
+impl<F> InterpreterExecutor<F> for ShiftWLogicalCoreExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", ShiftWOpcode::from_usize(opcode - self.offset))
     }
@@ -124,7 +128,10 @@ impl InterpreterExecutor for ShiftWLogicalCoreExecutor {
     }
 }
 
-impl InterpreterExecutor for ShiftWRightArithmeticCoreExecutor {
+impl<F> InterpreterExecutor<F> for ShiftWRightArithmeticCoreExecutor
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", ShiftWOpcode::from_usize(opcode - self.offset))
     }
@@ -161,7 +168,10 @@ impl InterpreterExecutor for ShiftWRightArithmeticCoreExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for ShiftWLogicalCoreExecutor {
+impl<F> InterpreterMeteredExecutor<F> for ShiftWLogicalCoreExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftWPreCompute>>()
     }
@@ -195,7 +205,10 @@ impl InterpreterMeteredExecutor for ShiftWLogicalCoreExecutor {
     }
 }
 
-impl InterpreterMeteredExecutor for ShiftWRightArithmeticCoreExecutor {
+impl<F> InterpreterMeteredExecutor<F> for ShiftWRightArithmeticCoreExecutor
+where
+    F: PrimeField32,
+{
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftWPreCompute>>()
     }

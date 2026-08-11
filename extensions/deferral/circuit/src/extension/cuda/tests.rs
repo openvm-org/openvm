@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        deferral::DeferralState, rvr::PreflightLimits, Streams, VirtualMachine, VmFieldExecutor,
+        deferral::DeferralState, rvr::PreflightLimits, Streams, VirtualMachine, VmExecutor,
         BLOCK_FE_WIDTH,
     },
     system::memory::online::LinearMemory,
@@ -123,7 +123,7 @@ fn deferral_output_coordinator_proves_from_preflight_history() {
         ),
     };
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let executor = VmFieldExecutor::<F, _>::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Streams {
         deferrals: vec![DeferralState::new(vec![result])],
@@ -270,7 +270,7 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         deferrals: vec![deferral],
         ..Default::default()
     };
-    let executor = VmFieldExecutor::<F, _>::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(streams);
     let (mut vm, pk) =
