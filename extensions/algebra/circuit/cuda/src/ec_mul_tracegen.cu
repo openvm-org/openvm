@@ -88,7 +88,8 @@ static __global__ void ec_mul_k256_eval_rows(
     }
 }
 
-extern "C" int _ec_mul_k256_generate_vars(
+template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
+static int launch_ec_mul_projective_vars(
     const void *projection,
     size_t num_instructions,
     const uint32_t *blob,
@@ -106,9 +107,6 @@ extern "C" int _ec_mul_k256_generate_vars(
     uint32_t *error,
     cudaStream_t stream
 ) {
-    constexpr uint32_t K = 8;
-    constexpr size_t NUM_LIMBS = 32;
-    constexpr size_t BLOCKS = 8;
     const size_t rows = num_instructions * EC_MUL_COMPUTE_ROWS;
     if (projection == nullptr || blob == nullptr || vars == nullptr || projective == nullptr ||
         affine == nullptr || scratch == nullptr || error == nullptr || num_instructions == 0 ||
@@ -132,6 +130,43 @@ extern "C" int _ec_mul_k256_generate_vars(
             inputs, num_instructions, blob, affine, vars, scratch, scratch_words, aux_words, error
         );
     return CHECK_KERNEL();
+}
+
+extern "C" int _ec_mul_k256_generate_vars(
+    size_t num_limbs,
+    size_t blocks,
+    const void *projection,
+    size_t num_instructions,
+    const uint32_t *blob,
+    uint32_t *vars,
+    size_t vars_words,
+    uint32_t *projective,
+    size_t projective_words,
+    uint8_t *affine,
+    size_t affine_bytes,
+    uint32_t *scratch,
+    size_t scratch_words,
+    size_t aux_words,
+    size_t grid_blocks,
+    size_t block_threads,
+    uint32_t *error,
+    cudaStream_t stream
+) {
+    if (num_limbs == 32 && blocks == 8) {
+        return launch_ec_mul_projective_vars<8, 32, 8>(
+            projection, num_instructions, blob, vars, vars_words, projective, projective_words,
+            affine, affine_bytes, scratch, scratch_words, aux_words, grid_blocks, block_threads,
+            error, stream
+        );
+    }
+    if (num_limbs == 48 && blocks == 12) {
+        return launch_ec_mul_projective_vars<12, 48, 12>(
+            projection, num_instructions, blob, vars, vars_words, projective, projective_words,
+            affine, affine_bytes, scratch, scratch_words, aux_words, grid_blocks, block_threads,
+            error, stream
+        );
+    }
+    return cudaErrorInvalidValue;
 }
 
 // Checks the shape the host derived against the blob, before any row is written.

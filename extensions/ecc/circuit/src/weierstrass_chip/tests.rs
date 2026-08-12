@@ -2415,4 +2415,52 @@ mod ec_mul_tests {
             &test_scalars(),
         );
     }
+
+    #[test]
+    fn test_ec_mul_cuda_bn254() {
+        let modulus = BigUint::from_str_radix(
+            "30644E72E131A029B85045B68181585D97816A916871CA8D3C208C16D87CFD47",
+            16,
+        )
+        .unwrap();
+        // The standard BN254 G1 generator on y^2 = x^3 + 3.
+        let generator = (BigUint::from(1u32), BigUint::from(2u32));
+        run_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            WeierstrassOpcode::CLASS_OFFSET,
+            modulus,
+            BigUint::zero(),
+            &[generator],
+            &[
+                BigUint::from(1u32),
+                BigUint::from(5u32),
+                BigUint::from(0x1234_5679u32),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_ec_mul_cuda_bls12_381() {
+        // The standard BLS12-381 G1 generator on y^2 = x^3 + 4.
+        let gx = BigUint::from_str_radix(
+            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
+            16,
+        )
+        .unwrap();
+        let gy = BigUint::from_str_radix(
+            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
+            16,
+        )
+        .unwrap();
+        run_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
+            WeierstrassOpcode::CLASS_OFFSET,
+            BLS12_381_MODULUS.clone(),
+            BigUint::zero(),
+            &[(gx, gy)],
+            &[
+                BigUint::from(1u32),
+                BigUint::from(5u32),
+                BigUint::from(0x1234_5679u32),
+            ],
+        );
+    }
 }

@@ -21,9 +21,7 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bigint::utils::secp256k1_coord_prime, var_range::VariableRangeCheckerChipGPU,
-};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -346,10 +344,8 @@ impl EcMulTracegenGpu {
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
 
         let expr_program = chip.expr.program();
-        let use_k256_projective = NUM_LIMBS == 32
-            && BLOCKS == 8
-            && expr_program.prime() == &secp256k1_coord_prime()
-            && expr_program.setup_values() == [BigUint::ZERO];
+        let use_k256_projective = matches!((NUM_LIMBS, BLOCKS), (32, 8) | (48, 12))
+            && expr_program.setup_values().len() == 1;
 
         let vars_per_instruction = EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs;
         let vars = if use_k256_projective {
@@ -396,6 +392,8 @@ impl EcMulTracegenGpu {
             );
             unsafe {
                 ec_mul_k256_generate_vars(
+                    NUM_LIMBS,
+                    BLOCKS,
                     &projection,
                     &self.program,
                     &vars,

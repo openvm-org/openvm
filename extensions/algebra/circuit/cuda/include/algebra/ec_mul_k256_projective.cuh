@@ -2,7 +2,7 @@
 
 #include "algebra/ec_mul_tracegen.cuh"
 
-// secp256k1-only ladder acceleration. Values remain in the field program's Montgomery domain.
+// Generic short-Weierstrass ladder acceleration. Values remain in the program's Montgomery domain.
 // Four K-word slots per row store X, Y, Z, and the prefix product used for batch normalization.
 template <uint32_t K>
 static constexpr size_t EC_MUL_K256_POINT_WORDS = 4 * K;
@@ -66,12 +66,13 @@ static __device__ __noinline__ void ec_mul_k256_double(
     const uint32_t *x,
     const uint32_t *y,
     const uint32_t *z,
+    const uint32_t *curve_a,
     uint32_t *xo,
     uint32_t *yo,
     uint32_t *zo,
     uint32_t *t
 ) {
-    // dbl-2009-l specialized to a=0.
+    // dbl-2009-l, including the generic a*Z^4 term in E.
     uint32_t *a = t, *b = t + K, *c = t + 2 * K, *d = t + 3 * K;
     uint32_t *e = t + 4 * K, *tmp = t + 5 * K, *tmp2 = t + 6 * K;
     f.square(x, a);
@@ -84,6 +85,10 @@ static __device__ __noinline__ void ec_mul_k256_double(
     f.add(tmp2, tmp2, d);
     f.add(a, a, tmp);
     f.add(tmp, a, e);
+    f.square(z, tmp);
+    f.square(tmp, tmp2);
+    f.mul(curve_a, tmp2, tmp);
+    f.add(e, tmp, e);
     f.square(e, tmp);
     f.add(d, d, tmp2);
     f.sub(tmp, tmp2, xo);
@@ -153,9 +158,18 @@ static __device__ __noinline__ bool ec_mul_k256_build_projective(
     const uint8_t *scalar = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
     uint32_t work[2 * K + 2], temps[11 * K];
     EcMulK256Field<K> f{s, work};
-    uint32_t px[K], py[K], neg_py[K] = {}, x[K], y[K], z[K], nx[K], ny[K], nz[K];
+    if (s.n_setup_values != 1) {
+        preflight_set_error(error, EC_MUL_BAD_PROGRAM);
+        return false;
+    }
+    uint32_t px[K], py[K], curve_a[K], neg_py[K] = {}, x[K], y[K], z[K], nx[K], ny[K], nz[K];
     f.canonical_bytes_to_mont(point, px);
     f.canonical_bytes_to_mont(point + s.num_limbs, py);
+    uint8_t a_bytes[48] = {};
+    for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+        a_bytes[byte] = static_cast<uint8_t>(s.setup_values[byte]);
+    }
+    f.canonical_bytes_to_mont(a_bytes, curve_a);
     f.sub(neg_py, py, neg_py);
     f.copy(px, x);
     f.copy(py, y);
@@ -170,7 +184,7 @@ static __device__ __noinline__ bool ec_mul_k256_build_projective(
         f.copy(z, saved + 2 * K);
         uint32_t pattern = ec_mul_sign_pattern_for_row(scalar, row);
         for (size_t step = 0; step < EC_MUL_STEPS_PER_ROW; step++) {
-            ec_mul_k256_double<K>(f, x, y, z, nx, ny, nz, temps);
+            ec_mul_k256_double<K>(f, x, y, z, curve_a, nx, ny, nz, temps);
             bool plus = ((pattern >> (EC_MUL_STEPS_PER_ROW - 1 - step)) & 1u) != 0;
             ec_mul_k256_add_base<K>(f, nx, ny, nz, px, plus ? py : neg_py, x, y, z, temps);
         }
