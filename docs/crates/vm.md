@@ -20,11 +20,12 @@ There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which 
 
 Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
 
-The `InterpreterExecutor` trait defines the field-independent interface for pure execution
-(aliased as `Executor` via a supertrait):
+The `InterpreterExecutor<F>` trait defines the interface for pure execution (aliased as
+`Executor<F>` via a supertrait). The field parameter selects field-dependent execution behavior,
+while instructions themselves remain field-independent:
 
 ```rust
-pub trait InterpreterExecutor {
+pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
     fn pre_compute<Ctx>(
@@ -51,11 +52,11 @@ Each executor pre-computes instruction-specific data during a preprocessing step
 
 Metered execution tracks the trace heights for each chip along with normal execution. This mode divides the execution into segments, where each segment consists of an instruction range and an (over)estimate of the resulting trace heights for each chip in the segment. Segmentation is done based on configurable limits like maximum trace height, maximum trace cells etc.
 
-The `InterpreterMeteredExecutor` trait defines the field-independent interface for metered
-execution (aliased as `MeteredExecutor` via a supertrait):
+The `InterpreterMeteredExecutor<F>` trait defines the interface for metered execution (aliased as
+`MeteredExecutor<F>` via a supertrait). Its instructions are likewise field-independent:
 
 ```rust
-pub trait InterpreterMeteredExecutor {
+pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
     fn metered_pre_compute<Ctx>(
@@ -195,7 +196,7 @@ pub trait VmConfig<SC>:
     + Serialize
     + DeserializeOwned
     + InitFileGenerator
-    + VmFieldExecutionConfig<Val<SC>>
+    + VmExecutionConfig<Val<SC>>
     + VmCircuitConfig<SC>
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
@@ -205,24 +206,17 @@ where
 }
 ```
 
-A field-independent execution configuration implements `VmExecutionConfig`. A full `VmConfig`
-implements `VmFieldExecutionConfig<Val<SC>>`; ordinary configurations receive a delegating
-implementation, while configurations containing field-dependent runtime semantics implement it
-directly. The `Executor` type is typically an enum over executor structs that handle instruction
+A `VmConfig` should implement the `VmExecutionConfig` trait which provides execution
+configuration. The field parameter is retained because some extensions have genuinely
+field-dependent runtime behavior, but the executor enum and its instructions need not store the
+field. The `Executor` type is typically an enum over executor structs that handle instruction
 execution.
 
 ```rust
-pub trait VmExecutionConfig {
+pub trait VmExecutionConfig<F> {
     type Executor: AnyEnum;
 
     fn create_executors(&self)
-        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
-}
-
-pub trait VmFieldExecutionConfig<F: VmField> {
-    type Executor: AnyEnum;
-
-    fn create_field_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 }
 ```
@@ -410,9 +404,8 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 
 Execution and trace generation are deliberately separate:
 
-- `Executor` provides the field-independent opcode state transition used by pure and preflight
-  execution.
-- `MeteredExecutor` adds the AIR-index metadata needed for segmentation.
+- `Executor<F>` provides the opcode state transition used by pure and preflight execution.
+- `MeteredExecutor<F>` adds the AIR-index metadata needed for segmentation.
 - A prover extension registers backend-specific postflight generators. Each generator replays the
   opcode steps assigned to its AIR from immutable preflight history.
 
