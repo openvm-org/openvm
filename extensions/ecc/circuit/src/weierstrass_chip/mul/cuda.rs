@@ -34,20 +34,14 @@ use openvm_mod_circuit_builder::device_program::{
 };
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
-use super::{ec_mul_width, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_TOTAL_ROWS};
+use super::{
+    build_ec_mul_trace, ec_mul_width, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS,
+    EC_MUL_TOTAL_ROWS,
+};
 
 /// Device memory the row-filling pass may use for per-thread scratch.
 const MAX_EC_MUL_SCRATCH_BYTES: usize = 128 << 20;
 const EC_MUL_FILL_BLOCK_THREADS: usize = 128;
-
-/// Scratch the device's Jacobian point operations need, in slots of `u32_limbs` words.
-///
-/// Mirrors `EC_MUL_JACOBIAN_TEMPS` in `algebra/ec_mul_projective.cuh`. The device revalidates the
-/// buffer this sizes before writing to it, so a drift here fails the launch rather than corrupting
-/// memory.
-const EC_MUL_JACOBIAN_TEMPS: usize = 14;
-/// Mirrors `EC_MUL_MONT_WORKSPACE_WORDS`: the leading slots reserved for Montgomery multiplication.
-const EC_MUL_MONT_WORKSPACE_WORDS: usize = 2;
 
 /// Gathers every `EC_MUL` and `SETUP_EC_MUL` projection for one curve, in execution order.
 ///
@@ -183,6 +177,7 @@ pub(crate) struct EcMulTracegenGpu {
     opcode_base: usize,
     aux_words: usize,
     expr_width: usize,
+    num_vars: usize,
     u32_limbs: usize,
     pointer_max_bits: u32,
     timestamp_max_bits: u32,
@@ -230,6 +225,7 @@ impl EcMulTracegenGpu {
             opcode_base,
             aux_words: serialized.aux_words_per_thread,
             expr_width,
+            num_vars: chip.expr.program().num_vars(),
             // Canonical limbs are bytes, so a `u32` limb spans four of them.
             u32_limbs: NUM_LIMBS.div_ceil(4),
             pointer_max_bits: u32::try_from(chip.ptr_max_bits).map_err(|_| {
@@ -275,28 +271,26 @@ impl EcMulTracegenGpu {
         let height = next_power_of_two_or_zero(num_instructions * EC_MUL_TOTAL_ROWS);
         let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
+        // The per-instruction pass indexes the same scratch by instruction rather than by row.
+        let scratch_words = launch
+            .scratch_words
+            .max(num_instructions.saturating_mul(self.aux_words));
+        if scratch_words > max_scratch_words {
+            return Err(GpuPostflightError::ResourceLimitExceeded {
+                resource: "EC_MUL scratch words",
+                requested: scratch_words,
+                limit: max_scratch_words,
+            });
+        }
 
         let projection = inputs.as_slice().to_device_on(device_ctx)?;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
-        // The accumulator entering each compute row, as the affine bytes pass 2 reads as input.
-        let affine = DeviceBuffer::<u8>::with_capacity_on(
-            num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS,
-            device_ctx,
-        );
-        // Per instruction: Jacobian accumulators, the prefix products the batch inversion consumes,
-        // then that thread's Montgomery workspace. Used only by the per-instruction pass, and
-        // allocated here rather than on the kernel's stack, where a frame this large would limit
-        // occupancy.
-        let ladder_slice_words = EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs
-            + EC_MUL_MONT_WORKSPACE_WORDS * self.u32_limbs
-            + 2
-            + EC_MUL_JACOBIAN_TEMPS * self.u32_limbs;
-        let ladder = DeviceBuffer::<u32>::with_capacity_on(
-            num_instructions * ladder_slice_words,
+        let vars = DeviceBuffer::<u32>::with_capacity_on(
+            num_instructions * EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs,
             device_ctx,
         );
         let dummy_expr = DeviceBuffer::<F>::with_capacity_on(self.expr_width, device_ctx);
-        let scratch = DeviceBuffer::<u32>::with_capacity_on(launch.scratch_words, device_ctx);
+        let scratch = DeviceBuffer::<u32>::with_capacity_on(scratch_words, device_ctx);
         let delta = DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
         // The dummy row's own range checks are discarded: the AIR emits none when `is_valid` is
@@ -316,8 +310,7 @@ impl EcMulTracegenGpu {
                 BLOCKS,
                 &projection,
                 &self.program,
-                &affine,
-                &ladder,
+                &vars,
                 &dummy_expr,
                 &delta,
                 &discarded,
@@ -337,11 +330,48 @@ impl EcMulTracegenGpu {
             )));
         }
 
+        // Debug builds rebuild the trace on the host from the same gathered projections and
+        // compare cell by cell, so device/host drift fails at its first divergent coordinate
+        // rather than surfacing as an opaque verification error downstream. The reference build
+        // counts its range checks into a discarded checker, leaving the real histogram untouched.
+        #[cfg(debug_assertions)]
+        {
+            use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+
+            let reference_chip = EcMulChip::<F, NUM_LIMBS, BLOCKS>::new(
+                chip.expr.clone(),
+                Arc::new(VariableRangeCheckerChip::new(chip.range_checker.bus())),
+                chip.mem_helper.clone(),
+                chip.ptr_max_bits,
+            );
+            let host_trace = build_ec_mul_trace(&reference_chip, &inputs).map_err(|error| {
+                GpuPostflightError::InvalidTranscript(format!(
+                    "EC_MUL host reference trace generation failed: {error:?}"
+                ))
+            })?;
+            assert_eq!(host_trace.width, width);
+            assert_eq!(host_trace.values.len(), height * width);
+            let device_values = trace.buffer().to_host_on(device_ctx)?;
+            for row in 0..height {
+                for column in 0..width {
+                    let host_value = host_trace.values[row * width + column];
+                    let device_value = device_values[column * height + row];
+                    assert_eq!(
+                        host_value,
+                        device_value,
+                        "EC_MUL device trace diverges from the host reference at row {row} \
+                         (instruction {}, local row {}), column {column}",
+                        row / EC_MUL_TOTAL_ROWS,
+                        row % EC_MUL_TOTAL_ROWS,
+                    );
+                }
+            }
+        }
+
         // Dropped after their kernels are enqueued on the owning stream, before proving starts.
         drop(discarded);
         drop(scratch);
-        drop(ladder);
-        drop(affine);
+        drop(vars);
         drop(dummy_expr);
         drop(projection);
 
