@@ -2083,3 +2083,289 @@ mod ec_double_tests {
         assert_eq!(r[2], expected_double_y);
     }
 }
+
+/// CPU/GPU trace parity for the `EC_MUL` chip.
+///
+/// [`GpuTestChipHarness`] generates each instruction's trace through both backends and asserts
+/// byte-for-byte equality before proving, so these tests pin the device kernels — the projective
+/// ladder, the row filler, and the shared dummy-row contract — against the host reference in
+/// `build_ec_mul_trace`. The host path needs no parity test of its own: it *is* the reference,
+/// and the guest-program tests prove it end to end.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+mod ec_mul_tests {
+    use super::*;
+    use crate::{
+        extension::HybridEcMulChip, get_ec_mul_air, get_ec_mul_chip, get_ec_mul_executor,
+        weierstrass_chip::generate_ec_mul_trace_from_postflight, EcMulAir, EcMulChip,
+        EcMulExecutor, SCALAR_LIMBS,
+    };
+
+    type EcMulGpuHarness<const NUM_LIMBS: usize, const BLOCKS: usize> = GpuTestChipHarness<
+        F,
+        EcMulExecutor<BLOCKS>,
+        EcMulAir<NUM_LIMBS, BLOCKS>,
+        HybridEcMulChip<F, NUM_LIMBS, BLOCKS>,
+        EcMulChip<F, NUM_LIMBS, BLOCKS>,
+    >;
+
+    fn create_cuda_harness<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        tester: &GpuChipTestBuilder,
+        config: ExprBuilderConfig,
+        offset: usize,
+        a: BigUint,
+    ) -> EcMulGpuHarness<NUM_LIMBS, BLOCKS> {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+
+        let air = get_ec_mul_air::<NUM_LIMBS, BLOCKS>(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            range_bus,
+            tester.address_bits(),
+            offset,
+            a.clone(),
+        );
+        let executor = get_ec_mul_executor::<BLOCKS>(
+            config.clone(),
+            range_bus.range_max_bits,
+            offset,
+            a.clone(),
+        );
+
+        let cpu_chip = get_ec_mul_chip::<F, NUM_LIMBS, BLOCKS>(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            tester.address_bits(),
+            a.clone(),
+        );
+
+        let gpu_cpu_chip = get_ec_mul_chip::<F, NUM_LIMBS, BLOCKS>(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.address_bits(),
+            a,
+        );
+        let hybrid_chip = HybridEcMulChip::new(
+            gpu_cpu_chip,
+            tester.range_checker().device_ctx.clone(),
+            offset,
+            tester.range_checker(),
+        )
+        .unwrap();
+
+        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+            .with_trace_generators(
+                move |chip, postflight| {
+                    generate_ec_mul_trace_from_postflight(chip, postflight, offset)
+                },
+                |chip, program, transcript, plan| {
+                    chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+                },
+            )
+    }
+
+    /// Writes one instruction's operands and executes it.
+    ///
+    /// `point` is `None` for `SETUP_EC_MUL`, whose point operand carries `(modulus, a)` and whose
+    /// scalar operand is a placeholder the chip reads but does not check.
+    #[allow(clippy::too_many_arguments)]
+    fn set_and_execute_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        tester: &mut impl TestBuilder<F>,
+        executor: &mut EcMulExecutor<BLOCKS>,
+        preflight: &mut TestPreflight<F>,
+        rng: &mut StdRng,
+        modulus: &BigUint,
+        a: &BigUint,
+        offset: usize,
+        point: Option<&(BigUint, BigUint)>,
+        scalar: &BigUint,
+    ) {
+        let (x, y, op_local) = match point {
+            None => (
+                modulus.clone(),
+                a.clone(),
+                WeierstrassOpcode::SETUP_EC_MUL as usize,
+            ),
+            Some((x, y)) => (x.clone(), y.clone(), WeierstrassOpcode::EC_MUL as usize),
+        };
+
+        let ptr_as = REGISTER_AS as usize;
+        let data_as = MEMORY_AS as usize;
+
+        let [rs1_ptr, rs2_ptr, rd_ptr] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
+        let point_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
+        let scalar_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
+        let result_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
+
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rs1_ptr,
+            point_addr.to_le_bytes().map(F::from_u8),
+        );
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rs2_ptr,
+            scalar_addr.to_le_bytes().map(F::from_u8),
+        );
+        tester.write_bytes::<REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rd_ptr,
+            result_addr.to_le_bytes().map(F::from_u8),
+        );
+
+        let x_limbs: Vec<F> = biguint_to_limbs_vec(&x, NUM_LIMBS)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+        let y_limbs: Vec<F> = biguint_to_limbs_vec(&y, NUM_LIMBS)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+        for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
+                data_as,
+                point_addr as usize + i,
+                x_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
+                data_as,
+                (point_addr + NUM_LIMBS as u64) as usize + i,
+                y_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+        }
+
+        let scalar_limbs: Vec<F> = biguint_to_limbs_vec(scalar, SCALAR_LIMBS)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+        for i in (0..SCALAR_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
+                data_as,
+                scalar_addr as usize + i,
+                scalar_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
+            );
+        }
+
+        let instruction = Instruction::from_isize(
+            VmOpcode::from_usize(offset + op_local),
+            rd_ptr as isize,
+            rs1_ptr as isize,
+            rs2_ptr as isize,
+            ptr_as as isize,
+            data_as as isize,
+        );
+
+        tester.execute(executor, preflight, &instruction);
+    }
+
+    /// One setup instruction, then `k * P` for every scalar in `scalars`.
+    ///
+    /// Scalars must satisfy the chip's caller preconditions: odd, nonzero, and below the curve
+    /// order. `points` must lie on the configured curve.
+    fn run_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        offset: usize,
+        modulus: BigUint,
+        a: BigUint,
+        points: &[(BigUint, BigUint)],
+        scalars: &[BigUint],
+    ) {
+        let mut rng = create_seeded_rng();
+        let mut tester = GpuChipTestBuilder::default();
+
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
+        let mut harness =
+            create_cuda_harness::<NUM_LIMBS, BLOCKS>(&tester, config, offset, a.clone());
+
+        set_and_execute_ec_mul::<NUM_LIMBS, BLOCKS>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            &modulus,
+            &a,
+            offset,
+            None,
+            &BigUint::from(1u32),
+        );
+        for (index, scalar) in scalars.iter().enumerate() {
+            set_and_execute_ec_mul::<NUM_LIMBS, BLOCKS>(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.preflight,
+                &mut rng,
+                &modulus,
+                &a,
+                offset,
+                Some(&points[index % points.len()]),
+                scalar,
+            );
+        }
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
+    }
+
+    /// Odd, nonzero, below both the secp256k1 and P-256 group orders.
+    ///
+    /// `1` exercises the seed-only edge, where every row's accumulator relates back to `P`;
+    /// `2^255 - 1` drives all-ones sign patterns through the full width.
+    fn test_scalars() -> Vec<BigUint> {
+        vec![
+            BigUint::from(1u32),
+            BigUint::from(5u32),
+            BigUint::from(0x1234_5679u32),
+            (BigUint::from(1u32) << 255usize) - BigUint::from(1u32),
+        ]
+    }
+
+    #[test]
+    fn test_ec_mul_cuda_2x32() {
+        run_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            WeierstrassOpcode::CLASS_OFFSET,
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            &SampleEcPoints[..2],
+            &test_scalars(),
+        );
+    }
+
+    /// P-256's `a = p - 3` exercises the nonzero-`a` paths: the constant folded into the
+    /// expression, the device dummy row (unsatisfiable on zeros when `a != 0`), and the Jacobian
+    /// doubling's `a * ZZ^2` term.
+    #[test]
+    fn test_ec_mul_cuda_2x32_nonzero_a() {
+        let modulus = secp256r1_coord_prime();
+        let a = modulus.clone() - BigUint::from(3u32);
+        // P-256 generator.
+        let gx = BigUint::from_str_radix(
+            "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296",
+            16,
+        )
+        .unwrap();
+        let gy = BigUint::from_str_radix(
+            "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5",
+            16,
+        )
+        .unwrap();
+        run_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            WeierstrassOpcode::CLASS_OFFSET,
+            modulus,
+            a,
+            &[(gx, gy)],
+            &test_scalars(),
+        );
+    }
+}
