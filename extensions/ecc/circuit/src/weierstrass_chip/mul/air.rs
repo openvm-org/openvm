@@ -152,7 +152,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 
         // The expression is active exactly on compute rows. Elsewhere its region still has to hold
         // a consistent witness, since several of its constraints are ungated; trace generation
-        // supplies one for zero inputs.
+        // supplies one built from the setup inputs.
         builder.assert_eq(local_expr[0], local.is_compute);
 
         // Evaluate the ladder step. `FieldExpr` reads `is_valid` from `local_expr[0]`.
@@ -308,7 +308,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 
         // ==== Compute → digest handoff ======================================================
         // Gated on `is_digest`, not `is_real_digest`: a setup instruction's operands need binding
-        // just as much as a multiplication's. On a setup row `FieldExpr` pins `inputs[IN_PX]` and
+        // as much as a multiplication's. On a setup row `FieldExpr` pins `inputs[IN_PX]` and
         // `inputs[IN_PY]` to the prime and `a`, so linking them to the point read is what ties the
         // memory operand to the values the setup check enforces. Only the scalar binding below is
         // genuinely setup-specific, since a setup row's scalar operand is a placeholder.

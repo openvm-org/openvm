@@ -28,10 +28,11 @@ use super::{EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW};
 
 /// Input indices into the expression's `inputs`.
 ///
-/// `P` comes first on purpose. On a setup row `FieldExpr` pins the leading inputs to the prime and
-/// `a`, and the doubling denominator is `2*acc_y`. With the accumulator first, a setup row would
-/// carry `acc_y = a`, which is zero on three of the four supported curves. That row is
-/// unsatisfiable, and also uncomputable, since `SymbolicExpr::compute` inverts the denominator.
+/// The ordering is load-bearing: `P` must precede the accumulator. On a setup row `FieldExpr` pins
+/// the leading inputs to the prime and `a`, and the doubling denominator is `2*acc_y`. With the
+/// accumulator first, a setup row would carry `acc_y = a`, which is zero on three of the four
+/// supported curves. That row is unsatisfiable, and also uncomputable, since
+/// `SymbolicExpr::compute` inverts the denominator.
 ///
 /// Pinning `P` instead leaves the accumulator free on setup rows for [`setup_row_inputs`] to
 /// choose. It also matches the other ECC chips, whose setup operand carries `(modulus, a)`.
@@ -42,10 +43,11 @@ pub const IN_ACC_Y: usize = 3;
 
 /// The accumulator a setup row carries.
 ///
-/// The setup check does not pin it, so it only has to keep the row's denominators nonzero. That is
-/// easy to get wrong. A setup row's `P` is `(prime, a)`, which is the identity sentinel `(0, 0)`
-/// whenever `a = 0`. Adding it repeatedly drives many starting values to `(0, 0)` as well, and then
-/// `2*acc_y` is zero. `(1, 1)` degenerates this way after one step.
+/// The setup check does not pin it, so it only has to keep the row's denominators nonzero — a
+/// condition fewer values satisfy than it suggests. A setup row's `P` is `(prime, a)`, which is
+/// the identity sentinel `(0, 0)` whenever `a = 0`. Adding it repeatedly drives many starting
+/// values to `(0, 0)` as well, and then `2*acc_y` is zero; `(1, 1)` degenerates this way after one
+/// step.
 ///
 /// `(2, 1)` works on all four supported curves. `ec_mul_setup_row_is_computable` in the rvr FFI
 /// checks it.
