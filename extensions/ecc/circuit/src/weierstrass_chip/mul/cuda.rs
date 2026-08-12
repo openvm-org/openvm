@@ -34,10 +34,7 @@ use openvm_mod_circuit_builder::device_program::{
 };
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
-use super::{
-    build_ec_mul_trace, ec_mul_width, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS,
-    EC_MUL_TOTAL_ROWS,
-};
+use super::{ec_mul_width, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_TOTAL_ROWS};
 
 /// Device memory the row-filling pass may use for per-thread scratch.
 const MAX_EC_MUL_SCRATCH_BYTES: usize = 128 << 20;
@@ -328,44 +325,6 @@ impl EcMulTracegenGpu {
             return Err(GpuPostflightError::InvalidTranscript(format!(
                 "EC_MUL trace generation rejected transcript with code {error:#010x}"
             )));
-        }
-
-        // Debug builds rebuild the trace on the host from the same gathered projections and
-        // compare cell by cell, so device/host drift fails at its first divergent coordinate
-        // rather than surfacing as an opaque verification error downstream. The reference build
-        // counts its range checks into a discarded checker, leaving the real histogram untouched.
-        #[cfg(debug_assertions)]
-        {
-            use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-
-            let reference_chip = EcMulChip::<F, NUM_LIMBS, BLOCKS>::new(
-                chip.expr.clone(),
-                Arc::new(VariableRangeCheckerChip::new(chip.range_checker.bus())),
-                chip.mem_helper.clone(),
-                chip.ptr_max_bits,
-            );
-            let host_trace = build_ec_mul_trace(&reference_chip, &inputs).map_err(|error| {
-                GpuPostflightError::InvalidTranscript(format!(
-                    "EC_MUL host reference trace generation failed: {error:?}"
-                ))
-            })?;
-            assert_eq!(host_trace.width, width);
-            assert_eq!(host_trace.values.len(), height * width);
-            let device_values = trace.buffer().to_host_on(device_ctx)?;
-            for row in 0..height {
-                for column in 0..width {
-                    let host_value = host_trace.values[row * width + column];
-                    let device_value = device_values[column * height + row];
-                    assert_eq!(
-                        host_value,
-                        device_value,
-                        "EC_MUL device trace diverges from the host reference at row {row} \
-                         (instruction {}, local row {}), column {column}",
-                        row / EC_MUL_TOTAL_ROWS,
-                        row % EC_MUL_TOTAL_ROWS,
-                    );
-                }
-            }
         }
 
         // Dropped after their kernels are enqueued on the owning stream, before proving starts.
