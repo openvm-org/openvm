@@ -173,6 +173,25 @@ unsafe extern "C" {
         d_error: *mut u32,
         stream: cudaStream_t,
     ) -> i32;
+
+    fn _ec_mul_k256_generate_vars(
+        d_projection: *const std::ffi::c_void,
+        num_instructions: usize,
+        d_blob: *const u32,
+        d_vars: *mut u32,
+        vars_words: usize,
+        d_projective: *mut u32,
+        projective_words: usize,
+        d_affine: *mut u8,
+        affine_bytes: usize,
+        d_scratch: *mut u32,
+        scratch_words: usize,
+        aux_words: usize,
+        grid_blocks: usize,
+        block_threads: usize,
+        d_error: *mut u32,
+        stream: cudaStream_t,
+    ) -> i32;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -462,6 +481,45 @@ pub struct EcMulFillLaunchConfig {
     pub grid_blocks: usize,
     pub block_threads: usize,
     pub scratch_words: usize,
+}
+
+/// Generates the exact field-expression saved variables for the secp256k1 EC MUL specialization.
+///
+/// # Safety
+///
+/// `T` must match the device `EcMulTraceInput<8>` layout and all buffers must share `stream`'s
+/// context. The caller must restrict this to the 32-byte, `a = 0`, secp256k1 coordinate field.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn ec_mul_k256_generate_vars<T>(
+    d_projection: &DeviceBuffer<T>,
+    d_blob: &DeviceBuffer<u32>,
+    d_vars: &DeviceBuffer<u32>,
+    d_projective: &DeviceBuffer<u32>,
+    d_affine: &DeviceBuffer<u8>,
+    d_scratch: &DeviceBuffer<u32>,
+    aux_words: usize,
+    launch: EcMulFillLaunchConfig,
+    d_error: *mut u32,
+    stream: cudaStream_t,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_ec_mul_k256_generate_vars(
+        d_projection.as_ptr().cast(),
+        d_projection.len(),
+        d_blob.as_ptr(),
+        d_vars.as_mut_ptr(),
+        d_vars.len(),
+        d_projective.as_mut_ptr(),
+        d_projective.len(),
+        d_affine.as_mut_ptr(),
+        d_affine.len(),
+        d_scratch.as_mut_ptr(),
+        d_scratch.len(),
+        aux_words,
+        launch.grid_blocks,
+        launch.block_threads,
+        d_error,
+        stream,
+    ))
 }
 
 /// Generates one curve's `EC_MUL` trace from already-gathered projections.
