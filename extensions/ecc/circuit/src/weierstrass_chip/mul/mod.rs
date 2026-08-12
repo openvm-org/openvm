@@ -1,9 +1,10 @@
 //! `EC_MUL`: variable-base scalar multiplication.
 //!
-//! One instruction spans [`EC_MUL_TOTAL_ROWS`] rows: [`EC_MUL_COMPUTE_ROWS`] ladder rows and a
-//! digest row holding every memory access. The accumulator moves between ladder rows by transition
-//! constraint rather than through memory, so the instruction costs one point read, one scalar read
-//! and one point write.
+//! One instruction spans [`EC_MUL_COMPUTE_ROWS`] ladder rows, the last of which carries every
+//! memory access: the memory bridge reads that row's expression inputs and writes its outputs
+//! directly. The accumulator moves between ladder rows by transition constraint rather than
+//! through memory, so the instruction costs one point read, one scalar read and one point write —
+//! and its row count is a power of two, so instruction counts never straddle a padding boundary.
 //!
 //! The ladder is MSB-first double-and-add over signed digits, [`EC_MUL_STEPS_PER_ROW`] per row:
 //!
@@ -175,7 +176,7 @@ pub const EC_MUL_DIGITS: usize = EC_MUL_SCALAR_BITS + 1;
 
 /// Digits consumed per compute row, each one step of `R = 2R +- P`.
 ///
-/// Grouping steps amortizes the row's fixed overhead, since the digest region and header occupy
+/// Grouping steps amortizes the row's fixed overhead, since the I/O region and header occupy
 /// every row whatever arithmetic it does. Raising this halves the row count and the bit
 /// accumulator but doubles the flag count, the sign flags being one-hot over patterns rather than
 /// one per digit. Measured for 32-byte coordinates:
@@ -202,8 +203,12 @@ pub const EC_MUL_SIGN_PATTERNS: usize = 1 << EC_MUL_STEPS_PER_ROW;
 /// The most significant digit seeds the accumulator instead of being folded into it, leaving the
 /// remaining [`EC_MUL_SCALAR_BITS`] digits to divide evenly among the rows.
 pub const EC_MUL_COMPUTE_ROWS: usize = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
-/// Total trace rows per instruction: [`EC_MUL_COMPUTE_ROWS`] plus the digest row.
-pub const EC_MUL_TOTAL_ROWS: usize = EC_MUL_COMPUTE_ROWS + 1;
+/// Total trace rows per instruction.
+///
+/// The final compute row carries the instruction's I/O, so this equals
+/// [`EC_MUL_COMPUTE_ROWS`] — a power of two, so instruction counts never straddle a
+/// power-of-two padding boundary.
+pub const EC_MUL_TOTAL_ROWS: usize = EC_MUL_COMPUTE_ROWS;
 
 const _: () = assert!(EC_MUL_SCALAR_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));
 const _: () = assert!(8usize.is_multiple_of(EC_MUL_STEPS_PER_ROW));

@@ -30,12 +30,12 @@ const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
 /// curve.
 pub const EC_MUL_SCALAR_DWORDS: u32 = 4;
 
-/// Trace rows the `EC_MUL` chip consumes per instruction: one ladder row per two scalar digits
-/// plus the digest row that carries the instruction's memory accesses.
+/// Trace rows the `EC_MUL` chip consumes per instruction: one ladder row per two scalar digits,
+/// the last of which carries the instruction's memory accesses.
 ///
 /// Restated here rather than imported because `openvm-ecc-circuit` — which owns the chip and is the
 /// authority on this value — depends on this crate. That crate statically asserts the two agree.
-pub const EC_MUL_TRACE_ROWS: u32 = 129;
+pub const EC_MUL_TRACE_ROWS: u32 = 128;
 
 fn decode_reg(value: u32) -> Variable {
     decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
@@ -264,7 +264,7 @@ impl ExtInstr for EcMulInstr {
         let point_dwords = self.curve.point_dwords();
         if is_preflight {
             // One point read, one scalar read, and one point write happen inside the opaque call.
-            // The chip performs the same accesses on its digest row.
+            // The chip performs the same accesses on its final compute row.
             ctx.advance_timestamp(2 * point_dwords + EC_MUL_SCALAR_DWORDS);
         }
         let suffix = self.curve.c_suffix();
@@ -720,7 +720,7 @@ mod tests {
                     "trap".to_string(),
                     "}".to_string(),
                     // One point read, a four-word scalar read, and one point write, matching the
-                    // accesses the chip's digest row performs.
+                    // accesses the chip's final compute row performs.
                     format!(
                         "timestamp_slots({})",
                         2 * point_dwords + EC_MUL_SCALAR_DWORDS
