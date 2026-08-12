@@ -274,15 +274,12 @@ mod tests {
         let (transcript, replay_plan) =
             Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &first, first.retired)
                 .unwrap();
-        // The rvr preflight carries a `PreflightTranscript`, not the `PreflightHistory` a host
-        // postflight needs, so this path cannot generate an `EC_MUL` trace.
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             gpu_program.program(),
             &transcript,
             &replay_plan,
-            None,
         )
         .unwrap();
         drop(replay_plan);
@@ -303,15 +300,12 @@ mod tests {
         let (transcript, replay_plan) =
             Rv64ImPreflightGpuTracegen::postflight(&vm, &gpu_program, &second, second.retired)
                 .unwrap();
-        // The rvr preflight carries a `PreflightTranscript`, not the `PreflightHistory` a host
-        // postflight needs, so this path cannot generate an `EC_MUL` trace.
         let proving_ctx = Rv64PairingGpuBuilder::generate_proving_ctx_from_postflight(
             &mut vm,
             &config,
             gpu_program.program(),
             &transcript,
             &replay_plan,
-            None,
         )
         .unwrap();
         drop(replay_plan);
