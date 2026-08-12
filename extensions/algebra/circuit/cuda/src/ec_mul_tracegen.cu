@@ -17,20 +17,19 @@ static __global__ void ec_mul_projective_prepare_pass(
 ) {
     if (*error != 0) return;
     size_t instruction = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (instruction >= num_instructions) return;
+    if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
-    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
+    uint32_t *rows = projective + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
     ec_mul_projective_build_projective<K>(s, projection[instruction], rows, error);
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
-static __global__ void ec_mul_projective_normalize_pass(
+static __global__ void ec_mul_projective_batch_invert_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
     uint32_t *projective,
-    uint8_t *affine,
     uint32_t *error
 ) {
     if (*error != 0) return;
@@ -38,19 +37,34 @@ static __global__ void ec_mul_projective_normalize_pass(
     if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
-    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
-    size_t total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
-    ec_mul_projective_normalize<K>(
-        s, rows, affine, total_rows, instruction * EC_MUL_COMPUTE_ROWS, error
-    );
+    uint32_t *rows = projective + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
+    ec_mul_projective_batch_invert<K>(s, rows, error);
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
-static __global__ void ec_mul_projective_eval_rows(
+static __global__ void ec_mul_projective_materialize_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
-    const uint8_t *affine,
+    uint32_t *projective,
+    uint32_t *vars,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    size_t flat_row = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
+    size_t total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
+    if (flat_row >= total_rows || projection[flat_row / EC_MUL_COMPUTE_ROWS].is_setup != 0)
+        return;
+    FieldExprProg s;
+    load_prog(blob, s);
+    ec_mul_projective_materialize_row<K>(s, projective, vars, total_rows, flat_row);
+}
+
+template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
+static __global__ void ec_mul_projective_setup_vars(
+    const EcMulTraceInput<BLOCKS> *projection,
+    size_t num_instructions,
+    const uint32_t *blob,
     uint32_t *vars,
     uint32_t *scratch,
     size_t scratch_words,
@@ -58,37 +72,27 @@ static __global__ void ec_mul_projective_eval_rows(
     uint32_t *error
 ) {
     if (*error != 0) return;
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
-    size_t tid = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    size_t threads = gridDim.x * static_cast<size_t>(blockDim.x);
-    if (threads == 0 || threads * aux_words > scratch_words) {
+    if (aux_words > scratch_words) {
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return;
     }
-    uint32_t *aux = scratch + tid * aux_words;
+    uint32_t *aux = scratch;
     uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
     size_t total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
-    for (size_t flat = tid; flat < total_rows; flat += threads) {
-        size_t instruction = flat / EC_MUL_COMPUTE_ROWS;
-        size_t row = flat % EC_MUL_COMPUTE_ROWS;
-        const auto &input = projection[instruction];
-        bool setup = input.is_setup != 0;
-        if (setup) {
-            ec_mul_setup_inputs(in_limbs, s);
-        } else {
-            const uint8_t *point = reinterpret_cast<const uint8_t *>(&input.point_blocks[0][0]);
-            for (uint32_t byte = 0; byte < 2 * NUM_LIMBS; byte++) {
-                in_limbs[byte] = point[byte];
-                in_limbs[2 * NUM_LIMBS + byte] = affine[byte * total_rows + flat];
-            }
-        }
-        const uint8_t *scalar = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
+    for (size_t instruction = 0; instruction < num_instructions; instruction++) {
+        if (projection[instruction].is_setup == 0) continue;
+        ec_mul_setup_inputs(in_limbs, s);
         if (!field_expr_eval_values<K>(
-                s, in_limbs, nullptr, ec_mul_row_mode(scalar, row, setup), aux, error
+                s, in_limbs, nullptr, FieldExprRowMode{0, true, false}, aux, error
             )) return;
+        size_t first_row = instruction * EC_MUL_COMPUTE_ROWS;
         for (uint32_t word = 0; word < s.num_vars * K; word++) {
-            vars[word * total_rows + flat] = aux[word];
+            for (size_t row = 0; row < EC_MUL_COMPUTE_ROWS; row++) {
+                vars[word * total_rows + first_row + row] = aux[word];
+            }
         }
     }
 }
@@ -102,37 +106,38 @@ static int launch_ec_mul_projective_vars(
     size_t vars_words,
     uint32_t *projective,
     size_t projective_words,
-    uint8_t *affine,
-    size_t affine_bytes,
     uint32_t *scratch,
     size_t scratch_words,
     size_t aux_words,
-    size_t grid_blocks,
-    size_t block_threads,
     uint32_t *error,
     cudaStream_t stream
 ) {
-    const size_t rows = num_instructions * EC_MUL_COMPUTE_ROWS;
     if (projection == nullptr || blob == nullptr || vars == nullptr || projective == nullptr ||
-        affine == nullptr || scratch == nullptr || error == nullptr || num_instructions == 0 ||
+        scratch == nullptr || error == nullptr || num_instructions == 0 ||
         vars_words == 0 ||
-        projective_words < rows * EC_MUL_PROJECTIVE_POINT_WORDS<K> ||
-        affine_bytes < rows * 2 * NUM_LIMBS || grid_blocks == 0 || block_threads == 0 ||
-        grid_blocks * block_threads * aux_words > scratch_words) return cudaErrorInvalidValue;
+        projective_words < num_instructions * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K> ||
+        scratch_words < aux_words)
+        return cudaErrorInvalidValue;
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
     auto [instruction_grid, instruction_block] = kernel_launch_params(num_instructions, 64);
     ec_mul_projective_prepare_pass<K, BLOCKS><<<instruction_grid, instruction_block, 0, stream>>>(
         inputs, num_instructions, blob, projective, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    ec_mul_projective_normalize_pass<K, NUM_LIMBS, BLOCKS>
+    ec_mul_projective_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
         <<<instruction_grid, instruction_block, 0, stream>>>(
-            inputs, num_instructions, blob, projective, affine, error
+            inputs, num_instructions, blob, projective, error
         );
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    ec_mul_projective_eval_rows<K, NUM_LIMBS, BLOCKS>
-        <<<static_cast<uint32_t>(grid_blocks), static_cast<uint32_t>(block_threads), 0, stream>>>(
-            inputs, num_instructions, blob, affine, vars, scratch, scratch_words, aux_words, error
+    auto [row_grid, row_block] =
+        kernel_launch_params(num_instructions * EC_MUL_COMPUTE_ROWS, 128);
+    ec_mul_projective_materialize_pass<K, NUM_LIMBS, BLOCKS>
+        <<<row_grid, row_block, 0, stream>>>(
+            inputs, num_instructions, blob, projective, vars, error
+        );
+    if (int result = CHECK_KERNEL(); result != 0) return result;
+    ec_mul_projective_setup_vars<K, NUM_LIMBS, BLOCKS><<<1, 1, 0, stream>>>(
+            inputs, num_instructions, blob, vars, scratch, scratch_words, aux_words, error
         );
     return CHECK_KERNEL();
 }
@@ -147,28 +152,22 @@ extern "C" int _ec_mul_projective_generate_vars(
     size_t vars_words,
     uint32_t *projective,
     size_t projective_words,
-    uint8_t *affine,
-    size_t affine_bytes,
     uint32_t *scratch,
     size_t scratch_words,
     size_t aux_words,
-    size_t grid_blocks,
-    size_t block_threads,
     uint32_t *error,
     cudaStream_t stream
 ) {
     if (num_limbs == 32 && blocks == 8) {
         return launch_ec_mul_projective_vars<8, 32, 8>(
             projection, num_instructions, blob, vars, vars_words, projective, projective_words,
-            affine, affine_bytes, scratch, scratch_words, aux_words, grid_blocks, block_threads,
-            error, stream
+            scratch, scratch_words, aux_words, error, stream
         );
     }
     if (num_limbs == 48 && blocks == 12) {
         return launch_ec_mul_projective_vars<12, 48, 12>(
             projection, num_instructions, blob, vars, vars_words, projective, projective_words,
-            affine, affine_bytes, scratch, scratch_words, aux_words, grid_blocks, block_threads,
-            error, stream
+            scratch, scratch_words, aux_words, error, stream
         );
     }
     return cudaErrorInvalidValue;

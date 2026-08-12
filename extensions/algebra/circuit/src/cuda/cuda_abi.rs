@@ -185,13 +185,9 @@ unsafe extern "C" {
         vars_words: usize,
         d_projective: *mut u32,
         projective_words: usize,
-        d_affine: *mut u8,
-        affine_bytes: usize,
         d_scratch: *mut u32,
         scratch_words: usize,
         aux_words: usize,
-        grid_blocks: usize,
-        block_threads: usize,
         d_error: *mut u32,
         stream: cudaStream_t,
     ) -> i32;
@@ -490,8 +486,8 @@ pub struct EcMulFillLaunchConfig {
 ///
 /// # Safety
 ///
-/// `T` must match the device `EcMulTraceInput<8>` layout and all buffers must share `stream`'s
-/// context. The caller must restrict this to the 32-byte, `a = 0`, secp256k1 coordinate field.
+/// `T` must match the selected device `EcMulTraceInput<BLOCKS>` layout and all buffers must share
+/// `stream`'s context.
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn ec_mul_projective_generate_vars<T>(
     num_limbs: usize,
@@ -500,10 +496,8 @@ pub unsafe fn ec_mul_projective_generate_vars<T>(
     d_blob: &DeviceBuffer<u32>,
     d_vars: &DeviceBuffer<u32>,
     d_projective: &DeviceBuffer<u32>,
-    d_affine: &DeviceBuffer<u8>,
     d_scratch: &DeviceBuffer<u32>,
     aux_words: usize,
-    launch: EcMulFillLaunchConfig,
     d_error: *mut u32,
     stream: cudaStream_t,
 ) -> Result<(), CudaError> {
@@ -517,13 +511,9 @@ pub unsafe fn ec_mul_projective_generate_vars<T>(
         d_vars.len(),
         d_projective.as_mut_ptr(),
         d_projective.len(),
-        d_affine.as_mut_ptr(),
-        d_affine.len(),
         d_scratch.as_mut_ptr(),
         d_scratch.len(),
         aux_words,
-        launch.grid_blocks,
-        launch.block_threads,
         d_error,
         stream,
     ))

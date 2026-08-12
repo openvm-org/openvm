@@ -43,7 +43,8 @@ use openvm_stark_backend::{
 
 use super::{
     blocks_to_bytes, ec_mul_width, execution::sign_pattern_for_row, setup_row_inputs, EcMulChip,
-    EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_TOTAL_ROWS,
+    EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW,
+    EC_MUL_TOTAL_ROWS,
 };
 
 /// Device memory the row-filling pass may use for per-thread scratch.
@@ -344,8 +345,10 @@ impl EcMulTracegenGpu {
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
 
         let expr_program = chip.expr.program();
-        let use_projective = matches!((NUM_LIMBS, BLOCKS), (32, 8) | (48, 12))
-            && expr_program.setup_values().len() == 1;
+        // The saved-variable schedule is expression-shape-dependent. The current direct mapping
+        // matches the 32-byte program; wider fields retain the exact generic host path.
+        let use_projective =
+            matches!((NUM_LIMBS, BLOCKS), (32, 8)) && expr_program.setup_values().len() == 1;
 
         let vars_per_instruction = EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs;
         let vars = if use_projective {
@@ -378,17 +381,16 @@ impl EcMulTracegenGpu {
             DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
         discarded.fill_zero_on(device_ctx)?;
 
-        // The projective path advances the dependent ladder without inversions, batch-normalizes
-        // its row inputs,
-        // then evaluates independent rows in parallel to produce the same variable buffer the
-        // generic host path uploads.
+        // The projective path stores every doubled and post-add state, batch-normalizes all four
+        // states per row with one inversion per instruction, and writes the ten exact saved
+        // variables directly in variable-major order.
         let projective_buffers = if use_projective {
             let projective = DeviceBuffer::<u32>::with_capacity_on(
-                num_instructions * EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs,
-                device_ctx,
-            );
-            let affine = DeviceBuffer::<u8>::with_capacity_on(
-                num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS,
+                num_instructions
+                    * EC_MUL_COMPUTE_ROWS
+                    * (2 * EC_MUL_STEPS_PER_ROW)
+                    * 5
+                    * self.u32_limbs,
                 device_ctx,
             );
             unsafe {
@@ -399,13 +401,17 @@ impl EcMulTracegenGpu {
                     &self.program,
                     &vars,
                     &projective,
-                    &affine,
                     &scratch,
                     self.aux_words,
-                    launch,
                     transcript.error_ptr(),
                     device_ctx.stream.as_raw(),
                 )?;
+            }
+            let projective_error = transcript.error_code()?;
+            if projective_error != 0 {
+                return Err(GpuPostflightError::InvalidTranscript(format!(
+                    "EC_MUL projective variable generation failed with code {projective_error}"
+                )));
             }
             #[cfg(debug_assertions)]
             {
@@ -431,7 +437,7 @@ impl EcMulTracegenGpu {
                     }
                 }
             }
-            Some((projective, affine))
+            Some(projective)
         } else {
             None
         };
