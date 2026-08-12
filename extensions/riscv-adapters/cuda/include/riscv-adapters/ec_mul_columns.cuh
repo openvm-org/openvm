@@ -25,8 +25,8 @@ static constexpr size_t EC_MUL_SCALAR_BITS = 256;
 static constexpr size_t EC_MUL_STEPS_PER_ROW = 2;
 static constexpr size_t EC_MUL_SIGN_PATTERNS = size_t(1) << EC_MUL_STEPS_PER_ROW;
 static constexpr size_t EC_MUL_COMPUTE_ROWS = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
-static constexpr size_t EC_MUL_TOTAL_ROWS = EC_MUL_COMPUTE_ROWS + 1;
-static constexpr size_t EC_MUL_DIGEST_ROW_IDX = EC_MUL_COMPUTE_ROWS;
+static constexpr size_t EC_MUL_TOTAL_ROWS = EC_MUL_COMPUTE_ROWS;
+static constexpr size_t EC_MUL_FINAL_ROW_IDX = EC_MUL_COMPUTE_ROWS - 1;
 static constexpr size_t EC_MUL_SCALAR_LIMBS = EC_MUL_SCALAR_BITS / 8;
 // Sized to one row's contribution, making the accumulator recurrence a shift.
 static constexpr size_t EC_MUL_SCALAR_ACC_LIMBS = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
@@ -45,17 +45,19 @@ static constexpr uint32_t EC_MUL_IDENTITY_ACCUMULATOR = 0x56020004;
 // Present on every row. `is_compute` doubles as the expression's `is_valid`.
 template <typename T> struct EcMulHeaderCols {
     T is_compute;
-    T is_digest;
+    T is_final;
     T is_first_compute;
     T is_setup;
     T is_ladder;
-    T is_real_digest;
+    T is_real_final;
     T row_idx;
     T scalar_acc[EC_MUL_SCALAR_ACC_LIMBS];
 };
 
-// Present only on the digest row, which carries the instruction's memory I/O.
-template <typename T, size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestCols {
+// Present only on the final compute row, which carries the instruction's memory I/O. The point
+// and result have no stored copies: the memory bridge reads the final row's expression inputs and
+// writes its outputs directly.
+template <typename T, size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoCols {
     ExecutionState<T> from_state;
 
     T rd_ptr;
@@ -68,27 +70,23 @@ template <typename T, size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestCols {
 
     MemoryReadAuxCols<T> rs_read_aux[EC_MUL_REGISTER_READS];
 
-    T point_x[NUM_LIMBS];
-    T point_y[NUM_LIMBS];
     MemoryReadAuxCols<T> point_read_aux[BLOCKS];
 
     T scalar_data[EC_MUL_SCALAR_LIMBS];
     MemoryReadAuxCols<T> scalar_read_aux[EC_MUL_SCALAR_BLOCKS];
     T scalar_carry[EC_MUL_SCALAR_LIMBS];
 
-    T result_x[NUM_LIMBS];
-    T result_y[NUM_LIMBS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[BLOCKS];
 };
 
 static constexpr size_t EC_MUL_HEADER_WIDTH = sizeof(EcMulHeaderCols<uint8_t>);
 
 template <size_t NUM_LIMBS, size_t BLOCKS>
-static constexpr size_t EC_MUL_DIGEST_WIDTH = sizeof(EcMulDigestCols<uint8_t, NUM_LIMBS, BLOCKS>);
+static constexpr size_t EC_MUL_IO_WIDTH = sizeof(EcMulIoCols<uint8_t, NUM_LIMBS, BLOCKS>);
 
 static_assert(EC_MUL_HEADER_WIDTH == 135);
-static_assert(EC_MUL_DIGEST_WIDTH<32, 8> == 281);
-static_assert(EC_MUL_DIGEST_WIDTH<48, 12> == 377);
+static_assert(EC_MUL_IO_WIDTH<32, 8> == 153);
+static_assert(EC_MUL_IO_WIDTH<48, 12> == 185);
 
 // One byte of a projected memory operand, stored by the gather as `u16` cells.
 template <size_t N>
@@ -127,16 +125,16 @@ static __device__ void fill_ec_mul_header(
     RowSlice row, const uint8_t *scalar, size_t row_idx, bool is_setup
 ) {
     bool is_compute = row_idx < EC_MUL_COMPUTE_ROWS;
-    bool is_digest = row_idx == EC_MUL_DIGEST_ROW_IDX;
+    bool is_final = row_idx == EC_MUL_FINAL_ROW_IDX;
     bool is_first_compute = is_compute && row_idx == 0;
     bool is_ladder = is_compute && !is_setup && row_idx != 0;
 
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_compute, uint32_t(is_compute));
-    COL_WRITE_VALUE(row, EcMulHeaderCols, is_digest, uint32_t(is_digest));
+    COL_WRITE_VALUE(row, EcMulHeaderCols, is_final, uint32_t(is_final));
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_first_compute, uint32_t(is_first_compute));
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_setup, uint32_t(is_setup));
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_ladder, uint32_t(is_ladder));
-    COL_WRITE_VALUE(row, EcMulHeaderCols, is_real_digest, uint32_t(is_digest && !is_setup));
+    COL_WRITE_VALUE(row, EcMulHeaderCols, is_real_final, uint32_t(is_final && !is_setup));
     COL_WRITE_VALUE(row, EcMulHeaderCols, row_idx, uint32_t(row_idx));
 
     size_t acc_base = COL_INDEX(EcMulHeaderCols, scalar_acc);
@@ -149,13 +147,13 @@ static __device__ void fill_ec_mul_header(
     }
 }
 
-// Fills the digest row from one instruction's projection.
-template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestFiller {
+// Fills the final row's I/O region from one instruction's projection.
+template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
     VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
     uint32_t pointer_max_bits;
 
-    __device__ EcMulDigestFiller(
+    __device__ EcMulIoFiller(
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits,
         uint32_t pointer_max_bits
@@ -163,11 +161,11 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestFiller {
         : range_checker(range_checker), mem_helper(range_checker, timestamp_max_bits),
           pointer_max_bits(pointer_max_bits) {}
 
-    template <typename T> using Cols = EcMulDigestCols<T, NUM_LIMBS, BLOCKS>;
+    template <typename T> using Cols = EcMulIoCols<T, NUM_LIMBS, BLOCKS>;
 
     static_assert(2 * NUM_LIMBS == BLOCKS * MEMORY_BLOCK_BYTES);
 
-    // `row` points at the first digest column. Returns false, setting `err`, if the scalar does
+    // `row` points at the first I/O column. Returns false, setting `err`, if the scalar does
     // not fit; the gather has already validated every other input.
     __device__ __noinline__ bool fill(
         RowSlice row, const EcMulTraceInput<BLOCKS> &input, uint32_t *err
@@ -199,24 +197,6 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestFiller {
             );
         }
 
-        size_t point_x_base = COL_INDEX(Cols, point_x);
-        size_t point_y_base = COL_INDEX(Cols, point_y);
-        for (size_t byte = 0; byte < 2 * NUM_LIMBS; byte++) {
-            uint8_t value = ec_mul_block_byte(input.point_blocks, byte);
-            size_t column =
-                byte < NUM_LIMBS ? point_x_base + byte : point_y_base + (byte - NUM_LIMBS);
-            row.write(column, Fp(uint32_t(value)));
-        }
-
-        size_t result_x_base = COL_INDEX(Cols, result_x);
-        size_t result_y_base = COL_INDEX(Cols, result_y);
-        for (size_t byte = 0; byte < 2 * NUM_LIMBS; byte++) {
-            uint8_t value = ec_mul_block_byte(input.write_blocks, byte);
-            size_t column =
-                byte < NUM_LIMBS ? result_x_base + byte : result_y_base + (byte - NUM_LIMBS);
-            row.write(column, Fp(uint32_t(value)));
-        }
-
         size_t scalar_base = COL_INDEX(Cols, scalar_data);
         for (size_t byte = 0; byte < EC_MUL_SCALAR_LIMBS; byte++) {
             uint32_t limb = ec_mul_block_byte(input.scalar_blocks, byte);
@@ -232,8 +212,10 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestFiller {
     }
 
   private:
-    // Carries for the `2B + 1 == scalar` check, byte by byte; byte 0's incoming carry is the `+1`.
-    // A setup row leaves them zero, its accumulator having stayed zero and the check gated off.
+    // Carries for the `2B + 1 == scalar` check, byte by byte; byte 0's incoming carry is the
+    // `+1`. `B` is the completed accumulator: limb `j` is the sign pattern of compute row
+    // `EC_MUL_COMPUTE_ROWS - 1 - j`, with limb 0 contributed by the final row itself. A setup row
+    // leaves the carries zero, its accumulator having stayed zero and the check gated off.
     __device__ bool fill_scalar_carries(
         RowSlice row, const EcMulTraceInput<BLOCKS> &input, bool is_setup, uint32_t *err
     ) {
@@ -247,7 +229,7 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulDigestFiller {
             uint32_t accumulated = 0;
             for (size_t limb = 0; limb < EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE; limb++) {
                 size_t index = byte * EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE + limb;
-                // Limb `j` of the digest row's accumulator came from compute row
+                // Limb `j` of the completed accumulator came from compute row
                 // `EC_MUL_COMPUTE_ROWS - 1 - j`.
                 uint32_t pattern = ec_mul_sign_pattern_for_row(
                     scalar_bytes, EC_MUL_COMPUTE_ROWS - 1 - index

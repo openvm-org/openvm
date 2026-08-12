@@ -194,7 +194,7 @@ fn step_expr_matches_reference_ladder() {
         let g_pt: Pt = Some(g.clone());
 
         // Only odd scalars: `sum +-2^i` is odd, so an even operand has no digit assignment and the
-        // digest row's `scalar = 2B + 1` check rejects it. That check is what makes an even operand
+        // final row's `scalar = 2B + 1` check rejects it. That check is what makes an even operand
         // unprovable rather than silently answering `(k + 1) * P`, and it is not exercised here --
         // this test drives the expression alone.
         //

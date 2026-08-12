@@ -599,7 +599,7 @@ mod tests {
 
     /// An even scalar is multiplied as `k | 1`, matching the circuit.
     ///
-    /// The circuit's digits are all `+-1`, so it can only represent odd multipliers; its digest row
+    /// The circuit's digits are all `+-1`, so it can only represent odd multipliers; its final row
     /// rejects an even operand. This path has no such check and must not diverge, so it rounds the
     /// same way rather than computing the mathematically correct `k * P`.
     #[test]

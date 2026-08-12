@@ -151,8 +151,8 @@ static __device__ bool ec_mul_eval_instruction(
 
 // Writes one row of the trace.
 //
-// `dummy_expr` is the inactive expression witness that digest and padding rows carry, computed once
-// per trace. It cannot be all zero: the curve's `a` coefficient is folded in as a constant, so on a
+// `dummy_expr` is the inactive expression witness that padding rows carry, computed once per
+// trace. It cannot be all zero: the curve's `a` coefficient is folded in as a constant, so on a
 // zero row the lambda constraint evaluates to `-a` and the ungated carry recurrences are
 // unsatisfiable whenever `a != 0`.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -172,9 +172,9 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     uint8_t *acc_bytes,
     uint32_t *err
 ) {
-    const size_t width = EC_MUL_HEADER_WIDTH + s.width + EC_MUL_DIGEST_WIDTH<NUM_LIMBS, BLOCKS>;
+    const size_t width = EC_MUL_HEADER_WIDTH + s.width + EC_MUL_IO_WIDTH<NUM_LIMBS, BLOCKS>;
     const size_t expr_offset = EC_MUL_HEADER_WIDTH;
-    const size_t digest_offset = expr_offset + s.width;
+    const size_t io_offset = expr_offset + s.width;
     row.fill_zero(0, width);
 
     // Padding rows carry the inactive witness with every selector clear.
@@ -190,14 +190,6 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     const uint8_t *scalar_bytes = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
 
     fill_ec_mul_header(row, scalar_bytes, local_row, is_setup);
-
-    if (local_row == EC_MUL_DIGEST_ROW_IDX) {
-        row.write_array(expr_offset, s.width, dummy_expr);
-        EcMulDigestFiller<NUM_LIMBS, BLOCKS> filler(
-            range_checker, timestamp_max_bits, pointer_max_bits
-        );
-        return filler.fill(row.slice_from(digest_offset), input, err);
-    }
 
     // The variables were evaluated by `ec_mul_eval_instruction`; the witness needs the same inputs
     // that evaluation saw.
@@ -227,12 +219,23 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     }
 
     FieldExprRowMode mode = ec_mul_row_mode(scalar_bytes, local_row, is_setup);
-    return field_expr_fill_witness<K>(
-        s, row.slice_from(expr_offset), in_limbs, mode, range_checker, aux, err
-    );
+    if (!field_expr_fill_witness<K>(
+            s, row.slice_from(expr_offset), in_limbs, mode, range_checker, aux, err
+        )) {
+        return false;
+    }
+
+    // The final compute row also carries the instruction's memory I/O.
+    if (local_row == EC_MUL_FINAL_ROW_IDX) {
+        EcMulIoFiller<NUM_LIMBS, BLOCKS> filler(
+            range_checker, timestamp_max_bits, pointer_max_bits
+        );
+        return filler.fill(row.slice_from(io_offset), input, err);
+    }
+    return true;
 }
 
-// Builds the inactive expression witness that digest and padding rows carry.
+// Builds the inactive expression witness that padding rows carry.
 //
 // Built from the setup inputs rather than zeros, since the expression divides by `2*acc_y` without
 // a guard. `is_valid` is then cleared, as `fill_dummy_core_row` does for the single-row chips. The
@@ -271,7 +274,7 @@ static __device__ bool ec_mul_validate_trace_shape(
     size_t vars_words
 ) {
     return ec_mul_program_matches(s, static_cast<uint32_t>(NUM_LIMBS)) && s.k == K &&
-           width == EC_MUL_HEADER_WIDTH + s.width + EC_MUL_DIGEST_WIDTH<NUM_LIMBS, BLOCKS> &&
+           width == EC_MUL_HEADER_WIDTH + s.width + EC_MUL_IO_WIDTH<NUM_LIMBS, BLOCKS> &&
            num_instructions * EC_MUL_TOTAL_ROWS <= height &&
            vars_words >= num_instructions * EC_MUL_COMPUTE_ROWS * s.num_vars * K;
 }
