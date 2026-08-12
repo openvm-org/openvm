@@ -12,8 +12,7 @@ static __global__ void ec_mul_validate(
     size_t height,
     size_t width,
     size_t num_instructions,
-    size_t affine_bytes,
-    size_t ladder_words,
+    size_t vars_words,
     const uint32_t *blob,
     size_t blob_words,
     size_t aux_words,
@@ -22,7 +21,7 @@ static __global__ void ec_mul_validate(
     FieldExprProg s;
     if (!validate_and_load_prog(blob, blob_words, s) || aux_words != s.aux_words ||
         !ec_mul_validate_trace_shape<K, NUM_LIMBS, BLOCKS>(
-            s, width, height, num_instructions, affine_bytes, ladder_words
+            s, width, height, num_instructions, vars_words
         )) {
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
     }
@@ -52,8 +51,9 @@ static __global__ void ec_mul_eval(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
-    uint8_t *affine,
-    uint32_t *ladder,
+    uint32_t *vars,
+    uint32_t *scratch,
+    size_t aux_words,
     uint32_t *error
 ) {
     if (*error != 0) return;
@@ -62,14 +62,13 @@ static __global__ void ec_mul_eval(
 
     FieldExprProg s;
     load_prog(blob, s);
-    // Both the Jacobian scratch and the Montgomery temporaries come from the per-instruction slice,
-    // rather than a kernel-local array large enough to hurt occupancy.
-    uint8_t *row_affine = affine + index * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS;
-    uint32_t *row_ladder = ladder + index * EC_MUL_LADDER_SLICE_WORDS<K>;
+    uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
+    uint8_t accumulator[2 * NUM_LIMBS];
+    uint32_t *aux = scratch + index * aux_words;
+    uint32_t *row_vars = vars + index * EC_MUL_COMPUTE_ROWS * s.num_vars * K;
 
     ec_mul_eval_instruction<K, BLOCKS>(
-        s, projection[index], row_affine, row_ladder,
-        row_ladder + EC_MUL_COMPUTE_ROWS * 4 * K, error
+        s, projection[index], row_vars, aux, in_limbs, accumulator, error
     );
 }
 
@@ -82,7 +81,7 @@ static __global__ void ec_mul_fill(
     size_t num_instructions,
     const EcMulTraceInput<BLOCKS> *projection,
     const uint32_t *blob,
-    const uint8_t *affine,
+    const uint32_t *vars,
     const Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
@@ -107,6 +106,7 @@ static __global__ void ec_mul_fill(
     VariableRangeChecker range_checker(range_counts, range_bins);
     uint32_t *aux = scratch + tid * aux_words;
     uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
+    uint8_t accumulator[2 * NUM_LIMBS];
     const size_t used_rows = num_instructions * EC_MUL_TOTAL_ROWS;
 
     for (size_t row_index = tid; row_index < height; row_index += threads) {
@@ -116,13 +116,14 @@ static __global__ void ec_mul_fill(
                 row_index,
                 used_rows,
                 projection,
-                affine,
+                vars,
                 dummy_expr,
                 range_checker,
                 timestamp_max_bits,
                 pointer_max_bits,
                 aux,
                 in_limbs,
+                accumulator,
                 error
             )) {
             return;
@@ -139,10 +140,8 @@ static int launch_ec_mul_tracegen(
     size_t num_instructions,
     const uint32_t *blob,
     size_t blob_words,
-    uint8_t *affine,
-    size_t affine_bytes,
-    uint32_t *ladder,
-    size_t ladder_words,
+    uint32_t *vars,
+    size_t vars_words,
     Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
@@ -157,26 +156,22 @@ static int launch_ec_mul_tracegen(
     uint32_t *error,
     cudaStream_t stream
 ) {
-    if (trace == nullptr || projection == nullptr || blob == nullptr || affine == nullptr ||
-        ladder == nullptr || dummy_expr == nullptr || range_counts == nullptr ||
-        discarded_counts == nullptr || scratch == nullptr || error == nullptr || height == 0 ||
-        num_instructions == 0 ||
+    if (trace == nullptr || projection == nullptr || blob == nullptr || vars == nullptr ||
+        dummy_expr == nullptr || range_counts == nullptr || discarded_counts == nullptr ||
+        scratch == nullptr || error == nullptr || height == 0 || num_instructions == 0 ||
         aux_words == 0 || fill_grid_blocks == 0 || fill_block_threads == 0 ||
         fill_grid_blocks > UINT32_MAX || fill_block_threads > 1024) {
         return cudaErrorInvalidValue;
     }
-    const size_t needed_affine = num_instructions * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS;
-    const size_t needed_ladder = num_instructions * EC_MUL_LADDER_SLICE_WORDS<K>;
     if (num_instructions > height / EC_MUL_TOTAL_ROWS ||
         fill_grid_blocks * fill_block_threads * aux_words > scratch_words ||
-        affine_bytes < needed_affine || ladder_words < needed_ladder) {
+        num_instructions * aux_words > scratch_words) {
         return cudaErrorInvalidValue;
     }
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
 
     ec_mul_validate<K, NUM_LIMBS, BLOCKS><<<1, 1, 0, stream>>>(
-        height, width, num_instructions, affine_bytes, ladder_words, blob, blob_words, aux_words,
-        error
+        height, width, num_instructions, vars_words, blob, blob_words, aux_words, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
 
@@ -187,7 +182,7 @@ static int launch_ec_mul_tracegen(
 
     auto [eval_grid, eval_block] = kernel_launch_params(num_instructions, 64);
     ec_mul_eval<K, NUM_LIMBS, BLOCKS><<<eval_grid, eval_block, 0, stream>>>(
-        inputs, num_instructions, blob, affine, ladder, error
+        inputs, num_instructions, blob, vars, scratch, aux_words, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
 
@@ -201,7 +196,7 @@ static int launch_ec_mul_tracegen(
             num_instructions,
             inputs,
             blob,
-            affine,
+            vars,
             dummy_expr,
             range_counts,
             range_bins,
@@ -225,10 +220,8 @@ extern "C" int _ec_mul_tracegen(
     size_t num_instructions,
     const uint32_t *blob,
     size_t blob_words,
-    uint8_t *affine,
-    size_t affine_bytes,
-    uint32_t *ladder,
-    size_t ladder_words,
+    uint32_t *vars,
+    size_t vars_words,
     Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
@@ -245,18 +238,18 @@ extern "C" int _ec_mul_tracegen(
 ) {
     if (num_limbs == 32 && blocks == 8) {
         return launch_ec_mul_tracegen<8, 32, 8>(
-            trace, height, width, projection, num_instructions, blob, blob_words, affine,
-            affine_bytes, ladder, ladder_words, dummy_expr, range_counts, range_bins,
-            discarded_counts, scratch, scratch_words, aux_words, fill_grid_blocks,
-            fill_block_threads, pointer_max_bits, timestamp_max_bits, error, stream
+            trace, height, width, projection, num_instructions, blob, blob_words, vars, vars_words,
+            dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
+            aux_words, fill_grid_blocks, fill_block_threads, pointer_max_bits, timestamp_max_bits,
+            error, stream
         );
     }
     if (num_limbs == 48 && blocks == 12) {
         return launch_ec_mul_tracegen<12, 48, 12>(
-            trace, height, width, projection, num_instructions, blob, blob_words, affine,
-            affine_bytes, ladder, ladder_words, dummy_expr, range_counts, range_bins,
-            discarded_counts, scratch, scratch_words, aux_words, fill_grid_blocks,
-            fill_block_threads, pointer_max_bits, timestamp_max_bits, error, stream
+            trace, height, width, projection, num_instructions, blob, blob_words, vars, vars_words,
+            dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
+            aux_words, fill_grid_blocks, fill_block_threads, pointer_max_bits, timestamp_max_bits,
+            error, stream
         );
     }
     return cudaErrorInvalidValue;
