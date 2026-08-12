@@ -627,10 +627,12 @@ impl MemoryMerkleTree {
             let cell_type = self.mem_config.addr_spaces[addr_space].layout.into();
             let mut subtree = match &build {
                 InitialMerkleBuild::DensePrefix(addr_space_size) => {
+                    let configured_leaves =
+                        self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH;
                     assert!(
-                        *addr_space_size
-                            <= self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
-                        "subtree size exceeds the address space's configured leaf count"
+                        *addr_space_size <= configured_leaves,
+                        "address space {addr_space}: initial memory needs {addr_space_size} leaf \
+                         digests but the address space is configured for {configured_leaves}"
                     );
                     MemoryMerkleSubTree::new(
                         *addr_space_size,
