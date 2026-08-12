@@ -175,6 +175,8 @@ unsafe extern "C" {
     ) -> i32;
 
     fn _ec_mul_k256_generate_vars(
+        num_limbs: usize,
+        blocks: usize,
         d_projection: *const std::ffi::c_void,
         num_instructions: usize,
         d_blob: *const u32,
@@ -491,6 +493,8 @@ pub struct EcMulFillLaunchConfig {
 /// context. The caller must restrict this to the 32-byte, `a = 0`, secp256k1 coordinate field.
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn ec_mul_k256_generate_vars<T>(
+    num_limbs: usize,
+    blocks: usize,
     d_projection: &DeviceBuffer<T>,
     d_blob: &DeviceBuffer<u32>,
     d_vars: &DeviceBuffer<u32>,
@@ -503,6 +507,8 @@ pub unsafe fn ec_mul_k256_generate_vars<T>(
     stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_ec_mul_k256_generate_vars(
+        num_limbs,
+        blocks,
         d_projection.as_ptr().cast(),
         d_projection.len(),
         d_blob.as_ptr(),
