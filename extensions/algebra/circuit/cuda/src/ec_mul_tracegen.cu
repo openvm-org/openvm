@@ -45,33 +45,6 @@ static __global__ void ec_mul_dummy_expr(
     ec_mul_build_dummy_expr<K>(s, RowSlice(dummy, 1), discarded, scratch, in_limbs, error);
 }
 
-// One thread per instruction: advances the ladder, storing each row's saved variables.
-template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
-static __global__ void ec_mul_eval(
-    const EcMulTraceInput<BLOCKS> *projection,
-    size_t num_instructions,
-    const uint32_t *blob,
-    uint32_t *vars,
-    uint32_t *scratch,
-    size_t aux_words,
-    uint32_t *error
-) {
-    if (*error != 0) return;
-    size_t index = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
-    if (index >= num_instructions) return;
-
-    FieldExprProg s;
-    load_prog(blob, s);
-    uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
-    uint8_t accumulator[2 * NUM_LIMBS];
-    uint32_t *aux = scratch + index * aux_words;
-    uint32_t *row_vars = vars + index * EC_MUL_COMPUTE_ROWS * s.num_vars * K;
-
-    ec_mul_eval_instruction<K, BLOCKS>(
-        s, projection[index], row_vars, aux, in_limbs, accumulator, error
-    );
-}
-
 // One thread per trace row, grid-stride so the scratch a launch needs is bounded by its thread
 // count rather than by the trace height.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -140,7 +113,7 @@ static int launch_ec_mul_tracegen(
     size_t num_instructions,
     const uint32_t *blob,
     size_t blob_words,
-    uint32_t *vars,
+    const uint32_t *vars,
     size_t vars_words,
     Fp *dummy_expr,
     uint32_t *range_counts,
@@ -164,8 +137,7 @@ static int launch_ec_mul_tracegen(
         return cudaErrorInvalidValue;
     }
     if (num_instructions > height / EC_MUL_TOTAL_ROWS ||
-        fill_grid_blocks * fill_block_threads * aux_words > scratch_words ||
-        num_instructions * aux_words > scratch_words) {
+        fill_grid_blocks * fill_block_threads * aux_words > scratch_words) {
         return cudaErrorInvalidValue;
     }
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
@@ -177,12 +149,6 @@ static int launch_ec_mul_tracegen(
 
     ec_mul_dummy_expr<K, NUM_LIMBS><<<1, 1, 0, stream>>>(
         dummy_expr, blob, discarded_counts, range_bins, scratch, error
-    );
-    if (int result = CHECK_KERNEL(); result != 0) return result;
-
-    auto [eval_grid, eval_block] = kernel_launch_params(num_instructions, 64);
-    ec_mul_eval<K, NUM_LIMBS, BLOCKS><<<eval_grid, eval_block, 0, stream>>>(
-        inputs, num_instructions, blob, vars, scratch, aux_words, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
 
@@ -220,7 +186,7 @@ extern "C" int _ec_mul_tracegen(
     size_t num_instructions,
     const uint32_t *blob,
     size_t blob_words,
-    uint32_t *vars,
+    const uint32_t *vars,
     size_t vars_words,
     Fp *dummy_expr,
     uint32_t *range_counts,
