@@ -71,6 +71,7 @@ pub(crate) fn compute_root_proof_heights(
         MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;
+    app_config.app_vm_config.apply_optimizations();
 
     let def_hook_cached_commit = deferral_setup.hook_cached_commit();
     let def_hook_commit = deferral_setup.hook_commit().map(Into::into);
