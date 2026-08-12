@@ -75,6 +75,28 @@ pub fn ec_mul_step_expr(
     )
 }
 
+/// Builds a program whose public setup coefficient and formula coefficient differ.
+///
+/// This is deliberately available only to unit tests. It preserves the program's coarse layout
+/// while changing its arithmetic, so the CUDA fast-path eligibility check can prove that it keys
+/// off the exact expression rather than only dimensions and output indices.
+#[cfg(all(test, feature = "cuda"))]
+pub(super) fn mutated_ec_mul_step_expr(
+    config: ExprBuilderConfig,
+    range_bus: VariableRangeCheckerBus,
+    setup_a: BigUint,
+    formula_a: BigUint,
+) -> FieldExpr {
+    FieldExpr::new(
+        FieldExpressionProgram::new_with_setup_values(
+            build_ec_mul_step_expr(config, range_bus.range_max_bits, &formula_a),
+            true,
+            vec![setup_a],
+        ),
+        range_bus,
+    )
+}
+
 pub fn ec_mul_step_program(
     config: ExprBuilderConfig,
     range_max_bits: usize,
