@@ -2093,11 +2093,15 @@ mod ec_double_tests {
 /// and the guest-program tests prove it end to end.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 mod ec_mul_tests {
+    use openvm_circuit_primitives::TraceSubRowGenerator;
+    use openvm_stark_backend::p3_air::BaseAir;
+
     use super::*;
     use crate::{
-        extension::HybridEcMulChip, get_ec_mul_air, get_ec_mul_chip, get_ec_mul_executor,
+        ec_mul_header_width, extension::HybridEcMulChip, get_ec_mul_air, get_ec_mul_chip,
+        get_ec_mul_executor, setup_row_inputs,
         weierstrass_chip::generate_ec_mul_trace_from_postflight, EcMulAir, EcMulChip,
-        EcMulExecutor, SCALAR_LIMBS,
+        EcMulExecutor, EC_MUL_SIGN_PATTERNS, SCALAR_LIMBS,
     };
 
     type EcMulGpuHarness<const NUM_LIMBS: usize, const BLOCKS: usize> = GpuTestChipHarness<
@@ -2143,6 +2147,26 @@ mod ec_mul_tests {
             a.clone(),
         );
 
+        // The harness pads the stitched trace with zero rows, which satisfy this AIR only when
+        // `a = 0`: the expression's ungated carry recurrences evaluate to `-a` on an all-zero
+        // row. Padding must carry the same inactive witness both trace generators produce.
+        let dummy_expr = {
+            let expr = &cpu_chip.expr;
+            let discard = VariableRangeCheckerChip::new(range_bus);
+            let mut sub = F::zero_vec(BaseAir::<F>::width(expr));
+            expr.generate_subrow(
+                (
+                    &discard,
+                    setup_row_inputs(expr.program()),
+                    vec![false; EC_MUL_SIGN_PATTERNS],
+                ),
+                &mut sub,
+            );
+            sub[0] = F::ZERO;
+            sub
+        };
+        let expr_offset = ec_mul_header_width();
+
         let gpu_cpu_chip = get_ec_mul_chip::<F, NUM_LIMBS, BLOCKS>(
             config,
             tester.cpu_memory_helper(),
@@ -2167,6 +2191,9 @@ mod ec_mul_tests {
                     chip.generate_proving_ctx_from_postflight(program, transcript, plan)
                 },
             )
+            .with_padding(move |row| {
+                row[expr_offset..expr_offset + dummy_expr.len()].copy_from_slice(&dummy_expr);
+            })
     }
 
     /// Writes one instruction's operands and executes it.
