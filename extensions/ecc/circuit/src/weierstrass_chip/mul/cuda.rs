@@ -2,12 +2,15 @@
 //!
 //! The shared vec-heap gather cannot describe this opcode: its two heap reads have different block
 //! counts, and its trace is [`EC_MUL_TOTAL_ROWS`] rows per instruction rather than one. A dedicated
-//! kernel gathers the same fields the host postflight projects, and [`EcMulTracegenGpu`] fills the
-//! trace on the device. The host builder stays reachable through the postflight path, which is what
-//! the device path is compared against.
+//! kernel gathers the same fields the host postflight projects; the host evaluates each
+//! instruction's chained ladder values (see [`fill_instruction_vars`] for why the device is the
+//! wrong place for that chain) and uploads them; and [`EcMulTracegenGpu`]'s fill kernel writes the
+//! trace on the device, one thread per row, without a single modular inversion. The host builder
+//! stays reachable through the postflight path, which is what the device path is compared against.
 
 use std::sync::Arc;
 
+use num_bigint::BigUint;
 use openvm_algebra_circuit::cuda::{
     ec_mul_tracegen, gather_ec_mul, merge_range_counts, EcMulFillLaunchConfig,
 };
@@ -29,12 +32,18 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
     VmOpcode,
 };
-use openvm_mod_circuit_builder::device_program::{
-    serialize_field_expr_from_parts, DeviceOutputSource,
+use openvm_mod_circuit_builder::{
+    device_program::{serialize_field_expr_from_parts, DeviceOutputSource},
+    FieldExpr,
 };
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::{
+    p3_air::BaseAir, p3_maybe_rayon::prelude::*, prover::AirProvingContext,
+};
 
-use super::{ec_mul_width, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_TOTAL_ROWS};
+use super::{
+    blocks_to_bytes, ec_mul_width, execution::sign_pattern_for_row, setup_row_inputs, EcMulChip,
+    EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_TOTAL_ROWS,
+};
 
 /// Device memory the row-filling pass may use for per-thread scratch.
 const MAX_EC_MUL_SCRATCH_BYTES: usize = 128 << 20;
@@ -165,6 +174,70 @@ fn fill_launch_config(
     })
 }
 
+/// Writes one row's saved variables in the layout the fill kernel reads: variable-major, each
+/// variable's canonical bytes packed four per `u32` word.
+fn write_vars_row(out: &mut [u32], u32_limbs: usize, vars: &[BigUint]) {
+    for (var, value) in vars.iter().enumerate() {
+        let words = &mut out[var * u32_limbs..(var + 1) * u32_limbs];
+        words.fill(0);
+        for (i, byte) in value.to_bytes_le().into_iter().enumerate() {
+            words[i / 4] |= u32::from(byte) << (8 * (i % 4));
+        }
+    }
+}
+
+/// Computes one instruction's saved-variable buffer for the fill kernel.
+///
+/// A ladder row's inputs are the previous row's outputs, so evaluation is sequential within an
+/// instruction — the wrong shape for a device thread, whose Fermat inversions leave the
+/// evaluation throughput-bound. On the host an inversion is an extended gcd and instructions
+/// parallelize across cores. A setup instruction carries the same variables on every row, so it
+/// is evaluated once and copied.
+fn fill_instruction_vars<const BLOCKS: usize>(
+    expr: &FieldExpr,
+    u32_limbs: usize,
+    out: &mut [u32],
+    input: &EcMulTraceInput<BLOCKS>,
+) {
+    let program = expr.program();
+    let vars_per_row = program.num_vars() * u32_limbs;
+
+    if input.is_setup() {
+        let vars = program.execute(
+            &setup_row_inputs(program),
+            &vec![false; EC_MUL_SIGN_PATTERNS],
+        );
+        write_vars_row(&mut out[..vars_per_row], u32_limbs, &vars);
+        for row in 1..EC_MUL_COMPUTE_ROWS {
+            out.copy_within(0..vars_per_row, row * vars_per_row);
+        }
+        return;
+    }
+
+    let point_bytes = blocks_to_bytes(input.point_blocks());
+    let scalar_bytes = blocks_to_bytes(input.scalar_blocks());
+    let coord_bytes = point_bytes.len() / 2;
+    let px = BigUint::from_bytes_le(&point_bytes[..coord_bytes]);
+    let py = BigUint::from_bytes_le(&point_bytes[coord_bytes..]);
+    let outs = program.output_indices();
+
+    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
+    let mut rx = px.clone();
+    let mut ry = py.clone();
+    for row in 0..EC_MUL_COMPUTE_ROWS {
+        let mut flags = vec![false; EC_MUL_SIGN_PATTERNS];
+        flags[sign_pattern_for_row(&scalar_bytes, row)] = true;
+        let vars = program.execute(&[px.clone(), py.clone(), rx.clone(), ry.clone()], &flags);
+        rx = vars[outs[0]].clone();
+        ry = vars[outs[1]].clone();
+        write_vars_row(
+            &mut out[row * vars_per_row..(row + 1) * vars_per_row],
+            u32_limbs,
+            &vars,
+        );
+    }
+}
+
 /// Device-side trace generation for one curve's `EC_MUL` chip.
 ///
 /// The serialized expression is uploaded once, at construction, since it depends only on the curve.
@@ -268,26 +341,25 @@ impl EcMulTracegenGpu {
         let height = next_power_of_two_or_zero(num_instructions * EC_MUL_TOTAL_ROWS);
         let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
-        // The per-instruction pass indexes the same scratch by instruction rather than by row.
-        let scratch_words = launch
-            .scratch_words
-            .max(num_instructions.saturating_mul(self.aux_words));
-        if scratch_words > max_scratch_words {
-            return Err(GpuPostflightError::ResourceLimitExceeded {
-                resource: "EC_MUL scratch words",
-                requested: scratch_words,
-                limit: max_scratch_words,
+
+        // Each row's saved variables, computed on the host and uploaded. Evaluating them on
+        // device serializes each instruction's chain on Fermat inversions, which measures
+        // throughput-bound at real instruction counts; host inversions are extended gcds and
+        // instructions parallelize across cores.
+        let vars_per_instruction = EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs;
+        let mut host_vars = vec![0u32; num_instructions * vars_per_instruction];
+        host_vars
+            .par_chunks_exact_mut(vars_per_instruction)
+            .zip(inputs.par_iter())
+            .for_each(|(out, input)| {
+                fill_instruction_vars::<BLOCKS>(&chip.expr, self.u32_limbs, out, input)
             });
-        }
+        let vars = host_vars.as_slice().to_device_on(device_ctx)?;
 
         let projection = inputs.as_slice().to_device_on(device_ctx)?;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
-        let vars = DeviceBuffer::<u32>::with_capacity_on(
-            num_instructions * EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs,
-            device_ctx,
-        );
         let dummy_expr = DeviceBuffer::<F>::with_capacity_on(self.expr_width, device_ctx);
-        let scratch = DeviceBuffer::<u32>::with_capacity_on(scratch_words, device_ctx);
+        let scratch = DeviceBuffer::<u32>::with_capacity_on(launch.scratch_words, device_ctx);
         let delta = DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
         // The dummy row's own range checks are discarded: the AIR emits none when `is_valid` is
