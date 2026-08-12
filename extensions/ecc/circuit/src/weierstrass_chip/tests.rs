@@ -53,7 +53,9 @@ use {
         SystemOpcode,
     },
     openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram},
-    openvm_stark_backend::StarkEngine,
+    openvm_stark_backend::{
+        p3_matrix::Matrix, prover::MatrixDimensions as DeviceMatrixDimensions, StarkEngine,
+    },
     rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT},
     strum::EnumCount,
 };
@@ -301,6 +303,31 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
         .memory
         .inventory
         .set_initial_memory(&tester.memory.memory.data.memory);
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn initialize_gpu_memory_from_history(tester: &mut GpuChipTestBuilder, history: &PreflightHistory) {
+    for event in &history.memory.accesses {
+        if event.address_space_and_kind & PREFLIGHT_WRITE_BIT == 0 {
+            unsafe {
+                tester.memory.memory.data.write::<u16, 4>(
+                    event.address_space_and_kind,
+                    event.pointer,
+                    event.value,
+                );
+            }
+        }
+    }
+    for write in &history.memory.initial_writes {
+        unsafe {
+            tester.memory.memory.data.write::<u16, 4>(
+                write.address_space,
+                write.pointer,
+                write.initial_value,
+            );
+        }
+    }
+    reset_gpu_initial_memory(tester);
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -2213,7 +2240,7 @@ mod ec_mul_tests {
         offset: usize,
         point: Option<&(BigUint, BigUint)>,
         scalar: &BigUint,
-    ) {
+    ) -> Instruction<F> {
         let (x, y, op_local) = match point {
             None => (
                 modulus.clone(),
@@ -2290,6 +2317,7 @@ mod ec_mul_tests {
         );
 
         tester.execute(executor, preflight, &instruction);
+        instruction
     }
 
     /// One setup instruction, then `k * P` for every scalar in `scalars`.
@@ -2345,6 +2373,116 @@ mod ec_mul_tests {
             .finalize()
             .simple_test()
             .unwrap();
+    }
+
+    /// Exercises the production path with several EC_MULs in one postflight transcript.
+    ///
+    /// The chip micro-harness intentionally uploads one isolated history at a time, so it cannot
+    /// catch instruction-stride, variable-transpose, or shared-histogram bugs. This fixture repeats
+    /// a valid execution in one program, compares every GPU cell against the CPU batch trace,
+    /// compares the complete range histogram, and proves the stitched trace.
+    fn run_multi_instruction_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        modulus: BigUint,
+        a: BigUint,
+        point: (BigUint, BigUint),
+    ) {
+        const REPETITIONS: usize = 3;
+
+        let offset = WeierstrassOpcode::CLASS_OFFSET;
+        let mut rng = create_seeded_rng();
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
+
+        // Generate one authoritative execution history without mutating the GPU proof fixture's
+        // buses or memory. The latter must contain exactly the repeated history, not this seed run
+        // plus the repeated history.
+        let mut fixture = VmChipTestBuilder::default();
+        let mut executor = get_ec_mul_executor::<BLOCKS>(
+            config.clone(),
+            default_var_range_checker_bus().range_max_bits,
+            offset,
+            a.clone(),
+        );
+        let mut preflight = TestPreflight::default();
+        let instruction = set_and_execute_ec_mul::<NUM_LIMBS, BLOCKS>(
+            &mut fixture,
+            &mut executor,
+            &mut preflight,
+            &mut rng,
+            &modulus,
+            &a,
+            offset,
+            Some(&point),
+            &BigUint::from(0x1234_5679u32),
+        );
+        let execution = preflight.executions.pop().unwrap();
+
+        let mut tester = GpuChipTestBuilder::default();
+        initialize_gpu_memory_from_history(&mut tester, &execution.history);
+        let harness = create_cuda_harness::<NUM_LIMBS, BLOCKS>(&tester, config, offset, a.clone());
+        let (program, history) =
+            repeat_vec_heap_history(instruction, execution.history, REPETITIONS);
+        tester.record_preflight_history(&program, &history, Some(0));
+
+        let memory_config = MemoryConfig::default();
+        let device_ctx = tester.range_checker().device_ctx.clone();
+        let gpu_program =
+            GpuPostflightProgram::upload(&program, &memory_config, &device_ctx).unwrap();
+        let (gpu_transcript, replay_plan) = gpu_program
+            .upload_history_for_test(&program, &history, Some(0))
+            .unwrap();
+        let replay_ctx = harness
+            .gpu_chip
+            .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
+            .unwrap();
+        gpu_transcript.synchronize().unwrap();
+        assert_eq!(gpu_transcript.error_code().unwrap(), 0);
+
+        let postflight = Postflight::new_for_test(&program, &history, &memory_config).unwrap();
+        let cpu_trace = generate_ec_mul_trace_from_postflight(
+            &harness.cpu_chip,
+            &postflight,
+            WeierstrassOpcode::CLASS_OFFSET,
+        )
+        .unwrap();
+        let gpu_height = DeviceMatrixDimensions::height(&replay_ctx.common_main);
+        let gpu_width = DeviceMatrixDimensions::width(&replay_ctx.common_main);
+        assert_eq!(Matrix::height(&cpu_trace), gpu_height);
+        assert_eq!(Matrix::width(&cpu_trace), gpu_width);
+        let gpu_trace = replay_ctx
+            .common_main
+            .buffer()
+            .to_host_on(&device_ctx)
+            .unwrap();
+        for row in 0..gpu_height {
+            for column in 0..gpu_width {
+                assert_eq!(
+                    cpu_trace.values[row * gpu_width + column],
+                    gpu_trace[column * gpu_height + row],
+                    "EC_MUL multi-instruction trace mismatch at row {row}, column {column}",
+                );
+            }
+        }
+
+        let cpu_counts = harness
+            .cpu_chip
+            .range_checker
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>();
+        assert_eq!(gpu_range_counts(&tester), cpu_counts);
+
+        let mut tester = tester.build();
+        tester.balance_preflight_history(&program, &history, Some(0));
+        tester
+            .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+            .finalize()
+            .simple_test()
+            .expect("multi-instruction EC_MUL postflight proof failed");
     }
 
     /// Odd, nonzero, below both the secp256k1 and P-256 group orders.
@@ -2461,6 +2599,31 @@ mod ec_mul_tests {
                 BigUint::from(5u32),
                 BigUint::from(0x1234_5679u32),
             ],
+        );
+    }
+
+    #[test]
+    fn test_ec_mul_cuda_multi_instruction_k8_k12() {
+        run_multi_instruction_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            SampleEcPoints[0].clone(),
+        );
+
+        let gx = BigUint::from_str_radix(
+            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
+            16,
+        )
+        .unwrap();
+        let gy = BigUint::from_str_radix(
+            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
+            16,
+        )
+        .unwrap();
+        run_multi_instruction_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
+            BLS12_381_MODULUS.clone(),
+            BigUint::zero(),
+            (gx, gy),
         );
     }
 }
