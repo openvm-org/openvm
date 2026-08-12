@@ -209,6 +209,23 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> HybridEcMulChip<F, NUM_LIMBS, 
             WeierstrassOpcode::SETUP_EC_MUL as usize,
         ]
     }
+
+    /// Device trace generation from the GPU postflight transcript, mirroring
+    /// [`HybridWeierstrassChip::generate_proving_ctx_from_postflight`].
+    pub fn generate_proving_ctx_from_postflight(
+        &self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        self.tracegen.generate_proving_ctx::<NUM_LIMBS, BLOCKS>(
+            &self.cpu,
+            self.opcode_base,
+            program,
+            transcript,
+            replay_plan,
+        )
+    }
 }
 
 /// Prover extension for hybrid CPU trace generation and GPU proving.
@@ -225,8 +242,6 @@ pub struct WeierstrassPreflightGpuTracegen<'a> {
     replay_plan: &'a GpuPostflightPlan,
     claimed_opcodes: Vec<u32>,
     pending_opcodes: BTreeSet<u32>,
-    /// Host postflight for the `EC_MUL` chip, whose multirow trace has no GPU projection.
-    cpu_postflight: Option<&'a Postflight<'a, F>>,
 }
 
 impl<'a> WeierstrassPreflightGpuTracegen<'a> {
@@ -444,19 +459,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             replay_plan,
             claimed_opcodes,
             pending_opcodes,
-            cpu_postflight: None,
         }
-    }
-
-    /// Supplies the host postflight used to generate the `EC_MUL` trace.
-    ///
-    /// Required whenever the segment executes `EC_MUL` or `SETUP_EC_MUL`. Callers that own the
-    /// interpreter's preflight output can always provide it; those working only from a GPU
-    /// transcript cannot, and such a segment is rejected rather than mis-traced.
-    #[must_use]
-    pub fn with_cpu_postflight(mut self, postflight: &'a Postflight<'a, F>) -> Self {
-        self.cpu_postflight = Some(postflight);
-        self
     }
 
     pub fn claimed_opcodes(&self) -> &[u32] {
@@ -480,12 +483,12 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         chip.generate_proving_ctx_from_postflight(self.program, self.transcript, self.replay_plan)
     }
 
-    /// `EC_MUL`'s trace is built on the host and uploaded.
+    /// `EC_MUL`'s trace is generated on the device by its dedicated gather and fill kernels.
     ///
-    /// The shared vec-heap gather kernel accepts only a fixed set of (reads, blocks) shapes with
-    /// uniform read widths, and none describes this chip's point + 256-bit scalar + point schedule
-    /// or its multirow trace. Rather than add a kernel, this reuses the same host trace generator
-    /// the CPU prover uses, so both backends produce identical traces by construction.
+    /// The shared vec-heap replay path cannot describe this chip: its point + 256-bit scalar +
+    /// point access pattern and its multirow trace fit none of the fixed (reads, blocks) shapes.
+    /// The host builder stays reachable through the executor-chip tracegen closure, and
+    /// `ec_mul_tests` asserts the two backends produce identical traces.
     fn generate_for_ec_mul_chip<const NUM_LIMBS: usize, const BLOCKS: usize>(
         &mut self,
         chip: &HybridEcMulChip<F, NUM_LIMBS, BLOCKS>,
@@ -512,28 +515,7 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
             ));
         }
 
-        let Some(postflight) = self.cpu_postflight else {
-            // No host history — the rvr flow emits a compact replay seed and expands it on the
-            // device, so the projections and the trace are both produced there.
-            return chip.tracegen.generate_proving_ctx::<NUM_LIMBS, BLOCKS>(
-                &chip.cpu,
-                chip.opcode_base,
-                self.program,
-                self.transcript,
-                self.replay_plan,
-            );
-        };
-
-        let trace = generate_ec_mul_trace_from_postflight(&chip.cpu, postflight, chip.opcode_base)
-            .map_err(|error| {
-                GpuPostflightError::InvalidTranscript(format!(
-                    "EC_MUL host trace generation failed: {error:?}"
-                ))
-            })?;
-        Ok(cpu_proving_ctx_to_gpu(
-            AirProvingContext::simple_no_pis(trace),
-            &chip.device_ctx,
-        ))
+        chip.generate_proving_ctx_from_postflight(self.program, self.transcript, self.replay_plan)
     }
 
     /// Returns `Some` only for a Weierstrass-owned AIR, allowing a concrete
@@ -859,7 +841,7 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBui
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        host_program: &Program<F>,
+        _host_program: &Program<F>,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
@@ -867,22 +849,12 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64WeierstrassHybridBui
             .postflight_history(program, output)
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         let config = vm.config().clone();
-        // `EC_MUL` has no GPU projection, so its trace comes from the host postflight.
-        let memory_config = vm.config().as_ref().memory_config.clone();
-        let cpu_postflight = Postflight::new(
-            host_program,
-            &output.history,
-            &memory_config,
-            output.exit_code,
-        )
-        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
         WeierstrassPreflightGpuTracegen::new(
             &config.weierstrass,
             program,
             &transcript,
             &replay_plan,
         )
-        .with_cpu_postflight(&cpu_postflight)
         .generate_proving_ctx(vm, &config.modular.modular, None)
     }
 }
