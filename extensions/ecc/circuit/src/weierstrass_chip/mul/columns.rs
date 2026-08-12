@@ -71,7 +71,7 @@ pub struct EcMulHeaderCols<T> {
     /// transition constraint in one column, where an `Encoder` over this many rows would raise the
     /// AIR's maximum constraint degree and with it the application's `log_blowup`.
     pub row_idx: T,
-    /// The bit accumulator `B`, MSB-first, in limbs of [`EC_MUL_STEPS_PER_ROW`] bits:
+    /// The bit accumulator `B`, MSB-first, in limbs of [`super::EC_MUL_STEPS_PER_ROW`] bits:
     /// `B' = 2^EC_MUL_STEPS_PER_ROW * B + digits`.
     ///
     /// Holds the value entering the row, so it is zero on the first compute row and complete on

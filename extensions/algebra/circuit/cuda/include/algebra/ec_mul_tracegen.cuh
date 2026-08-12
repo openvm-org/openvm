@@ -119,10 +119,8 @@ static __device__ bool ec_mul_eval_instruction(
 
 // Writes one row of the trace.
 //
-// `dummy_expr` is the inactive expression witness that digest and padding rows carry, computed once
-// per trace. It cannot be all zero: the curve's `a` coefficient is folded in as a constant, so on a
-// zero row the lambda constraint evaluates to `-a` and the ungated carry recurrences are
-// unsatisfiable whenever `a != 0`.
+// `dummy_expr` is the inactive expression witness that digest and padding rows carry, computed
+// once per trace by `ec_mul_build_dummy_expr`.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
 static __device__ __noinline__ bool ec_mul_fill_row(
     const FieldExprProg &s,
@@ -186,9 +184,12 @@ static __device__ __noinline__ bool ec_mul_fill_row(
 
 // Builds the inactive expression witness that digest and padding rows carry.
 //
-// Built from the setup inputs rather than zeros, since the expression divides by `2*acc_y` without
-// a guard. `is_valid` is then cleared, as `fill_dummy_core_row` does for the single-row chips. The
-// AIR emits no range check when `is_valid` is zero, so the caller passes a throwaway histogram.
+// The witness cannot be all-zero: the curve's `a` coefficient is folded in as a constant, so on a
+// zero row the lambda constraint evaluates to `-a` and the ungated carry recurrences are
+// unsatisfiable whenever `a != 0`. Nor can it be built from zero inputs, since the expression
+// divides by `2*acc_y` without a guard. It is therefore built from the setup inputs, and
+// `is_valid` is then cleared, as `fill_dummy_core_row` does for the single-row chips. The AIR
+// emits no range check when `is_valid` is zero, so the caller passes a throwaway histogram.
 template <uint32_t K>
 static __device__ bool ec_mul_build_dummy_expr(
     const FieldExprProg &s,

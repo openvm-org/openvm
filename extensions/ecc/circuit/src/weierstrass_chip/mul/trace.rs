@@ -4,10 +4,9 @@
 //! produced by evaluating the step [`FieldExpr`] once per group of [`EC_MUL_STEPS_PER_ROW`] digits
 //! and carrying the accumulator forward, followed by the digest row holding the memory witnesses.
 //!
-//! Padding rows carry a consistent witness for zero inputs with `is_valid` cleared, rather than
-//! being all-zero: the expression folds the curve's `a` coefficient in as a constant, so on a zero
-//! row its lambda constraint evaluates to `-a` and the ungated carry recurrences are unsatisfiable
-//! whenever `a != 0`.
+//! Digest and padding rows carry an inactive expression witness with `is_valid` cleared, rather
+//! than being all-zero; [`build_ec_mul_trace`] explains why zeros satisfy neither the ungated
+//! constraints nor witness generation.
 
 use std::{
     borrow::BorrowMut,

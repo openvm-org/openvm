@@ -173,3 +173,55 @@ fn native_ladder_matches_field_expression() {
         p256_modulus - BigUint::from(3u32),
     );
 }
+
+/// The order check must accept every configured curve and reject the case its proof cannot cover.
+///
+/// For `n = 3 (mod 4)` the prefix `(n - 1)/2` is odd, hence reachable, and makes the incomplete
+/// addition's denominator vanish. See the module documentation.
+#[test]
+fn supported_scalar_orders_are_accepted() {
+    for hex in [
+        // secp256k1 group order. Note its *coordinate* modulus is 3 mod 4, so passing the wrong
+        // one of the two trips this check rather than silently building an unprovable chip.
+        "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+        // secp256r1
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
+        // bn254 Fr
+        "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
+        // bls12-381 Fr
+        "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+    ] {
+        let order = BigUint::parse_bytes(hex.as_bytes(), 16).unwrap();
+        assert_eq!(&order % 4u32, BigUint::from(1u32), "{hex} is not 1 mod 4");
+        super::assert_supported_scalar_order(&order);
+    }
+}
+
+#[test]
+#[should_panic(expected = "scalar order congruent to 1 mod 4")]
+fn scalar_order_three_mod_four_is_rejected() {
+    // 23 = 3 (mod 4): scalar 21 reaches prefix 11, where 2*11 = -1 makes the addend and the
+    // doubled accumulator share an x-coordinate.
+    super::assert_supported_scalar_order(&BigUint::from(23u32));
+}
+
+/// Pins the row layout the GPU prover's device mirror restates.
+///
+/// `extensions/riscv-adapters/cuda/include/riscv-adapters/ec_mul_columns.cuh` declares these column
+/// structs in C++ and resolves each column by `offsetof`, so a field added, removed, or reordered
+/// here would write to the wrong column there rather than fail to compile. Both sides assert the
+/// same three widths.
+#[test]
+fn ec_mul_column_widths_match_the_cuda_mirror() {
+    use crate::{ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48};
+
+    assert_eq!(super::ec_mul_header_width(), 135);
+    assert_eq!(
+        super::ec_mul_digest_width::<NUM_LIMBS_32, ECC_BLOCKS_32>(),
+        281
+    );
+    assert_eq!(
+        super::ec_mul_digest_width::<NUM_LIMBS_48, ECC_BLOCKS_48>(),
+        377
+    );
+}

@@ -512,7 +512,6 @@ ecc_double_setup_entry!(
     CurveType::BLS12_381
 );
 
-
 ecc_mul_setup_entry!(
     rvr_ext_setup_ec_mul_bls12_381,
     POINT_BLS12_381_BYTES,
