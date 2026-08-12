@@ -9,8 +9,7 @@ use openvm_circuit::arch::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
     },
     instructions::program::Program,
-    prepare_gpu_postflight, GenerationError, Postflight, PostflightTracegen, PreflightOutput,
-    VirtualMachine,
+    prepare_gpu_postflight, GenerationError, PostflightTracegen, PreflightOutput, VirtualMachine,
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_deferral_circuit::DeferralPreflightGpuTracegen;
@@ -140,19 +139,6 @@ impl SdkVmGpuBuilder {
         transcript: &GpuPostflightTranscript,
         replay_plan: &GpuPostflightPlan,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
-        Self::generate_preflight_proving_ctx_with_host(vm, program, transcript, replay_plan, None)
-    }
-
-    /// As above, but supplies the host postflight that `EC_MUL` trace generation requires. Callers
-    /// that own the interpreter's preflight output should prefer this; a configuration whose
-    /// Weierstrass curves are ever set up needs it.
-    pub(crate) fn generate_preflight_proving_ctx_with_host(
-        vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        program: &GpuPostflightProgram,
-        transcript: &GpuPostflightTranscript,
-        replay_plan: &GpuPostflightPlan,
-        cpu_postflight: Option<&Postflight<'_, BabyBear>>,
-    ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let max_trace_height = 1usize << vm.engine.params().log_stacked_height();
         SdkPreflightGpuTracegen::new(
             vm.config(),
@@ -160,7 +146,6 @@ impl SdkVmGpuBuilder {
             transcript,
             replay_plan,
             max_trace_height,
-            cpu_postflight,
         )
         .map_err(extension_error)?
         .generate_proving_ctx(vm)
@@ -179,29 +164,14 @@ impl PostflightTracegen<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<BabyBearPoseidon2GpuEngine, Self>,
-        host_program: &Program<BabyBear>,
+        _host_program: &Program<BabyBear>,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
         let (transcript, replay_plan) = vm
             .postflight_history(program, output)
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        // `EC_MUL` has no GPU projection; its trace is built from the host postflight.
-        let memory_config = vm.config().as_ref().memory_config.clone();
-        let cpu_postflight = Postflight::new(
-            host_program,
-            &output.history,
-            &memory_config,
-            output.exit_code,
-        )
-        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        Self::generate_preflight_proving_ctx_with_host(
-            vm,
-            program,
-            &transcript,
-            &replay_plan,
-            Some(&cpu_postflight),
-        )
+        Self::generate_preflight_proving_ctx(vm, program, &transcript, &replay_plan)
     }
 }
 
@@ -212,7 +182,6 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
         transcript: &'a GpuPostflightTranscript,
         replay_plan: &'a GpuPostflightPlan,
         max_trace_height: usize,
-        cpu_postflight: Option<&'a Postflight<'a, BabyBear>>,
     ) -> Result<Self, GpuPostflightError> {
         validate_preflight_config(config)?;
         let keccak = config
@@ -240,14 +209,10 @@ impl<'a> SdkPreflightGpuTracegen<'a> {
                 )
             })
             .transpose()?;
-        let ecc = config.ecc.as_ref().map(|ecc| {
-            let tracegen =
-                WeierstrassPreflightGpuTracegen::new(ecc, program, transcript, replay_plan);
-            match cpu_postflight {
-                Some(postflight) => tracegen.with_cpu_postflight(postflight),
-                None => tracegen,
-            }
-        });
+        let ecc = config
+            .ecc
+            .as_ref()
+            .map(|ecc| WeierstrassPreflightGpuTracegen::new(ecc, program, transcript, replay_plan));
         let deferral = config
             .deferral
             .as_ref()
