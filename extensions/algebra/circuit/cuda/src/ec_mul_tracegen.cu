@@ -4,11 +4,11 @@
 // Like the `EC_MUL` projection gather, this lives in the algebra crate because that is the crate
 // compiling CUDA for the extension stack; the ECC circuit crate has no CUDA build of its own.
 #include "algebra/ec_mul_tracegen.cuh"
-#include "algebra/ec_mul_k256_projective.cuh"
+#include "algebra/ec_mul_projective.cuh"
 #include "launcher.cuh"
 
 template <uint32_t K, size_t BLOCKS>
-static __global__ void ec_mul_k256_projective_pass(
+static __global__ void ec_mul_projective_prepare_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
@@ -20,12 +20,12 @@ static __global__ void ec_mul_k256_projective_pass(
     if (instruction >= num_instructions) return;
     FieldExprProg s;
     load_prog(blob, s);
-    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_K256_POINT_WORDS<K>;
-    ec_mul_k256_build_projective<K>(s, projection[instruction], rows, error);
+    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
+    ec_mul_projective_build_projective<K>(s, projection[instruction], rows, error);
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
-static __global__ void ec_mul_k256_normalize_pass(
+static __global__ void ec_mul_projective_normalize_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
@@ -38,13 +38,15 @@ static __global__ void ec_mul_k256_normalize_pass(
     if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
-    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_K256_POINT_WORDS<K>;
-    uint8_t *out = affine + instruction * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS;
-    ec_mul_k256_normalize<K>(s, rows, out, error);
+    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
+    size_t total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
+    ec_mul_projective_normalize<K>(
+        s, rows, affine, total_rows, instruction * EC_MUL_COMPUTE_ROWS, error
+    );
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
-static __global__ void ec_mul_k256_eval_rows(
+static __global__ void ec_mul_projective_eval_rows(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
@@ -76,15 +78,18 @@ static __global__ void ec_mul_k256_eval_rows(
             ec_mul_setup_inputs(in_limbs, s);
         } else {
             const uint8_t *point = reinterpret_cast<const uint8_t *>(&input.point_blocks[0][0]);
-            const uint8_t *acc = affine + flat * 2 * NUM_LIMBS;
-            ec_mul_compute_inputs(in_limbs, NUM_LIMBS, point, acc);
+            for (uint32_t byte = 0; byte < 2 * NUM_LIMBS; byte++) {
+                in_limbs[byte] = point[byte];
+                in_limbs[2 * NUM_LIMBS + byte] = affine[byte * total_rows + flat];
+            }
         }
         const uint8_t *scalar = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
         if (!field_expr_eval_values<K>(
                 s, in_limbs, nullptr, ec_mul_row_mode(scalar, row, setup), aux, error
             )) return;
-        uint32_t *out = vars + flat * s.num_vars * K;
-        for (uint32_t word = 0; word < s.num_vars * K; word++) out[word] = aux[word];
+        for (uint32_t word = 0; word < s.num_vars * K; word++) {
+            vars[word * total_rows + flat] = aux[word];
+        }
     }
 }
 
@@ -111,28 +116,28 @@ static int launch_ec_mul_projective_vars(
     if (projection == nullptr || blob == nullptr || vars == nullptr || projective == nullptr ||
         affine == nullptr || scratch == nullptr || error == nullptr || num_instructions == 0 ||
         vars_words == 0 ||
-        projective_words < rows * EC_MUL_K256_POINT_WORDS<K> ||
+        projective_words < rows * EC_MUL_PROJECTIVE_POINT_WORDS<K> ||
         affine_bytes < rows * 2 * NUM_LIMBS || grid_blocks == 0 || block_threads == 0 ||
         grid_blocks * block_threads * aux_words > scratch_words) return cudaErrorInvalidValue;
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
     auto [instruction_grid, instruction_block] = kernel_launch_params(num_instructions, 64);
-    ec_mul_k256_projective_pass<K, BLOCKS><<<instruction_grid, instruction_block, 0, stream>>>(
+    ec_mul_projective_prepare_pass<K, BLOCKS><<<instruction_grid, instruction_block, 0, stream>>>(
         inputs, num_instructions, blob, projective, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    ec_mul_k256_normalize_pass<K, NUM_LIMBS, BLOCKS>
+    ec_mul_projective_normalize_pass<K, NUM_LIMBS, BLOCKS>
         <<<instruction_grid, instruction_block, 0, stream>>>(
             inputs, num_instructions, blob, projective, affine, error
         );
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    ec_mul_k256_eval_rows<K, NUM_LIMBS, BLOCKS>
+    ec_mul_projective_eval_rows<K, NUM_LIMBS, BLOCKS>
         <<<static_cast<uint32_t>(grid_blocks), static_cast<uint32_t>(block_threads), 0, stream>>>(
             inputs, num_instructions, blob, affine, vars, scratch, scratch_words, aux_words, error
         );
     return CHECK_KERNEL();
 }
 
-extern "C" int _ec_mul_k256_generate_vars(
+extern "C" int _ec_mul_projective_generate_vars(
     size_t num_limbs,
     size_t blocks,
     const void *projection,
@@ -218,6 +223,7 @@ static __global__ void ec_mul_fill(
     const EcMulTraceInput<BLOCKS> *projection,
     const uint32_t *blob,
     const uint32_t *vars,
+    bool vars_transposed,
     const Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
@@ -253,6 +259,7 @@ static __global__ void ec_mul_fill(
                 used_rows,
                 projection,
                 vars,
+                vars_transposed,
                 dummy_expr,
                 range_checker,
                 timestamp_max_bits,
@@ -278,6 +285,7 @@ static int launch_ec_mul_tracegen(
     size_t blob_words,
     const uint32_t *vars,
     size_t vars_words,
+    bool vars_transposed,
     Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
@@ -326,6 +334,7 @@ static int launch_ec_mul_tracegen(
             inputs,
             blob,
             vars,
+            vars_transposed,
             dummy_expr,
             range_counts,
             range_bins,
@@ -351,6 +360,7 @@ extern "C" int _ec_mul_tracegen(
     size_t blob_words,
     const uint32_t *vars,
     size_t vars_words,
+    bool vars_transposed,
     Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
@@ -368,7 +378,7 @@ extern "C" int _ec_mul_tracegen(
     if (num_limbs == 32 && blocks == 8) {
         return launch_ec_mul_tracegen<8, 32, 8>(
             trace, height, width, projection, num_instructions, blob, blob_words, vars, vars_words,
-            dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
+            vars_transposed, dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
             aux_words, fill_grid_blocks, fill_block_threads, pointer_max_bits, timestamp_max_bits,
             error, stream
         );
@@ -376,7 +386,7 @@ extern "C" int _ec_mul_tracegen(
     if (num_limbs == 48 && blocks == 12) {
         return launch_ec_mul_tracegen<12, 48, 12>(
             trace, height, width, projection, num_instructions, blob, blob_words, vars, vars_words,
-            dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
+            vars_transposed, dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
             aux_words, fill_grid_blocks, fill_block_threads, pointer_max_bits, timestamp_max_bits,
             error, stream
         );

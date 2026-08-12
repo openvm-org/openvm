@@ -5,10 +5,10 @@
 // Generic short-Weierstrass ladder acceleration. Values remain in the program's Montgomery domain.
 // Four K-word slots per row store X, Y, Z, and the prefix product used for batch normalization.
 template <uint32_t K>
-static constexpr size_t EC_MUL_K256_POINT_WORDS = 4 * K;
+static constexpr size_t EC_MUL_PROJECTIVE_POINT_WORDS = 4 * K;
 
 template <uint32_t K>
-static __device__ __noinline__ void ec_mul_k256_mont_mul(
+static __device__ __noinline__ void ec_mul_projective_mont_mul(
     const FieldExprProg &s,
     const uint32_t *x,
     const uint32_t *y,
@@ -19,19 +19,19 @@ static __device__ __noinline__ void ec_mul_k256_mont_mul(
 }
 
 template <uint32_t K>
-static __device__ __noinline__ void ec_mul_k256_mont_inv(
+static __device__ __noinline__ void ec_mul_projective_mont_inv(
     const FieldExprProg &s, const uint32_t *x, uint32_t *out, uint32_t *work
 ) {
     mont_inv<K>(s, x, out, work);
 }
 
 template <uint32_t K>
-struct EcMulK256Field {
+struct EcMulProjectiveField {
     const FieldExprProg &s;
     uint32_t *work;
 
     __device__ void mul(const uint32_t *x, const uint32_t *y, uint32_t *out) const {
-        ec_mul_k256_mont_mul<K>(s, x, y, out, work);
+        ec_mul_projective_mont_mul<K>(s, x, y, out, work);
     }
     __device__ void square(const uint32_t *x, uint32_t *out) const { mul(x, x, out); }
     __device__ void add(const uint32_t *x, const uint32_t *y, uint32_t *out) const {
@@ -61,8 +61,8 @@ struct EcMulK256Field {
 };
 
 template <uint32_t K>
-static __device__ __noinline__ void ec_mul_k256_double(
-    const EcMulK256Field<K> &f,
+static __device__ __noinline__ void ec_mul_projective_double(
+    const EcMulProjectiveField<K> &f,
     const uint32_t *x,
     const uint32_t *y,
     const uint32_t *z,
@@ -103,8 +103,8 @@ static __device__ __noinline__ void ec_mul_k256_double(
 }
 
 template <uint32_t K>
-static __device__ __noinline__ void ec_mul_k256_add_base(
-    const EcMulK256Field<K> &f,
+static __device__ __noinline__ void ec_mul_projective_add_base(
+    const EcMulProjectiveField<K> &f,
     const uint32_t *x,
     const uint32_t *y,
     const uint32_t *z,
@@ -147,7 +147,7 @@ static __device__ __noinline__ void ec_mul_k256_add_base(
 }
 
 template <uint32_t K, size_t BLOCKS>
-static __device__ __noinline__ bool ec_mul_k256_build_projective(
+static __device__ __noinline__ bool ec_mul_projective_build_projective(
     const FieldExprProg &s,
     const EcMulTraceInput<BLOCKS> &input,
     uint32_t *rows,
@@ -157,7 +157,7 @@ static __device__ __noinline__ bool ec_mul_k256_build_projective(
     const uint8_t *point = reinterpret_cast<const uint8_t *>(&input.point_blocks[0][0]);
     const uint8_t *scalar = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
     uint32_t work[2 * K + 2], temps[11 * K];
-    EcMulK256Field<K> f{s, work};
+    EcMulProjectiveField<K> f{s, work};
     if (s.n_setup_values != 1) {
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
@@ -178,54 +178,66 @@ static __device__ __noinline__ bool ec_mul_k256_build_projective(
     f.mul(one, s.r2, z);
 
     for (size_t row = 0; row < EC_MUL_COMPUTE_ROWS; row++) {
-        uint32_t *saved = rows + row * EC_MUL_K256_POINT_WORDS<K>;
+        uint32_t *saved = rows + row * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
         f.copy(x, saved);
         f.copy(y, saved + K);
         f.copy(z, saved + 2 * K);
         uint32_t pattern = ec_mul_sign_pattern_for_row(scalar, row);
         for (size_t step = 0; step < EC_MUL_STEPS_PER_ROW; step++) {
-            ec_mul_k256_double<K>(f, x, y, z, curve_a, nx, ny, nz, temps);
+            ec_mul_projective_double<K>(f, x, y, z, curve_a, nx, ny, nz, temps);
             bool plus = ((pattern >> (EC_MUL_STEPS_PER_ROW - 1 - step)) & 1u) != 0;
-            ec_mul_k256_add_base<K>(f, nx, ny, nz, px, plus ? py : neg_py, x, y, z, temps);
+            ec_mul_projective_add_base<K>(f, nx, ny, nz, px, plus ? py : neg_py, x, y, z, temps);
         }
     }
     return true;
 }
 
 template <uint32_t K>
-static __device__ __noinline__ bool ec_mul_k256_normalize(
-    const FieldExprProg &s, uint32_t *rows, uint8_t *affine, uint32_t *error
+static __device__ __noinline__ bool ec_mul_projective_normalize(
+    const FieldExprProg &s,
+    uint32_t *rows,
+    uint8_t *affine,
+    size_t affine_rows,
+    size_t first_row,
+    uint32_t *error
 ) {
     uint32_t work[2 * K + 2], running[K], inv[K], zi[K], zi2[K], value[K];
-    EcMulK256Field<K> f{s, work};
+    uint8_t canonical[MAX_U32_LIMBS * sizeof(uint32_t)];
+    EcMulProjectiveField<K> f{s, work};
     uint32_t *first_prefix = rows + 3 * K;
     f.copy(rows + 2 * K, first_prefix);
     for (size_t row = 1; row < EC_MUL_COMPUTE_ROWS; row++) {
-        uint32_t *cur = rows + row * EC_MUL_K256_POINT_WORDS<K>;
-        uint32_t *prev = cur - EC_MUL_K256_POINT_WORDS<K>;
+        uint32_t *cur = rows + row * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
+        uint32_t *prev = cur - EC_MUL_PROJECTIVE_POINT_WORDS<K>;
         f.mul(prev + 3 * K, cur + 2 * K, cur + 3 * K);
     }
-    uint32_t *last = rows + (EC_MUL_COMPUTE_ROWS - 1) * EC_MUL_K256_POINT_WORDS<K>;
+    uint32_t *last = rows + (EC_MUL_COMPUTE_ROWS - 1) * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
     if (limbs_are_zero(last + 3 * K, K)) {
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
     }
-    ec_mul_k256_mont_inv<K>(s, last + 3 * K, inv, work);
+    ec_mul_projective_mont_inv<K>(s, last + 3 * K, inv, work);
     f.copy(inv, running);
     for (size_t row = EC_MUL_COMPUTE_ROWS; row-- > 0;) {
-        uint32_t *cur = rows + row * EC_MUL_K256_POINT_WORDS<K>;
+        uint32_t *cur = rows + row * EC_MUL_PROJECTIVE_POINT_WORDS<K>;
         if (row == 0) f.copy(running, zi);
         else {
-            uint32_t *prev = cur - EC_MUL_K256_POINT_WORDS<K>;
+            uint32_t *prev = cur - EC_MUL_PROJECTIVE_POINT_WORDS<K>;
             f.mul(running, prev + 3 * K, zi);
             f.mul(running, cur + 2 * K, running);
         }
         f.square(zi, zi2);
         f.mul(cur, zi2, value);
-        f.mont_to_canonical_bytes(value, affine + row * 2 * s.num_limbs);
+        f.mont_to_canonical_bytes(value, canonical);
+        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+            affine[byte * affine_rows + first_row + row] = canonical[byte];
+        }
         f.mul(zi2, zi, zi2);
         f.mul(cur + K, zi2, value);
-        f.mont_to_canonical_bytes(value, affine + row * 2 * s.num_limbs + s.num_limbs);
+        f.mont_to_canonical_bytes(value, canonical);
+        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+            affine[(s.num_limbs + byte) * affine_rows + first_row + row] = canonical[byte];
+        }
     }
     return true;
 }

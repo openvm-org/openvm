@@ -159,6 +159,7 @@ unsafe extern "C" {
         blob_words: usize,
         d_vars: *const u32,
         vars_words: usize,
+        vars_transposed: bool,
         d_dummy_expr: *mut F,
         d_range_counts: *mut u32,
         range_bins: usize,
@@ -174,7 +175,7 @@ unsafe extern "C" {
         stream: cudaStream_t,
     ) -> i32;
 
-    fn _ec_mul_k256_generate_vars(
+    fn _ec_mul_projective_generate_vars(
         num_limbs: usize,
         blocks: usize,
         d_projection: *const std::ffi::c_void,
@@ -492,7 +493,7 @@ pub struct EcMulFillLaunchConfig {
 /// `T` must match the device `EcMulTraceInput<8>` layout and all buffers must share `stream`'s
 /// context. The caller must restrict this to the 32-byte, `a = 0`, secp256k1 coordinate field.
 #[allow(clippy::too_many_arguments)]
-pub unsafe fn ec_mul_k256_generate_vars<T>(
+pub unsafe fn ec_mul_projective_generate_vars<T>(
     num_limbs: usize,
     blocks: usize,
     d_projection: &DeviceBuffer<T>,
@@ -506,7 +507,7 @@ pub unsafe fn ec_mul_k256_generate_vars<T>(
     d_error: *mut u32,
     stream: cudaStream_t,
 ) -> Result<(), CudaError> {
-    CudaError::from_result(_ec_mul_k256_generate_vars(
+    CudaError::from_result(_ec_mul_projective_generate_vars(
         num_limbs,
         blocks,
         d_projection.as_ptr().cast(),
@@ -546,6 +547,7 @@ pub unsafe fn ec_mul_tracegen<T>(
     d_projection: &DeviceBuffer<T>,
     d_blob: &DeviceBuffer<u32>,
     d_vars: &DeviceBuffer<u32>,
+    vars_transposed: bool,
     d_dummy_expr: &DeviceBuffer<F>,
     d_range_counts: &DeviceBuffer<F>,
     d_discarded_counts: &DeviceBuffer<F>,
@@ -569,6 +571,7 @@ pub unsafe fn ec_mul_tracegen<T>(
         d_blob.len(),
         d_vars.as_ptr(),
         d_vars.len(),
+        vars_transposed,
         d_dummy_expr.as_mut_ptr(),
         d_range_counts.as_mut_ptr().cast(),
         d_range_counts.len(),
