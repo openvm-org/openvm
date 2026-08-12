@@ -180,6 +180,7 @@ fn fill_launch_config(
 pub(crate) struct EcMulTracegenGpu {
     program: DeviceBuffer<u32>,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
+    opcode_base: usize,
     aux_words: usize,
     expr_width: usize,
     u32_limbs: usize,
@@ -190,6 +191,7 @@ pub(crate) struct EcMulTracegenGpu {
 impl EcMulTracegenGpu {
     pub fn new<const NUM_LIMBS: usize, const BLOCKS: usize>(
         chip: &EcMulChip<F, NUM_LIMBS, BLOCKS>,
+        opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Result<Self, GpuPostflightError> {
         // The ladder drives its flags per row rather than per opcode, so the table declares only
@@ -225,6 +227,7 @@ impl EcMulTracegenGpu {
         let program = serialized.blob.as_slice().to_device_on(&device_ctx)?;
         Ok(Self {
             program,
+            opcode_base,
             aux_words: serialized.aux_words_per_thread,
             expr_width,
             // Canonical limbs are bytes, so a `u32` limb spans four of them.
@@ -248,7 +251,6 @@ impl EcMulTracegenGpu {
     pub fn generate_proving_ctx<const NUM_LIMBS: usize, const BLOCKS: usize>(
         &self,
         chip: &EcMulChip<F, NUM_LIMBS, BLOCKS>,
-        opcode_base: usize,
         program: &GpuPostflightProgram,
         transcript: &GpuPostflightTranscript,
         replay_plan: &GpuPostflightPlan,
@@ -256,7 +258,7 @@ impl EcMulTracegenGpu {
         let device_ctx = &self.range_checker.device_ctx;
         let inputs = gather_projections::<BLOCKS>(
             chip.ptr_max_bits,
-            opcode_base,
+            self.opcode_base,
             program,
             transcript,
             replay_plan,
