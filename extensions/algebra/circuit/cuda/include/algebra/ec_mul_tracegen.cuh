@@ -19,12 +19,11 @@ static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 static constexpr uint32_t EC_MUL_EXPR_NUM_INPUTS = 4;
 static constexpr uint32_t EC_MUL_EXPR_NUM_OUTPUTS = 2;
 
-// A ladder row's inputs are the previous row's outputs, so evaluating the chain is sequential
-// within an instruction — the wrong shape for the device, where a serial chain of Fermat
-// inversions is throughput-bound. The host therefore computes every row's saved variables and
-// uploads them; `ec_mul_fill_row` consumes the buffer one thread per row. Witness generation
-// depends only on a row's own variables and derives its quotients by exact integer division, so
-// the fill performs no modular inversions.
+// A ladder row's inputs are the previous row's outputs. The generic path uploads host-computed
+// saved variables; supported device shapes replace the serial affine chain with projective
+// preparation, batch normalization, and row-parallel evaluation. `ec_mul_fill_row` consumes either
+// row-major host variables or variable-major device variables one thread per row. Witness
+// generation depends only on a row's own variables and performs no modular inversions.
 
 // Checks that a blob describes this chip's ladder step before any row relies on its shape.
 static __device__ bool ec_mul_program_matches(const FieldExprProg &s, uint32_t num_limbs) {
@@ -42,6 +41,30 @@ static __device__ void ec_mul_output_bytes(
         for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
             out[output * s.num_limbs + byte] =
                 static_cast<uint8_t>(value[byte / 4] >> (8 * (byte % 4)));
+        }
+    }
+}
+
+// An evaluation's two outputs from the row-major or variable-major saved-variable buffer.
+static __device__ void ec_mul_output_bytes_from_layout(
+    uint8_t *out,
+    const FieldExprProg &s,
+    const uint32_t *vars,
+    size_t row,
+    size_t total_rows,
+    uint32_t k,
+    bool vars_transposed
+) {
+    if (!vars_transposed) {
+        ec_mul_output_bytes(out, s, vars + row * s.num_vars * k, k);
+        return;
+    }
+    for (uint32_t output = 0; output < EC_MUL_EXPR_NUM_OUTPUTS; output++) {
+        uint32_t var = s.outputs[output];
+        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+            uint32_t word = vars[(var * k + byte / 4) * total_rows + row];
+            out[output * s.num_limbs + byte] =
+                static_cast<uint8_t>(word >> (8 * (byte % 4)));
         }
     }
 }
@@ -106,6 +129,7 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     size_t used_rows,
     const EcMulTraceInput<BLOCKS> *projection,
     const uint32_t *vars,
+    bool vars_transposed,
     const Fp *dummy_expr,
     VariableRangeChecker range_checker,
     uint32_t timestamp_max_bits,
@@ -138,9 +162,10 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     // that evaluation saw.
     const uint32_t vars_per_row = s.num_vars * K;
     const size_t vars_index = instruction * EC_MUL_COMPUTE_ROWS + local_row;
-    const uint32_t *row_vars = vars + vars_index * vars_per_row;
+    const size_t vars_rows = (used_rows / EC_MUL_TOTAL_ROWS) * EC_MUL_COMPUTE_ROWS;
     for (uint32_t word = 0; word < vars_per_row; word++) {
-        aux[word] = row_vars[word];
+        aux[word] = vars_transposed ? vars[word * vars_rows + vars_index]
+                                    : vars[vars_index * vars_per_row + word];
     }
 
     if (is_setup) {
@@ -151,9 +176,9 @@ static __device__ __noinline__ bool ec_mul_fill_row(
                 acc_bytes[byte] = ec_mul_block_byte(input.point_blocks, byte);
             }
         } else {
-            const uint32_t *previous =
-                vars + (instruction * EC_MUL_COMPUTE_ROWS + local_row - 1) * vars_per_row;
-            ec_mul_output_bytes(acc_bytes, s, previous, K);
+            ec_mul_output_bytes_from_layout(
+                acc_bytes, s, vars, vars_index - 1, vars_rows, K, vars_transposed
+            );
         }
         ec_mul_compute_inputs(
             in_limbs, s.num_limbs,

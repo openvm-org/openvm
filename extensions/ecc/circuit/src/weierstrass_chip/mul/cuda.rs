@@ -2,17 +2,17 @@
 //!
 //! The shared vec-heap gather cannot describe this opcode: its two heap reads have different block
 //! counts, and its trace is [`EC_MUL_TOTAL_ROWS`] rows per instruction rather than one. A dedicated
-//! kernel gathers the same fields the host postflight projects; the host evaluates each
-//! instruction's chained ladder values (see [`fill_instruction_vars`] for why the device is the
-//! wrong place for that chain) and uploads them; and [`EcMulTracegenGpu`]'s fill kernel writes the
-//! trace on the device, one thread per row, without a single modular inversion. The host builder
-//! stays reachable through the postflight path, which is what the device path is compared against.
+//! kernel gathers the same fields the host postflight projects. Supported shapes advance the
+//! dependent ladder in projective coordinates, batch-normalize its rows, then evaluate independent
+//! rows into a variable-major buffer; other shapes retain the host evaluator. The fill kernel
+//! writes the trace on the device one thread per row. The host builder stays reachable through the
+//! postflight path, which is what the device path is compared against.
 
 use std::sync::Arc;
 
 use num_bigint::BigUint;
 use openvm_algebra_circuit::cuda::{
-    ec_mul_k256_generate_vars, ec_mul_tracegen, gather_ec_mul, merge_range_counts,
+    ec_mul_projective_generate_vars, ec_mul_tracegen, gather_ec_mul, merge_range_counts,
     EcMulFillLaunchConfig,
 };
 use openvm_circuit::{
@@ -344,18 +344,18 @@ impl EcMulTracegenGpu {
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
 
         let expr_program = chip.expr.program();
-        let use_k256_projective = matches!((NUM_LIMBS, BLOCKS), (32, 8) | (48, 12))
+        let use_projective = matches!((NUM_LIMBS, BLOCKS), (32, 8) | (48, 12))
             && expr_program.setup_values().len() == 1;
 
         let vars_per_instruction = EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs;
-        let vars = if use_k256_projective {
+        let vars = if use_projective {
             DeviceBuffer::<u32>::with_capacity_on(
                 num_instructions * vars_per_instruction,
                 device_ctx,
             )
         } else {
             // Generic fallback: host extended-gcd inversions are still preferable to a serial
-            // chain of device Fermat inversions for curves outside the specialized k256 path.
+            // chain of device Fermat inversions for curves outside the supported shapes.
             let mut host_vars = vec![0u32; num_instructions * vars_per_instruction];
             host_vars
                 .par_chunks_exact_mut(vars_per_instruction)
@@ -378,10 +378,11 @@ impl EcMulTracegenGpu {
             DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
         discarded.fill_zero_on(device_ctx)?;
 
-        // k256 advances the dependent ladder without inversions, batch-normalizes its row inputs,
+        // The projective path advances the dependent ladder without inversions, batch-normalizes
+        // its row inputs,
         // then evaluates independent rows in parallel to produce the same variable buffer the
         // generic host path uploads.
-        let k256_buffers = if use_k256_projective {
+        let projective_buffers = if use_projective {
             let projective = DeviceBuffer::<u32>::with_capacity_on(
                 num_instructions * EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs,
                 device_ctx,
@@ -391,7 +392,7 @@ impl EcMulTracegenGpu {
                 device_ctx,
             );
             unsafe {
-                ec_mul_k256_generate_vars(
+                ec_mul_projective_generate_vars(
                     NUM_LIMBS,
                     BLOCKS,
                     &projection,
@@ -416,10 +417,19 @@ impl EcMulTracegenGpu {
                     .for_each(|(out, input)| {
                         fill_instruction_vars::<BLOCKS>(&chip.expr, self.u32_limbs, out, input)
                     });
-                assert_eq!(
-                    device_vars, expected,
-                    "k256 projective GPU saved variables diverge from FieldExpressionProgram::execute"
-                );
+                let total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
+                for (row, expected_row) in expected
+                    .chunks_exact(self.num_vars * self.u32_limbs)
+                    .enumerate()
+                {
+                    for (word, expected_word) in expected_row.iter().enumerate() {
+                        assert_eq!(
+                            device_vars[word * total_rows + row],
+                            *expected_word,
+                            "projective GPU saved variable diverges at row {row}, word {word}"
+                        );
+                    }
+                }
             }
             Some((projective, affine))
         } else {
@@ -438,6 +448,7 @@ impl EcMulTracegenGpu {
                 &projection,
                 &self.program,
                 &vars,
+                use_projective,
                 &dummy_expr,
                 &delta,
                 &discarded,
@@ -460,7 +471,7 @@ impl EcMulTracegenGpu {
         // Dropped after their kernels are enqueued on the owning stream, before proving starts.
         drop(discarded);
         drop(scratch);
-        drop(k256_buffers);
+        drop(projective_buffers);
         drop(vars);
         drop(dummy_expr);
         drop(projection);
