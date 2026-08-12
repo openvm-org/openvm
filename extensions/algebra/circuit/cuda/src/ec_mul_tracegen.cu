@@ -4,7 +4,135 @@
 // Like the `EC_MUL` projection gather, this lives in the algebra crate because that is the crate
 // compiling CUDA for the extension stack; the ECC circuit crate has no CUDA build of its own.
 #include "algebra/ec_mul_tracegen.cuh"
+#include "algebra/ec_mul_k256_projective.cuh"
 #include "launcher.cuh"
+
+template <uint32_t K, size_t BLOCKS>
+static __global__ void ec_mul_k256_projective_pass(
+    const EcMulTraceInput<BLOCKS> *projection,
+    size_t num_instructions,
+    const uint32_t *blob,
+    uint32_t *projective,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    size_t instruction = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
+    if (instruction >= num_instructions) return;
+    FieldExprProg s;
+    load_prog(blob, s);
+    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_K256_POINT_WORDS<K>;
+    ec_mul_k256_build_projective<K>(s, projection[instruction], rows, error);
+}
+
+template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
+static __global__ void ec_mul_k256_normalize_pass(
+    const EcMulTraceInput<BLOCKS> *projection,
+    size_t num_instructions,
+    const uint32_t *blob,
+    uint32_t *projective,
+    uint8_t *affine,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    size_t instruction = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
+    if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
+    FieldExprProg s;
+    load_prog(blob, s);
+    uint32_t *rows = projective + instruction * EC_MUL_COMPUTE_ROWS * EC_MUL_K256_POINT_WORDS<K>;
+    uint8_t *out = affine + instruction * EC_MUL_COMPUTE_ROWS * 2 * NUM_LIMBS;
+    ec_mul_k256_normalize<K>(s, rows, out, error);
+}
+
+template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
+static __global__ void ec_mul_k256_eval_rows(
+    const EcMulTraceInput<BLOCKS> *projection,
+    size_t num_instructions,
+    const uint32_t *blob,
+    const uint8_t *affine,
+    uint32_t *vars,
+    uint32_t *scratch,
+    size_t scratch_words,
+    size_t aux_words,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    FieldExprProg s;
+    load_prog(blob, s);
+    size_t tid = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
+    size_t threads = gridDim.x * static_cast<size_t>(blockDim.x);
+    if (threads == 0 || threads * aux_words > scratch_words) {
+        preflight_set_error(error, EC_MUL_BAD_PROGRAM);
+        return;
+    }
+    uint32_t *aux = scratch + tid * aux_words;
+    uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
+    size_t total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
+    for (size_t flat = tid; flat < total_rows; flat += threads) {
+        size_t instruction = flat / EC_MUL_COMPUTE_ROWS;
+        size_t row = flat % EC_MUL_COMPUTE_ROWS;
+        const auto &input = projection[instruction];
+        bool setup = input.is_setup != 0;
+        if (setup) {
+            ec_mul_setup_inputs(in_limbs, s);
+        } else {
+            const uint8_t *point = reinterpret_cast<const uint8_t *>(&input.point_blocks[0][0]);
+            const uint8_t *acc = affine + flat * 2 * NUM_LIMBS;
+            ec_mul_compute_inputs(in_limbs, NUM_LIMBS, point, acc);
+        }
+        const uint8_t *scalar = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
+        if (!field_expr_eval_values<K>(
+                s, in_limbs, nullptr, ec_mul_row_mode(scalar, row, setup), aux, error
+            )) return;
+        uint32_t *out = vars + flat * s.num_vars * K;
+        for (uint32_t word = 0; word < s.num_vars * K; word++) out[word] = aux[word];
+    }
+}
+
+extern "C" int _ec_mul_k256_generate_vars(
+    const void *projection,
+    size_t num_instructions,
+    const uint32_t *blob,
+    uint32_t *vars,
+    size_t vars_words,
+    uint32_t *projective,
+    size_t projective_words,
+    uint8_t *affine,
+    size_t affine_bytes,
+    uint32_t *scratch,
+    size_t scratch_words,
+    size_t aux_words,
+    size_t grid_blocks,
+    size_t block_threads,
+    uint32_t *error,
+    cudaStream_t stream
+) {
+    constexpr uint32_t K = 8;
+    constexpr size_t NUM_LIMBS = 32;
+    constexpr size_t BLOCKS = 8;
+    const size_t rows = num_instructions * EC_MUL_COMPUTE_ROWS;
+    if (projection == nullptr || blob == nullptr || vars == nullptr || projective == nullptr ||
+        affine == nullptr || scratch == nullptr || error == nullptr || num_instructions == 0 ||
+        vars_words == 0 ||
+        projective_words < rows * EC_MUL_K256_POINT_WORDS<K> ||
+        affine_bytes < rows * 2 * NUM_LIMBS || grid_blocks == 0 || block_threads == 0 ||
+        grid_blocks * block_threads * aux_words > scratch_words) return cudaErrorInvalidValue;
+    auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
+    auto [instruction_grid, instruction_block] = kernel_launch_params(num_instructions, 64);
+    ec_mul_k256_projective_pass<K, BLOCKS><<<instruction_grid, instruction_block, 0, stream>>>(
+        inputs, num_instructions, blob, projective, error
+    );
+    if (int result = CHECK_KERNEL(); result != 0) return result;
+    ec_mul_k256_normalize_pass<K, NUM_LIMBS, BLOCKS>
+        <<<instruction_grid, instruction_block, 0, stream>>>(
+            inputs, num_instructions, blob, projective, affine, error
+        );
+    if (int result = CHECK_KERNEL(); result != 0) return result;
+    ec_mul_k256_eval_rows<K, NUM_LIMBS, BLOCKS>
+        <<<static_cast<uint32_t>(grid_blocks), static_cast<uint32_t>(block_threads), 0, stream>>>(
+            inputs, num_instructions, blob, affine, vars, scratch, scratch_words, aux_words, error
+        );
+    return CHECK_KERNEL();
+}
 
 // Checks the shape the host derived against the blob, before any row is written.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>

@@ -12,7 +12,9 @@ use openvm_circuit::arch::{
     },
     MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
 };
-use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
+use openvm_circuit_primitives::bigint::utils::{
+    secp256k1_coord_prime, secp256k1_scalar_prime, secp256r1_coord_prime,
+};
 use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
@@ -2360,12 +2362,30 @@ mod ec_mul_tests {
 
     #[test]
     fn test_ec_mul_cuda_2x32() {
+        let order = secp256k1_scalar_prime();
+        let mut rng = create_seeded_rng();
+        let mut scalars = test_scalars();
+        scalars.push(order.clone() - BigUint::from(2u32));
+        for _ in 0..8 {
+            let bytes: [u8; 32] = rng.random();
+            let mut scalar = BigUint::from_bytes_le(&bytes) % &order;
+            if scalar.is_zero() {
+                scalar = BigUint::from(1u32);
+            }
+            if !scalar.bit(0) {
+                scalar += BigUint::from(1u32);
+                if scalar >= order {
+                    scalar -= BigUint::from(2u32);
+                }
+            }
+            scalars.push(scalar);
+        }
         run_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             BigUint::zero(),
             &SampleEcPoints[..2],
-            &test_scalars(),
+            &scalars,
         );
     }
 
