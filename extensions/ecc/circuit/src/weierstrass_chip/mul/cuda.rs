@@ -352,12 +352,15 @@ impl EcMulTracegenGpu {
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
 
         let expr_program = chip.expr.program();
-        // The saved-variable schedule is expression-shape-dependent. The current direct mapping
-        // matches the 32-byte program; wider fields retain the exact generic host path.
-        let use_projective = matches!((NUM_LIMBS, BLOCKS), (32, 8))
-            && expr_program.setup_values().len() == 1
-            && expr_program.num_vars() == 10
-            && expr_program.output_indices() == [8, 9];
+        // The 48-byte expression saves the doubling numerator to satisfy its carry bound, while
+        // the 32-byte expression does not. Gate both direct layouts on their exact variable/output
+        // shape; any other serialized program retains the generic host path.
+        let direct_shape_matches = match (NUM_LIMBS, BLOCKS) {
+            (32, 8) => expr_program.num_vars() == 10 && expr_program.output_indices() == [8, 9],
+            (48, 12) => expr_program.num_vars() == 12 && expr_program.output_indices() == [10, 11],
+            _ => false,
+        };
+        let use_projective = expr_program.setup_values().len() == 1 && direct_shape_matches;
 
         let vars_per_instruction = EC_MUL_COMPUTE_ROWS
             .checked_mul(self.num_vars)

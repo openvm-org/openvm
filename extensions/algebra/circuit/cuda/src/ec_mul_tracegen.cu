@@ -112,8 +112,9 @@ static int launch_ec_mul_projective_vars(
     uint32_t *error,
     cudaStream_t stream
 ) {
+    constexpr size_t vars_per_step = K == 12 ? 6 : 5;
     constexpr size_t vars_words_per_instruction =
-        EC_MUL_COMPUTE_ROWS * 5 * EC_MUL_STEPS_PER_ROW * K;
+        EC_MUL_COMPUTE_ROWS * vars_per_step * EC_MUL_STEPS_PER_ROW * K;
     if (num_instructions > SIZE_MAX / vars_words_per_instruction ||
         num_instructions > SIZE_MAX / EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>)
         return cudaErrorInvalidValue;

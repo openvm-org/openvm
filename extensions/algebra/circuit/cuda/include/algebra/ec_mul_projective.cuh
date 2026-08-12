@@ -236,8 +236,10 @@ static __device__ __noinline__ bool ec_mul_projective_batch_invert(
     uint32_t *rows,
     uint32_t *error
 ) {
-    if (s.num_vars != 5 * EC_MUL_STEPS_PER_ROW || s.n_outputs != 2 ||
-        s.outputs[0] != 8 || s.outputs[1] != 9) {
+    constexpr uint32_t vars_per_step = K == 12 ? 6 : 5;
+    constexpr uint32_t output_x = K == 12 ? 10 : 8;
+    if (s.num_vars != vars_per_step * EC_MUL_STEPS_PER_ROW || s.n_outputs != 2 ||
+        s.outputs[0] != output_x || s.outputs[1] != output_x + 1) {
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
     }
@@ -292,8 +294,31 @@ static __device__ __noinline__ void ec_mul_projective_materialize_row(
                 EC_MUL_PROJECTIVE_STATE_WORDS<K>;
         const size_t step = within_row / 2;
         const bool post_add = (within_row & 1) != 0;
-        const uint32_t var_base = static_cast<uint32_t>(5 * step + (post_add ? 2 : 0));
+        constexpr uint32_t vars_per_step = K == 12 ? 6 : 5;
+        const uint32_t step_base = static_cast<uint32_t>(vars_per_step * step);
+        const uint32_t var_base = step_base +
+            (post_add ? (K == 12 ? 3 : 2) : (K == 12 ? 1 : 0));
         const uint32_t *zi = cur + 4 * K;
+
+        // At 48 bytes the expression builder saves E before the doubling quotient to bring its
+        // carry bound under the configured maximum. The 32-byte program does not need that slot.
+        if constexpr (K == 12) {
+            if (!post_add) {
+                size_t state_index = row * EC_MUL_PROJECTIVE_STATES_PER_ROW + within_row;
+                if (state_index == 0) {
+                    f.copy(cur + 3 * K, value);
+                } else {
+                    uint32_t *previous = cur - EC_MUL_PROJECTIVE_STATE_WORDS<K>;
+                    f.square(previous + 4 * K, zi2);
+                    f.square(zi2, zi2);
+                    f.mul(cur + 3 * K, zi2, value);
+                }
+                f.mont_to_canonical(value, canonical);
+                for (uint32_t word = 0; word < K; word++) {
+                    vars[(step_base * K + word) * total_rows + flat_row] = canonical[word];
+                }
+            }
+        }
 
         // For doubling, Z_D = 2*Y*Z and M = 3*X^2 + a*Z^4, so lambda_d = M/Z_D.
         // For mixed addition, Z_R = 2*Z_D*H and r = 2*(S_2-Y_D), so lambda_a = r/Z_R.
