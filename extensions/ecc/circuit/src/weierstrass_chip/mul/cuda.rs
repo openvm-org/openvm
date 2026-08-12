@@ -273,17 +273,6 @@ impl EcMulTracegenGpu {
         let height = next_power_of_two_or_zero(num_instructions * EC_MUL_TOTAL_ROWS);
         let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
-        // The per-instruction pass indexes the same scratch by instruction rather than by row.
-        let scratch_words = launch
-            .scratch_words
-            .max(num_instructions.saturating_mul(self.aux_words));
-        if scratch_words > max_scratch_words {
-            return Err(GpuPostflightError::ResourceLimitExceeded {
-                resource: "EC_MUL scratch words",
-                requested: scratch_words,
-                limit: max_scratch_words,
-            });
-        }
 
         let projection = inputs.as_slice().to_device_on(device_ctx)?;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
@@ -293,8 +282,9 @@ impl EcMulTracegenGpu {
             device_ctx,
         );
         // Per instruction: Jacobian accumulators, the prefix products the batch inversion consumes,
-        // then that thread's Montgomery workspace. Pass 1 only. Kept off the kernel's stack, where
-        // it would cost occupancy for nothing.
+        // then that thread's Montgomery workspace. Used only by the per-instruction pass, and
+        // allocated here rather than on the kernel's stack, where a frame this large would limit
+        // occupancy.
         let ladder_slice_words = EC_MUL_COMPUTE_ROWS * 4 * self.u32_limbs
             + EC_MUL_MONT_WORKSPACE_WORDS * self.u32_limbs
             + 2
@@ -304,7 +294,7 @@ impl EcMulTracegenGpu {
             device_ctx,
         );
         let dummy_expr = DeviceBuffer::<F>::with_capacity_on(self.expr_width, device_ctx);
-        let scratch = DeviceBuffer::<u32>::with_capacity_on(scratch_words, device_ctx);
+        let scratch = DeviceBuffer::<u32>::with_capacity_on(launch.scratch_words, device_ctx);
         let delta = DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
         // The dummy row's own range checks are discarded: the AIR emits none when `is_valid` is

@@ -31,9 +31,9 @@ static constexpr uint32_t EC_MUL_LADDER_WORKSPACE_WORDS =
 // `__noinline__` wrappers around the field primitives.
 //
 // The point operations below call these from straight-line code, dozens of times per ladder step.
-// Inlined, each copy expands the primitive's K-by-K limb loops, and the resulting function is large
-// enough that nvcc's frontend gives up. One frame per call keeps it bounded; the call overhead is
-// negligible against the K-squared body.
+// Inlined, each call site expands the primitive's K-by-K limb loops, and the enclosing function
+// grows past what nvcc's frontend can compile. One frame per call keeps the function bounded; the
+// call overhead is negligible against the K-squared body.
 template <uint32_t K>
 static __device__ __noinline__ void ec_mul_mont_mul(
     const FieldExprProg &s, const uint32_t *a, const uint32_t *b, uint32_t *r, uint32_t *ws
