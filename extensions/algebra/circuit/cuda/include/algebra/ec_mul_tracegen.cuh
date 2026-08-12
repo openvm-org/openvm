@@ -19,13 +19,12 @@ static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 static constexpr uint32_t EC_MUL_EXPR_NUM_INPUTS = 4;
 static constexpr uint32_t EC_MUL_EXPR_NUM_OUTPUTS = 2;
 
-// Trace generation runs in two passes, split where the row dependency ends.
-//
-// A ladder row's inputs are the previous row's outputs, so evaluation is sequential within an
-// instruction. Witness generation depends only on a row's own saved variables, so it is not.
-// `ec_mul_eval_instruction` walks the chain, one thread per instruction, storing every row's
-// variables; `ec_mul_fill_row` then writes each row, one thread per row. Nothing is evaluated
-// twice, at the cost of the variable buffer.
+// A ladder row's inputs are the previous row's outputs, so evaluating the chain is sequential
+// within an instruction — the wrong shape for the device, where a serial chain of Fermat
+// inversions is throughput-bound. The host therefore computes every row's saved variables and
+// uploads them; `ec_mul_fill_row` consumes the buffer one thread per row. Witness generation
+// depends only on a row's own variables and derives its quotients by exact integer division, so
+// the fill performs no modular inversions.
 
 // Checks that a blob describes this chip's ladder step before any row relies on its shape.
 static __device__ bool ec_mul_program_matches(const FieldExprProg &s, uint32_t num_limbs) {
@@ -93,62 +92,6 @@ static __device__ FieldExprRowMode ec_mul_row_mode(
                             false, false};
 }
 
-// Walks one instruction's ladder, writing each compute row's saved variables to
-// `vars_out[row * num_vars * K]`.
-//
-// A setup instruction carries the same inputs on every row, so it is evaluated once and copied, as
-// the host does. Its accumulator never advances.
-template <uint32_t K, size_t BLOCKS>
-static __device__ bool ec_mul_eval_instruction(
-    const FieldExprProg &s,
-    const EcMulTraceInput<BLOCKS> &input,
-    uint32_t *vars_out,
-    uint32_t *aux,
-    uint8_t *in_limbs,
-    uint8_t *acc_bytes,
-    uint32_t *err
-) {
-    const uint32_t nl = s.num_limbs;
-    const uint32_t vars_per_row = s.num_vars * K;
-    const bool is_setup = input.is_setup != 0;
-    const uint8_t *scalar_bytes = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
-
-    if (is_setup) {
-        ec_mul_setup_inputs(in_limbs, s);
-        FieldExprRowMode mode{0, true, false};
-        if (!field_expr_eval_values<K>(s, in_limbs, nullptr, mode, aux, err)) {
-            return false;
-        }
-        for (size_t row = 0; row < EC_MUL_COMPUTE_ROWS; row++) {
-            for (uint32_t word = 0; word < vars_per_row; word++) {
-                vars_out[row * vars_per_row + word] = aux[word];
-            }
-        }
-        return true;
-    }
-
-    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
-    for (uint32_t byte = 0; byte < 2 * nl; byte++) {
-        acc_bytes[byte] = ec_mul_block_byte(input.point_blocks, byte);
-    }
-    for (size_t row = 0; row < EC_MUL_COMPUTE_ROWS; row++) {
-        ec_mul_compute_inputs(
-            in_limbs, nl, reinterpret_cast<const uint8_t *>(&input.point_blocks[0][0]), acc_bytes
-        );
-        FieldExprRowMode mode = ec_mul_row_mode(scalar_bytes, row, false);
-        if (!field_expr_eval_values<K>(s, in_limbs, nullptr, mode, aux, err)) {
-            return false;
-        }
-        uint32_t *row_vars = vars_out + row * vars_per_row;
-        for (uint32_t word = 0; word < vars_per_row; word++) {
-            row_vars[word] = aux[word];
-        }
-        // Carry the accumulator to the next row.
-        ec_mul_output_bytes(acc_bytes, s, aux, K);
-    }
-    return true;
-}
-
 // Writes one row of the trace.
 //
 // `dummy_expr` is the inactive expression witness that padding rows carry, computed once per
@@ -191,7 +134,7 @@ static __device__ __noinline__ bool ec_mul_fill_row(
 
     fill_ec_mul_header(row, scalar_bytes, local_row, is_setup);
 
-    // The variables were evaluated by `ec_mul_eval_instruction`; the witness needs the same inputs
+    // The variables were computed on the host and uploaded; the witness needs the same inputs
     // that evaluation saw.
     const uint32_t vars_per_row = s.num_vars * K;
     const size_t vars_index = instruction * EC_MUL_COMPUTE_ROWS + local_row;

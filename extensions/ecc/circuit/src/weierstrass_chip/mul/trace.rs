@@ -101,6 +101,18 @@ impl<const BLOCKS: usize> EcMulTraceInput<BLOCKS> {
     pub(crate) fn start_timestamp(&self) -> u32 {
         self.from_timestamp
     }
+
+    pub(super) fn is_setup(&self) -> bool {
+        self.is_setup != 0
+    }
+
+    pub(super) fn point_blocks(&self) -> &[[u16; BLOCK_FE_WIDTH]; BLOCKS] {
+        &self.point_blocks
+    }
+
+    pub(super) fn scalar_blocks(&self) -> &[[u16; BLOCK_FE_WIDTH]; SCALAR_BLOCKS] {
+        &self.scalar_blocks
+    }
 }
 
 /// Byte size of [`EcMulTraceInput`], stated independently of the struct so a layout change fails to
@@ -255,7 +267,7 @@ fn project_step<F: PrimeField32, const BLOCKS: usize>(
     })
 }
 
-fn blocks_to_bytes<const N: usize>(blocks: &[[u16; BLOCK_FE_WIDTH]; N]) -> Vec<u8> {
+pub(super) fn blocks_to_bytes<const N: usize>(blocks: &[[u16; BLOCK_FE_WIDTH]; N]) -> Vec<u8> {
     let mut out = Vec::with_capacity(N * MEMORY_BLOCK_BYTES);
     for block in blocks {
         for limb in block {
