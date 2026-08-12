@@ -900,4 +900,3 @@ static __device__ bool field_expr_fill_core_row(
     return field_expr_eval_values<K>(s, in_limbs, logged_output, mode, my_aux, err) &&
            field_expr_fill_witness<K>(s, core_row, in_limbs, mode, rc, my_aux, err);
 }
-
