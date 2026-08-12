@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
-use crate::{Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
+use crate::{replay_sha2_from_postflight, Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
 
 pub(crate) fn generate_trace_from_postflight<F, C>(
     chip: &Sha2MainChip<F, C>,
@@ -41,11 +41,8 @@ where
         .zip(steps.par_iter().copied())
         .enumerate()
         .try_for_each(|(row_index, (row, step))| {
-            let replay = crate::replay_sha2_from_postflight::<F, C>(
-                postflight,
-                step,
-                chip.pointer_max_bits,
-            )?;
+            let replay =
+                replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)?;
             chip.fill_trace_row_from_replay(
                 temporary_range_checker.as_ref(),
                 &mem_helper,
@@ -81,7 +78,7 @@ where
     let mut replay_rows = Vec::new();
     for postflight in postflights {
         for &step in postflight.steps(C::OPCODE.global_opcode()) {
-            replay_rows.push(crate::replay_sha2_from_postflight::<F, C>(
+            replay_rows.push(replay_sha2_from_postflight::<F, C>(
                 postflight,
                 step,
                 chip.pointer_max_bits,
