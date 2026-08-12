@@ -216,12 +216,6 @@ fn ec_mul_column_widths_match_the_cuda_mirror() {
     use crate::{ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48};
 
     assert_eq!(super::ec_mul_header_width(), 135);
-    assert_eq!(
-        super::ec_mul_digest_width::<NUM_LIMBS_32, ECC_BLOCKS_32>(),
-        281
-    );
-    assert_eq!(
-        super::ec_mul_digest_width::<NUM_LIMBS_48, ECC_BLOCKS_48>(),
-        377
-    );
+    assert_eq!(super::ec_mul_io_width::<NUM_LIMBS_32, ECC_BLOCKS_32>(), 153);
+    assert_eq!(super::ec_mul_io_width::<NUM_LIMBS_48, ECC_BLOCKS_48>(), 185);
 }
