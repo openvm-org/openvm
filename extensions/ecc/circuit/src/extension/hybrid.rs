@@ -194,7 +194,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> HybridEcMulChip<F, NUM_LIMBS, 
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Result<Self, GpuPostflightError> {
-        let tracegen = EcMulTracegenGpu::new(&cpu, range_checker)?;
+        let tracegen = EcMulTracegenGpu::new(&cpu, opcode_base, range_checker)?;
         Ok(Self {
             cpu,
             device_ctx,
@@ -220,7 +220,6 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> HybridEcMulChip<F, NUM_LIMBS, 
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         self.tracegen.generate_proving_ctx::<NUM_LIMBS, BLOCKS>(
             &self.cpu,
-            self.opcode_base,
             program,
             transcript,
             replay_plan,
@@ -493,28 +492,12 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         &mut self,
         chip: &HybridEcMulChip<F, NUM_LIMBS, BLOCKS>,
     ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
-        let mut used = 0usize;
         for local in HybridEcMulChip::<F, NUM_LIMBS, BLOCKS>::local_opcodes() {
             let opcode = chip.opcode_base + local;
             let opcode =
                 u32::try_from(opcode).map_err(|_| GpuPostflightError::OpcodeTooLarge(opcode))?;
-            used += self
-                .replay_plan
-                .opcode_range(openvm_instructions::VmOpcode::from_usize(opcode as usize))
-                .len();
             self.pending_opcodes.remove(&opcode);
         }
-
-        // Every configured curve registers an `EC_MUL` chip whether or not the program uses one.
-        // An unused chip yields a zero-row trace, which cannot be uploaded: the device allocator
-        // rejects a zero-capacity request. Return the dummy matrix instead, as the field-expression
-        // replay path does for an empty projection.
-        if used == 0 {
-            return Ok(AirProvingContext::simple_no_pis(
-                openvm_cuda_backend::base::DeviceMatrix::dummy(),
-            ));
-        }
-
         chip.generate_proving_ctx_from_postflight(self.program, self.transcript, self.replay_plan)
     }
 
