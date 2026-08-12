@@ -340,26 +340,46 @@ impl EcMulTracegenGpu {
 
         let num_instructions = inputs.len();
         let width = ec_mul_width::<NUM_LIMBS, BLOCKS>(self.expr_width);
-        let height = next_power_of_two_or_zero(num_instructions * EC_MUL_TOTAL_ROWS);
+        let unpadded_height = num_instructions
+            .checked_mul(EC_MUL_TOTAL_ROWS)
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidConfiguration(
+                    "EC_MUL trace height overflows usize".to_string(),
+                )
+            })?;
+        let height = next_power_of_two_or_zero(unpadded_height);
         let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
         let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
 
         let expr_program = chip.expr.program();
         // The saved-variable schedule is expression-shape-dependent. The current direct mapping
         // matches the 32-byte program; wider fields retain the exact generic host path.
-        let use_projective =
-            matches!((NUM_LIMBS, BLOCKS), (32, 8)) && expr_program.setup_values().len() == 1;
+        let use_projective = matches!((NUM_LIMBS, BLOCKS), (32, 8))
+            && expr_program.setup_values().len() == 1
+            && expr_program.num_vars() == 10
+            && expr_program.output_indices() == [8, 9];
 
-        let vars_per_instruction = EC_MUL_COMPUTE_ROWS * self.num_vars * self.u32_limbs;
+        let vars_per_instruction = EC_MUL_COMPUTE_ROWS
+            .checked_mul(self.num_vars)
+            .and_then(|words| words.checked_mul(self.u32_limbs))
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidConfiguration(
+                    "EC_MUL variable buffer shape overflows usize".to_string(),
+                )
+            })?;
+        let vars_words = num_instructions
+            .checked_mul(vars_per_instruction)
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidConfiguration(
+                    "EC_MUL variable buffer size overflows usize".to_string(),
+                )
+            })?;
         let vars = if use_projective {
-            DeviceBuffer::<u32>::with_capacity_on(
-                num_instructions * vars_per_instruction,
-                device_ctx,
-            )
+            DeviceBuffer::<u32>::with_capacity_on(vars_words, device_ctx)
         } else {
             // Generic fallback: host extended-gcd inversions are still preferable to a serial
             // chain of device Fermat inversions for curves outside the supported shapes.
-            let mut host_vars = vec![0u32; num_instructions * vars_per_instruction];
+            let mut host_vars = vec![0u32; vars_words];
             host_vars
                 .par_chunks_exact_mut(vars_per_instruction)
                 .zip(inputs.par_iter())
@@ -385,14 +405,17 @@ impl EcMulTracegenGpu {
         // states per row with one inversion per instruction, and writes the ten exact saved
         // variables directly in variable-major order.
         let projective_buffers = if use_projective {
-            let projective = DeviceBuffer::<u32>::with_capacity_on(
-                num_instructions
-                    * EC_MUL_COMPUTE_ROWS
-                    * (2 * EC_MUL_STEPS_PER_ROW)
-                    * 5
-                    * self.u32_limbs,
-                device_ctx,
-            );
+            let projective_words = num_instructions
+                .checked_mul(EC_MUL_COMPUTE_ROWS)
+                .and_then(|words| words.checked_mul(2 * EC_MUL_STEPS_PER_ROW))
+                .and_then(|words| words.checked_mul(5))
+                .and_then(|words| words.checked_mul(self.u32_limbs))
+                .ok_or_else(|| {
+                    GpuPostflightError::InvalidConfiguration(
+                        "EC_MUL projective buffer size overflows usize".to_string(),
+                    )
+                })?;
+            let projective = DeviceBuffer::<u32>::with_capacity_on(projective_words, device_ctx);
             unsafe {
                 ec_mul_projective_generate_vars(
                     NUM_LIMBS,
