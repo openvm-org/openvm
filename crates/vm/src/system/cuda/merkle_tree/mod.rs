@@ -629,9 +629,6 @@ impl MemoryMerkleTree {
                 InitialMerkleBuild::DensePrefix(addr_space_size) => {
                     let configured_leaves =
                         self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH;
-                    // The size comes from the initial memory image, so a violation means the image
-                    // was built from a different `MemoryConfig` than this tree: check that the
-                    // executor and the circuit see the same address space sizes.
                     assert!(
                         *addr_space_size <= configured_leaves,
                         "address space {addr_space}: initial memory needs {addr_space_size} leaf \

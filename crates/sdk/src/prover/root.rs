@@ -189,10 +189,6 @@ pub fn compute_root_proof_heights(
         MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;
-    // The caller's system config may size `DEFERRAL_AS`, but this dummy config carries no deferral
-    // extension. Re-run the optimizations so the outer config matches the one the AIRs and chips
-    // are built from (`SdkVmConfig::to_inner`); otherwise the executor allocates a memory image
-    // for an address space the circuit treats as empty.
     app_config.app_vm_config.apply_optimizations();
 
     let deferral_setup = match def_prover {
