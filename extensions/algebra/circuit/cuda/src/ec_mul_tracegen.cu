@@ -112,10 +112,15 @@ static int launch_ec_mul_projective_vars(
     uint32_t *error,
     cudaStream_t stream
 ) {
+    constexpr size_t vars_words_per_instruction =
+        EC_MUL_COMPUTE_ROWS * 5 * EC_MUL_STEPS_PER_ROW * K;
+    if (num_instructions > SIZE_MAX / vars_words_per_instruction ||
+        num_instructions > SIZE_MAX / EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>)
+        return cudaErrorInvalidValue;
     if (projection == nullptr || blob == nullptr || vars == nullptr || projective == nullptr ||
         scratch == nullptr || error == nullptr || num_instructions == 0 ||
-        vars_words == 0 ||
-        projective_words < num_instructions * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K> ||
+        vars_words != num_instructions * vars_words_per_instruction ||
+        projective_words != num_instructions * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K> ||
         scratch_words < aux_words)
         return cudaErrorInvalidValue;
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
