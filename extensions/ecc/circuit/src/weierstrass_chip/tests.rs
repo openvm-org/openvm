@@ -2580,6 +2580,32 @@ mod ec_mul_tests {
         );
     }
 
+    /// Pins the first row's fixed negative digit and the following positive-digit path against
+    /// the generic FieldExpr witness. Scalar 1 starts with `2G + (-G)`, while setting bit 254
+    /// selects `+G` in the row's second mixed addition.
+    #[test]
+    fn test_ec_mul_cuda_k256_first_row_signs() {
+        let gx = BigUint::from_str_radix(
+            "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798",
+            16,
+        )
+        .unwrap();
+        let gy = BigUint::from_str_radix(
+            "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8",
+            16,
+        )
+        .unwrap();
+        let scalar_with_positive_second_digit =
+            (BigUint::from(1u32) << 254usize) + BigUint::from(1u32);
+        run_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            WeierstrassOpcode::CLASS_OFFSET,
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            &[(gx, gy)],
+            &[BigUint::from(1u32), scalar_with_positive_second_digit],
+        );
+    }
+
     /// P-256's `a = p - 3` exercises the nonzero-`a` paths: the constant folded into the
     /// expression, the device dummy row (unsatisfiable on zeros when `a != 0`), and the Jacobian
     /// doubling's `a * ZZ^2` term.
