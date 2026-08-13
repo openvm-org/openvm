@@ -201,31 +201,6 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     return true;
 }
 
-// Builds the inactive expression witness that padding rows carry.
-//
-// Built from the setup inputs rather than zeros, since the expression divides by `2*acc_y` without
-// a guard. `is_valid` is then cleared, as `fill_dummy_core_row` does for the single-row chips. The
-// AIR emits no range check when `is_valid` is zero, so the caller passes a throwaway histogram.
-template <uint32_t K>
-static __device__ bool ec_mul_build_dummy_expr(
-    const FieldExprProg &s,
-    RowSlice scratch_row,
-    VariableRangeChecker discarded,
-    uint32_t *aux,
-    uint8_t *in_limbs,
-    uint32_t *err
-) {
-    ec_mul_setup_inputs(in_limbs, s);
-    FieldExprRowMode mode{0, true, false};
-    if (!field_expr_fill_core_row<K>(
-            s, scratch_row, in_limbs, nullptr, mode, discarded, aux, err
-        )) {
-        return false;
-    }
-    scratch_row.write(0, Fp(0u));
-    return true;
-}
-
 // Checks the host's trace shape and buffer sizing against the blob before any row is written.
 //
 // The host derives the width and the variable-buffer length from its own copies of these constants,

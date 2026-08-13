@@ -2122,15 +2122,12 @@ mod ec_double_tests {
 /// and the guest-program tests prove it end to end.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 mod ec_mul_tests {
-    use openvm_circuit_primitives::TraceSubRowGenerator;
-    use openvm_stark_backend::p3_air::BaseAir;
-
     use super::*;
     use crate::{
-        ec_mul_header_width, extension::HybridEcMulChip, get_ec_mul_air, get_ec_mul_chip,
-        get_ec_mul_executor, setup_row_inputs,
+        build_ec_mul_dummy_expr, ec_mul_header_width, extension::HybridEcMulChip, get_ec_mul_air,
+        get_ec_mul_chip, get_ec_mul_executor,
         weierstrass_chip::generate_ec_mul_trace_from_postflight, EcMulAir, EcMulChip,
-        EcMulExecutor, EC_MUL_SIGN_PATTERNS, SCALAR_LIMBS,
+        EcMulExecutor, EC_MUL_TOTAL_ROWS, SCALAR_LIMBS,
     };
 
     type EcMulGpuHarness<const NUM_LIMBS: usize, const BLOCKS: usize> = GpuTestChipHarness<
@@ -2179,21 +2176,7 @@ mod ec_mul_tests {
         // The harness pads the stitched trace with zero rows, which satisfy this AIR only when
         // `a = 0`: the expression's ungated carry recurrences evaluate to `-a` on an all-zero
         // row. Padding must carry the same inactive witness both trace generators produce.
-        let dummy_expr = {
-            let expr = &cpu_chip.expr;
-            let discard = VariableRangeCheckerChip::new(range_bus);
-            let mut sub = F::zero_vec(BaseAir::<F>::width(expr));
-            expr.generate_subrow(
-                (
-                    &discard,
-                    setup_row_inputs(expr.program()),
-                    vec![false; EC_MUL_SIGN_PATTERNS],
-                ),
-                &mut sub,
-            );
-            sub[0] = F::ZERO;
-            sub
-        };
+        let dummy_expr = build_ec_mul_dummy_expr(&cpu_chip.expr, range_bus);
         let expr_offset = ec_mul_header_width();
 
         let gpu_cpu_chip = get_ec_mul_chip::<F, NUM_LIMBS, BLOCKS>(
@@ -2457,6 +2440,20 @@ mod ec_mul_tests {
             .buffer()
             .to_host_on(&device_ctx)
             .unwrap();
+        let used_rows = REPETITIONS * EC_MUL_TOTAL_ROWS;
+        assert!(used_rows < gpu_height, "fixture must exercise padding rows");
+        let dummy_expr =
+            build_ec_mul_dummy_expr(&harness.cpu_chip.expr, harness.cpu_chip.range_checker.bus());
+        let expr_offset = ec_mul_header_width();
+        for row in used_rows..gpu_height {
+            for (column, expected) in dummy_expr.iter().enumerate() {
+                assert_eq!(
+                    gpu_trace[(expr_offset + column) * gpu_height + row],
+                    *expected,
+                    "EC_MUL cached dummy mismatch at row {row}, expression column {column}",
+                );
+            }
+        }
         for row in 0..gpu_height {
             for column in 0..gpu_width {
                 assert_eq!(
