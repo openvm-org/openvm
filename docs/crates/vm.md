@@ -17,10 +17,6 @@ There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which 
 
 Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
 
-Interpreter execution states and executor APIs use aligned 32-bit byte program counters. Circuit
-execution states, trace columns, and bus messages use the 30-bit PC index
-`pc_idx = byte_pc / DEFAULT_PC_STEP`, which fits in one BabyBear field element.
-
 The `InterpreterExecutor<F>` trait defines the interface for pure execution (aliased as `Executor<F>` via a supertrait):
 
 ```rust
@@ -129,9 +125,13 @@ execution bus. The memory bus is used to access memory, the program bus is used 
 and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
 which is provided by `AirInventory`/`SystemAirInventory`.
 
-The `pc_idx` carried by the program and execution buses is the circuit PC index. A sequential AIR
-transition advances it by one, corresponding to advancing the runtime byte PC by
-`DEFAULT_PC_STEP` bytes.
+The program and execution buses use `pc_idx = byte_pc / DEFAULT_PC_STEP`. A sequential AIR
+transition advances `pc_idx` by one.
+
+Memory-bus addresses contain an address space and a block index. Each block contains
+`BLOCK_FE_WIDTH` cells. In the RV64 register and memory address spaces, this is four u16 cells, or
+eight guest bytes. The default RV64 configuration supports 32-bit guest addresses; adapters reject
+accesses outside the configured pointer bound.
 
 The buses have very low-level APIs and are not intended to be used directly. "Bridges" are provided to provide a cleaner interface for
 sending interactions over the buses and enforcing additional constraints for soundness. The two system bridges are
@@ -139,9 +139,7 @@ sending interactions over the buses and enforcing additional constraints for sou
 
 ### Phantom Sub-Instructions
 
-Phantom sub-instructions are instructions that affect the runtime and trace matrix values but have
-no AIR constraints besides advancing `pc_idx` by one. They should not mutate memory, but they can
-mutate the input & hint streams.
+Phantom sub-instructions are instructions that affect the runtime and trace matrix values but have no AIR constraints besides advancing `pc_idx` by one. They should not mutate memory, but they can mutate the input & hint streams.
 
 You can specify phantom sub-instruction executors by implementing the trait:
 

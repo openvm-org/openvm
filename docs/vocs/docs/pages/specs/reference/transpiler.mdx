@@ -16,9 +16,12 @@ We define a RISC-V **machine code block** to be a 32-bit aligned contiguous sequ
 
 The transpiler is configured upon construction with the set of VM extensions to support. In order to be supported by the transpiler, a VM extension must specify a set of RISC-V machine code blocks and rules for mapping each code block to a sequence of _potentially multiple_ [OpenVM instructions](/specs/openvm/isa#openvm-instruction-set). Extensions may also modify the executable's initial memory image.
 
+In this section, `[ptr:N]_1` and `[ptr:N]_2` denote `N` guest bytes starting at byte address `ptr`.
+The RV64 adapters pack each adjacent byte pair into one u16 memory cell.
+
 The transpilation rules must satisfy:
 
-- A read or write to the RISC-V program counter corresponds to a read or write to the OpenVM byte program counter of the same value. This includes the implicit read of the program counter to fetch the instruction from program code, as well as any implicit `pc += 4` advancement in some RISC-V instructions. Circuit traces and buses represent that byte address as the PC index `pc_idx = byte_pc / DEFAULT_PC_STEP`.
+- A read or write to the RISC-V program counter corresponds to a read or write to the OpenVM byte program counter of the same value. This includes the implicit read of the program counter to fetch the instruction from program code, as well as any implicit `pc += 4` advancement in some RISC-V instructions.
 - A RISC-V 64-bit register `x{i}` read or write access corresponds to an OpenVM memory access at `[8 * i: 8]_1` **except** for writes to `x0`, see [below](#register-x0-handling). The 64-bits of `x{i}` are represented as 8 little-endian bytes in OpenVM memory.
   - A RISC-V code block must **never** map to any OpenVM instruction that changes the value of `[0:8]_1` in OpenVM memory.
 - A RISC-V user memory access of the `j`th byte at address `addr` corresponds to an OpenVM memory access at `[addr + j]_2`.
@@ -27,12 +30,12 @@ The transpilation rules must satisfy:
 The above requirements, together with the invariants of the OpenVM ISA, imply that transpilation will only be valid for programs where:
 
 - Every program address is a multiple of `DEFAULT_PC_STEP` and is at most `MAX_ALLOWED_PC = 2^32 - DEFAULT_PC_STEP`.
-- The program does not access memory outside the range `[0, 2^pointer_max_bits)`: programs that attempt such accesses will fail to execute.
+- Every RISC-V user-memory access lies entirely in the configured memory range, which is
+  `[0, 2^32)` by default. Address underflow or overflow fails during execution or trace generation.
 
-The transpiler decodes every machine-code word in executable text, which may include embedded data.
-It therefore does not reject a word solely because it decodes as a branch or jump with a misaligned
-offset. Runtime execution and trace generation reject the target if that control-flow operation is
-actually executed (or, for a conditional branch, actually taken).
+The transpiler does not reject a word solely because it decodes to a misaligned branch or jump
+target. Execution and trace generation reject the target if it is reached; a conditional branch
+fails only when taken.
 
 A transpiler configuration is only considered valid if there are no two transpilation rules that may map the same RISC-V code block to different OpenVM instructions.
 

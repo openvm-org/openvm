@@ -35,10 +35,7 @@ AIRs, and global coherence comes from the buses plus the local AIR constraints.
 
 ## Execution flow
 
-A circuit _execution state_ consists of `pc_idx` and `timestamp`. Runtime execution uses an aligned
-32-bit byte PC, while circuits use the 30-bit index
-`pc_idx = byte_pc / DEFAULT_PC_STEP`. Program- and execution-bus messages carry this index in one
-field element, and an ordinary four-byte instruction advances it by one.
+A circuit _execution state_ consists of `pc_idx = byte_pc / DEFAULT_PC_STEP` and `timestamp`.
 
 Although we use sequential language below, a witness (a set of traces) is a static object. The AIR
 constraints and bus balancing conditions are designed so that from any valid witness one can extract
@@ -46,11 +43,10 @@ a valid execution of the committed program whose boundary states match the publi
 standard cryptographic assumptions, the proof system ensures the verifier only accepts proofs for
 which such a witness exists.
 
-The connector AIR exposes the initial and final execution states of the segment as public values.
-The exposed `initial_pc_idx` and `final_pc_idx` values are single field elements. On the execution
-bus, the connector sends the initial execution state and receives the final execution state. If the
-segment terminates the whole program, the connector also constrains that `final_pc_idx` points to a
-`TERMINATE` instruction with the declared exit code.
+The connector AIR exposes the initial and final execution states of the segment as public values. On
+the execution bus, the connector sends the initial execution state and receives the final execution
+state. If the segment terminates the whole program, the connector also constrains that `final_pc_idx`
+points to a `TERMINATE` instruction with the declared exit code.
 
 For each instruction it handles, an instruction executor AIR receives an execution state from the
 bus and sends the next execution state back. It also looks up the instruction at that `pc_idx` on the
@@ -138,5 +134,5 @@ At the constraint level, a new instruction executor must:
 - [Ensure memory consistency](/specs/architecture/memory#what-to-take-into-account-when-adding-a-new-chip)
 - Constrain the semantics of every opcode family that your AIR handles.
 - Balance the relevant system buses for each logical instruction execution.
-- Update the execution state correctly, including the `pc` and `timestamp`.
+- Update the execution state correctly, including `pc_idx` and `timestamp`.
 - Preserve the timestamp-growth bound above, even if one logical instruction execution spans multiple trace rows.

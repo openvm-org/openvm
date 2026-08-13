@@ -86,7 +86,7 @@ use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_ST
 </details>
 
 :::info
-When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
+For Rust guest programs, keep the default `pointer_max_bits = 31`. Smaller values may reject valid 32-bit guest memory addresses.
 :::
 
 ## Building and Transpiling a Program

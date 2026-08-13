@@ -9,10 +9,11 @@ The RV64IM chips is composed of two main components: an adapter chip and a core 
 - The adapter chip adapts the core chip's I/O to the VM's expected format and manages interactions with the VM.
 - The core chip is responsible for implementing the logic of the RISC-V instructions.
 
-Runtime execution and preflight records use 32-bit byte program counters. Circuit traces represent
-each byte PC as the 30-bit index `pc_idx = byte_pc / DEFAULT_PC_STEP`. In the circuit statements
-below, `from_pc_idx` and `to_pc_idx` denote circuit PC indices. A normal four-byte instruction
-advances the index by one, while branch and jump immediates remain byte offsets.
+Runtime execution and preflight use 32-bit byte PCs. Circuit traces use
+`pc_idx = byte_pc / DEFAULT_PC_STEP`; the statements below use `from_pc_idx` and `to_pc_idx`.
+
+RV64 memory uses 32-bit byte addresses. Load/store adapters use one or two aligned 8-byte blocks and
+enforce the configured pointer bound.
 
 ## Circuit statements
 
@@ -115,7 +116,8 @@ Given
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
-- A memory read from the RV64 memory address space is performed at address `val(rs1) + imm`
+- The full access at `val(rs1) + imm` fits within the configured pointer bound without wrapping
+- One or two aligned memory blocks are read from the RV64 memory address space
 - A memory write to register `rd` is performed if `rd` is not `x0`
 - The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
@@ -131,7 +133,8 @@ This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
-- A memory write to the RV64 memory address space (`2`) is performed at address `val(rs1) + imm`
+- The full access at `val(rs1) + imm` fits within the configured pointer bound without wrapping
+- One or two aligned memory blocks are written in the RV64 memory address space (`2`)
 - The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 8. Reveal
@@ -214,13 +217,16 @@ This circuit proves that:
 - `a[i] == b[i] | c[i]` for `or`, and the equivalent operation with the sign-extended immediate for `ori`
 - `a[i] == b[i] & c[i]` for `and`, and the equivalent operation with the sign-extended immediate for `andi`
 
+Branch immediates are byte offsets. A taken branch target must be aligned and in range; an untaken
+branch ignores its encoded target.
+
 #### 3. [Branch Eq](./branch_eq/core.rs)
 
 Given:
 
 - `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `opcode_beq_flag` and `opcode_bne_flag` indicate if the instruction is `beq` or `bne`
-- `imm` is the immediate value
+- `imm` is the signed byte-offset immediate
 - `to_pc_idx` is the destination circuit PC index
 
 This circuit proves that:
@@ -234,7 +240,7 @@ Given:
 
 - `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - Flags indicating if the instruction is one of `blt`, `bltu`, `bge`, `bgeu`
-- `imm` is the immediate value
+- `imm` is the signed byte-offset immediate
 - `to_pc_idx` is the destination circuit PC index
 
 This circuit proves that:
@@ -298,8 +304,8 @@ Given:
 
 This circuit proves that:
 
-- `raw_target_bit0 + 4 * compose(to_pc_idx_limbs) == compose(rs1) + imm` as a low-32-bit
-  addition with boolean carries; a byte target with bit 1 set (misaligned) is unsatisfiable
+- `raw_target_bit0 + 4 * compose(to_pc_idx_limbs) == compose(rs1) + imm` as a non-wrapping u32
+  addition; a byte target with bit 1 set (misaligned) is unsatisfiable
 - The destination PC index is `compose(to_pc_idx_limbs)`, so the least significant bit of the
   byte target is cleared as required by `jalr`
 - `compose(rd) == 4 * (pc_idx + 1)`, including the possible bit-32 carry
