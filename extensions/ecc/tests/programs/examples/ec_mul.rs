@@ -6,10 +6,7 @@
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve},
-    CyclicGroup, Group,
-};
+use openvm_ecc_guest::{weierstrass::CachedMulTable, CyclicGroup, Group};
 use openvm_k256::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
 
 openvm::init!("openvm_init_ec_mul_k256.rs");
