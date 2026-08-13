@@ -153,6 +153,7 @@ struct DeviceFieldExprProgram {
     output_indices: Vec<u32>,
     dummy_outputs: Vec<u32>,
     aux_words_per_thread: usize,
+    witness_words_per_thread: usize,
 }
 
 /// A field-expression program ready to upload to a device-side interpreter.
@@ -161,6 +162,8 @@ pub struct SerializedFieldExpr {
     pub blob: Vec<u32>,
     pub core_width: usize,
     pub aux_words_per_thread: usize,
+    /// Scratch needed when saved variables are supplied directly and only the witness tape runs.
+    pub witness_words_per_thread: usize,
 }
 
 struct Serializer<'a> {
@@ -776,12 +779,13 @@ fn build_device_program_inner(
     }
 
     let max_quotient_limbs = builder.q_limbs.iter().copied().max().unwrap_or(0);
+    let witness_words_per_thread =
+        witness_words_per_thread(u32_limbs, serializer.limb_scratch_len, max_quotient_limbs)?;
     let aux_words_per_thread = aux_words_per_thread(
         builder.num_variables,
         u32_limbs,
         serializer.num_value_slots,
-        serializer.limb_scratch_len,
-        max_quotient_limbs,
+        witness_words_per_thread,
     )?;
     let prime_u32 = biguint_to_u32_limbs(&builder.prime, u32_limbs);
     let mut inverse = 1u32;
@@ -852,6 +856,7 @@ fn build_device_program_inner(
         output_indices,
         dummy_outputs,
         aux_words_per_thread,
+        witness_words_per_thread,
     })
 }
 
@@ -912,20 +917,26 @@ fn aux_words_per_thread(
     num_vars: usize,
     u32_limbs: usize,
     num_value_slots: usize,
-    limb_scratch_len: usize,
-    max_quotient_limbs: usize,
+    witness_words_per_thread: usize,
 ) -> Result<usize, FieldExpressionTraceError> {
     let persistent = checked_mul(num_vars, u32_limbs)?;
     let value_workspace = checked_mul(num_value_slots, u32_limbs)?
         .checked_add(checked_mul(3, u32_limbs)?)
         .and_then(|value| value.checked_add(2))
         .ok_or(FieldExpressionTraceError::ProgramTooLarge)?;
-    let constraint_workspace = limb_scratch_len
+    persistent
+        .checked_add(value_workspace.max(witness_words_per_thread))
+        .ok_or(FieldExpressionTraceError::ProgramTooLarge)
+}
+
+fn witness_words_per_thread(
+    u32_limbs: usize,
+    limb_scratch_len: usize,
+    max_quotient_limbs: usize,
+) -> Result<usize, FieldExpressionTraceError> {
+    limb_scratch_len
         .checked_add(checked_mul(4, u32_limbs)?)
         .and_then(|value| value.checked_add(max_quotient_limbs))
-        .ok_or(FieldExpressionTraceError::ProgramTooLarge)?;
-    persistent
-        .checked_add(value_workspace.max(constraint_workspace))
         .ok_or(FieldExpressionTraceError::ProgramTooLarge)
 }
 
@@ -988,6 +999,7 @@ impl DeviceFieldExprProgram {
             blob: self.to_blob()?,
             core_width: self.core_width,
             aux_words_per_thread: self.aux_words_per_thread,
+            witness_words_per_thread: self.witness_words_per_thread,
         })
     }
 

@@ -301,6 +301,7 @@ pub(crate) struct EcMulTracegenGpu {
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     opcode_base: usize,
     aux_words: usize,
+    witness_words: usize,
     expr_width: usize,
     num_vars: usize,
     u32_limbs: usize,
@@ -359,6 +360,7 @@ impl EcMulTracegenGpu {
             program,
             opcode_base,
             aux_words: serialized.aux_words_per_thread,
+            witness_words: serialized.witness_words_per_thread,
             expr_width,
             num_vars: chip.expr.program().num_vars(),
             // Canonical limbs are bytes, so a `u32` limb spans four of them.
@@ -412,10 +414,12 @@ impl EcMulTracegenGpu {
                 )
             })?;
         let height = next_power_of_two_or_zero(unpadded_height);
-        let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
-        let launch = fill_launch_config(height, self.aux_words, max_scratch_words)?;
-
         let use_projective = self.projective_fast_path;
+        let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
+        let mut launch = fill_launch_config(height, self.witness_words, max_scratch_words)?;
+        // Projective setup-variable generation and the one dummy expression still run the value
+        // evaluator once, so keep enough total storage for one full auxiliary buffer.
+        launch.scratch_words = launch.scratch_words.max(self.aux_words);
 
         let vars_per_instruction = EC_MUL_COMPUTE_ROWS
             .checked_mul(self.num_vars)
@@ -540,7 +544,7 @@ impl EcMulTracegenGpu {
                 &delta,
                 &discarded,
                 &scratch,
-                self.aux_words,
+                self.witness_words,
                 launch,
                 self.pointer_max_bits,
                 self.timestamp_max_bits,
