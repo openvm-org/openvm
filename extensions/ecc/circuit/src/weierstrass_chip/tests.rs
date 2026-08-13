@@ -2485,6 +2485,63 @@ mod ec_mul_tests {
             .expect("multi-instruction EC_MUL postflight proof failed");
     }
 
+    /// Replaces the point's `y` coordinate with zero after producing an otherwise valid history.
+    /// The first projective doubling then has `Z_D = 2*Y*Z = 0`. The device must report the active
+    /// zero divisor through the normal error channel in optimized builds, before batch inversion
+    /// or row materialization can consume the invalid projective state.
+    fn run_exceptional_denominator_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        modulus: BigUint,
+        a: BigUint,
+        point: (BigUint, BigUint),
+    ) {
+        let offset = WeierstrassOpcode::CLASS_OFFSET;
+        let mut rng = create_seeded_rng();
+        let tester = GpuChipTestBuilder::default();
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
+        let mut harness =
+            create_cuda_harness::<NUM_LIMBS, BLOCKS>(&tester, config, offset, a.clone());
+        let mut fixture = VmChipTestBuilder::default();
+        set_and_execute_ec_mul::<NUM_LIMBS, BLOCKS>(
+            &mut fixture,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            &modulus,
+            &a,
+            offset,
+            Some(&point),
+            &BigUint::from(5u32),
+        );
+        let execution = harness.preflight.executions.pop().unwrap();
+        let mut history = execution.history;
+
+        // Three register reads precede the point blocks. Its second half is the y coordinate.
+        let point_y_start = 3 + BLOCKS / 2;
+        for event in &mut history.memory.accesses[point_y_start..3 + BLOCKS] {
+            event.value = [0; 4];
+        }
+
+        let device_ctx = tester.range_checker().device_ctx.clone();
+        let gpu_program =
+            GpuPostflightProgram::upload(&execution.program, &MemoryConfig::default(), &device_ctx)
+                .unwrap();
+        let (transcript, replay_plan) = gpu_program
+            .upload_history_for_test(&execution.program, &history, Some(0))
+            .unwrap();
+        let error = harness
+            .gpu_chip
+            .generate_proving_ctx_from_postflight(&gpu_program, &transcript, &replay_plan)
+            .err()
+            .expect("zero projective denominator must be rejected");
+        assert!(error
+            .to_string()
+            .contains("projective variable generation failed"));
+    }
+
     /// Odd, nonzero, below both the secp256k1 and P-256 group orders.
     ///
     /// `1` exercises the seed-only edge, where every row's accumulator relates back to `P`;
@@ -2621,6 +2678,31 @@ mod ec_mul_tests {
         )
         .unwrap();
         run_multi_instruction_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
+            BLS12_381_MODULUS.clone(),
+            BigUint::zero(),
+            (gx, gy),
+        );
+    }
+
+    #[test]
+    fn test_ec_mul_cuda_exceptional_denominator_k8_k12() {
+        run_exceptional_denominator_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            SampleEcPoints[0].clone(),
+        );
+
+        let gx = BigUint::from_str_radix(
+            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
+            16,
+        )
+        .unwrap();
+        let gy = BigUint::from_str_radix(
+            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
+            16,
+        )
+        .unwrap();
+        run_exceptional_denominator_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
             BLS12_381_MODULUS.clone(),
             BigUint::zero(),
             (gx, gy),
