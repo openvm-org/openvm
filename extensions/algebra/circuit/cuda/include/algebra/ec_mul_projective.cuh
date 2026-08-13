@@ -15,6 +15,28 @@ template <uint32_t K>
 static constexpr size_t EC_MUL_PROJECTIVE_INSTRUCTION_WORDS =
     EC_MUL_PROJECTIVE_STATES * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
 
+// Per-thread arithmetic workspaces. These live in dynamic shared memory so every address passed
+// through a device helper names explicit kernel-owned storage rather than a caller-local array.
+//
+// Prepare: Montgomery work (2K+2), curve temporaries (11K), and 12 field values. `nx` is reused
+// as conversion scratch before the ladder and the dead zero slot becomes canonical one. Batch
+// inversion: Montgomery work plus running/inverse/output values. Materialization: Montgomery work,
+// inverse powers/value/canonical output, and canonical one. Each stride has one padding word so
+// adjacent thread slices do not begin in the same shared-memory bank.
+template <uint32_t K>
+static constexpr size_t EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS = 25 * K + 3;
+template <uint32_t K>
+static constexpr size_t EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS = 5 * K + 3;
+template <uint32_t K>
+static constexpr size_t EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS = 6 * K + 3;
+
+static_assert(EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS<8> == 203);
+static_assert(EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS<12> == 303);
+static_assert(EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS<8> == 43);
+static_assert(EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS<12> == 63);
+static_assert(EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<8> == 51);
+static_assert(EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<12> == 75);
+
 template <uint32_t K>
 static __device__ __noinline__ void ec_mul_projective_mont_mul(
     const FieldExprProg &s,
@@ -51,24 +73,18 @@ struct EcMulProjectiveField {
     __device__ void copy(const uint32_t *x, uint32_t *out) const {
         for (uint32_t i = 0; i < K; i++) out[i] = x[i];
     }
-    __device__ void canonical_bytes_to_mont(const uint8_t *bytes, uint32_t *out) const {
-        uint32_t canonical[K] = {};
+    __device__ void canonical_bytes_to_mont(
+        const uint8_t *bytes, uint32_t *canonical, uint32_t *out
+    ) const {
+        for (uint32_t i = 0; i < K; i++) canonical[i] = 0;
         for (uint32_t i = 0; i < s.num_limbs; i++) {
             canonical[i / 4] |= static_cast<uint32_t>(bytes[i]) << (8 * (i % 4));
         }
         mul(canonical, s.r2, out);
     }
-    __device__ void mont_to_canonical_bytes(const uint32_t *x, uint8_t *out) const {
-        uint32_t one[K] = {}, canonical[K];
-        one[0] = 1;
-        mul(x, one, canonical);
-        for (uint32_t i = 0; i < s.num_limbs; i++) {
-            out[i] = static_cast<uint8_t>(canonical[i / 4] >> (8 * (i % 4)));
-        }
-    }
-    __device__ void mont_to_canonical(const uint32_t *x, uint32_t *out) const {
-        uint32_t one[K] = {};
-        one[0] = 1;
+    __device__ void mont_to_canonical(
+        const uint32_t *x, const uint32_t *one, uint32_t *out
+    ) const {
         mul(x, one, out);
     }
 };
@@ -170,37 +186,55 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
     const FieldExprProg &s,
     const EcMulTraceInput<BLOCKS> &input,
     uint32_t *rows,
+    uint32_t *scratch,
     uint32_t *error
 ) {
     if (input.is_setup != 0) return true;
     const uint8_t *point = reinterpret_cast<const uint8_t *>(&input.point_blocks[0][0]);
     const uint8_t *scalar = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
-    uint32_t work[2 * K + 2], temps[11 * K];
+    uint32_t *work = scratch;
+    uint32_t *temps = work + 2 * K + 2;
+    uint32_t *px = temps + 11 * K;
+    uint32_t *py = px + K;
+    uint32_t *curve_a = py + K;
+    uint32_t *zero = curve_a + K;
+    uint32_t *neg_py = zero + K;
+    uint32_t *x = neg_py + K;
+    uint32_t *y = x + K;
+    uint32_t *z = y + K;
+    uint32_t *nx = z + K;
+    uint32_t *ny = nx + K;
+    uint32_t *nz = ny + K;
+    uint32_t *numerator = nz + K;
+    static_assert(25 * K + 2 < EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS<K>);
     EcMulProjectiveField<K> f{s, work};
     if (s.n_setup_values != 1) {
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
     }
-    uint32_t px[K] = {}, py[K], curve_a[K] = {}, zero[K] = {}, neg_py[K], x[K], y[K], z[K];
-    uint32_t nx[K], ny[K], nz[K], numerator[K];
-    if constexpr (!ZERO_A) {
-        uint8_t a_bytes[48] = {};
-        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
-            a_bytes[byte] = static_cast<uint8_t>(s.setup_values[byte]);
-        }
-        f.canonical_bytes_to_mont(a_bytes, curve_a);
+    for (uint32_t word = 0; word < K; word++) {
+        curve_a[word] = 0;
+        zero[word] = 0;
     }
-    f.canonical_bytes_to_mont(point, px);
-    f.canonical_bytes_to_mont(point + s.num_limbs, py);
+    if constexpr (!ZERO_A) {
+        for (uint32_t word = 0; word < K; word++) nx[word] = 0;
+        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+            nx[byte / 4] |= static_cast<uint32_t>(static_cast<uint8_t>(s.setup_values[byte]))
+                << (8 * (byte % 4));
+        }
+        f.mul(nx, s.r2, curve_a);
+    }
+    f.canonical_bytes_to_mont(point, nx, px);
+    f.canonical_bytes_to_mont(point + s.num_limbs, nx, py);
     f.copy(px, x);
     f.copy(py, y);
     // Keep the zero input distinct from the output. Besides making the intended `-py` operation
     // explicit, this avoids carrying an aliased input/output pointer through the nested device
     // arithmetic helpers.
     f.sub(zero, py, neg_py);
-    uint32_t one[K] = {};
-    one[0] = 1;
-    f.mul(one, s.r2, z);
+    // `zero` is dead after point negation, so reuse it for canonical one.
+    zero[0] = 1;
+    f.mul(zero, s.r2, z);
 
     for (size_t row = 0; row < EC_MUL_COMPUTE_ROWS; row++) {
         uint32_t pattern = ec_mul_sign_pattern_for_row(scalar, row);
@@ -241,6 +275,7 @@ template <uint32_t K>
 static __device__ __noinline__ bool ec_mul_projective_batch_invert(
     const FieldExprProg &s,
     uint32_t *rows,
+    uint32_t *scratch,
     uint32_t *error
 ) {
     constexpr uint32_t vars_per_step = K == 12 ? 6 : 5;
@@ -253,7 +288,11 @@ static __device__ __noinline__ bool ec_mul_projective_batch_invert(
 
     // One scalar owner performs the instruction-wide scan. This avoids relying on warp-level
     // cross-lane register exchange and keeps the inversion path portable across CUDA architectures.
-    uint32_t work[2 * K + 2], running[K], inv[K], zi[K];
+    uint32_t *work = scratch;
+    uint32_t *running = work + 2 * K + 2;
+    uint32_t *inv = running + K;
+    uint32_t *zi = inv + K;
+    static_assert(5 * K + 2 < EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS<K>);
     EcMulProjectiveField<K> f{s, work};
     uint32_t *first_prefix = rows + 4 * K;
     f.copy(rows + 2 * K, first_prefix);
@@ -292,10 +331,18 @@ static __device__ __noinline__ void ec_mul_projective_materialize_row(
     uint32_t *rows,
     uint32_t *vars,
     size_t total_rows,
-    size_t flat_row
+    size_t flat_row,
+    uint32_t *scratch
 ) {
-    uint32_t work[2 * K + 2], zi2[K], value[K], canonical[K];
+    uint32_t *work = scratch;
+    uint32_t *zi2 = work + 2 * K + 2;
+    uint32_t *value = zi2 + K;
+    uint32_t *canonical = value + K;
+    uint32_t *one = canonical + K;
+    static_assert(6 * K + 2 < EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<K>);
     EcMulProjectiveField<K> f{s, work};
+    for (uint32_t word = 0; word < K; word++) one[word] = 0;
+    one[0] = 1;
     size_t instruction = flat_row / EC_MUL_COMPUTE_ROWS;
     size_t row = flat_row % EC_MUL_COMPUTE_ROWS;
     uint32_t *instruction_rows = rows + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
@@ -324,7 +371,7 @@ static __device__ __noinline__ void ec_mul_projective_materialize_row(
                     f.square(zi2, zi2);
                     f.mul(cur + 3 * K, zi2, value);
                 }
-                f.mont_to_canonical(value, canonical);
+                f.mont_to_canonical(value, one, canonical);
                 for (uint32_t word = 0; word < K; word++) {
                     vars[(step_base * K + word) * total_rows + flat_row] = canonical[word];
                 }
@@ -334,21 +381,21 @@ static __device__ __noinline__ void ec_mul_projective_materialize_row(
         // For doubling, Z_D = 2*Y*Z and M = 3*X^2 + a*Z^4, so lambda_d = M/Z_D.
         // For mixed addition, Z_R = 2*Z_D*H and r = 2*(S_2-Y_D), so lambda_a = r/Z_R.
         f.mul(cur + 3 * K, zi, value);
-        f.mont_to_canonical(value, canonical);
+        f.mont_to_canonical(value, one, canonical);
         for (uint32_t word = 0; word < K; word++) {
             vars[(var_base * K + word) * total_rows + flat_row] = canonical[word];
         }
 
         f.square(zi, zi2);
         f.mul(cur, zi2, value);
-        f.mont_to_canonical(value, canonical);
+        f.mont_to_canonical(value, one, canonical);
         for (uint32_t word = 0; word < K; word++) {
             vars[((var_base + 1) * K + word) * total_rows + flat_row] = canonical[word];
         }
         if (post_add) {
             f.mul(zi2, zi, zi2);
             f.mul(cur + K, zi2, value);
-            f.mont_to_canonical(value, canonical);
+            f.mont_to_canonical(value, one, canonical);
             for (uint32_t word = 0; word < K; word++) {
                 vars[((var_base + 2) * K + word) * total_rows + flat_row] = canonical[word];
             }

@@ -22,14 +22,17 @@ static __global__ void ec_mul_projective_prepare_pass(
     uint32_t *projective,
     uint32_t *error
 ) {
+    extern __shared__ uint32_t shared_words[];
     if (*error != 0) return;
     size_t instruction = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
     uint32_t *rows = projective + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
+    uint32_t *thread_scratch =
+        shared_words + threadIdx.x * EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS<K>;
     ec_mul_projective_build_projective<K, BLOCKS, ZERO_A>(
-        s, projection[instruction], rows, error
+        s, projection[instruction], rows, thread_scratch, error
     );
 }
 
@@ -41,13 +44,16 @@ static __global__ void ec_mul_projective_serial_batch_invert_pass(
     uint32_t *projective,
     uint32_t *error
 ) {
+    extern __shared__ uint32_t shared_words[];
     if (*error != 0) return;
     size_t instruction = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
     uint32_t *rows = projective + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
-    ec_mul_projective_batch_invert<K>(s, rows, error);
+    uint32_t *thread_scratch =
+        shared_words + threadIdx.x * EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS<K>;
+    ec_mul_projective_batch_invert<K>(s, rows, thread_scratch, error);
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -59,6 +65,7 @@ static __global__ void ec_mul_projective_materialize_pass(
     uint32_t *vars,
     uint32_t *error
 ) {
+    extern __shared__ uint32_t shared_words[];
     if (*error != 0) return;
     size_t flat_row = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     size_t total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
@@ -66,7 +73,11 @@ static __global__ void ec_mul_projective_materialize_pass(
         return;
     FieldExprProg s;
     load_prog(blob, s);
-    ec_mul_projective_materialize_row<K>(s, projective, vars, total_rows, flat_row);
+    uint32_t *thread_scratch =
+        shared_words + threadIdx.x * EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<K>;
+    ec_mul_projective_materialize_row<K>(
+        s, projective, vars, total_rows, flat_row, thread_scratch
+    );
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -137,27 +148,44 @@ static int launch_ec_mul_projective_vars(
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
     auto [instruction_grid, instruction_block] =
         kernel_launch_params(num_instructions, EC_MUL_PREPARE_THREADS);
+    static_assert(
+        EC_MUL_PREPARE_THREADS * EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS<K> * sizeof(uint32_t) <=
+        48 * 1024
+    );
+    static_assert(
+        EC_MUL_PREPARE_THREADS * EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS<K> * sizeof(uint32_t) <=
+        48 * 1024
+    );
+    static_assert(
+        128 * EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<K> * sizeof(uint32_t) <= 48 * 1024
+    );
+    size_t prepare_shared_bytes = static_cast<size_t>(instruction_block.x) *
+        EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS<K> * sizeof(uint32_t);
+    size_t batch_shared_bytes = static_cast<size_t>(instruction_block.x) *
+        EC_MUL_PROJECTIVE_BATCH_SCRATCH_WORDS<K> * sizeof(uint32_t);
     if (zero_a) {
         ec_mul_projective_prepare_pass<K, BLOCKS, true>
-            <<<instruction_grid, instruction_block, 0, stream>>>(
+            <<<instruction_grid, instruction_block, prepare_shared_bytes, stream>>>(
                 inputs, num_instructions, blob, projective, error
             );
     } else {
         ec_mul_projective_prepare_pass<K, BLOCKS, false>
-            <<<instruction_grid, instruction_block, 0, stream>>>(
+            <<<instruction_grid, instruction_block, prepare_shared_bytes, stream>>>(
                 inputs, num_instructions, blob, projective, error
             );
     }
     if (int result = CHECK_KERNEL(); result != 0) return result;
     ec_mul_projective_serial_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
-        <<<instruction_grid, instruction_block, 0, stream>>>(
+        <<<instruction_grid, instruction_block, batch_shared_bytes, stream>>>(
             inputs, num_instructions, blob, projective, error
         );
     if (int result = CHECK_KERNEL(); result != 0) return result;
     auto [row_grid, row_block] =
         kernel_launch_params(num_instructions * EC_MUL_COMPUTE_ROWS, 128);
+    size_t materialize_shared_bytes = static_cast<size_t>(row_block.x) *
+        EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<K> * sizeof(uint32_t);
     ec_mul_projective_materialize_pass<K, NUM_LIMBS, BLOCKS>
-        <<<row_grid, row_block, 0, stream>>>(
+        <<<row_grid, row_block, materialize_shared_bytes, stream>>>(
             inputs, num_instructions, blob, projective, vars, error
         );
     if (int result = CHECK_KERNEL(); result != 0) return result;
