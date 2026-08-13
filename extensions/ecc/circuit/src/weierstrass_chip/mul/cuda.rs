@@ -263,10 +263,7 @@ fn fill_instruction_vars<const BLOCKS: usize>(
     let vars_per_row = program.num_vars() * u32_limbs;
 
     if input.is_setup() {
-        let vars = program.execute(
-            &setup_row_inputs(program),
-            &vec![false; EC_MUL_SIGN_PATTERNS],
-        );
+        let vars = program.execute(&setup_row_inputs(program), &[false; EC_MUL_SIGN_PATTERNS]);
         write_vars_row(&mut out[..vars_per_row], u32_limbs, &vars);
         for row in 1..EC_MUL_COMPUTE_ROWS {
             out.copy_within(0..vars_per_row, row * vars_per_row);
