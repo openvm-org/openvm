@@ -7,6 +7,11 @@
 #include "algebra/ec_mul_projective.cuh"
 #include "launcher.cuh"
 
+#ifndef OPENVM_ECMUL_CUDA_CACHE_REV
+#error "OPENVM_ECMUL_CUDA_CACHE_REV must be defined by the algebra CUDA build"
+#endif
+static_assert(OPENVM_ECMUL_CUDA_CACHE_REV == 2, "unexpected EC_MUL CUDA cache revision");
+
 static constexpr uint32_t EC_MUL_PREPARE_THREADS = 8;
 
 template <uint32_t K, size_t BLOCKS, bool ZERO_A>

@@ -9,6 +9,7 @@ fn main() {
         }
 
         let builder = CudaBuilder::new()
+            .flag("-DOPENVM_ECMUL_CUDA_CACHE_REV=2")
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
