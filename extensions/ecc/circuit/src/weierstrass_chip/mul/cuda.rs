@@ -42,9 +42,9 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    blocks_to_bytes, ec_mul_step_expr, ec_mul_width, execution::sign_pattern_for_row,
-    setup_row_inputs, EcMulChip, EcMulTraceInput, EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS,
-    EC_MUL_STEPS_PER_ROW, EC_MUL_TOTAL_ROWS,
+    blocks_to_bytes, build_ec_mul_dummy_expr, ec_mul_step_expr, ec_mul_width,
+    execution::sign_pattern_for_row, setup_row_inputs, EcMulChip, EcMulTraceInput,
+    EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, EC_MUL_TOTAL_ROWS,
 };
 
 /// Device memory the row-filling pass may use for per-thread scratch.
@@ -298,6 +298,7 @@ fn fill_instruction_vars<const BLOCKS: usize>(
 /// The serialized expression is uploaded once, at construction, since it depends only on the curve.
 pub(crate) struct EcMulTracegenGpu {
     program: DeviceBuffer<u32>,
+    dummy_expr: DeviceBuffer<F>,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     opcode_base: usize,
     aux_words: usize,
@@ -356,8 +357,12 @@ impl EcMulTracegenGpu {
 
         let device_ctx = range_checker.device_ctx.clone();
         let program = serialized.blob.as_slice().to_device_on(&device_ctx)?;
+        let dummy_expr = build_ec_mul_dummy_expr(&chip.expr, chip.range_checker.bus())
+            .as_slice()
+            .to_device_on(&device_ctx)?;
         Ok(Self {
             program,
+            dummy_expr,
             opcode_base,
             aux_words: serialized.aux_words_per_thread,
             witness_words: serialized.witness_words_per_thread,
@@ -417,8 +422,8 @@ impl EcMulTracegenGpu {
         let use_projective = self.projective_fast_path;
         let max_scratch_words = MAX_EC_MUL_SCRATCH_BYTES / size_of::<u32>();
         let mut launch = fill_launch_config(height, self.witness_words, max_scratch_words)?;
-        // Projective setup-variable generation and the one dummy expression still run the value
-        // evaluator once, so keep enough total storage for one full auxiliary buffer.
+        // Projective setup-variable generation still runs the value evaluator once, so keep
+        // enough total storage for one full auxiliary buffer.
         launch.scratch_words = launch.scratch_words.max(self.aux_words);
 
         let vars_per_instruction = EC_MUL_COMPUTE_ROWS
@@ -453,15 +458,9 @@ impl EcMulTracegenGpu {
 
         let projection = inputs.as_slice().to_device_on(device_ctx)?;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
-        let dummy_expr = DeviceBuffer::<F>::with_capacity_on(self.expr_width, device_ctx);
         let scratch = DeviceBuffer::<u32>::with_capacity_on(launch.scratch_words, device_ctx);
         let delta = DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
         delta.fill_zero_on(device_ctx)?;
-        // The dummy row's own range checks are discarded: the AIR emits none when `is_valid` is
-        // zero.
-        let discarded =
-            DeviceBuffer::<F>::with_capacity_on(self.range_checker.count.len(), device_ctx);
-        discarded.fill_zero_on(device_ctx)?;
 
         // The projective path stores every doubled and post-add state, batch-normalizes all four
         // states per row with one inversion per instruction, and writes the ten exact saved
@@ -540,9 +539,8 @@ impl EcMulTracegenGpu {
                 &self.program,
                 &vars,
                 use_projective,
-                &dummy_expr,
+                &self.dummy_expr,
                 &delta,
-                &discarded,
                 &scratch,
                 self.witness_words,
                 launch,
@@ -560,11 +558,9 @@ impl EcMulTracegenGpu {
         }
 
         // Dropped after their kernels are enqueued on the owning stream, before proving starts.
-        drop(discarded);
         drop(scratch);
         drop(projective_buffers);
         drop(vars);
-        drop(dummy_expr);
         drop(projection);
 
         // SAFETY: both histograms have the same length, checked at construction.

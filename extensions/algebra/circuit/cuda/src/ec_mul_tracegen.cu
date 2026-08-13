@@ -209,24 +209,6 @@ static __global__ void ec_mul_validate(
     }
 }
 
-// Builds the inactive expression witness once, for every digest and padding row to share.
-template <uint32_t K, size_t NUM_LIMBS>
-static __global__ void ec_mul_dummy_expr(
-    Fp *dummy,
-    const uint32_t *blob,
-    uint32_t *discarded_counts,
-    size_t range_bins,
-    uint32_t *scratch,
-    uint32_t *error
-) {
-    if (*error != 0) return;
-    FieldExprProg s;
-    load_prog(blob, s);
-    uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
-    VariableRangeChecker discarded(discarded_counts, range_bins);
-    ec_mul_build_dummy_expr<K>(s, RowSlice(dummy, 1), discarded, scratch, in_limbs, error);
-}
-
 // One thread per trace row, grid-stride so the scratch a launch needs is bounded by its thread
 // count rather than by the trace height.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -300,10 +282,9 @@ static int launch_ec_mul_tracegen(
     const uint32_t *vars,
     size_t vars_words,
     bool vars_transposed,
-    Fp *dummy_expr,
+    const Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
-    uint32_t *discarded_counts,
     uint32_t *scratch,
     size_t scratch_words,
     size_t aux_words,
@@ -315,8 +296,8 @@ static int launch_ec_mul_tracegen(
     cudaStream_t stream
 ) {
     if (trace == nullptr || projection == nullptr || blob == nullptr || vars == nullptr ||
-        dummy_expr == nullptr || range_counts == nullptr || discarded_counts == nullptr ||
-        scratch == nullptr || error == nullptr || height == 0 || num_instructions == 0 ||
+        dummy_expr == nullptr || range_counts == nullptr || scratch == nullptr ||
+        error == nullptr || height == 0 || num_instructions == 0 ||
         aux_words == 0 || fill_grid_blocks == 0 || fill_block_threads == 0 ||
         fill_grid_blocks > UINT32_MAX || fill_block_threads > 1024) {
         return cudaErrorInvalidValue;
@@ -329,11 +310,6 @@ static int launch_ec_mul_tracegen(
 
     ec_mul_validate<K, NUM_LIMBS, BLOCKS><<<1, 1, 0, stream>>>(
         height, width, num_instructions, vars_words, blob, blob_words, aux_words, error
-    );
-    if (int result = CHECK_KERNEL(); result != 0) return result;
-
-    ec_mul_dummy_expr<K, NUM_LIMBS><<<1, 1, 0, stream>>>(
-        dummy_expr, blob, discarded_counts, range_bins, scratch, error
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
 
@@ -375,10 +351,9 @@ extern "C" int _ec_mul_tracegen(
     const uint32_t *vars,
     size_t vars_words,
     bool vars_transposed,
-    Fp *dummy_expr,
+    const Fp *dummy_expr,
     uint32_t *range_counts,
     size_t range_bins,
-    uint32_t *discarded_counts,
     uint32_t *scratch,
     size_t scratch_words,
     size_t aux_words,
@@ -392,7 +367,7 @@ extern "C" int _ec_mul_tracegen(
     if (num_limbs == 32 && blocks == 8) {
         return launch_ec_mul_tracegen<8, 32, 8>(
             trace, height, width, projection, num_instructions, blob, blob_words, vars, vars_words,
-            vars_transposed, dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
+            vars_transposed, dummy_expr, range_counts, range_bins, scratch, scratch_words,
             aux_words, fill_grid_blocks, fill_block_threads, pointer_max_bits, timestamp_max_bits,
             error, stream
         );
@@ -400,7 +375,7 @@ extern "C" int _ec_mul_tracegen(
     if (num_limbs == 48 && blocks == 12) {
         return launch_ec_mul_tracegen<12, 48, 12>(
             trace, height, width, projection, num_instructions, blob, blob_words, vars, vars_words,
-            vars_transposed, dummy_expr, range_counts, range_bins, discarded_counts, scratch, scratch_words,
+            vars_transposed, dummy_expr, range_counts, range_bins, scratch, scratch_words,
             aux_words, fill_grid_blocks, fill_block_threads, pointer_max_bits, timestamp_max_bits,
             error, stream
         );

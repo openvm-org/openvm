@@ -19,7 +19,9 @@ use openvm_circuit::{
     system::memory::SharedMemoryHelper,
 };
 use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
     TraceSubRowGenerator,
 };
 use openvm_ecc_transpiler::WeierstrassOpcode;
@@ -535,6 +537,38 @@ pub fn generate_ec_mul_trace_from_postflight<
     build_ec_mul_trace::<F, NUM_LIMBS, BLOCKS>(chip, &inputs)
 }
 
+/// Builds the canonical inactive expression witness shared by digest and padding rows.
+///
+/// The expression's range checks are intentionally accumulated in a private chip and discarded:
+/// the AIR emits no range checks when `is_valid` is zero. Keeping this helper next to the CPU
+/// trace builder gives the CPU and GPU backends one definition of the otherwise nonzero padding
+/// expression.
+pub(crate) fn build_ec_mul_dummy_expr<F: PrimeField32>(
+    expr: &FieldExpr,
+    range_bus: VariableRangeCheckerBus,
+) -> Vec<F> {
+    // An inactive expression region cannot be zero: the curve's `a` coefficient is folded in as a
+    // constant, so on an all-zero row the lambda constraint evaluates to `-a` and the ungated
+    // carry recurrences are unsatisfiable whenever `a != 0`. Build one consistent witness with
+    // `is_valid` cleared, as `fill_dummy_core_row` does for the single-row chips.
+    //
+    // The witness is built from `setup_row_inputs` rather than zeros. Zeros would put `0` in the
+    // accumulator, and the expression divides by `2*acc_y` without a guard, so computing the
+    // witness would divide by zero.
+    let discard = VariableRangeCheckerChip::new(range_bus);
+    let mut dummy = F::zero_vec(BaseAir::<F>::width(expr));
+    expr.generate_subrow(
+        (
+            &discard,
+            setup_row_inputs(expr.program()),
+            vec![false; EC_MUL_SIGN_PATTERNS],
+        ),
+        &mut dummy,
+    );
+    dummy[0] = F::ZERO;
+    dummy
+}
+
 /// Fills the trace from already-replayed instruction data.
 ///
 /// Split from the postflight walk above so both prover backends share one row layout: the CPU
@@ -559,31 +593,8 @@ pub(crate) fn build_ec_mul_trace<
     };
     let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
 
-    // An inactive expression region cannot be zero: the curve's `a` coefficient is folded in as a
-    // constant, so on an all-zero row the lambda constraint evaluates to `-a` and the ungated carry
-    // recurrences are unsatisfiable whenever `a != 0`. Build one consistent witness with `is_valid`
-    // cleared, as `fill_dummy_core_row` does for the single-row chips, and reuse it for every
-    // padding row. Its range-check counts are discarded, since the AIR emits no range checks when
-    // `is_valid` is zero.
-    //
-    // The witness is built from `setup_row_inputs` rather than zeros. Zeros would put `0` in the
-    // accumulator, and the expression divides by `2*acc_y` without a guard, so computing the
-    // witness would divide by zero.
     let expr_width = BaseAir::<F>::width(&chip.expr);
-    let dummy_expr = {
-        let discard = VariableRangeCheckerChip::new(chip.range_checker.bus());
-        let mut sub = F::zero_vec(expr_width);
-        chip.expr.generate_subrow(
-            (
-                &discard,
-                setup_row_inputs(chip.expr.program()),
-                vec![false; EC_MUL_SIGN_PATTERNS],
-            ),
-            &mut sub,
-        );
-        sub[0] = F::ZERO;
-        sub
-    };
+    let dummy_expr = build_ec_mul_dummy_expr(&chip.expr, chip.range_checker.bus());
 
     // Counts accumulate into a private chip and are merged at the end so the per-instruction fills
     // can run in parallel, as the single-row chips do.
