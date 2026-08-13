@@ -43,9 +43,9 @@
 //! odd, that is when `n = 3 (mod 4)`. For `n = 1 (mod 4)` the prefix is even and unreachable, and
 //! the addition is total.
 //!
-//! All four configured curves have `n = 1 (mod 4)`. [`assert_supported_scalar_order`] states the
-//! requirement and the tests exercise it, but no constructor enforces it; see that function for
-//! why. A counterexample for the excluded case: with `n = 23`, the scalar `n - 2 = 21` reaches
+//! Every configured curve must have `n = 1 (mod 4)`; extension registration enforces this with
+//! [`assert_supported_scalar_order`]. A counterexample for the excluded case: with `n = 23`, the
+//! scalar `n - 2 = 21` reaches
 //! prefix `m = 11`, where `2m = -1` makes the addend and the doubled accumulator share an
 //! x-coordinate.
 //!
@@ -107,13 +107,8 @@ impl<const BLOCKS: usize> EcMulExecutor<BLOCKS> {
 /// `n = 3 (mod 4)` the prefix `+-(n - 1)/2` is odd, hence reachable, and drives the incomplete
 /// addition's denominator and numerator to zero, leaving `lambda` unconstrained.
 ///
-/// No constructor calls this. Rejecting at construction would also reject curves that never
-/// use `EC_MUL`: the chip is built for every declared curve, and `CurveConfig::scalar` is a
-/// documented placeholder for curves configured only for decompression or add/double. Enforcing
-/// the requirement needs either registration-level exclusion of such curves from `EC_MUL`, which
-/// changes the AIR set and with it the verifying key, or exceptional-case handling in the
-/// expression. Until one of those exists, the requirement is stated and tested here but not
-/// enforced.
+/// Every declared Weierstrass curve receives the EC_MUL executor and AIR, so registration rejects
+/// unsupported orders even if a particular guest program does not call the opcode.
 pub fn assert_supported_scalar_order(scalar_order: &BigUint) {
     assert_eq!(
         scalar_order % 4u32,
@@ -166,13 +161,6 @@ pub fn get_ec_mul_chip<F, const NUM_LIMBS: usize, const BLOCKS: usize>(
 
 /// Scalar width in bits.
 pub const EC_MUL_SCALAR_BITS: usize = 256;
-
-/// Signed digits per scalar, each `+1` or `-1`.
-///
-/// Substituting `sigma_i = 2*b_i - 1` collapses the ladder's multiplier to `2B + 1` for
-/// `B = sum b_i 2^i`. The most significant digit is then `+1` for every odd scalar in range, so the
-/// accumulator starts at `P` and needs no seed operand.
-pub const EC_MUL_DIGITS: usize = EC_MUL_SCALAR_BITS + 1;
 
 /// Digits consumed per compute row, each one step of `R = 2R +- P`.
 ///

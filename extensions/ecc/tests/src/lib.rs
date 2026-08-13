@@ -141,8 +141,9 @@ mod tests {
                     struct_name: "CurvePoint5mod8".to_string(),
                     modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
                         .unwrap(),
-                    // unused, set to 10e9 + 7
-                    scalar: BigUint::from_str("1000000007")
+                    // Unused by this decompression-only fixture, but EC_MUL registration requires
+                    // every configured scalar order to be 1 modulo 4.
+                    scalar: BigUint::from_str("1000000009")
                         .unwrap(),
                     a: BigUint::ZERO,
                     b: BigUint::from_str("6").unwrap(),

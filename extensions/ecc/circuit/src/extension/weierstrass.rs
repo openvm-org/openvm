@@ -29,9 +29,9 @@ use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
 use crate::{
-    generate_ec_mul_trace_from_postflight, get_ec_addne_air, get_ec_addne_chip,
-    get_ec_addne_executor, get_ec_double_air, get_ec_double_chip, get_ec_double_executor,
-    get_ec_mul_air, get_ec_mul_chip, get_ec_mul_executor,
+    assert_supported_scalar_order, generate_ec_mul_trace_from_postflight, get_ec_addne_air,
+    get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air, get_ec_double_chip,
+    get_ec_double_executor, get_ec_mul_air, get_ec_mul_chip, get_ec_mul_executor,
     weierstrass_chip::{
         generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
     },
@@ -82,6 +82,12 @@ pub struct WeierstrassExtension {
 }
 
 impl WeierstrassExtension {
+    fn assert_valid_ec_mul_curves(&self) {
+        for curve in &self.supported_curves {
+            assert_supported_scalar_order(&curve.scalar);
+        }
+    }
+
     pub fn generate_sw_init(&self) -> String {
         let supported_curves = self
             .supported_curves
@@ -97,6 +103,7 @@ impl WeierstrassExtension {
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
+        self.assert_valid_ec_mul_curves();
         for curve in &self.supported_curves {
             if let Some(expected) = CurveType::from_struct_name(&curve.struct_name) {
                 assert_eq!(
@@ -138,6 +145,7 @@ impl VmExecutionExtension for WeierstrassExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
+        self.assert_valid_ec_mul_curves();
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset = WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
@@ -229,6 +237,7 @@ impl VmExecutionExtension for WeierstrassExtension {
 
 impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        self.assert_valid_ec_mul_curves();
         let SystemPort {
             execution_bus,
             program_bus,
