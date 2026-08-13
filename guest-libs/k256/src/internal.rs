@@ -4,7 +4,7 @@ use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
+    weierstrass::{IntrinsicCurve, WeierstrassPoint},
     CyclicGroup, Group,
 };
 use openvm_ecc_sw_macros::sw_declare;
@@ -60,14 +60,15 @@ impl IntrinsicCurve for Secp256k1 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
-        if let ([coeff], [base]) = (coeffs, bases) {
-            return base.mul_scalar(coeff);
-        }
+        assert_eq!(coeffs.len(), bases.len());
 
         // heuristic
         if coeffs.len() < 25 {
-            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
-            table.windowed_mul(coeffs)
+            let mut acc = <Self::Point as Group>::IDENTITY;
+            for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+                acc += base.mul_scalar(coeff);
+            }
+            acc
         } else {
             openvm_ecc_guest::msm(coeffs, bases)
         }
@@ -126,8 +127,8 @@ impl Secp256k1Point {
 }
 
 // Host-side coverage for the ladder that `sw_declare!` generates for non-openvm targets. Guest
-// programs are run on the host through that path, so it has to agree with the windowed method the
-// rest of the guest library uses.
+// programs are run on the host through that path, so it has to agree with an independent
+// implementation; the windowed table, which `msm` itself no longer uses, serves as that reference.
 #[cfg(all(test, not(any(openvm_intrinsics, target_os = "openvm"))))]
 mod tests {
     use hex_literal::hex;
@@ -138,8 +139,8 @@ mod tests {
 
     /// Reference implementation: the windowed table, called directly.
     ///
-    /// `IntrinsicCurve::msm` cannot serve as the reference any more, because it now routes a
-    /// single pair to `mul_scalar` and would compare the ladder against itself.
+    /// `IntrinsicCurve::msm` cannot serve as the reference any more, because it now routes
+    /// small MSMs to `mul_scalar` and would compare the ladder against itself.
     fn windowed_reference(scalar: Secp256k1Scalar) -> Secp256k1Point {
         let base = [Secp256k1Point::GENERATOR];
         let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&base, 4);
