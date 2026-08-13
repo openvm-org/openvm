@@ -15,8 +15,8 @@ template <uint32_t K>
 static constexpr size_t EC_MUL_PROJECTIVE_INSTRUCTION_WORDS =
     EC_MUL_PROJECTIVE_STATES * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
 
-// Per-thread arithmetic workspaces. These live in dynamic shared memory so every address passed
-// through a device helper names explicit kernel-owned storage rather than a caller-local array.
+// Per-thread arithmetic workspaces. These live in dynamic shared memory so address-taken field
+// arrays name explicit kernel-owned storage rather than caller-local arrays.
 //
 // Prepare: Montgomery work (2K+2), curve temporaries (11K), and 12 field values. `nx` is reused
 // as conversion scratch before the ladder and the dead zero slot becomes canonical one. Batch
@@ -278,6 +278,7 @@ static __device__ __noinline__ bool ec_mul_projective_batch_invert(
     uint32_t *scratch,
     uint32_t *error
 ) {
+    static_assert(K == 8 || K == 12);
     constexpr uint32_t vars_per_step = K == 12 ? 6 : 5;
     constexpr uint32_t output_x = K == 12 ? 10 : 8;
     if (s.num_vars != vars_per_step * EC_MUL_STEPS_PER_ROW || s.n_outputs != 2 ||
@@ -334,6 +335,7 @@ static __device__ __noinline__ void ec_mul_projective_materialize_row(
     size_t flat_row,
     uint32_t *scratch
 ) {
+    static_assert(K == 8 || K == 12);
     uint32_t *work = scratch;
     uint32_t *zi2 = work + 2 * K + 2;
     uint32_t *value = zi2 + K;

@@ -5,8 +5,8 @@
 //! kernel gathers the same fields the host postflight projects. Supported shapes advance the
 //! dependent ladder in projective coordinates, batch-normalize its rows, then evaluate independent
 //! rows into a variable-major buffer; other shapes retain the host evaluator. The fill kernel
-//! writes the trace on the device one thread per row. The host builder stays reachable through the
-//! postflight path, which is what the device path is compared against.
+//! writes the trace on the device one thread per row. Dedicated tests compare both paths cell for
+//! cell and prove their outputs.
 
 use std::sync::Arc;
 
@@ -503,30 +503,6 @@ impl EcMulTracegenGpu {
                 return Err(GpuPostflightError::InvalidTranscript(format!(
                     "EC_MUL projective variable generation failed with code {projective_error}"
                 )));
-            }
-            #[cfg(debug_assertions)]
-            {
-                let device_vars = vars.to_host_on(device_ctx)?;
-                let mut expected = vec![0u32; num_instructions * vars_per_instruction];
-                expected
-                    .par_chunks_exact_mut(vars_per_instruction)
-                    .zip(inputs.par_iter())
-                    .for_each(|(out, input)| {
-                        fill_instruction_vars::<BLOCKS>(&chip.expr, self.u32_limbs, out, input)
-                    });
-                let total_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
-                for (row, expected_row) in expected
-                    .chunks_exact(self.num_vars * self.u32_limbs)
-                    .enumerate()
-                {
-                    for (word, expected_word) in expected_row.iter().enumerate() {
-                        assert_eq!(
-                            device_vars[word * total_rows + row],
-                            *expected_word,
-                            "projective GPU saved variable diverges at row {row}, word {word}"
-                        );
-                    }
-                }
             }
             Some(projective)
         } else {

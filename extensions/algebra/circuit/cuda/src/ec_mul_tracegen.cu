@@ -7,11 +7,6 @@
 #include "algebra/ec_mul_projective.cuh"
 #include "launcher.cuh"
 
-#ifndef OPENVM_ECMUL_CUDA_CACHE_REV
-#error "OPENVM_ECMUL_CUDA_CACHE_REV must be defined by the algebra CUDA build"
-#endif
-static_assert(OPENVM_ECMUL_CUDA_CACHE_REV == 2, "unexpected EC_MUL CUDA cache revision");
-
 static constexpr uint32_t EC_MUL_PREPARE_THREADS = 8;
 
 template <uint32_t K, size_t BLOCKS, bool ZERO_A>
@@ -36,7 +31,7 @@ static __global__ void ec_mul_projective_prepare_pass(
     );
 }
 
-template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
+template <uint32_t K, size_t BLOCKS>
 static __global__ void ec_mul_projective_serial_batch_invert_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
@@ -56,7 +51,7 @@ static __global__ void ec_mul_projective_serial_batch_invert_pass(
     ec_mul_projective_batch_invert<K>(s, rows, thread_scratch, error);
 }
 
-template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
+template <uint32_t K, size_t BLOCKS>
 static __global__ void ec_mul_projective_materialize_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
@@ -175,7 +170,7 @@ static int launch_ec_mul_projective_vars(
             );
     }
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    ec_mul_projective_serial_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
+    ec_mul_projective_serial_batch_invert_pass<K, BLOCKS>
         <<<instruction_grid, instruction_block, batch_shared_bytes, stream>>>(
             inputs, num_instructions, blob, projective, error
         );
@@ -184,7 +179,7 @@ static int launch_ec_mul_projective_vars(
         kernel_launch_params(num_instructions * EC_MUL_COMPUTE_ROWS, 128);
     size_t materialize_shared_bytes = static_cast<size_t>(row_block.x) *
         EC_MUL_PROJECTIVE_MATERIALIZE_SCRATCH_WORDS<K> * sizeof(uint32_t);
-    ec_mul_projective_materialize_pass<K, NUM_LIMBS, BLOCKS>
+    ec_mul_projective_materialize_pass<K, BLOCKS>
         <<<row_grid, row_block, materialize_shared_bytes, stream>>>(
             inputs, num_instructions, blob, projective, vars, error
         );

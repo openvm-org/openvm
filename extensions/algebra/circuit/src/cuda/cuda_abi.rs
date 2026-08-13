@@ -482,7 +482,7 @@ pub struct EcMulFillLaunchConfig {
     pub scratch_words: usize,
 }
 
-/// Generates the exact field-expression saved variables for the secp256k1 EC MUL specialization.
+/// Generates the exact field-expression saved variables for a supported EC MUL shape.
 ///
 /// # Safety
 ///

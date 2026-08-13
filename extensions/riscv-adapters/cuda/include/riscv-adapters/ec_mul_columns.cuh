@@ -40,8 +40,6 @@ static_assert(8 % EC_MUL_STEPS_PER_ROW == 0);
 static constexpr uint32_t EC_MUL_SCALAR_OVERFLOW = 0x56020002;
 // The expression blob does not describe this chip's ladder step.
 static constexpr uint32_t EC_MUL_BAD_PROGRAM = 0x56020003;
-// A ladder accumulator was the identity, which the preconditions exclude.
-static constexpr uint32_t EC_MUL_IDENTITY_ACCUMULATOR = 0x56020004;
 // Present on every row. `is_compute` doubles as the expression's `is_valid`.
 template <typename T> struct EcMulHeaderCols {
     T is_compute;
