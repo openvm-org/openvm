@@ -11,6 +11,13 @@ static constexpr size_t EC_MUL_PROJECTIVE_STATE_WORDS = 5 * K;
 static constexpr size_t EC_MUL_PROJECTIVE_STATES_PER_ROW = 2 * EC_MUL_STEPS_PER_ROW;
 static constexpr size_t EC_MUL_PROJECTIVE_STATES =
     EC_MUL_COMPUTE_ROWS * EC_MUL_PROJECTIVE_STATES_PER_ROW;
+static constexpr uint32_t EC_MUL_BATCH_INVERT_THREADS = 32;
+static constexpr size_t EC_MUL_BATCH_INVERT_ITEMS_PER_THREAD =
+    EC_MUL_PROJECTIVE_STATES / EC_MUL_BATCH_INVERT_THREADS;
+static_assert(
+    EC_MUL_PROJECTIVE_STATES % EC_MUL_BATCH_INVERT_THREADS == 0,
+    "projective states must divide evenly across the inversion warp"
+);
 template <uint32_t K>
 static constexpr size_t EC_MUL_PROJECTIVE_INSTRUCTION_WORDS =
     EC_MUL_PROJECTIVE_STATES * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
@@ -231,7 +238,7 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
 }
 
 template <uint32_t K>
-static __device__ __noinline__ bool ec_mul_projective_batch_invert(
+static __device__ __noinline__ bool ec_mul_projective_batch_invert_chunked(
     const FieldExprProg &s,
     uint32_t *rows,
     uint32_t *error
@@ -240,36 +247,104 @@ static __device__ __noinline__ bool ec_mul_projective_batch_invert(
     constexpr uint32_t output_x = K == 12 ? 10 : 8;
     if (s.num_vars != vars_per_step * EC_MUL_STEPS_PER_ROW || s.n_outputs != 2 ||
         s.outputs[0] != output_x || s.outputs[1] != output_x + 1) {
-        preflight_set_error(error, EC_MUL_BAD_PROGRAM);
+        if (threadIdx.x == 0) preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
     }
-    uint32_t work[2 * K + 2], running[K], inv[K], zi[K];
+    if (blockDim.x != EC_MUL_BATCH_INVERT_THREADS) {
+        if (threadIdx.x == 0) preflight_set_error(error, EC_MUL_BAD_PROGRAM);
+        return false;
+    }
+
+    constexpr uint32_t full_warp = 0xffffffffu;
+    const uint32_t lane = threadIdx.x;
+    const size_t first_state = lane * EC_MUL_BATCH_INVERT_ITEMS_PER_THREAD;
+    uint32_t work[2 * K + 2], chunk_product[K], prefix[K], suffix[K], other[K];
+    uint32_t inv_total[K], inv_chunk[K], running[K], zi[K], tmp[K];
     EcMulProjectiveField<K> f{s, work};
-    uint32_t *first_prefix = rows + 4 * K;
-    f.copy(rows + 2 * K, first_prefix);
-    for (size_t state = 1; state < EC_MUL_PROJECTIVE_STATES; state++) {
+
+    // Each lane builds inclusive prefixes for one contiguous 16-state chunk. Contiguous chunks
+    // keep the reverse pass local to the lane; the prefix slots are dead until materialization.
+    bool nonzero = true;
+    for (size_t item = 0; item < EC_MUL_BATCH_INVERT_ITEMS_PER_THREAD; item++) {
+        size_t state = first_state + item;
         uint32_t *cur = rows + state * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
-        uint32_t *prev = cur - EC_MUL_PROJECTIVE_STATE_WORDS<K>;
-        f.mul(prev + 4 * K, cur + 2 * K, cur + 4 * K);
+        const uint32_t *z = cur + 2 * K;
+        nonzero &= !limbs_are_zero(z, K);
+        if (item == 0) f.copy(z, chunk_product);
+        else {
+            f.mul(chunk_product, z, tmp);
+            f.copy(tmp, chunk_product);
+        }
+        f.copy(chunk_product, cur + 4 * K);
     }
-    uint32_t *last = rows + (EC_MUL_PROJECTIVE_STATES - 1) * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
-    if (limbs_are_zero(last + 4 * K, K)) {
-        preflight_set_error(error, EC_MUL_BAD_PROGRAM);
+    if (__ballot_sync(full_warp, nonzero) != full_warp) {
+        if (lane == 0) preflight_set_error(error, FIELD_EXPR_ACTIVE_ZERO_DIVISOR);
         return false;
     }
-    ec_mul_projective_mont_inv<K>(s, last + 4 * K, inv, work);
-    f.copy(inv, running);
-    for (size_t state = EC_MUL_PROJECTIVE_STATES; state-- > 0;) {
+
+    // Inclusive prefix and suffix scans over the 32 chunk products. Montgomery multiplication is
+    // associative, so warp shuffle order does not affect the resulting field values.
+    f.copy(chunk_product, prefix);
+    f.copy(chunk_product, suffix);
+    for (uint32_t offset = 1; offset < EC_MUL_BATCH_INVERT_THREADS; offset <<= 1) {
+        for (uint32_t word = 0; word < K; word++) {
+            other[word] = __shfl_up_sync(full_warp, prefix[word], offset);
+        }
+        if (lane >= offset) {
+            f.mul(other, prefix, tmp);
+            f.copy(tmp, prefix);
+        }
+    }
+    for (uint32_t offset = 1; offset < EC_MUL_BATCH_INVERT_THREADS; offset <<= 1) {
+        for (uint32_t word = 0; word < K; word++) {
+            other[word] = __shfl_down_sync(full_warp, suffix[word], offset);
+        }
+        if (lane + offset < EC_MUL_BATCH_INVERT_THREADS) {
+            f.mul(suffix, other, tmp);
+            f.copy(tmp, suffix);
+        }
+    }
+
+    if (lane == EC_MUL_BATCH_INVERT_THREADS - 1) {
+        ec_mul_projective_mont_inv<K>(s, prefix, inv_total, work);
+    }
+    for (uint32_t word = 0; word < K; word++) {
+        inv_total[word] = __shfl_sync(
+            full_warp, inv_total[word], EC_MUL_BATCH_INVERT_THREADS - 1
+        );
+    }
+
+    // Invert the product of this lane's chunk from the inverse total and the products on either
+    // side. The edge lanes deliberately omit the empty product, avoiding a separately computed
+    // Montgomery-one identity.
+    f.copy(inv_total, inv_chunk);
+    for (uint32_t word = 0; word < K; word++) {
+        other[word] = __shfl_up_sync(full_warp, prefix[word], 1);
+    }
+    if (lane != 0) {
+        f.mul(inv_chunk, other, tmp);
+        f.copy(tmp, inv_chunk);
+    }
+    for (uint32_t word = 0; word < K; word++) {
+        other[word] = __shfl_down_sync(full_warp, suffix[word], 1);
+    }
+    if (lane + 1 != EC_MUL_BATCH_INVERT_THREADS) {
+        f.mul(inv_chunk, other, tmp);
+        f.copy(tmp, inv_chunk);
+    }
+
+    // Reverse each chunk independently. Its inclusive-prefix slots become the individual Z
+    // inverses consumed unchanged by the existing row-parallel materialization pass.
+    f.copy(inv_chunk, running);
+    for (size_t item = EC_MUL_BATCH_INVERT_ITEMS_PER_THREAD; item-- > 0;) {
+        size_t state = first_state + item;
         uint32_t *cur = rows + state * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
-        if (state == 0) f.copy(running, zi);
+        if (item == 0) f.copy(running, zi);
         else {
             uint32_t *prev = cur - EC_MUL_PROJECTIVE_STATE_WORDS<K>;
             f.mul(running, prev + 4 * K, zi);
             f.mul(running, cur + 2 * K, running);
         }
-
-        // The prefix slot is dead after the reverse scan reaches this state. Reuse it for Z^-1
-        // so a row-parallel pass can materialize the exact affine values independently.
         f.copy(zi, cur + 4 * K);
     }
     return true;

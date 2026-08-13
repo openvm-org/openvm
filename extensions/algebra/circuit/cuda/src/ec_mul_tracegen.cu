@@ -33,12 +33,12 @@ static __global__ void ec_mul_projective_batch_invert_pass(
     uint32_t *error
 ) {
     if (*error != 0) return;
-    size_t instruction = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
+    size_t instruction = blockIdx.x;
     if (instruction >= num_instructions || projection[instruction].is_setup != 0) return;
     FieldExprProg s;
     load_prog(blob, s);
     uint32_t *rows = projective + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
-    ec_mul_projective_batch_invert<K>(s, rows, error);
+    ec_mul_projective_batch_invert_chunked<K>(s, rows, error);
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -131,7 +131,7 @@ static int launch_ec_mul_projective_vars(
     );
     if (int result = CHECK_KERNEL(); result != 0) return result;
     ec_mul_projective_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
-        <<<instruction_grid, instruction_block, 0, stream>>>(
+        <<<static_cast<uint32_t>(num_instructions), EC_MUL_BATCH_INVERT_THREADS, 0, stream>>>(
             inputs, num_instructions, blob, projective, error
         );
     if (int result = CHECK_KERNEL(); result != 0) return result;
