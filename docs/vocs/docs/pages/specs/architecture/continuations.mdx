@@ -170,8 +170,8 @@ There are 2 aggregation subcircuit types: **inner** and **root**. Each type has 
 
 App public values are the public values exposed by the app layer. They are propagated through all aggregation layers.
 
-- `initial_pc: F` — starting PC value of the program/segment
-- `final_pc: F` — final PC value of the program/segment
+- `initial_pc_idx: F` — circuit PC index at the start of the program/segment
+- `final_pc_idx: F` — circuit PC index at the end of the program/segment
 - `exit_code: F` — exit code of the program/segment
 - `is_terminate: F` — boolean flag indicating whether this segment terminated the program
 - `initial_root: Digest` — Merkle root of the initial memory state
@@ -179,7 +179,7 @@ App public values are the public values exposed by the app layer. They are propa
 
 All aggregation subcircuits enforce **segment adjacency** constraints on the app public values. Given several adjacent segments, the aggregation subcircuit constrains that:
 
-1. The `final_pc` and `final_root` of each non-terminal segment equal the `initial_pc` and `initial_root` of the segment immediately following it
+1. The `final_pc_idx` and `final_root` of each non-terminal segment equal the `initial_pc_idx` and `initial_root` of the segment immediately following it
 2. Non-terminal segments have `is_terminate == 0` and `exit_code == DEFAULT_SUSPEND_EXIT_CODE`
 3. The terminal segment has `is_terminate == 1` and `exit_code == ExitCode::Success`
 
@@ -247,7 +247,7 @@ The root subcircuit exposes a new set of public values for the static verifier. 
 - `app_exe_commit: Digest` — hashed combination of:
   - The app-level `ProgramAir` cached trace commit
   - The Merkle root of the starting app memory state (`initial_root`)
-  - The initial app program counter (`initial_pc`)
+  - The initial app PC index (`initial_pc_idx`)
 - `app_vm_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf VK commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
 
 #### Constraints

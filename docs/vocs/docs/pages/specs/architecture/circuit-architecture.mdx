@@ -35,7 +35,10 @@ AIRs, and global coherence comes from the buses plus the local AIR constraints.
 
 ## Execution flow
 
-An _execution state_ consists of `pc` and `timestamp`.
+A circuit _execution state_ consists of `pc_idx` and `timestamp`. Runtime execution uses an aligned
+32-bit byte PC, while circuits use the 30-bit index
+`pc_idx = byte_pc / DEFAULT_PC_STEP`. Program- and execution-bus messages carry this index in one
+field element, and an ordinary four-byte instruction advances it by one.
 
 Although we use sequential language below, a witness (a set of traces) is a static object. The AIR
 constraints and bus balancing conditions are designed so that from any valid witness one can extract
@@ -43,23 +46,24 @@ a valid execution of the committed program whose boundary states match the publi
 standard cryptographic assumptions, the proof system ensures the verifier only accepts proofs for
 which such a witness exists.
 
-The connector AIR exposes the initial and final execution states of the segment as public values. On
-the execution bus, the connector sends the initial execution state and receives the final execution
-state. If the segment terminates the whole program, the connector also constrains that `final_pc`
-points to a `TERMINATE` instruction with the declared exit code.
+The connector AIR exposes the initial and final execution states of the segment as public values.
+The exposed `initial_pc_idx` and `final_pc_idx` values are single field elements. On the execution
+bus, the connector sends the initial execution state and receives the final execution state. If the
+segment terminates the whole program, the connector also constrains that `final_pc_idx` points to a
+`TERMINATE` instruction with the declared exit code.
 
 For each instruction it handles, an instruction executor AIR receives an execution state from the
-bus and sends the next execution state back. It also looks up the instruction at that `pc` on the
+bus and sends the next execution state back. It also looks up the instruction at that `pc_idx` on the
 program bus, and the local AIR constraints check the semantics of the opcode family.
 
 Bus balancing forces these interactions to form a chain: the initial state sent by the connector
 is received by some instruction executor trace row, whose post-state is received by another
 instruction executor trace row, and so on, until the final state is received by the connector. The
-program bus pins each step to the instruction committed at that `pc`.
+program bus pins each step to the instruction committed at that `pc_idx`.
 
-The net effect is that a valid witness encodes a chain of instruction executions from `initial_pc`
-to `final_pc`. Large executions may be split into segments; continuations then relate the boundary
-states of adjacent segments. See
+The net effect is that a valid witness encodes a chain of instruction executions from
+`initial_pc_idx` to `final_pc_idx`. Large executions may be split into segments; continuations then
+relate the boundary states of adjacent segments. See
 [Continuations](/specs/architecture/continuations) for full details.
 
 ## Memory flow

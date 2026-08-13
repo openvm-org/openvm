@@ -28,8 +28,9 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | Name                         | Description                                                        | Constraints                                                          |
 | ---------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `F`                          | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
-| `PC_BITS`                    | The number of bits in the program counter.                         | Fixed to 30.                                                         |
-| `DEFAULT_PC_STEP`            | The default program counter step size.                             | Fixed to 4.                                                          |
+| `PC_IDX_BITS`                | The number of bits in the circuit PC index.                        | Fixed to 30.                                                         |
+| `DEFAULT_PC_STEP`            | The byte distance between sequential instructions.                | Fixed to 4.                                                          |
+| `MAX_ALLOWED_PC`             | The greatest supported byte program counter.                       | Fixed to `2^32 - DEFAULT_PC_STEP = 0xffff_fffc`.                     |
 | `LIMB_BITS`                  | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                          |
 | `ADDR_SPACE_OFFSET`          | The index of the first writable address space.                     | Fixed to 1.                                                          |
 | `addr_space_height`          | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`      |
@@ -66,7 +67,7 @@ The state of the virtual machine consists of the following components:
 The **initial state** of the virtual machine consists of:
 
 - Program ROM - immutable throughout VM execution
-- `pc_0` - starting program counter
+- `pc_0` - starting byte program counter
 - Initial data memory
 - No user public outputs
 - Input stream
@@ -81,12 +82,14 @@ OpenVM operates under the Harvard architecture, where program code is stored sep
 memory. The program code is loaded as read-only memory (ROM) in the VM state prior to execution, and it remains
 immutable throughout the execution.
 
-Program code is a map from `[0, 2^PC_BITS)` to the space of instructions `F^{NUM_OPERANDS + 1}`, where
+Program code is a map from PC indices in `[0, 2^PC_IDX_BITS)` to the space of instructions
+`F^{NUM_OPERANDS + 1}`, where
 
-- `PC_BITS = 30`
+- `PC_IDX_BITS = 30`
 - `NUM_OPERANDS = 7`.
 
-Instructions will typically only exist at a subset of the indices in `[0, 2^PC_BITS)`.
+Index `pc_idx` corresponds to the aligned byte address `pc_idx * DEFAULT_PC_STEP`. Instructions
+will typically only exist at a subset of the indices in `[0, 2^PC_IDX_BITS)`.
 
 #### Instruction format
 
@@ -104,9 +107,21 @@ case, `d` is suggested to be set to `1`. This also may not be constrained, thoug
 
 ### Program Counter
 
-There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the
-instruction being executed. During execution, the program counter must always be a valid program address, meaning that it
-is an element in the range `[0, 2^PC_BITS)` where the program code is defined.
+There is a single special purpose register `pc` for the program counter. It is a 32-bit byte address
+that must be a multiple of `DEFAULT_PC_STEP` and at most `MAX_ALLOWED_PC`, so the full aligned
+32-bit byte address space is supported.
+
+Because an arbitrary 32-bit value does not fit uniquely in one BabyBear element, circuits represent
+the byte PC by dividing out its two fixed alignment bits:
+
+```
+pc_idx = pc / DEFAULT_PC_STEP
+```
+
+The resulting 30-bit `pc_idx` fits in one field element. Program trace columns, program- and
+execution-bus messages, connector public values, and the executable commitment all carry the PC
+index. Runtime execution and preflight records continue to use byte PCs and convert at circuit
+boundaries.
 
 ### Data Memory
 
@@ -210,8 +225,10 @@ which must satisfy the following conditions:
 - The program counter is set to a new `to_pc` at the end of the instruction execution.
   Instructions are only considered valid if `to_pc` is the address of a valid instruction in the program ROM.
 
-ℹ️ Notes for extension developers: The specification of new instructions should carefully consider `to_pc` overflows, especially when you want to move `pc` with
-a positive offset.
+ℹ️ Notes for extension developers: Runtime execution and preflight records use byte PCs, while AIR
+trace columns and buses use `pc_idx = byte_pc / DEFAULT_PC_STEP`. Sequential AIR transitions advance
+`pc_idx` by one. New instructions must reject byte-PC overflow and any destination that is not
+`DEFAULT_PC_STEP`-aligned before converting it to an index.
 
 ### Guest Instruction Execution
 
@@ -243,8 +260,9 @@ new extension to be compatible with some extensions, you need select some compat
 
 ## OpenVM Instruction Set
 
-We now specify instructions supported by the default VM extensions shipping with OpenVM. Unless otherwise specified,
-instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the following notation:
+We now specify instructions supported by the default VM extensions shipping with OpenVM. Unless
+otherwise specified, instructions set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the
+following notation:
 
 - `u64(x)` where `x: [F; 8]` consists of 8 bytes will mean the casting from little-endian bytes in 2's complement to
   unsigned 64-bit integer.
@@ -380,27 +398,28 @@ For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 
 | BGE_RV64   | `a,b,c,1,1`      | `if(i64([a:8]_1) >= i64([b:8]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
 | BLTU_RV64  | `a,b,c,1,1`      | `if(u64([a:8]_1) < u64([b:8]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                   |
 | BGEU_RV64  | `a,b,c,1,1`      | `if(u64([a:8]_1) >= u64([b:8]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
-| JAL_RV64   | `a,_,c,1,_,f`    | `if(f!=0) [a:8]_1 = sign_extend(decompose(pc+4)); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `i32(c)`must be in`[-2^24, 2^24)`.                                                                                                                                                                    |
-| JALR_RV64  | `a,b,c,1,_,f,g` | `if(f!=0) [a:8]_1 = zero_extend(decompose(pc+4)); pc = F::from_u32(u32([b:8]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `u32([b:8]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
-| LUI_RV64   | `a,_,c,1,_,1`    | `[a:8]_1 = sign_extend(u32(c) << 12)`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                |
-| AUIPC_RV64 | `a,_,c,1,_,_`    | `[a:8]_1 = sign_extend(decompose(pc) + (decompose(c) << 8))`. Here `i32(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                        |
+| JAL_RV64   | `a,_,c,1,_,f`    | If `f!=0`, write the 64-bit link value `u64(pc) + 4` to `[a:8]_1`; then set `pc += c`. The operand `f` is assumed to be boolean. The PC update is always done regardless of `f`'s value. Here `i32(c)` must be in `[-2^24, 2^24)`. The target must remain in the 32-bit PC address space and be 4-byte aligned. |
+| JALR_RV64  | `a,b,c,1,_,f,g` | Let `raw_target = u32([b:8]_1) + sign_extend(decompose(c)[0:2], g)`. If `f!=0`, write the 64-bit link value `u64(pc) + 4` to `[a:8]_1`; then set `pc = raw_target & !1`. The operands `f` and `g` are assumed to be boolean. The PC update is always done regardless of `f`'s value. The masked target must be in the 32-bit PC address space and be 4-byte aligned. Here `u32(c)` must be in `[0, 2^16)`. |
+| LUI_RV64   | `a,_,c,1,_,1`    | `[a:8]_1 = sign_extend(u32(c) << 12)`. Here `i32(c)` must be in `[0, 2^20)`. |
+| AUIPC_RV64 | `a,_,c,1,_,_`    | `[a:8]_1 = u64(pc) + sign_extend(u32(c) << 8)`, computed as a 64-bit value. Here `i32(c)` must be in `[0, 2^24)`. |
 
-For branch and JAL_RV64 instructions, the instructions assume that the operand `i32(c)` is in `[-2^24,2^24)`. The
-assignment `pc += c` is done as field elements.
-In valid programs, the `from_pc` is always in `[0, 2^PC_BITS)`. We will only use base field `F` satisfying
-`2^PC_BITS + 2*2^24 < F::modulus()` so `to_pc = from_pc + c` is only valid if `i32(from_pc) + i32(c)` is in
-`[0, 2^PC_BITS)`.
+For branch and JAL_RV64 instructions, `i32(c)` is a signed byte offset in `[-2^24, 2^24)`.
+A taken target is valid only if integer addition places it in `[0, MAX_ALLOWED_PC]` on a
+`DEFAULT_PC_STEP`-aligned address. The circuit constrains
+`to_pc_idx = from_pc_idx + i32(c) / DEFAULT_PC_STEP`. A misaligned encoding is not rejected merely
+because it occurs in the executable's text, which may contain embedded data; it is rejected if
+execution actually uses it as a control-flow target.
 
 For JALR_RV64, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. Then it is added to the register value `u32([b:8]_1)` (the upper 4 bytes of the 64-bit register must be zero), where 32-bit overflow is ignored. The instruction is only valid if the resulting `i32` is in range `[0, 2^PC_BITS)`. The
-result is then cast to `u32` and then to `F` and assigned to `pc`.
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. It is then added to the register value `u32([b:8]_1)` (the upper 4 bytes of the 64-bit register must be zero) without wrapping the implemented address space. JALR clears bit 0 before validation; bit 1 must be zero so that the resulting PC is 4-byte aligned. The circuit decomposes the resulting 30-bit PC index into a low 14-bit limb and a high 16-bit limb for this arithmetic.
 
 For LUI_RV64, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
 For AUIPC_RV64, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.
 The instruction does not need to interpret whether the register is signed or unsigned.
-For AUIPC_RV64, the addition is treated as unchecked `u32` addition since that is the same as `i32` addition at the bit
-level. The result is sign-extended to 64 bits before writing to the register.
+For AUIPC_RV64, the circuit reconstructs the byte PC from `pc_idx` before adding the immediate.
+Negative results are sign-extended to 64 bits, while a positive carry becomes bit 32 of the
+64-bit result. For example, `0xfffffff8 + 0x1000 = 0x1_00000ff8` is valid.
 
 Note that AUIPC_RV64 does not have any condition for the register write.
 

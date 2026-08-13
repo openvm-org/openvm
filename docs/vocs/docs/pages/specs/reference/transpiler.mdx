@@ -7,7 +7,7 @@ The OpenVM framework supports transpilation of a RISC-V ELF consisting of the RV
 The transpiler is a function that converts a [RISC-V ELF](https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/riscv-elf.adoc) into an OpenVM executable, where an **OpenVM executable** is defined as the following pieces of data:
 
 - Program ROM
-- Starting program counter `pc_0`
+- Starting byte program counter `pc_0`
 - Initial data memory
 
 The OpenVM executable forms a part of the [initial VM state](/specs/openvm/isa#virtual-machine-state).
@@ -18,7 +18,7 @@ The transpiler is configured upon construction with the set of VM extensions to 
 
 The transpilation rules must satisfy:
 
-- A read or write to the RISC-V program counter corresponds to a read or write to the program counter of the same value in OpenVM. This includes the implicit read of the program counter to fetch the instruction from program code, as well as any implicit `pc += 4` advancement in some RISC-V instructions.
+- A read or write to the RISC-V program counter corresponds to a read or write to the OpenVM byte program counter of the same value. This includes the implicit read of the program counter to fetch the instruction from program code, as well as any implicit `pc += 4` advancement in some RISC-V instructions. Circuit traces and buses represent that byte address as the PC index `pc_idx = byte_pc / DEFAULT_PC_STEP`.
 - A RISC-V 64-bit register `x{i}` read or write access corresponds to an OpenVM memory access at `[8 * i: 8]_1` **except** for writes to `x0`, see [below](#register-x0-handling). The 64-bits of `x{i}` are represented as 8 little-endian bytes in OpenVM memory.
   - A RISC-V code block must **never** map to any OpenVM instruction that changes the value of `[0:8]_1` in OpenVM memory.
 - A RISC-V user memory access of the `j`th byte at address `addr` corresponds to an OpenVM memory access at `[addr + j]_2`.
@@ -26,8 +26,13 @@ The transpilation rules must satisfy:
 
 The above requirements, together with the invariants of the OpenVM ISA, imply that transpilation will only be valid for programs where:
 
-- The program code does not have program address greater than or equal to `2^PC_BITS`.
+- Every program address is a multiple of `DEFAULT_PC_STEP` and is at most `MAX_ALLOWED_PC = 2^32 - DEFAULT_PC_STEP`.
 - The program does not access memory outside the range `[0, 2^pointer_max_bits)`: programs that attempt such accesses will fail to execute.
+
+The transpiler decodes every machine-code word in executable text, which may include embedded data.
+It therefore does not reject a word solely because it decodes as a branch or jump with a misaligned
+offset. Runtime execution and trace generation reject the target if that control-flow operation is
+actually executed (or, for a conditional branch, actually taken).
 
 A transpiler configuration is only considered valid if there are no two transpilation rules that may map the same RISC-V code block to different OpenVM instructions.
 

@@ -14,8 +14,8 @@ As in v1, OpenVM v2 starts with a list of app segment proofs, which are generate
 The final internal-recursive proof will expose the following public values:
 
 - `program_commit`: Program code commitment
-- `initial_pc`: Initial program counter at the start of app execution
-- `final_pc`: Final program counter after app execution
+- `initial_pc_idx`: Initial circuit PC index (`byte_pc / DEFAULT_PC_STEP`) at the start of app execution
+- `final_pc_idx`: Final circuit PC index after app execution
 - `exit_code`: Exit code after app execution
 - `is_terminate`: Flag to indicate whether the program terminated or not
 - `initial_root`: Merkle root of VM memory at the start of app execution
@@ -36,7 +36,7 @@ The user public values proof length is also checked against the baseline `num_us
 
 Given a fixed VM and executable, we must check certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
 
-- `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
+- `program_commit`, `initial_root`, and `initial_pc_idx` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`. The executable's byte `pc_start` is divided by `DEFAULT_PC_STEP` before the resulting PC index is included in this commitment.
 - `app_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit` (each containing both `cached_commit` and `vk_pre_hash`) are compared against pre-computed baselines
 - `internal_recursive_vk_commit` is checked conditionally:
   - if `recursion_depth > 1`, it is compared against the pre-computed baseline
@@ -50,7 +50,7 @@ The other public values are checked for completeness.
 - `internal_flag` is checked to be 2, i.e. the final layer must be internal-recursive
 - `recursion_depth` is checked to be in `[1, 256]`
 
-Note there is no expected value for `final_pc`, and thus it is left unchecked.
+Note there is no expected value for `final_pc_idx`, and thus it is left unchecked.
 
 **Deferral Validation:**
 
