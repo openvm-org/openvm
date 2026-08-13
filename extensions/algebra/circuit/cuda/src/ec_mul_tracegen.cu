@@ -29,7 +29,7 @@ static __global__ void ec_mul_projective_prepare_pass(
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
-static __global__ void ec_mul_projective_batch_invert_pass(
+static __global__ void ec_mul_projective_serial_batch_invert_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
     const uint32_t *blob,
@@ -144,7 +144,7 @@ static int launch_ec_mul_projective_vars(
             );
     }
     if (int result = CHECK_KERNEL(); result != 0) return result;
-    ec_mul_projective_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
+    ec_mul_projective_serial_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
         <<<instruction_grid, instruction_block, 0, stream>>>(
             inputs, num_instructions, blob, projective, error
         );
