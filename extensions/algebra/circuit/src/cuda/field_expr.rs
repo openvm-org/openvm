@@ -28,7 +28,10 @@ use crate::fields::get_field_type;
 
 const MAX_FIELD_EXPR_SCRATCH_BYTES: usize = 128 << 20;
 const MAX_FIELD_EXPR_LOCAL_BYTES: usize = 32 << 20;
-const MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD: usize = 512;
+// This is a compiler-spill regression guard, not a CUDA architectural limit. CUDA's reported
+// local frame is toolchain-dependent; leave headroom above the currently observed 528-byte frame
+// while the aggregate limit below controls the actual launch footprint.
+const MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD: usize = 1 << 10;
 
 fn supports_device_modulus(modulus: &BigUint) -> bool {
     get_field_type(modulus).is_some()
@@ -586,10 +589,11 @@ mod tests {
 
     #[test]
     fn launch_config_caps_grid_by_total_local_memory() {
+        const LOCAL_BYTES_PER_THREAD: usize = 528;
         let kernel = validate_kernel_config(cuda_abi::FieldExprReplayKernelConfig {
             max_grid_blocks: 1024,
             block_threads: 128,
-            local_bytes_per_thread: MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD,
+            local_bytes_per_thread: LOCAL_BYTES_PER_THREAD,
         })
         .unwrap();
         let launch = field_expr_launch_config(
@@ -599,11 +603,15 @@ mod tests {
             MAX_FIELD_EXPR_SCRATCH_BYTES / size_of::<u32>(),
         )
         .unwrap();
-        assert_eq!(launch.grid_blocks, 512);
+        let local_bytes_per_block = KERNEL.block_threads * LOCAL_BYTES_PER_THREAD;
         assert_eq!(
-            launch.active_threads * launch.local_bytes_per_thread,
-            MAX_FIELD_EXPR_LOCAL_BYTES
+            launch.grid_blocks,
+            MAX_FIELD_EXPR_LOCAL_BYTES / local_bytes_per_block
         );
+        assert!(
+            launch.active_threads * launch.local_bytes_per_thread <= MAX_FIELD_EXPR_LOCAL_BYTES
+        );
+        assert!((launch.grid_blocks + 1) * local_bytes_per_block > MAX_FIELD_EXPR_LOCAL_BYTES);
     }
 
     #[test]
@@ -623,7 +631,7 @@ mod tests {
         assert!(matches!(
             validate_kernel_config(cuda_abi::FieldExprReplayKernelConfig {
                 max_grid_blocks: 8,
-                block_threads: 128,
+                block_threads: KERNEL.block_threads,
                 local_bytes_per_thread: MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD + 1,
             }),
             Err(GpuPostflightError::ResourceLimitExceeded {
