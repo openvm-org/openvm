@@ -20,4 +20,5 @@ openvm-ecc-circuit.workspace = true
 openvm-mod-circuit-builder.workspace = true
 
 halo2curves-axiom.workspace = true
+mcl_rust.workspace = true
 num-bigint.workspace = true

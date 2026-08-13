@@ -4,13 +4,18 @@
 //! Point operations use `halo2curves_axiom`. Setup operations evaluate
 //! OpenVM's precomputed field expressions.
 
-use std::{ffi::c_void, iter, sync::LazyLock};
+use std::{
+    ffi::c_void,
+    iter,
+    sync::{LazyLock, OnceLock},
+};
 
 use halo2curves_axiom::{
     ff::Field,
     group::{Curve, Group as _},
     CurveAffine,
 };
+use mcl_rust::{CurveType as MclCurveType, Fp as MclFp, Fr as MclFr, G1 as MclG1};
 use openvm_circuit_primitives::U16_BITS;
 use openvm_ecc_circuit::{
     ec_add_ne_program, ec_double_ne_program, ec_mul_step_program, setup_row_inputs, CurveType,
@@ -137,6 +142,69 @@ fn ec_mul_ladder<C: CurveAffine>(base: C, scalar_le: &[u8]) -> C {
         }
     }
     acc.to_affine()
+}
+
+static MCL_BN254_INITIALIZED: OnceLock<bool> = OnceLock::new();
+
+fn mcl_bn254_initialized() -> bool {
+    *MCL_BN254_INITIALIZED.get_or_init(|| {
+        mcl_rust::init(MclCurveType::SNARK)
+            && mcl_rust::get_fp_serialized_size() as usize == FIELD_256_BYTES
+            && mcl_rust::get_fr_serialized_size() as usize == FIELD_256_BYTES
+    })
+}
+
+/// Compute `(scalar | 1) * (x, y)` with MCL's BN254 variable-base multiplier.
+///
+/// Inputs and outputs use OpenVM's canonical little-endian affine representation. Invalid points
+/// match the existing Halo2curves path by mapping to the affine identity `(0, 0)`.
+fn ec_mul_bn254_mcl(point_le: &[u8], scalar_le: &[u8]) -> Option<Vec<u8>> {
+    if !mcl_bn254_initialized()
+        || point_le.len() != POINT_256_BYTES as usize
+        || scalar_le.len() != SCALAR_BYTES as usize
+    {
+        return None;
+    }
+
+    let (x_le, y_le) = point_le.split_at(FIELD_256_BYTES);
+    let mut x = MclFp::zero();
+    let mut y = MclFp::zero();
+    if !x.set_little_endian_mod(x_le) || !y.set_little_endian_mod(y_le) {
+        return None;
+    }
+
+    let base = if x.is_zero() && y.is_zero() {
+        MclG1::zero()
+    } else {
+        let base = MclG1 {
+            x,
+            y,
+            z: MclFp::from_int(1),
+        };
+        if base.is_valid() {
+            base
+        } else {
+            MclG1::zero()
+        }
+    };
+
+    let mut scalar_bytes = scalar_le.to_vec();
+    scalar_bytes[0] |= 1;
+    let mut scalar = MclFr::zero();
+    if !scalar.set_little_endian_mod(&scalar_bytes) {
+        return None;
+    }
+
+    let mut product = MclG1::zero();
+    MclG1::mul(&mut product, &base, &scalar);
+    if product.is_zero() {
+        return Some(vec![0; POINT_256_BYTES as usize]);
+    }
+    let projective = product.clone();
+    MclG1::normalize(&mut product, &projective);
+    let x = product.x.serialize();
+    let y = product.y.serialize();
+    (x.len() == FIELD_256_BYTES && y.len() == FIELD_256_BYTES).then(|| [x, y].concat())
 }
 
 /// Execute `EC_MUL` for a curve over a 256-bit base field.
@@ -493,12 +561,93 @@ ecc_double_setup_entry!(
     POINT_256_BYTES,
     CurveType::BN254
 );
-ecc_mul_entry!(rvr_ext_ec_mul_bn254, halo2curves_axiom::bn256::G1Affine);
+/// # Safety
+///
+/// `state` must point to a valid native tracer state. Pointer parameters must point to a valid
+/// affine point, scalar, and result buffer.
+#[no_mangle]
+pub unsafe extern "C" fn rvr_ext_ec_mul_bn254(
+    state: *mut c_void,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
+) {
+    let point = trace_read_bytes(state, rs1_ptr, POINT_256_BYTES);
+    let scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
+    if let Some(output) = ec_mul_bn254_mcl(&point, &scalar) {
+        trace_write_bytes(state, rd_ptr, &output);
+    } else {
+        ec_mul_256::<halo2curves_axiom::bn256::G1Affine>(state, rd_ptr, rs1_ptr, rs2_ptr);
+    }
+}
 ecc_mul_setup_entry!(
     rvr_ext_setup_ec_mul_bn254,
     POINT_256_BYTES,
     CurveType::BN254
 );
+
+#[cfg(test)]
+mod mcl_tests {
+    use halo2curves_axiom::{
+        bn256::{Fq, G1Affine},
+        ff::PrimeField,
+        group::Curve,
+        CurveAffine,
+    };
+
+    use super::{ec_mul_bn254_mcl, ec_mul_ladder, FIELD_256_BYTES, POINT_256_BYTES};
+
+    fn point_bytes(point: G1Affine) -> Vec<u8> {
+        Option::<_>::from(point.coordinates())
+            .map(|coordinates: halo2curves_axiom::Coordinates<G1Affine>| {
+                [coordinates.x().to_repr(), coordinates.y().to_repr()].concat()
+            })
+            .unwrap_or_else(|| vec![0; POINT_256_BYTES as usize])
+    }
+
+    #[test]
+    fn mcl_bn254_mul_matches_halo2_ladder() {
+        let generator = halo2curves_axiom::bn256::G1::generator();
+        let bases = [generator.to_affine(), (generator + generator).to_affine()];
+        let mut high_scalar = [0u8; FIELD_256_BYTES];
+        high_scalar[0] = 0x79;
+        high_scalar[31] = 0x80;
+
+        for base in bases {
+            let point = point_bytes(base);
+            for scalar in [
+                {
+                    let mut value = [0u8; FIELD_256_BYTES];
+                    value[0] = 1;
+                    value
+                },
+                {
+                    let mut value = [0u8; FIELD_256_BYTES];
+                    value[0] = 2;
+                    value
+                },
+                high_scalar,
+            ] {
+                let expected = point_bytes(ec_mul_ladder(base, &scalar));
+                assert_eq!(ec_mul_bn254_mcl(&point, &scalar).unwrap(), expected);
+            }
+        }
+
+        let identity = vec![0; POINT_256_BYTES as usize];
+        let mut scalar = [0u8; FIELD_256_BYTES];
+        scalar[0] = 7;
+        assert_eq!(ec_mul_bn254_mcl(&identity, &scalar).unwrap(), identity);
+
+        let mut invalid = vec![0; POINT_256_BYTES as usize];
+        invalid[0] = 1;
+        invalid[FIELD_256_BYTES] = 1;
+        assert_eq!(ec_mul_bn254_mcl(&invalid, &scalar).unwrap(), identity);
+
+        // Keep the import and representation assumption explicit: OpenVM's 32-byte field values
+        // and Halo2curves' `Repr` are both little-endian.
+        assert_eq!(Fq::from(1).to_repr()[0], 1);
+    }
+}
 
 ecc_add_ne_setup_entry!(
     rvr_ext_setup_ec_add_ne_bls12_381,

@@ -439,6 +439,10 @@ impl RvrExtension for EccExtension {
         )]
     }
 
+    fn requires_cxx_linker(&self) -> bool {
+        true
+    }
+
     fn uses_memory_wrappers(&self) -> bool {
         true
     }
