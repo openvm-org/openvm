@@ -181,7 +181,7 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
     }
-    uint32_t px[K] = {}, py[K], curve_a[K] = {}, neg_py[K] = {}, x[K], y[K], z[K];
+    uint32_t px[K] = {}, py[K], curve_a[K] = {}, zero[K] = {}, neg_py[K], x[K], y[K], z[K];
     uint32_t nx[K], ny[K], nz[K], numerator[K];
     if constexpr (!ZERO_A) {
         uint8_t a_bytes[48] = {};
@@ -194,7 +194,10 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
     f.canonical_bytes_to_mont(point + s.num_limbs, py);
     f.copy(px, x);
     f.copy(py, y);
-    f.sub(neg_py, py, neg_py);
+    // Keep the zero input distinct from the output. Besides making the intended `-py` operation
+    // explicit, this avoids carrying an aliased input/output pointer through the nested device
+    // arithmetic helpers.
+    f.sub(zero, py, neg_py);
     uint32_t one[K] = {};
     one[0] = 1;
     f.mul(one, s.r2, z);
