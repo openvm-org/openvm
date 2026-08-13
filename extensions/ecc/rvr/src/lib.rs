@@ -428,15 +428,50 @@ impl RvrExtension for EccExtension {
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         // The modular extension supplies the native K-256 and BLS12-381 point
-        // functions declared in this header.
+        // functions declared in this header. ECC supplies BN254 EC_MUL.
         vec![("rvr_ext_ecc.h", include_str!("../c/rvr_ext_ecc.h"))]
     }
 
-    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "librvr_openvm_ext_ecc_ffi.a",
-            include_bytes!(env!("RVR_ECC_FFI_STATICLIB")),
+            "rvr_ext_bn254.c",
+            include_str!("../ffi/native/c/rvr_ext_bn254.c"),
         )]
+    }
+
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![
+            (
+                "librvr_openvm_ext_ecc_ffi.a",
+                include_bytes!(env!("RVR_ECC_FFI_STATICLIB")),
+            ),
+            ("libmcl.a", include_bytes!(env!("RVR_ECC_MCL_STATICLIB"))),
+        ]
+    }
+
+    fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            (
+                "mcl/include/mcl/bn.h",
+                include_str!("../ffi/native/mcl/include/mcl/bn.h"),
+            ),
+            (
+                "mcl/include/mcl/bn_c384_256.h",
+                include_str!("../ffi/native/mcl/include/mcl/bn_c384_256.h"),
+            ),
+            (
+                "mcl/include/mcl/curve_type.h",
+                include_str!("../ffi/native/mcl/include/mcl/curve_type.h"),
+            ),
+        ]
+    }
+
+    fn extra_cflags(&self) -> Vec<String> {
+        vec!["-isystem".to_string(), "mcl/include".to_string()]
+    }
+
+    fn requires_cxx_linker(&self) -> bool {
+        true
     }
 
     fn uses_memory_wrappers(&self) -> bool {

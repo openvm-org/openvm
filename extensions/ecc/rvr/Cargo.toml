@@ -17,4 +17,5 @@ openvm-instructions.workspace = true
 strum.workspace = true
 
 [build-dependencies]
+cmake = "0.1"
 rvr-openvm-build.workspace = true

@@ -16,7 +16,7 @@
 	path = extensions/algebra/rvr/ffi/modular/blst
 	url = https://github.com/supranational/blst.git
 	shallow = true
-[submodule "extensions/algebra/rvr/ffi/modular/mcl"]
-	path = extensions/algebra/rvr/ffi/modular/mcl
+[submodule "extensions/ecc/rvr/ffi/native/mcl"]
+	path = extensions/ecc/rvr/ffi/native/mcl
 	url = https://github.com/herumi/mcl
 	shallow = true

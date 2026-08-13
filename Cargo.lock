@@ -7380,7 +7380,6 @@ name = "rvr-openvm-ext-algebra"
 version = "2.0.0"
 dependencies = [
  "cc",
- "cmake",
  "num-bigint 0.4.6",
  "openvm-algebra-transpiler",
  "openvm-algebra-utils",
@@ -7467,6 +7466,7 @@ dependencies = [
 name = "rvr-openvm-ext-ecc"
 version = "2.0.0"
 dependencies = [
+ "cmake",
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "rvr-openvm-build",

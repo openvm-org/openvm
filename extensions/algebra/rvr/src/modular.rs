@@ -284,10 +284,6 @@ impl RvrExtension for ModularRvrExtension {
                 "rvr_ext_bls12_381.c",
                 include_str!("../ffi/modular/c/rvr_ext_bls12_381.c"),
             ),
-            (
-                "rvr_ext_bn254.c",
-                include_str!("../ffi/modular/c/rvr_ext_bn254.c"),
-            ),
         ]
     }
 
@@ -301,15 +297,7 @@ impl RvrExtension for ModularRvrExtension {
                 "libblst.a",
                 include_bytes!(env!("RVR_ALGEBRA_BLST_STATICLIB")),
             ),
-            (
-                "libmcl.a",
-                include_bytes!(env!("RVR_ALGEBRA_MCL_STATICLIB")),
-            ),
         ]
-    }
-
-    fn requires_cxx_linker(&self) -> bool {
-        true
     }
 
     fn uses_memory_wrappers(&self) -> bool {
@@ -344,18 +332,6 @@ impl RvrExtension for ModularRvrExtension {
                 "blst/blst_aux.h",
                 include_str!("../ffi/modular/blst/bindings/blst_aux.h"),
             ),
-            (
-                "mcl/include/mcl/bn.h",
-                include_str!("../ffi/modular/mcl/include/mcl/bn.h"),
-            ),
-            (
-                "mcl/include/mcl/bn_c384_256.h",
-                include_str!("../ffi/modular/mcl/include/mcl/bn_c384_256.h"),
-            ),
-            (
-                "mcl/include/mcl/curve_type.h",
-                include_str!("../ffi/modular/mcl/include/mcl/curve_type.h"),
-            ),
         ]);
         files
     }
@@ -368,8 +344,6 @@ impl RvrExtension for ModularRvrExtension {
             "secp256k1".to_string(),
             "-isystem".to_string(),
             "blst".to_string(),
-            "-isystem".to_string(),
-            "mcl/include".to_string(),
             // ENABLE_MODULE_RECOVERY keeps the ECC modules compiled in so the
             // k256 EC ops in rvr_ext_secp256k1.c can call into libsecp256k1.
             // (-DSECP256K1_BUILD is not set here — secp256k1.c defines it

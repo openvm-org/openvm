@@ -21,5 +21,4 @@ strum.workspace = true
 
 [build-dependencies]
 cc.workspace = true
-cmake = "0.1"
 rvr-openvm-build.workspace = true

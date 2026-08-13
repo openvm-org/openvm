@@ -1,6 +1,7 @@
 /* RVR BN254 scalar multiplication using MCL's native C API. */
 
 #include "openvm.h"
+#include "rvr_ext_ecc.h"
 
 #include <mcl/bn_c384_256.h>
 
@@ -8,21 +9,15 @@
 #include <stdint.h>
 #include <string.h>
 
-static constexpr uint32_t BN254_FIELD_WORDS = 4;
-static constexpr uint32_t BN254_POINT_WORDS = 2 * BN254_FIELD_WORDS;
-static constexpr uint32_t BN254_SCALAR_WORDS = 4;
+/* MCL and the guest both encode BN254 values as little-endian 32-byte limbs. */
+#if !defined(__BYTE_ORDER__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "BN254 guest limb codecs require a little-endian host"
+#endif
 
-typedef struct {
-    uint64_t limb0;
-    uint64_t limb1;
-    uint64_t limb2;
-    uint64_t limb3;
-} Bn254FieldBytes;
-
-typedef struct {
-    Bn254FieldBytes x;
-    Bn254FieldBytes y;
-} Bn254PointBytes;
+static constexpr uint32_t BN254_FIELD_BYTES = 32;
+static constexpr uint32_t BN254_FIELD_WORDS = BN254_FIELD_BYTES / WORD_SIZE;
+static constexpr uint32_t BN254_SCALAR_BYTES = 32;
+static constexpr uint32_t BN254_SCALAR_WORDS = BN254_SCALAR_BYTES / WORD_SIZE;
 
 static constexpr uint32_t MCL_UNINITIALIZED = 0;
 static constexpr uint32_t MCL_INITIALIZING = 1;
@@ -64,18 +59,20 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
 ) {
     ensure_mcl_bn254_initialized();
 
-    Bn254PointBytes point;
-    Bn254FieldBytes scalar_bytes;
-    read_mem_u64_range(state, rs1_ptr, (uint64_t *)&point, BN254_POINT_WORDS);
-    read_mem_u64_range(state, rs2_ptr, (uint64_t *)&scalar_bytes, BN254_SCALAR_WORDS);
+    uint64_t x[BN254_FIELD_WORDS];
+    uint64_t y[BN254_FIELD_WORDS];
+    uint64_t scalar_words[BN254_SCALAR_WORDS];
+    read_mem_u64_range(state, rs1_ptr, x, BN254_FIELD_WORDS);
+    read_mem_u64_range(state, rs1_ptr + BN254_FIELD_BYTES, y, BN254_FIELD_WORDS);
+    read_mem_u64_range(state, rs2_ptr, scalar_words, BN254_SCALAR_WORDS);
 
     mclBnG1 base;
-    static constexpr Bn254PointBytes IDENTITY = {};
-    if (memcmp(&point, &IDENTITY, sizeof(point)) == 0) {
+    static constexpr uint64_t ZERO[BN254_FIELD_WORDS] = {};
+    if (memcmp(x, ZERO, sizeof(x)) == 0 && memcmp(y, ZERO, sizeof(y)) == 0) {
         mclBnG1_clear(&base);
     } else {
-        int x_ok = mclBnFp_setLittleEndianMod(&base.x, &point.x, sizeof(point.x));
-        int y_ok = mclBnFp_setLittleEndianMod(&base.y, &point.y, sizeof(point.y));
+        int x_ok = mclBnFp_setLittleEndianMod(&base.x, x, BN254_FIELD_BYTES);
+        int y_ok = mclBnFp_setLittleEndianMod(&base.y, y, BN254_FIELD_BYTES);
         assert_assume(x_ok == 0 && y_ok == 0);
         mclBnFp_setInt32(&base.z, 1);
         if (!mclBnG1_isValid(&base)) {
@@ -83,21 +80,23 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
         }
     }
 
-    scalar_bytes.limb0 |= 1;
+    scalar_words[0] |= 1;
     mclBnFr scalar;
-    int scalar_ok = mclBnFr_setLittleEndianMod(&scalar, &scalar_bytes, sizeof(scalar_bytes));
+    int scalar_ok = mclBnFr_setLittleEndianMod(&scalar, scalar_words, BN254_SCALAR_BYTES);
     assert_assume(scalar_ok == 0);
 
     mclBnG1 product;
     mclBnG1_mul(&product, &base, &scalar);
 
-    Bn254PointBytes output = {};
+    uint64_t output_x[BN254_FIELD_WORDS] = {};
+    uint64_t output_y[BN254_FIELD_WORDS] = {};
     if (!mclBnG1_isZero(&product)) {
         mclBnG1 normalized;
         mclBnG1_normalize(&normalized, &product);
-        mclSize x_size = mclBnFp_serialize(&output.x, sizeof(output.x), &normalized.x);
-        mclSize y_size = mclBnFp_serialize(&output.y, sizeof(output.y), &normalized.y);
-        assert_assume(x_size == 32 && y_size == 32);
+        mclSize x_size = mclBnFp_serialize(output_x, BN254_FIELD_BYTES, &normalized.x);
+        mclSize y_size = mclBnFp_serialize(output_y, BN254_FIELD_BYTES, &normalized.y);
+        assert_assume(x_size == BN254_FIELD_BYTES && y_size == BN254_FIELD_BYTES);
     }
-    write_mem_u64_range(state, rd_ptr, (const uint64_t *)&output, BN254_POINT_WORDS);
+    write_mem_u64_range(state, rd_ptr, output_x, BN254_FIELD_WORDS);
+    write_mem_u64_range(state, rd_ptr + BN254_FIELD_BYTES, output_y, BN254_FIELD_WORDS);
 }
