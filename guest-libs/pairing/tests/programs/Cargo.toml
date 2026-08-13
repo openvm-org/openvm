@@ -47,6 +47,10 @@ name = "bn_final_exp_hint"
 required-features = ["bn254"]
 
 [[example]]
+name = "bn_ec_mul_rvr"
+required-features = ["bn254"]
+
+[[example]]
 name = "bls_final_exp_hint"
 required-features = ["bls12_381"]
 

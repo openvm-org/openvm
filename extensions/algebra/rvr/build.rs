@@ -15,6 +15,7 @@ fn main() {
     generate_secp256k1_file_list(&manifest_dir, &out_dir);
 
     let blst_staticlib = build_blst_staticlib(&manifest_dir, &out_dir);
+    let mcl_staticlib = build_mcl_staticlib(&manifest_dir, &out_dir);
 
     let modular_staticlib = build_rust_ffi_staticlib(
         &manifest_dir.join("ffi/modular"),
@@ -41,6 +42,10 @@ fn main() {
         "cargo:rustc-env=RVR_ALGEBRA_BLST_STATICLIB={}",
         blst_staticlib.display()
     );
+    println!(
+        "cargo:rustc-env=RVR_ALGEBRA_MCL_STATICLIB={}",
+        mcl_staticlib.display()
+    );
     println!("cargo:rerun-if-changed=ffi/common/Cargo.toml");
     println!("cargo:rerun-if-changed=ffi/common/src/lib.rs");
     println!("cargo:rerun-if-changed=ffi/modular/Cargo.toml");
@@ -49,6 +54,26 @@ fn main() {
     println!("cargo:rerun-if-changed=ffi/fp2/src/lib.rs");
     println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/Cargo.toml");
     println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/src");
+}
+
+fn build_mcl_staticlib(manifest_dir: &Path, out_dir: &Path) -> PathBuf {
+    let mcl = manifest_dir.join("ffi/modular/mcl");
+    assert!(
+        mcl.join("CMakeLists.txt").exists(),
+        "MCL submodule missing; run `git submodule update --init extensions/algebra/rvr/ffi/modular/mcl`"
+    );
+
+    let mut config = cmake::Config::new(&mcl);
+    config.out_dir(out_dir.join("mcl"));
+    let installed = config.build();
+    let archive = installed.join("lib/libmcl.a");
+    assert!(
+        archive.exists(),
+        "expected MCL static library at {}",
+        archive.display()
+    );
+    println!("cargo:rerun-if-changed={}", mcl.display());
+    archive
 }
 
 fn build_blst_staticlib(manifest_dir: &Path, out_dir: &Path) -> PathBuf {

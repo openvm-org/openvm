@@ -103,6 +103,32 @@ mod bn254 {
         Ok(())
     }
 
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_bn_ec_mul_rvr() -> Result<()> {
+        let curve = PairingCurve::Bn254.curve_config();
+        let config = test_rv64weierstrass_config(vec![curve]);
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!("tests/programs"),
+            "bn_ec_mul_rvr",
+            ["bn254"],
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+
+        let executor = VmExecutor::new(config)?;
+        let _execution = executor.instance(&openvm_exe)?.execute(vec![])?;
+        Ok(())
+    }
+
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let config = get_testing_config();
