@@ -684,26 +684,36 @@ static __device__ __noinline__ bool field_expr_eval_values(
     return true;
 }
 
-// Writes the core columns, the quotients and carries proving each limb constraint, and their
-// range-check counts. `core_row` must point at the first core column.
-//
-// `my_aux` must hold the variables `field_expr_eval_values` left for this same row and mode; the
-// workspace above them is reused here as limb scratch.
+// Canonical saved variables with a configurable word stride. A contiguous evaluator result uses
+// stride 1; EC_MUL's variable-major buffer uses the trace's row count so a warp reads each word
+// coalesced without first copying a row into lane-private scratch.
 template <uint32_t K>
-static __device__ __noinline__ bool field_expr_fill_witness(
+struct FieldExprSavedVarsView {
+    const uint32_t *base;
+    size_t word_stride;
+
+    __device__ __forceinline__ uint32_t word(uint32_t var, uint32_t limb) const {
+        return base[(static_cast<size_t>(var) * K + limb) * word_stride];
+    }
+};
+
+// Writes the core columns, the quotients and carries proving each limb constraint, and their
+// range-check counts. `core_row` must point at the first core column. `workspace` contains only
+// the limb-expression, quotient, and carry scratch; saved variables remain in `vars`.
+template <uint32_t K>
+static __device__ __noinline__ bool field_expr_fill_witness_from_vars(
     const FieldExprProg &s,
     RowSlice core_row,
     const uint8_t *in_limbs,
     FieldExprRowMode mode,
     VariableRangeChecker rc,
-    uint32_t *my_aux,
+    FieldExprSavedVarsView<K> vars,
+    uint32_t *workspace,
     uint32_t *err) {
     constexpr uint32_t k = K;
     const uint32_t nl = s.num_limbs, lb = s.limb_bits;
     const uint32_t flags = mode.flags;
     const bool is_dummy = mode.is_dummy;
-    const uint32_t *var_canon = my_aux;
-    uint32_t *workspace = my_aux + s.num_vars * k;
     int32_t *scratch = reinterpret_cast<int32_t *>(workspace); // scratch_len
     uint32_t *nacc = reinterpret_cast<uint32_t *>(scratch + s.scratch_len); // 2k
     uint32_t *q512 = nacc + 2 * k;                              // 2k
@@ -715,7 +725,7 @@ static __device__ __noinline__ bool field_expr_fill_witness(
         put_core_value(core_row, col, is_dummy ? 0u : static_cast<uint32_t>(in_limbs[i]));
     for (int v = 0; v < s.num_vars; v++)
         for (int i = 0; i < nl; i++) {
-            uint32_t limb = (var_canon[v * k + i / 4] >> ((i % 4) * 8)) & 0xff;
+            uint32_t limb = (vars.word(v, i / 4) >> ((i % 4) * 8)) & 0xff;
             put_core_value(core_row, col, limb);
             if (!is_dummy) rc.add_count(limb, lb);
         }
@@ -742,7 +752,7 @@ static __device__ __noinline__ bool field_expr_fill_witness(
                 case LOP_VAR:
                     for (uint32_t i = 0; i < dl; i++)
                         scratch[d + i] =
-                            (int32_t)((var_canon[ao * k + i / 4] >> ((i % 4) * 8)) & 0xff);
+                            (int32_t)((vars.word(ao, i / 4) >> ((i % 4) * 8)) & 0xff);
                     break;
                 case LOP_CONST:
                     for (uint32_t i = 0; i < dl; i++)
@@ -884,6 +894,29 @@ static __device__ __noinline__ bool field_expr_fill_witness(
         return false;
     }
     return true;
+}
+
+// Witness generation after the generic value evaluator. Saved variables occupy the persistent
+// prefix of `my_aux`; the remaining allocation is reused as witness scratch.
+template <uint32_t K>
+static __device__ bool field_expr_fill_witness(
+    const FieldExprProg &s,
+    RowSlice core_row,
+    const uint8_t *in_limbs,
+    FieldExprRowMode mode,
+    VariableRangeChecker rc,
+    uint32_t *my_aux,
+    uint32_t *err) {
+    return field_expr_fill_witness_from_vars<K>(
+        s,
+        core_row,
+        in_limbs,
+        mode,
+        rc,
+        FieldExprSavedVarsView<K>{my_aux, 1},
+        my_aux + s.num_vars * K,
+        err
+    );
 }
 
 // Both halves for one row.

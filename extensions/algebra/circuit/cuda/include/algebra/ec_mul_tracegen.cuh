@@ -158,15 +158,13 @@ static __device__ __noinline__ bool ec_mul_fill_row(
 
     fill_ec_mul_header(row, scalar_bytes, local_row, is_setup);
 
-    // The variables were computed on the host and uploaded; the witness needs the same inputs
-    // that evaluation saw.
-    const uint32_t vars_per_row = s.num_vars * K;
+    // The witness reads saved variables in place. Projective generation stores them variable-major,
+    // so adjacent row threads load each word coalesced; the host fallback remains row-major.
     const size_t vars_index = instruction * EC_MUL_COMPUTE_ROWS + local_row;
     const size_t vars_rows = (used_rows / EC_MUL_TOTAL_ROWS) * EC_MUL_COMPUTE_ROWS;
-    for (uint32_t word = 0; word < vars_per_row; word++) {
-        aux[word] = vars_transposed ? vars[word * vars_rows + vars_index]
-                                    : vars[vars_index * vars_per_row + word];
-    }
+    FieldExprSavedVarsView<K> saved_vars = vars_transposed
+        ? FieldExprSavedVarsView<K>{vars + vars_index, vars_rows}
+        : FieldExprSavedVarsView<K>{vars + vars_index * s.num_vars * K, 1};
 
     if (is_setup) {
         ec_mul_setup_inputs(in_limbs, s);
@@ -187,8 +185,8 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     }
 
     FieldExprRowMode mode = ec_mul_row_mode(scalar_bytes, local_row, is_setup);
-    if (!field_expr_fill_witness<K>(
-            s, row.slice_from(expr_offset), in_limbs, mode, range_checker, aux, err
+    if (!field_expr_fill_witness_from_vars<K>(
+            s, row.slice_from(expr_offset), in_limbs, mode, range_checker, saved_vars, aux, err
         )) {
         return false;
     }

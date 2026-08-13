@@ -192,7 +192,13 @@ static __global__ void ec_mul_validate(
     uint32_t *error
 ) {
     FieldExprProg s;
-    if (!validate_and_load_prog(blob, blob_words, s) || aux_words != s.aux_words ||
+    if (!validate_and_load_prog(blob, blob_words, s)) {
+        preflight_set_error(error, EC_MUL_BAD_PROGRAM);
+        return;
+    }
+    size_t expected_witness_words =
+        static_cast<size_t>(s.scratch_len) + 4 * K + s.max_q_limbs;
+    if (aux_words != expected_witness_words ||
         !ec_mul_validate_trace_shape<K, NUM_LIMBS, BLOCKS>(
             s, width, height, num_instructions, vars_words
         )) {
@@ -312,7 +318,7 @@ static int launch_ec_mul_tracegen(
         fill_grid_blocks > UINT32_MAX || fill_block_threads > 1024) {
         return cudaErrorInvalidValue;
     }
-    if (num_instructions > height / EC_MUL_TOTAL_ROWS ||
+    if (num_instructions > height / EC_MUL_TOTAL_ROWS || scratch_words < aux_words ||
         fill_grid_blocks * fill_block_threads * aux_words > scratch_words) {
         return cudaErrorInvalidValue;
     }
