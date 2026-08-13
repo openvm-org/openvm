@@ -203,13 +203,7 @@ impl IntrinsicCurve for Bn254 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
-        assert_eq!(coeffs.len(), bases.len());
-
-        let mut acc = <Self::Point as Group>::IDENTITY;
-        for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-            acc += base.mul_scalar(coeff);
-        }
-        acc
+        openvm_ecc_guest::msm_via_ec_mul(coeffs, bases)
     }
 }
 

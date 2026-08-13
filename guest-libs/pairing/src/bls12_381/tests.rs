@@ -21,7 +21,7 @@ use crate::{
             convert_bls12381_halo2_fq2_to_fp2, convert_bls12381_halo2_fq_to_fp,
             convert_g2_affine_halo2_to_openvm,
         },
-        Bls12_381, G2Affine as OpenVmG2Affine,
+        Bls12_381, G2Affine as OpenVmG2Affine, Scalar,
     },
     operations::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign},
 };
@@ -260,6 +260,19 @@ fn test_bls12381_g2_affine() {
             assert_eq!(convert_g2_affine_halo2_to_openvm(expected), actual);
         }
     }
+}
+
+#[test]
+fn test_bls12381_g2_msm() {
+    let mut rng = StdRng::seed_from_u64(35);
+    let p = G2Affine::random(&mut rng);
+    let q = G2Affine::random(&mut rng);
+    let bases = [p, q].map(convert_g2_affine_halo2_to_openvm);
+    let scalars = [Scalar::from_u64(2), Scalar::from_u64(3)];
+
+    let actual = openvm_ecc_guest::msm(&scalars, &bases);
+    let expected = G2Affine::from(p * Fr::from(2) + q * Fr::from(3));
+    assert_eq!(actual, convert_g2_affine_halo2_to_openvm(expected));
 }
 
 #[test]
