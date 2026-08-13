@@ -51,6 +51,11 @@ static void ensure_mcl_bn254_initialized(void) {
     }
 }
 
+/* Initialize before the compiled RVR instance can be shared across threads. */
+__attribute__((constructor)) static void initialize_mcl_bn254_at_load(void) {
+    ensure_mcl_bn254_initialized();
+}
+
 __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
     RvState *restrict state,
     uint64_t rd_ptr,

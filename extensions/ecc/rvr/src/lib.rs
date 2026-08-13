@@ -278,8 +278,8 @@ impl ExtInstr for EcMulInstr {
             let name = format!("rvr_ext_ec_mul_{suffix}");
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
         }
-        // Setup constrains only its modulus input, so its postimage is no less authoritative than a
-        // regular multiplication's, as for `EC_ADD_NE`.
+        // Setup constrains its modulus and curve coefficient inputs, so its postimage is no less
+        // authoritative than a regular multiplication's.
         for word in 0..point_dwords {
             ctx.append_replay_value(&format!("peek_mem_u64(state, {rd} + {}ull)", word * 8));
         }
@@ -321,6 +321,12 @@ pub struct EccExtension {
 }
 
 impl EccExtension {
+    fn has_bn254(&self) -> bool {
+        self.curves
+            .iter()
+            .any(|info| matches!(info.curve, Some(KnownCurve::Bn254)))
+    }
+
     /// Record the curves in configuration order and resolve the `EC_MUL` chip index for each one
     /// whose scalar multiplication this extension lifts.
     fn build(
@@ -433,45 +439,65 @@ impl RvrExtension for EccExtension {
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
-        vec![(
-            "rvr_ext_bn254.c",
-            include_str!("../ffi/native/c/rvr_ext_bn254.c"),
-        )]
+        if self.has_bn254() {
+            vec![(
+                "rvr_ext_bn254.c",
+                include_str!("../ffi/native/c/rvr_ext_bn254.c"),
+            )]
+        } else {
+            Vec::new()
+        }
     }
 
     fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
-        vec![
-            (
-                "librvr_openvm_ext_ecc_ffi.a",
-                include_bytes!(env!("RVR_ECC_FFI_STATICLIB")),
-            ),
-            ("libmcl.a", include_bytes!(env!("RVR_ECC_MCL_STATICLIB"))),
-        ]
+        let mut files = vec![(
+            "librvr_openvm_ext_ecc_ffi.a",
+            include_bytes!(env!("RVR_ECC_FFI_STATICLIB")).as_slice(),
+        )];
+        if self.has_bn254() {
+            files.push((
+                "libmcl.a",
+                include_bytes!(env!("RVR_ECC_MCL_STATICLIB")).as_slice(),
+            ));
+        }
+        files
     }
 
     fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
-        vec![
-            (
-                "mcl/include/mcl/bn.h",
-                include_str!("../ffi/native/mcl/include/mcl/bn.h"),
-            ),
-            (
-                "mcl/include/mcl/bn_c384_256.h",
-                include_str!("../ffi/native/mcl/include/mcl/bn_c384_256.h"),
-            ),
-            (
-                "mcl/include/mcl/curve_type.h",
-                include_str!("../ffi/native/mcl/include/mcl/curve_type.h"),
-            ),
-        ]
+        if self.has_bn254() {
+            vec![
+                (
+                    "mcl/include/mcl/bn.h",
+                    include_str!("../ffi/native/mcl/include/mcl/bn.h"),
+                ),
+                (
+                    "mcl/include/mcl/bn_c384_256.h",
+                    include_str!("../ffi/native/mcl/include/mcl/bn_c384_256.h"),
+                ),
+                (
+                    "mcl/include/mcl/curve_type.h",
+                    include_str!("../ffi/native/mcl/include/mcl/curve_type.h"),
+                ),
+            ]
+        } else {
+            Vec::new()
+        }
     }
 
     fn extra_cflags(&self) -> Vec<String> {
-        vec!["-isystem".to_string(), "mcl/include".to_string()]
+        if self.has_bn254() {
+            vec![
+                "-isystem".to_string(),
+                "mcl/include".to_string(),
+                "-Wno-global-constructors".to_string(),
+            ]
+        } else {
+            Vec::new()
+        }
     }
 
     fn requires_cxx_linker(&self) -> bool {
-        true
+        self.has_bn254()
     }
 
     fn uses_memory_wrappers(&self) -> bool {

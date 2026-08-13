@@ -25,10 +25,18 @@ enum Error {
 // uses MCL only for Ethereum's BN254 curve, so initialize and verify it once.
 static MCL_INITIALIZED: OnceLock<Result<(), Error>> = OnceLock::new();
 
+unsafe extern "C" {
+    fn mclBn_getCurveType() -> i32;
+}
+
+fn is_initialized() -> bool {
+    let curve = unsafe { mclBn_getCurveType() };
+    curve == CurveType::SNARK as i32 && mcl_rust::get_fp_serialized_size() as usize == FQ_BYTES
+}
+
 fn initialize() -> Result<(), Error> {
     *MCL_INITIALIZED.get_or_init(|| {
-        (mcl_rust::init(CurveType::SNARK)
-            && mcl_rust::get_fp_serialized_size() as usize == FQ_BYTES)
+        (is_initialized() || (mcl_rust::init(CurveType::SNARK) && is_initialized()))
             .then_some(())
             .ok_or(Error::Initialization)
     })
