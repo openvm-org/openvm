@@ -312,11 +312,22 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_k256(RvState* state,
 
   secp256k1_ge base;
   secp256k1_ge_set_xy(&base, &x, &y);
-  secp256k1_gej base_jacobian;
-  secp256k1_gej_set_ge(&base_jacobian, &base);
-
   secp256k1_gej product;
-  secp256k1_ecmult(&product, &base_jacobian, &q, NULL);
+  if (secp256k1_ge_eq_var(&base, &secp256k1_ge_const_g)) {
+    secp256k1_ecmult(&product, NULL, &secp256k1_scalar_zero, &q);
+  } else {
+    secp256k1_ge neg_g;
+    secp256k1_ge_neg(&neg_g, &secp256k1_ge_const_g);
+    if (secp256k1_ge_eq_var(&base, &neg_g)) {
+      secp256k1_scalar neg_q;
+      secp256k1_scalar_negate(&neg_q, &q);
+      secp256k1_ecmult(&product, NULL, &secp256k1_scalar_zero, &neg_q);
+    } else {
+      secp256k1_gej base_jacobian;
+      secp256k1_gej_set_ge(&base_jacobian, &base);
+      secp256k1_ecmult(&product, &base_jacobian, &q, NULL);
+    }
+  }
 
   secp256k1_ge affine;
   secp256k1_ge_set_gej(&affine, &product);

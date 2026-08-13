@@ -14,14 +14,19 @@ openvm::init!("openvm_init_ec_mul_k256.rs");
 openvm::entry!(main);
 
 /// Reference implementation: the windowed table, called directly.
-fn windowed_reference(scalar: Secp256k1Scalar) -> Secp256k1Point {
-    let base = [Secp256k1Point::GENERATOR];
+fn windowed_reference(
+    base: Secp256k1Point,
+    scalar: Secp256k1Scalar,
+) -> Secp256k1Point {
+    let base = [base];
     let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&base, 4);
     table.windowed_mul(&[scalar])
 }
 
 pub fn main() {
     let g = Secp256k1Point::GENERATOR;
+    let neg_g = Secp256k1Point::NEG_GENERATOR;
+    let generic = g.double();
 
     // The intrinsic requires an odd scalar below the group order. Its digits are all `+-1`, whose
     // sum is odd for any choice of signs, so an even scalar has no digit assignment at all. These
@@ -31,15 +36,20 @@ pub fn main() {
         let scalar = Secp256k1Scalar::from_u64(k);
         let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
-        let via_chip = unsafe { g.mul_scalar_le_unchecked(&bytes) };
-        assert_eq!(via_chip, windowed_reference(scalar));
+        for base in [g.clone(), neg_g.clone(), generic.clone()] {
+            let via_chip = unsafe { base.mul_scalar_le_unchecked(&bytes) };
+            assert_eq!(via_chip, windowed_reference(base, scalar.clone()));
+        }
     }
 
     // `mul_scalar` discharges that precondition, so it is total. Zero and the even scalars below
     // route through the `n - k` substitution and a negation.
     for k in [0u64, 1, 2, 3, 255, 0x1234_5678, u32::MAX as u64] {
         let scalar = Secp256k1Scalar::from_u64(k);
-        assert_eq!(g.mul_scalar(&scalar), windowed_reference(scalar));
+        assert_eq!(
+            g.mul_scalar(&scalar),
+            windowed_reference(g.clone(), scalar)
+        );
     }
 
     // `mul_scalar` accepts an unreduced scalar, which is what callers get from
@@ -47,7 +57,7 @@ pub fn main() {
     let unreduced = Secp256k1Scalar::from_be_bytes_unchecked(&hex!(
         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364146"
     ));
-    let expected = windowed_reference(Secp256k1Scalar::from_u64(5));
+    let expected = windowed_reference(g.clone(), Secp256k1Scalar::from_u64(5));
     assert_eq!(g.mul_scalar(&unreduced), expected);
 
     // `mul_scalar` also accepts the identity, which the ladder cannot handle for a nonzero scalar.
