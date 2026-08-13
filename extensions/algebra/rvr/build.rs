@@ -65,6 +65,10 @@ fn build_mcl_staticlib(manifest_dir: &Path, out_dir: &Path) -> PathBuf {
 
     let mut config = cmake::Config::new(&mcl);
     config.out_dir(out_dir.join("mcl"));
+    if env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("x86_64") {
+        // MCL compiles LLVM IR directly on non-x86 targets and requires clang++.
+        config.define("CMAKE_CXX_COMPILER", "clang++");
+    }
     let installed = config.build();
     let archive = installed.join("lib/libmcl.a");
     assert!(
