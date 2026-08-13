@@ -4,7 +4,7 @@ use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
-    weierstrass::{IntrinsicCurve, WeierstrassPoint},
+    weierstrass::{IntrinsicCurve, ScalarMul, WeierstrassPoint},
     CyclicGroup, Group,
 };
 use openvm_ecc_sw_macros::sw_declare;
@@ -62,16 +62,11 @@ impl IntrinsicCurve for Secp256k1 {
     {
         assert_eq!(coeffs.len(), bases.len());
 
-        // heuristic
-        if coeffs.len() < 25 {
-            let mut acc = <Self::Point as Group>::IDENTITY;
-            for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-                acc += base.mul_scalar(coeff);
-            }
-            acc
-        } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+        let mut acc = <Self::Point as Group>::IDENTITY;
+        for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+            acc += base.mul_scalar(coeff);
         }
+        acc
     }
 }
 
@@ -123,6 +118,12 @@ impl Secp256k1Point {
         } else {
             -product
         }
+    }
+}
+
+impl ScalarMul<Secp256k1Scalar> for Secp256k1Point {
+    fn mul_scalar(&self, scalar: &Secp256k1Scalar) -> Self {
+        Secp256k1Point::mul_scalar(self, scalar)
     }
 }
 

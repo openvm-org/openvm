@@ -144,6 +144,16 @@ pub trait FromCompressed<Coordinate> {
         Self: core::marker::Sized;
 }
 
+/// Scalar multiplication for MSM bases, implemented by the curve guest libraries as a total
+/// wrapper around the `EC_MUL` intrinsic. [`msm`](crate::msm) relies on this to compute per-base
+/// products.
+pub trait ScalarMul<Scalar>: Sized {
+    /// Returns `scalar * self`. Implementations discharge the intrinsic's preconditions
+    /// (identity base, zero/even/unreduced scalar); on a curve with a cofactor, `self` lying in
+    /// the prime-order subgroup remains a caller precondition.
+    fn mul_scalar(&self, scalar: &Scalar) -> Self;
+}
+
 /// A trait for elliptic curves that bridges the openvm types and external types with
 /// CurveArithmetic etc. Implement this for external curves with corresponding openvm point and
 /// scalar types.

@@ -2,9 +2,12 @@ extern crate alloc;
 
 use core::ops::Neg;
 
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{
+    weierstrass::{IntrinsicCurve, ScalarMul},
+    CyclicGroup, Group,
+};
 
 mod fp12;
 mod fp2;
@@ -71,6 +74,55 @@ impl CyclicGroup for G1Affine {
     };
 }
 
+impl G1Affine {
+    /// Returns `scalar * self`, for any scalar representation and any point in the prime-order
+    /// subgroup.
+    ///
+    /// [`G1Affine::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar that
+    /// is odd and below the group order; this discharges those preconditions. Unlike BN254, the
+    /// curve has a nontrivial cofactor, so subgroup membership stays a caller precondition (see
+    /// the note on [`G1Affine`]): for a point outside the subgroup, reducing the scalar changes
+    /// the product and the intrinsic's ladder is not total.
+    ///
+    /// `Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
+    /// `from_be_bytes_unchecked` do not reduce; reduction is exact because the order of a
+    /// subgroup point divides the group order.
+    pub fn mul_scalar(&self, scalar: &Scalar) -> Self {
+        if self.is_identity() {
+            return <Self as Group>::IDENTITY;
+        }
+        let mut reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
+        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
+        if reduced == Scalar::ZERO {
+            return <Self as Group>::IDENTITY;
+        }
+
+        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
+        // every choice of signs; an even scalar therefore has no digit assignment and would produce
+        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
+        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
+        // negating the result recovers the product.
+        let odd = reduced.as_le_bytes()[0] & 1 == 1;
+        if !odd {
+            reduced.neg_assign();
+        }
+        let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
+        // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
+        let product = unsafe { self.mul_scalar_le_unchecked(&bytes) };
+        if odd {
+            product
+        } else {
+            -product
+        }
+    }
+}
+
+impl ScalarMul<Scalar> for G1Affine {
+    fn mul_scalar(&self, scalar: &Scalar) -> Self {
+        G1Affine::mul_scalar(self, scalar)
+    }
+}
+
 pub struct Bls12_381;
 
 impl IntrinsicCurve for Bls12_381 {
@@ -78,7 +130,13 @@ impl IntrinsicCurve for Bls12_381 {
     type Point = G1Affine;
 
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        openvm_ecc_guest::msm(coeffs, bases)
+        assert_eq!(coeffs.len(), bases.len());
+
+        let mut acc = <Self::Point as Group>::IDENTITY;
+        for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+            acc += base.mul_scalar(coeff);
+        }
+        acc
     }
 }
 

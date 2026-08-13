@@ -6,7 +6,7 @@ use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve},
+    weierstrass::{IntrinsicCurve, ScalarMul},
     CyclicGroup, Group,
 };
 use openvm_ecc_sw_macros::sw_declare;
@@ -105,6 +105,12 @@ impl G1Affine {
     }
 }
 
+impl ScalarMul<Scalar> for G1Affine {
+    fn mul_scalar(&self, scalar: &Scalar) -> Self {
+        G1Affine::mul_scalar(self, scalar)
+    }
+}
+
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
 // but not special E(Fp2) intrinsics.
 mod g2 {
@@ -197,19 +203,13 @@ impl IntrinsicCurve for Bn254 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
-        if let ([coeff], [base]) = (coeffs, bases) {
-            return base.mul_scalar(coeff);
-        }
+        assert_eq!(coeffs.len(), bases.len());
 
-        // heuristic
-        if coeffs.len() < 25 {
-            // BN254(Fp) is of prime order by Weil conjecture:
-            // <https://hackmd.io/@jpw/bn254#Subgroup-check-for-mathbb-G_1>
-            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
-            table.windowed_mul(coeffs)
-        } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+        let mut acc = <Self::Point as Group>::IDENTITY;
+        for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+            acc += base.mul_scalar(coeff);
         }
+        acc
     }
 }
 

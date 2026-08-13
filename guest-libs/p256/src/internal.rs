@@ -4,7 +4,7 @@ use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
-    weierstrass::{IntrinsicCurve, WeierstrassPoint},
+    weierstrass::{IntrinsicCurve, ScalarMul, WeierstrassPoint},
     CyclicGroup, Group,
 };
 use openvm_ecc_sw_macros::sw_declare;
@@ -63,15 +63,11 @@ impl IntrinsicCurve for NistP256 {
     {
         assert_eq!(coeffs.len(), bases.len());
 
-        if coeffs.len() < 25 {
-            let mut acc = <Self::Point as Group>::IDENTITY;
-            for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-                acc += base.mul_scalar(coeff);
-            }
-            acc
-        } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+        let mut acc = <Self::Point as Group>::IDENTITY;
+        for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+            acc += base.mul_scalar(coeff);
         }
+        acc
     }
 }
 
@@ -121,5 +117,11 @@ impl P256Point {
         } else {
             -product
         }
+    }
+}
+
+impl ScalarMul<P256Scalar> for P256Point {
+    fn mul_scalar(&self, scalar: &P256Scalar) -> Self {
+        P256Point::mul_scalar(self, scalar)
     }
 }
