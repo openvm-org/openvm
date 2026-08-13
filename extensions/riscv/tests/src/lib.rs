@@ -1879,6 +1879,21 @@ mod tests {
     }
 
     #[test]
+    fn test_critical_section() -> Result<()> {
+        let config = test_rv64im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "critical-section", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
+        )?;
+        air_test(Rv64ImBuilder, config, exe);
+        Ok(())
+    }
+
+    #[test]
     fn test_tiny_mem_test() -> Result<()> {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(

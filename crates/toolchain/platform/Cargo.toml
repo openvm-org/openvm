@@ -16,7 +16,9 @@ openvm-riscv-guest.workspace = true
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
 [target.'cfg(all(target_arch = "riscv64", any(target_os = "none", target_os = "openvm")))'.dependencies]
-critical-section = { workspace = true, optional = true }
+# Provides the single-threaded guest implementation required by no_std crates
+# that use the `critical-section` interface (for example, `once_cell`).
+critical-section.workspace = true
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
 ], optional = true }
@@ -31,7 +33,6 @@ default = []
 entrypoint = []
 export-libm = ["dep:libm"]
 heap-embedded-alloc = [
-    "dep:critical-section",
     "dep:embedded-alloc",
     "rust-runtime",
 ]
