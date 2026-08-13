@@ -8,6 +8,10 @@
 #include "launcher.cuh"
 
 static constexpr uint32_t EC_MUL_PREPARE_THREADS = 8;
+static_assert(
+    EC_MUL_BATCH_INVERT_THREADS == 32,
+    "projective batch inversion requires one full warp"
+);
 
 template <uint32_t K, size_t BLOCKS, bool ZERO_A>
 static __global__ void ec_mul_projective_prepare_pass(
