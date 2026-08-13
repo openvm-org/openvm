@@ -2530,7 +2530,7 @@ mod ec_mul_tests {
             GpuPostflightProgram::upload(&execution.program, &MemoryConfig::default(), &device_ctx)
                 .unwrap();
         let (transcript, replay_plan) = gpu_program
-            .upload_history_for_test(&execution.program, &history, Some(0))
+            .upload_isolated_history_for_test(&execution.program, &history)
             .unwrap();
         let error = harness
             .gpu_chip
