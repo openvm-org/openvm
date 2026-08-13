@@ -2,6 +2,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     convert::TryInto,
     mem::size_of,
+    sync::OnceLock,
 };
 
 use openvm_circuit::{
@@ -14,7 +15,9 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, POSEIDON2_WIDTH};
+use openvm_poseidon2_air::{
+    p3_baby_bear::BabyBear, Poseidon2Config, Poseidon2SubChip, POSEIDON2_WIDTH,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{Poseidon2PermuteExecutor, NUM_OP_ROWS_PER_INS};
@@ -56,15 +59,33 @@ pub(super) fn decompose_bytes<F: PrimeField32>(
 /// the two can never diverge. If the periphery were ever configured with non-default constants,
 /// host execution would silently disagree with the AIR and verification would fail.
 ///
-/// NOTE: the subchip is rebuilt on each call (deferral's `deferral_poseidon2_chip` does the same);
-/// this is unavoidable for the `#[create_handler]` interpreter path, which has no access to
-/// executor state. Trace generation reuses the periphery chip's cached subchip, so no allocation is
-/// added to the proving hot path beyond the interpreter/preflight compute.
+/// The subchip is built once per process and shared by every caller: both the `#[create_handler]`
+/// interpreter path (which has no access to executor state) and [`PreflightExecutor::execute`],
+/// which runs once per `PERMUTE` instruction on the proving hot path. Building it is not cheap
+/// relative to the permutation it performs — `Poseidon2SubChip::new` allocates an
+/// `Arc<Poseidon2SubAir>` and the `Vec`s returned by `to_external_internal_constants` — so it must
+/// not happen per instruction.
+///
+/// [`PreflightExecutor::execute`]: openvm_circuit::arch::PreflightExecutor::execute
 pub(super) fn poseidon2_permute_bytes<F: VmField>(
     preimage: &[u8; POSEIDON2_STATE_BYTES],
 ) -> [u8; POSEIDON2_STATE_BYTES] {
-    let subchip = Poseidon2SubChip::<F, SBOX_REGISTERS>::new(Poseidon2Config::default().constants);
-    decompose_bytes(subchip.permute(recompose_words(preimage)))
+    debug_assert_eq!(
+        F::ORDER_U32,
+        BabyBear::ORDER_U32,
+        "poseidon2 round constants are BabyBear-specific, so F must be BabyBear"
+    );
+    decompose_bytes(host_permuter().permute(recompose_words::<BabyBear>(preimage)))
+}
+
+/// The permutation is computed in BabyBear regardless of `F`: `Poseidon2Config::default()` is built
+/// from `default_baby_bear_rc()`, so BabyBear is the only field for which the host result matches
+/// the periphery AIR. This mirrors `openvm_circuit::arch::hasher::poseidon2::vm_poseidon2_hasher`,
+/// which pins the same assumption. Fixing the field is also what lets the subchip be cached in a
+/// `static`.
+fn host_permuter() -> &'static Poseidon2SubChip<BabyBear, SBOX_REGISTERS> {
+    static HOST_PERMUTER: OnceLock<Poseidon2SubChip<BabyBear, SBOX_REGISTERS>> = OnceLock::new();
+    HOST_PERMUTER.get_or_init(|| Poseidon2SubChip::new(Poseidon2Config::default().constants))
 }
 
 impl Poseidon2PermuteExecutor {

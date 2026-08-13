@@ -1,0 +1,23 @@
+[workspace]
+[package]
+name = "openvm-poseidon2-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-poseidon2 = { path = "../../" }
+
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+
+[features]
+default = []
+std = ["serde/std", "openvm/std"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"
+# strip = "symbols"

@@ -1,0 +1,37 @@
+[package]
+name = "openvm-poseidon2"
+description = "OpenVM library for poseidon2"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-poseidon2-guest = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+p3-baby-bear = { workspace = true }
+p3-field = { workspace = true }
+p3-symmetric = { workspace = true }
+
+[dev-dependencies]
+openvm-instructions = { path = "../../crates/toolchain/instructions", default-features = false }
+openvm-sdk = { path = "../../crates/sdk", default-features = false }
+openvm-stark-sdk = { workspace = true }
+openvm-circuit = { path = "../../crates/vm", default-features = false, features = ["test-utils", "parallel"] }
+openvm-transpiler = { path = "../../crates/toolchain/transpiler", default-features = false }
+openvm-poseidon2-transpiler = { path = "../../extensions/poseidon2/transpiler", default-features = false }
+openvm-poseidon2-circuit = { path = "../../extensions/poseidon2/circuit", default-features = false }
+openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
+openvm-toolchain-tests = { path = "../../crates/toolchain/tests", default-features = false }
+eyre = { workspace = true }
+rand = { workspace = true }
+
+[features]
+default = []
+aot = ["openvm-sdk/aot"]
+# Internal feature for testing only.
+cuda = ["openvm-poseidon2-circuit/cuda"]
