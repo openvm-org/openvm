@@ -263,7 +263,9 @@ static __device__ __noinline__ bool ec_mul_projective_batch_invert_chunked(
     const uint32_t lane = threadIdx.x;
     const size_t first_state = lane * EC_MUL_BATCH_INVERT_ITEMS_PER_THREAD;
     uint32_t work[2 * K + 2], chunk_product[K], prefix[K], suffix[K], other[K];
-    uint32_t inv_total[K], inv_chunk[K], running[K], zi[K], tmp[K];
+    // Every lane evaluates the shuffle operand, even though lane 31 is selected as the source.
+    // Keep non-source lanes initialized to avoid architecture-dependent reads of indeterminate data.
+    uint32_t inv_total[K] = {}, inv_chunk[K], running[K], zi[K], tmp[K];
     EcMulProjectiveField<K> f{s, work};
 
     // Each lane builds inclusive prefixes for one contiguous 16-state chunk. Contiguous chunks
