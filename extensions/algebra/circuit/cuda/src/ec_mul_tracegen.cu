@@ -9,7 +9,7 @@
 
 static constexpr uint32_t EC_MUL_PREPARE_THREADS = 8;
 
-template <uint32_t K, size_t BLOCKS>
+template <uint32_t K, size_t BLOCKS, bool ZERO_A>
 static __global__ void ec_mul_projective_prepare_pass(
     const EcMulTraceInput<BLOCKS> *projection,
     size_t num_instructions,
@@ -23,7 +23,9 @@ static __global__ void ec_mul_projective_prepare_pass(
     FieldExprProg s;
     load_prog(blob, s);
     uint32_t *rows = projective + instruction * EC_MUL_PROJECTIVE_INSTRUCTION_WORDS<K>;
-    ec_mul_projective_build_projective<K>(s, projection[instruction], rows, error);
+    ec_mul_projective_build_projective<K, BLOCKS, ZERO_A>(
+        s, projection[instruction], rows, error
+    );
 }
 
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
@@ -104,6 +106,7 @@ static int launch_ec_mul_projective_vars(
     const void *projection,
     size_t num_instructions,
     const uint32_t *blob,
+    bool zero_a,
     uint32_t *vars,
     size_t vars_words,
     uint32_t *projective,
@@ -129,9 +132,17 @@ static int launch_ec_mul_projective_vars(
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
     auto [instruction_grid, instruction_block] =
         kernel_launch_params(num_instructions, EC_MUL_PREPARE_THREADS);
-    ec_mul_projective_prepare_pass<K, BLOCKS><<<instruction_grid, instruction_block, 0, stream>>>(
-        inputs, num_instructions, blob, projective, error
-    );
+    if (zero_a) {
+        ec_mul_projective_prepare_pass<K, BLOCKS, true>
+            <<<instruction_grid, instruction_block, 0, stream>>>(
+                inputs, num_instructions, blob, projective, error
+            );
+    } else {
+        ec_mul_projective_prepare_pass<K, BLOCKS, false>
+            <<<instruction_grid, instruction_block, 0, stream>>>(
+                inputs, num_instructions, blob, projective, error
+            );
+    }
     if (int result = CHECK_KERNEL(); result != 0) return result;
     ec_mul_projective_batch_invert_pass<K, NUM_LIMBS, BLOCKS>
         <<<static_cast<uint32_t>(num_instructions), EC_MUL_BATCH_INVERT_THREADS, 0, stream>>>(
@@ -157,6 +168,7 @@ extern "C" int _ec_mul_projective_generate_vars(
     const void *projection,
     size_t num_instructions,
     const uint32_t *blob,
+    bool zero_a,
     uint32_t *vars,
     size_t vars_words,
     uint32_t *projective,
@@ -169,14 +181,14 @@ extern "C" int _ec_mul_projective_generate_vars(
 ) {
     if (num_limbs == 32 && blocks == 8) {
         return launch_ec_mul_projective_vars<8, 32, 8>(
-            projection, num_instructions, blob, vars, vars_words, projective, projective_words,
-            scratch, scratch_words, aux_words, error, stream
+            projection, num_instructions, blob, zero_a, vars, vars_words, projective,
+            projective_words, scratch, scratch_words, aux_words, error, stream
         );
     }
     if (num_limbs == 48 && blocks == 12) {
         return launch_ec_mul_projective_vars<12, 48, 12>(
-            projection, num_instructions, blob, vars, vars_words, projective, projective_words,
-            scratch, scratch_words, aux_words, error, stream
+            projection, num_instructions, blob, zero_a, vars, vars_words, projective,
+            projective_words, scratch, scratch_words, aux_words, error, stream
         );
     }
     return cudaErrorInvalidValue;
