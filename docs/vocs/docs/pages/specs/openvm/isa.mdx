@@ -28,7 +28,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | Name                         | Description                                                        | Constraints                                                          |
 | ---------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `F`                          | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
-| `PC_BITS`                    | The number of bits in the program counter.                         | Fixed to 30.                                                         |
+| `PC_BITS`                    | The number of bits in the byte program counter.                    | Fixed to 32.                                                         |
 | `DEFAULT_PC_STEP`            | The default program counter step size.                             | Fixed to 4.                                                          |
 | `LIMB_BITS`                  | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                          |
 | `ADDR_SPACE_OFFSET`          | The index of the first writable address space.                     | Fixed to 1.                                                          |
@@ -81,9 +81,10 @@ OpenVM operates under the Harvard architecture, where program code is stored sep
 memory. The program code is loaded as read-only memory (ROM) in the VM state prior to execution, and it remains
 immutable throughout the execution.
 
-Program code is a map from `[0, 2^PC_BITS)` to the space of instructions `F^{NUM_OPERANDS + 1}`, where
+Program code is a map from 4-byte-aligned addresses in `[0, 2^PC_BITS)` to the space of instructions
+`F^{NUM_OPERANDS + 1}`, where
 
-- `PC_BITS = 30`
+- `PC_BITS = 32`
 - `NUM_OPERANDS = 7`.
 
 Instructions will typically only exist at a subset of the indices in `[0, 2^PC_BITS)`.
@@ -104,9 +105,9 @@ case, `d` is suggested to be set to `1`. This also may not be constrained, thoug
 
 ### Program Counter
 
-There is a single special purpose register `pc` for the program counter of type `F` which stores the location of the
-instruction being executed. During execution, the program counter must always be a valid program address, meaning that it
-is an element in the range `[0, 2^PC_BITS)` where the program code is defined.
+There is a single special purpose register `pc` for the 32-bit byte program counter. In the proof
+system it is represented by two little-endian 16-bit limbs rather than one element of `F`. During
+execution, the program counter must be a 4-byte-aligned address where program code is defined.
 
 ### Data Memory
 
@@ -381,20 +382,19 @@ For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 
 | BLTU_RV64  | `a,b,c,1,1`      | `if(u64([a:8]_1) < u64([b:8]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                   |
 | BGEU_RV64  | `a,b,c,1,1`      | `if(u64([a:8]_1) >= u64([b:8]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
 | JAL_RV64   | `a,_,c,1,_,f`    | `if(f!=0) [a:8]_1 = sign_extend(decompose(pc+4)); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `i32(c)`must be in`[-2^24, 2^24)`.                                                                                                                                                                    |
-| JALR_RV64  | `a,b,c,1,_,f,g` | `if(f!=0) [a:8]_1 = zero_extend(decompose(pc+4)); pc = F::from_u32(u32([b:8]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `u32([b:8]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
+| JALR_RV64  | `a,b,c,1,_,f,g` | `if(f!=0) [a:8]_1 = zero_extend(decompose(pc+4)); pc = (u32([b:8]_1) + sign_extend(decompose(c)[0:2], g) as u32) & !1`. The resulting target must be 4-byte aligned. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
 | LUI_RV64   | `a,_,c,1,_,1`    | `[a:8]_1 = sign_extend(u32(c) << 12)`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                |
 | AUIPC_RV64 | `a,_,c,1,_,_`    | `[a:8]_1 = sign_extend(decompose(pc) + (decompose(c) << 8))`. Here `i32(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                        |
 
-For branch and JAL_RV64 instructions, the instructions assume that the operand `i32(c)` is in `[-2^24,2^24)`. The
-assignment `pc += c` is done as field elements.
-In valid programs, the `from_pc` is always in `[0, 2^PC_BITS)`. We will only use base field `F` satisfying
-`2^PC_BITS + 2*2^24 < F::modulus()` so `to_pc = from_pc + c` is only valid if `i32(from_pc) + i32(c)` is in
-`[0, 2^PC_BITS)`.
+For branch and JAL_RV64 instructions, the instructions assume that operand `i32(c)` is in
+`[-2^24,2^24)`. The byte-address result must remain in the 32-bit address space, be 4-byte
+aligned, and identify an instruction in program ROM. The circuit obtains that 32-bit identity
+from the two-limb program lookup rather than requiring the byte pc to fit in one base-field
+element.
 
 For JALR_RV64, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. Then it is added to the register value `u32([b:8]_1)` (the upper 4 bytes of the 64-bit register must be zero), where 32-bit overflow is ignored. The instruction is only valid if the resulting `i32` is in range `[0, 2^PC_BITS)`. The
-result is then cast to `u32` and then to `F` and assigned to `pc`.
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. Then it is added to the register value `u32([b:8]_1)` (the upper 4 bytes of the 64-bit register must be zero), where 32-bit overflow is ignored. RISC-V clears bit 0 of the result, and OpenVM additionally requires the resulting instruction address to be 4-byte aligned.
 
 For LUI_RV64, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
 For AUIPC_RV64, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.

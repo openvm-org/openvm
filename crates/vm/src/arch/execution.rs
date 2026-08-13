@@ -238,7 +238,8 @@ pub struct E2PreCompute<DATA> {
     Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, StructReflection, Serialize, Deserialize,
 )]
 pub struct ExecutionState<T> {
-    pub pc: T,
+    /// Little-endian 16-bit limbs of the byte program counter.
+    pub pc: [T; 2],
     pub timestamp: T,
 }
 
@@ -281,9 +282,9 @@ pub enum PcIncOrSet<T> {
 }
 
 impl<T> ExecutionState<T> {
-    pub fn new(pc: impl Into<T>, timestamp: impl Into<T>) -> Self {
+    pub fn from_pc_limbs(pc: [impl Into<T>; 2], timestamp: impl Into<T>) -> Self {
         Self {
-            pc: pc.into(),
+            pc: pc.map(Into::into),
             timestamp: timestamp.into(),
         }
     }
@@ -292,22 +293,42 @@ impl<T> ExecutionState<T> {
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let mut next = || iter.next().unwrap();
         Self {
-            pc: next(),
+            pc: [next(), next()],
             timestamp: next(),
         }
     }
 
-    pub fn flatten(self) -> [T; 2] {
-        [self.pc, self.timestamp]
+    pub fn flatten(self) -> [T; 3] {
+        let [pc_lo, pc_hi] = self.pc;
+        [pc_lo, pc_hi, self.timestamp]
     }
 
     pub fn get_width() -> usize {
-        2
+        3
     }
 
     pub fn map<U: Clone, F: Fn(T) -> U>(self, function: F) -> ExecutionState<U> {
         ExecutionState::from_iter(&mut self.flatten().map(function).into_iter())
     }
+}
+
+impl ExecutionState<u32> {
+    pub fn new(pc: u32, timestamp: u32) -> Self {
+        Self::from_byte_pc(pc, timestamp)
+    }
+
+    pub fn from_byte_pc(pc: u32, timestamp: u32) -> Self {
+        Self::from_pc_limbs(openvm_instructions::program::pc_to_limbs(pc), timestamp)
+    }
+
+    pub fn byte_pc(&self) -> u32 {
+        openvm_instructions::program::limbs_to_pc(self.pc)
+    }
+}
+
+#[inline(always)]
+pub fn compose_pc<T: PrimeCharacteristicRing>(pc: [T; 2]) -> T {
+    pc[0].clone() + pc[1].clone() * T::from_u32(1 << 16)
 }
 
 impl ExecutionBus {
@@ -319,11 +340,24 @@ impl ExecutionBus {
         prev_state: ExecutionState<AB::Expr>,
         timestamp_change: impl Into<AB::Expr>,
     ) {
-        let next_state = ExecutionState {
-            pc: prev_state.pc.clone() + AB::F::ONE,
-            timestamp: prev_state.timestamp.clone() + timestamp_change.into(),
-        };
-        self.execute(builder, enabled, prev_state, next_state);
+        let enabled = enabled.into();
+        self.inner.receive(
+            builder,
+            [
+                compose_pc(prev_state.pc.clone()),
+                prev_state.timestamp.clone(),
+            ],
+            enabled.clone(),
+        );
+        self.inner.send(
+            builder,
+            [
+                compose_pc(prev_state.pc)
+                    + AB::F::from_u32(openvm_instructions::program::DEFAULT_PC_STEP),
+                prev_state.timestamp + timestamp_change.into(),
+            ],
+            enabled,
+        );
     }
 
     /// Caller must constrain that `enabled` is boolean.
@@ -337,12 +371,18 @@ impl ExecutionBus {
         let enabled = enabled.into();
         self.inner.receive(
             builder,
-            [prev_state.pc.into(), prev_state.timestamp.into()],
+            [
+                compose_pc(prev_state.pc.map(Into::into)),
+                prev_state.timestamp.into(),
+            ],
             enabled.clone(),
         );
         self.inner.send(
             builder,
-            [next_state.pc.into(), next_state.timestamp.into()],
+            [
+                compose_pc(next_state.pc.map(Into::into)),
+                next_state.timestamp.into(),
+            ],
             enabled,
         );
     }
@@ -367,17 +407,21 @@ impl ExecutionBridge {
         pc_kind: impl Into<PcIncOrSet<AB::Expr>>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: match pc_kind.into() {
-                PcIncOrSet::Set(to_pc) => to_pc,
-                PcIncOrSet::Inc(pc_inc) => from_state.pc.clone().into() + pc_inc,
-            },
+            pc: [
+                match pc_kind.into() {
+                    PcIncOrSet::Set(to_pc) => to_pc,
+                    PcIncOrSet::Inc(pc_inc) => {
+                        compose_pc(from_state.pc.clone().map(Into::into)) + pc_inc
+                    }
+                },
+                AB::Expr::ZERO,
+            ],
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
     }
 
-    /// The `pc` in [ExecutionState] is a pc index (see `pc_to_idx`), so advancing to the next
-    /// instruction increments it by one.
+    /// Advance the composed byte PC by one instruction (`DEFAULT_PC_STEP` bytes).
     pub fn execute_and_increment_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
@@ -386,7 +430,11 @@ impl ExecutionBridge {
         timestamp_change: impl Into<AB::Expr>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + AB::Expr::ONE,
+            pc: [
+                compose_pc(from_state.pc.clone().map(Into::into))
+                    + AB::Expr::from_u32(openvm_instructions::program::DEFAULT_PC_STEP),
+                AB::Expr::ZERO,
+            ],
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -440,7 +488,7 @@ impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
 /// However they all have no AIR constraints besides advancing the pc by
-/// [`DEFAULT_PC_STEP`](openvm_instructions::program::DEFAULT_PC_STEP) bytes (one pc index).
+/// [`DEFAULT_PC_STEP`](openvm_instructions::program::DEFAULT_PC_STEP) bytes (one instruction).
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///

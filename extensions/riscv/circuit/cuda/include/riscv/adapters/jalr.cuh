@@ -70,7 +70,7 @@ struct JalrAdapter {
 
         COL_WRITE_VALUE(row, JalrAdapterCols, rs1_ptr, rs1_ptr);
         COL_WRITE_VALUE(row, JalrAdapterCols, from_state.timestamp, from_timestamp);
-        COL_WRITE_VALUE(row, JalrAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
+        COL_WRITE_PC(row, JalrAdapterCols, from_state.pc, from_pc);
     }
 
     __device__ void fill_trace_row(RowSlice row, JalrAdapterRecord record) {

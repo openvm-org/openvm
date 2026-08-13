@@ -66,9 +66,9 @@ fn run_phantom_test<E>(
     for _ in 0..num_nops {
         tester.execute_with_pc(executor, preflight, &nop, pc);
         let new_state = tester.execution_final_state();
-        assert_eq!(pc + 4, new_state.pc);
+        assert_eq!(pc + 4, new_state.byte_pc());
         assert_eq!(2, new_state.timestamp);
-        pc = new_state.pc;
+        pc = new_state.byte_pc();
     }
 }
 

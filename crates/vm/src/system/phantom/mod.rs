@@ -45,7 +45,7 @@ pub struct PhantomAir {
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
-    pub pc: T,
+    pub pc: [T; 2],
     #[serde(with = "BigArray")]
     pub operands: [T; NUM_PHANTOM_OPERANDS],
     pub timestamp: T,
@@ -76,9 +76,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
             .execute_and_increment_or_set_pc(
                 self.phantom_opcode.to_field::<AB::F>(),
                 operands,
-                ExecutionState::<AB::Expr>::new(pc, timestamp),
+                ExecutionState::<AB::Expr>::from_pc_limbs(pc, timestamp),
                 AB::Expr::ONE,
-                PcIncOrSet::Inc(AB::Expr::ONE),
+                PcIncOrSet::Inc(AB::Expr::from_u32(
+                    openvm_instructions::program::DEFAULT_PC_STEP,
+                )),
             )
             .eval(builder, is_valid);
     }

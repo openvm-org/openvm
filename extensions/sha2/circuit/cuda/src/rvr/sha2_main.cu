@@ -52,7 +52,8 @@ static __device__ __forceinline__ void sha2_main_replay_row_body(
 
     SHA2_MAIN_WRITE_INSTR(V, row, is_enabled, Fp::one());
     SHA2_MAIN_WRITE_INSTR(V, row, from_state.timestamp, input.timestamp);
-    SHA2_MAIN_WRITE_INSTR(V, row, from_state.pc, ::program::pc_to_idx(input.from_pc));
+    SHA2_MAIN_WRITE_INSTR(V, row, from_state.pc[0], ::program::pc_lo(input.from_pc));
+    SHA2_MAIN_WRITE_INSTR(V, row, from_state.pc[1], ::program::pc_hi(input.from_pc));
     SHA2_MAIN_WRITE_INSTR(V, row, dst_reg_ptr, input.dst_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, state_reg_ptr, input.state_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, input_reg_ptr, input.input_reg_ptr);

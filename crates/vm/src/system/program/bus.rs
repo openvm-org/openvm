@@ -28,14 +28,14 @@ impl ProgramBus {
     pub fn lookup_instruction<AB: InteractionBuilder, E: Into<AB::Expr>>(
         &self,
         builder: &mut AB,
-        pc: impl Into<AB::Expr>,
+        pc: [impl Into<AB::Expr>; 2],
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = E>,
         enabled: impl Into<AB::Expr>,
     ) {
         self.inner.lookup_key(
             builder,
-            [pc.into(), opcode.into()].into_iter().chain(
+            pc.into_iter().map(Into::into).chain([opcode.into()]).chain(
                 operands
                     .into_iter()
                     .map(Into::into)

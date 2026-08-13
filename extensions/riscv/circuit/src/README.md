@@ -270,15 +270,15 @@ Given:
 This circuit proves that:
 
 - Each limb of `rd` is in the range `[0, 2^BYTE_BITS)`
-- If `opcode` is `jal`, then (with `pc` and `to_pc` as pc *indices*, i.e. byte pcs divided by 4,
+- If `opcode` is `jal`, then (with `pc` represented by two little-endian u16 byte-address limbs
   and `imm` a 4-byte-aligned byte offset)
-  - `to_pc == pc + imm / 4`
-  - `compose(rd) == 4 * (pc + 1)`, the byte return address; the low u16 limb of `rd` is a
-    multiple of 4 whose quotient is in the range `[0, 2^PC_IDX_LOW_BITS)`, which pins the
-    decomposition and keeps the return address inside the 32-bit PC address space
+  - `to_pc == compose(pc) + imm`
+  - `compose(rd) == compose(pc) + 4`, the byte return address; the low u16 limb of `rd` is a
+    multiple of 4 whose quotient is in the range `[0, 2^14)`, which pins the decomposition and
+    keeps the return address inside the 32-bit PC address space
   - The upper register cells of `rd` are zero (return addresses are zero-extended)
 - If `opcode` is `lui`, then
-  - `to_pc == pc + 1`
+  - `to_pc == compose(pc) + 4`
   - `compose(rd) == imm * 2^12`, sign-extended into the upper register cells
 
 #### 7. [JALR](./jalr/core.rs)
@@ -289,20 +289,19 @@ Given:
 - `rd` is the decomposition of the result
 - `imm` is the immediate value
 - `to_pc_least_sig_bit` is the least significant bit of `compose(rs1) + imm`
-- `to_pc_limbs` is the decomposition of the destination pc *index* (the byte target divided
-  by 4), where `to_pc_limbs[0]` is its low `PC_IDX_LOW_BITS` bits and `to_pc_limbs[1]` its
-  high u16 limb
+- `to_pc_limbs` is the little-endian u16 decomposition of the destination byte address after
+  clearing bit 0
 
 This circuit proves that:
 
-- `to_pc_least_sig_bit + 4 * compose(to_pc_limbs) == compose(rs1) + imm` as a low-32-bit
+- `to_pc_least_sig_bit + compose(to_pc_limbs) == compose(rs1) + imm` as a low-32-bit
   addition with boolean carries; a byte target with bit 1 set (misaligned) is unsatisfiable
-- The destination pc index is `compose(to_pc_limbs)`, so the least significant bit of the
+- The destination byte pc is `compose(to_pc_limbs)`, so the least significant bit of the
   byte target is cleared as required by `jalr`
-- `compose(rd) == 4 * (pc + 1)`, the byte return address (with `pc` the pc index); the low
-  u16 limb of `rd` is a multiple of 4 whose quotient is in the range `[0, 2^PC_IDX_LOW_BITS)`
+- `compose(rd) == compose(pc) + 4`, the byte return address; the low u16 limb of `rd` is a
+  multiple of 4 whose quotient is in the range `[0, 2^14)`
 - The high u16 limb of `rd` and `to_pc_limbs[1]` are in the range `[0, 2^16)`
-- `to_pc_limbs[0]` is in the range `[0, 2^PC_IDX_LOW_BITS)`
+- `to_pc_limbs[0] / 4` is in the range `[0, 2^14)`
 
 #### 8. [AUIPC](./auipc/core.rs)
 
@@ -310,16 +309,15 @@ Given:
 
 - `rd` is the decomposition of the result
 - `imm_limbs` are the decomposition of the immediate value
-- `pc_limbs` are the decomposition of the program counter
+- `pc_limbs` are the little-endian u16 decomposition of the byte program counter
 
 This circuit proves that:
 
 - `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^8` mod `2^32`, with negative
   results sign-extended into the upper register cells and results at or above `2^32`
   unsatisfiable
-- `compose(pc_limbs) == 4 * pc`, the byte pc for the pc index `pc`: the low u16 limb is
-  `4 * pc_idx_low` with `pc_idx_low` in the range `[0, 2^PC_IDX_LOW_BITS)` and the high u16
-  limb in the range `[0, 2^16)`
+- The PC limbs come directly from the program lookup; no division-by-four PC representation or
+  extra AUIPC PC decomposition columns are used
 
 #### 9. Less Than
 

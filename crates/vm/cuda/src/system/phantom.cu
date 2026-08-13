@@ -4,7 +4,7 @@
 static constexpr uint32_t NUM_PHANTOM_OPERANDS = 3;
 
 template <typename T> struct PhantomCols {
-    T pc;
+    T pc[2];
     T operands[NUM_PHANTOM_OPERANDS];
     T timestamp;
     T is_valid;
@@ -66,7 +66,7 @@ __global__ void phantom_replay_tracegen(
     uint32_t operands[NUM_PHANTOM_OPERANDS] = {
         instruction.words[1], instruction.words[2], instruction.words[3]
     };
-    COL_WRITE_VALUE(row, PhantomCols, pc, ::program::pc_to_idx(from.pc));
+    COL_WRITE_PC(row, PhantomCols, pc, from.pc);
     COL_WRITE_ARRAY(row, PhantomCols, operands, operands);
     COL_WRITE_VALUE(row, PhantomCols, timestamp, from.timestamp);
     COL_WRITE_VALUE(row, PhantomCols, is_valid, Fp::one());

@@ -14,7 +14,7 @@ use openvm_circuit::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, VmOpcode,
 };
@@ -280,7 +280,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
     adapter_row.rd_ptr = F::from_u32(rd_ptr);
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
+    adapter_row.from_state.pc = pc_to_limbs(from_pc).map(F::from_u32);
 
     Ok(AluReplay {
         inputs,
@@ -388,7 +388,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     adapter_row.rd_ptr = F::from_u32(rd_ptr);
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
+    adapter_row.from_state.pc = pc_to_limbs(from_pc).map(F::from_u32);
 
     Ok(AluReplay {
         inputs,
@@ -465,7 +465,7 @@ fn replay_branch<F: PrimeField32, M>(
     adapter_row.rs_val = rs_vals.map(|pointer| ptr_to_u16_limbs(pointer).map(F::from_u16));
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
+    adapter_row.from_state.pc = pc_to_limbs(from_pc).map(F::from_u32);
     Ok(BranchReplay {
         inputs,
         taken,

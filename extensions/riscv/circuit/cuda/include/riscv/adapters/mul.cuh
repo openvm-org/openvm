@@ -58,6 +58,6 @@ __device__ inline void MultAdapter::fill_trace_row(RowSlice row, MultAdapterReco
     COL_WRITE_VALUE(row, MultAdapterCols, rs2_ptr, record.rs2_ptr);
     COL_WRITE_VALUE(row, MultAdapterCols, rs1_ptr, record.rs1_ptr);
     COL_WRITE_VALUE(row, MultAdapterCols, rd_ptr, record.rd_ptr);
-    COL_WRITE_VALUE(row, MultAdapterCols, from_state.pc, ::program::pc_to_idx(record.from_pc));
+    COL_WRITE_PC(row, MultAdapterCols, from_state.pc, record.from_pc);
     COL_WRITE_VALUE(row, MultAdapterCols, from_state.timestamp, record.from_timestamp);
 }

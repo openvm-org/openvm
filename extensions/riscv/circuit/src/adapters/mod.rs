@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS, PC_STEP_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_stark_backend::{
@@ -53,14 +53,6 @@ pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const PTR_U16_LIMBS: usize = WORD_NUM_LIMBS / 2;
-/// Number of low bits of a pc index (`pc / DEFAULT_PC_STEP`) packed into the low u16 limb of the
-/// corresponding byte pc: the low limb is `DEFAULT_PC_STEP * (pc_idx % 2^PC_IDX_LOW_BITS)`.
-pub const PC_IDX_LOW_BITS: usize = U16_BITS - PC_STEP_BITS;
-/// Number of high bits of a pc index; equals the high u16 limb of the corresponding byte pc.
-pub const PC_IDX_HIGH_BITS: usize = PC_BITS - PC_IDX_LOW_BITS;
-// The pc-arithmetic chips (JAL/JALR/AUIPC) assume a byte pc is exactly two u16 limbs with the
-// high limb equal to the high PC_IDX_HIGH_BITS bits of the pc index.
-const _: () = assert!(PC_IDX_HIGH_BITS == U16_BITS && PC_BITS + PC_STEP_BITS == 32);
 /// Bit width covered by [`PTR_U16_LIMBS`].
 pub const PTR_BITS: usize = U16_BITS * PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a

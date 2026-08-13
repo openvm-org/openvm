@@ -18,7 +18,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_stark_backend::{
@@ -194,9 +194,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreByteAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
-        let to_pc = ctx.to_pc.unwrap_or(local_cols.from_state.pc + AB::F::ONE);
         self.execution_bridge
-            .execute(
+            .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
                     local_cols.rs2_ptr.into(),
@@ -208,15 +207,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreByteAdapterAir {
                     local_cols.imm_sign.into(),
                 ],
                 local_cols.from_state,
-                ExecutionState {
-                    pc: to_pc,
-                    timestamp: timestamp + AB::F::from_usize(timestamp_delta),
-                },
+                AB::F::from_usize(timestamp_delta),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, is_valid);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         let local_cols: &StoreByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
@@ -342,7 +339,7 @@ impl StoreByteAdapterFiller {
         adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
         adapter_row.rs1_ptr = F::from_u8(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-        adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
+        adapter_row.from_state.pc = pc_to_limbs(from_pc).map(F::from_u32);
 
         Ok((read_data.value, prev_data, shift_amount))
     }

@@ -84,9 +84,9 @@ pub struct VmPvs<F> {
     /// CONNECTOR PVS
     //////////////////////////////////////////////////////////////////////
     /// Starting PC value of the program (or segment) run.
-    pub initial_pc: F,
+    pub initial_pc: [F; 2],
     /// Final PC value of the program (or segment) run.
-    pub final_pc: F,
+    pub final_pc: [F; 2],
     /// Exit code of the program run.
     pub exit_code: F,
     /// Boolean flag to determine whether or not this segment terminated the program.

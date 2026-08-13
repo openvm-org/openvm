@@ -57,7 +57,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &MultiplicationCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         builder.assert_bool(cols.is_valid);

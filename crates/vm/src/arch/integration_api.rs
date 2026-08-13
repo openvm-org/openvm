@@ -43,7 +43,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     );
 
     /// Return the `from_pc` expression.
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2];
 }
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
@@ -56,7 +56,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I>;
 
     /// The offset the opcodes by this chip start from.

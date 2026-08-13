@@ -113,7 +113,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &DeferralCallCoreCols<_> = local_core.borrow();
         builder.assert_bool(cols.is_valid);
@@ -582,12 +582,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 ],
                 cols.from_state,
                 AB::Expr::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (openvm_instructions::program::DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         let cols: &DeferralCallAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }

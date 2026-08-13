@@ -1,7 +1,7 @@
 #pragma once
 
 template <typename T> struct ProgramExecutionCols {
-    T pc;
+    T pc[2];
     T opcode;
     T a;
     T b;

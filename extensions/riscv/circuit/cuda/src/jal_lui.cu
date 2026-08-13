@@ -42,9 +42,8 @@ struct JalLuiCore {
             );
             range_checker.add_count(imm_low_4, LUI_IMM_LOW_BITS);
         } else {
-            // The return address is DEFAULT_PC_STEP-aligned with a PC_IDX_LOW_BITS-bit
-            // quotient in the low limb.
-            range_checker.add_count(rd_lo >> PC_STEP_BITS, PC_IDX_LOW_BITS);
+            // The return address is DEFAULT_PC_STEP-aligned; range-check its low-limb quotient.
+            range_checker.add_count(rd_lo / DEFAULT_PC_STEP, U16_BITS - 2);
         }
 
         uint32_t rd_u16[2] = {rd_lo, rd_hi};

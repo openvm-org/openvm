@@ -48,7 +48,7 @@ struct BranchAdapter {
             rs1_prev_timestamp,
             from_timestamp
         );
-        COL_WRITE_VALUE(row, BranchAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
+        COL_WRITE_PC(row, BranchAdapterCols, from_state.pc, from_pc);
         COL_WRITE_VALUE(row, BranchAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, BranchAdapterCols, rs1_ptr, rs1_ptr);
         COL_WRITE_VALUE(row, BranchAdapterCols, rs2_ptr, rs2_ptr);

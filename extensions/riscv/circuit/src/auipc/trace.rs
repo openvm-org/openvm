@@ -4,16 +4,13 @@ use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
     utils::next_power_of_two_or_zero,
 };
-use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
-    LocalOpcode,
-};
+use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{run_auipc, AuipcChip, AuipcCoreCols};
 use crate::adapters::{
-    sext32_to_u64, RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, PC_IDX_LOW_BITS, U16_BITS,
+    sext32_to_u64, RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, U16_BITS,
 };
 
 /// Generates the AUIPC trace directly from immutable preflight history.
@@ -57,19 +54,12 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let imm_bytes = immediate.to_le_bytes();
         let imm_low_8 = imm_bytes[0];
         let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << BYTE_BITS);
-        let pc_idx = pc_to_idx(from_pc);
-        let pc_idx_low = pc_idx & ((1 << PC_IDX_LOW_BITS) - 1);
-        let pc_high = pc_idx >> PC_IDX_LOW_BITS;
         let rd_lo = rd_data[0];
         let rd_hi = rd_data[1];
         let is_sign_extend = rd_data[2] != 0;
         let imm_sign = (imm_high_16 >> (U16_BITS - 1)) & 1;
         let imm_magnitude_check = 2u32 * imm_high_16 - imm_sign * (1 << U16_BITS);
 
-        chip.inner
-            .range_checker_chip
-            .add_count(pc_idx_low, PC_IDX_LOW_BITS);
-        chip.inner.range_checker_chip.add_count(pc_high, U16_BITS);
         chip.inner
             .range_checker_chip
             .add_count(imm_low_8 as u32, BYTE_BITS);
@@ -90,7 +80,6 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         core_row.is_sign_extend = F::from_bool(is_sign_extend);
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
-        core_row.pc_high = F::from_u32(pc_high);
         core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
         Ok(())
     })?;

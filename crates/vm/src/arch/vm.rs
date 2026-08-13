@@ -2051,8 +2051,8 @@ where
         return Err(VmVerificationError::ProofNotFound);
     }
     let mut prev_final_memory_root = None;
-    let mut prev_final_pc = None;
-    let mut start_pc = None;
+    let mut prev_final_pc: Option<[Val<E::SC>; 2]> = None;
+    let mut start_pc: Option<[Val<E::SC>; 2]> = None;
     let mut initial_memory_root = None;
     let mut program_commit = None;
 
@@ -2094,8 +2094,12 @@ where
                     // Check initial pc matches the previous final pc.
                     if pvs.initial_pc != prev_final_pc.unwrap() {
                         return Err(VmVerificationError::InitialPcMismatch {
-                            initial: pvs.initial_pc.as_canonical_u32(),
-                            prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                            initial: openvm_instructions::program::limbs_to_pc(
+                                pvs.initial_pc.map(|x| x.as_canonical_u32()),
+                            ),
+                            prev_final: openvm_instructions::program::limbs_to_pc(
+                                prev_final_pc.unwrap().map(|x| x.as_canonical_u32()),
+                            ),
                         });
                     }
                 } else {

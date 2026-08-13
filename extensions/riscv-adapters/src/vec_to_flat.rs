@@ -196,7 +196,7 @@ where
         self.0.eval(builder, local, inner_ctx)
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         self.0.get_from_pc(local)
     }
 }
@@ -349,7 +349,7 @@ where
         self.0.eval(builder, local, inner_ctx)
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         self.0.get_from_pc(local)
     }
 }

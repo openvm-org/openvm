@@ -6,7 +6,10 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::{program::pc_to_idx, LocalOpcode};
+use openvm_instructions::{
+    program::{DEFAULT_PC_STEP, PC_LIMB_BITS},
+    LocalOpcode,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
@@ -29,6 +32,7 @@ mod tests;
 /// When a program hasn't terminated. There is no constraints on the exit code.
 /// But we will use this value when generating the proof.
 pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
+const ALIGNED_PC_LOW_LIMB_BITS: usize = PC_LIMB_BITS - DEFAULT_PC_STEP.ilog2() as usize;
 
 #[derive(Debug, Clone, Copy, ColumnsAir)]
 #[columns_via(ConnectorCols<u8>)]
@@ -44,9 +48,9 @@ pub struct VmConnectorAir {
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
     /// The initial PC of this segment.
-    pub initial_pc: F,
+    pub initial_pc: [F; 2],
     /// The final PC of this segment.
-    pub final_pc: F,
+    pub final_pc: [F; 2],
     /// The exit code of the whole program. 0 means exited normally. This is only meaningful when
     /// `is_terminate` is 1.
     pub exit_code: F,
@@ -116,7 +120,7 @@ impl VmConnectorAir {
 #[derive(Debug, Copy, Clone, AlignedBorrow, StructReflection, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ConnectorCols<T> {
-    pub pc: T,
+    pub pc: [T; 2],
     pub timestamp: T,
     pub is_terminate: T,
     pub exit_code: T,
@@ -130,7 +134,7 @@ pub struct ConnectorCols<T> {
 impl<T: Copy> ConnectorCols<T> {
     fn map<F>(self, f: impl Fn(T) -> F) -> ConnectorCols<F> {
         ConnectorCols {
-            pc: f(self.pc),
+            pc: self.pc.map(&f),
             timestamp: f(self.timestamp),
             is_terminate: f(self.is_terminate),
             exit_code: f(self.exit_code),
@@ -139,9 +143,10 @@ impl<T: Copy> ConnectorCols<T> {
         }
     }
 
-    fn flatten(&self) -> [T; 6] {
+    fn flatten(&self) -> [T; 7] {
         [
-            self.pc,
+            self.pc[0],
+            self.pc[1],
             self.timestamp,
             self.is_terminate,
             self.exit_code,
@@ -169,8 +174,24 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             is_terminate,
         } = builder.public_values().borrow();
 
-        builder.when_transition().assert_eq(local.pc, initial_pc);
-        builder.when_transition().assert_eq(next.pc, final_pc);
+        for i in 0..2 {
+            builder
+                .when_transition()
+                .assert_eq(local.pc[i], initial_pc[i]);
+            builder.when_transition().assert_eq(next.pc[i], final_pc[i]);
+        }
+        // Boundary PCs must be aligned as well as 32-bit. This makes composing the two limbs on
+        // the execution bus injective for BabyBear: congruent u32 values can differ only by p or
+        // 2p, and neither difference is divisible by four.
+        let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
+        for pc in [local.pc, next.pc] {
+            self.range_bus
+                .range_check(pc[0] * pc_step_inv, ALIGNED_PC_LOW_LIMB_BITS)
+                .eval(builder, local.is_begin);
+            self.range_bus
+                .range_check(pc[1], PC_LIMB_BITS)
+                .eval(builder, local.is_begin);
+        }
         builder
             .when_transition()
             .when(next.is_terminate)
@@ -197,8 +218,8 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         self.execution_bus.execute(
             builder,
             local.is_begin, // 1 only if these are [0th, 1st] and not [1st, 0th]
-            ExecutionState::new(next.pc, next.timestamp),
-            ExecutionState::new(local.pc, local.timestamp),
+            ExecutionState::from_pc_limbs(next.pc, next.timestamp),
+            ExecutionState::from_pc_limbs(local.pc, local.timestamp),
         );
         self.program_bus.lookup_instruction(
             builder,
@@ -245,11 +266,10 @@ impl VmConnectorChip {
         }
     }
 
-    /// `state.pc` is a byte program counter; it is stored (and later exposed as a public value)
-    /// as a pc index, matching the circuit representation of the pc.
+    /// Store and expose the byte program counter as little-endian u16 limbs.
     pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
-            pc: pc_to_idx(state.pc),
+            pc: state.pc,
             timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,
@@ -258,11 +278,10 @@ impl VmConnectorChip {
         });
     }
 
-    /// `state.pc` is a byte program counter; it is stored (and later exposed as a public value)
-    /// as a pc index, matching the circuit representation of the pc.
+    /// Store and expose the byte program counter as little-endian u16 limbs.
     pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
-            pc: pc_to_idx(state.pc),
+            pc: state.pc,
             timestamp: state.timestamp,
             is_terminate: exit_code.is_some() as u32,
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
@@ -297,6 +316,9 @@ where
             self.range_checker.add_count(timestamp_low_limb, low_bits);
             self.range_checker
                 .add_count(state.timestamp >> range_max_bits, high_bits);
+            self.range_checker
+                .add_count(state.pc[0] / DEFAULT_PC_STEP, ALIGNED_PC_LOW_LIMB_BITS);
+            self.range_checker.add_count(state.pc[1], PC_LIMB_BITS);
 
             state.map(Val::<SC>::from_u32)
         });

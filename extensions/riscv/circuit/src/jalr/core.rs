@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_STEP_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalrOpcode::{self, *};
@@ -19,8 +19,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    address_add_imm, expand_to_block, ptr_to_u16_limbs, u32_to_u16_block, PC_IDX_LOW_BITS,
-    PTR_U16_LIMBS, U16_BITS,
+    address_add_imm, expand_to_block, ptr_to_u16_limbs, u32_to_u16_block, PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -34,8 +33,7 @@ pub struct JalrCoreCols<T> {
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
-    /// Limbs of the target pc *index* (`to_pc / DEFAULT_PC_STEP`) after the low-bit split:
-    /// `[to_pc_idx % 2^PC_IDX_LOW_BITS, to_pc_idx >> PC_IDX_LOW_BITS]`.
+    /// Little-endian u16 limbs of the byte target after clearing bit 0.
     pub to_pc_limbs: [T; 2],
     pub imm_sign: T,
 }
@@ -66,7 +64,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &JalrCoreCols<AB::Var> = (*local_core).borrow();
         let JalrCoreCols::<AB::Var> {
@@ -87,19 +85,15 @@ where
         let pc_step = AB::F::from_u32(DEFAULT_PC_STEP);
         let pc_step_inv = pc_step.inverse();
 
-        // The byte return address is 4 * (from_pc + 1), where `from_pc` is a pc index.
-        let least_sig_limb = (from_pc + AB::F::ONE) * pc_step - composed;
+        // The byte return address is `from_pc + 4`.
+        let least_sig_limb = compose_pc(from_pc.map(Into::into)) + pc_step - composed;
 
         // rd_data_low is the low-32-bit decomposition of the byte return address.
         let rd_data_low: [AB::Expr; PTR_U16_LIMBS] = [least_sig_limb.clone(), rd_high[0].into()];
 
-        // The low limb is DEFAULT_PC_STEP-aligned with a PC_IDX_LOW_BITS-bit quotient (which
-        // also implies it is a u16), and the high limb is a u16. This pins the decomposition:
-        // the composed pc index rd_high[0] * 2^PC_IDX_LOW_BITS + least_sig_limb / 4 is
-        // < 2^PC_BITS < p, so it equals from_pc + 1 over the integers.
-        // Assumes only from_pc in [0, 2^PC_BITS) is allowed by program bus.
+        // The low limb is DEFAULT_PC_STEP-aligned and both return-address limbs are u16.
         self.range_bus
-            .range_check(least_sig_limb.clone() * pc_step_inv, PC_IDX_LOW_BITS)
+            .range_check(least_sig_limb.clone() * pc_step_inv, U16_BITS - 2)
             .eval(builder, is_valid);
         self.range_bus
             .range_check(rd_data_low[1].clone(), U16_BITS)
@@ -109,13 +103,11 @@ where
 
         let inv = AB::F::from_u32(1 << U16_BITS).inverse();
 
-        // Constrain to_pc_least_sig_bit + 4 * to_pc_limbs = rs1 + imm as a
-        // low-32-bit addition with two u16 limbs, where to_pc_limbs decompose the target pc
-        // *index*. RISC-V explicitly clears the least significant bit of the JALR target;
-        // a target with bit 1 set (misaligned) makes the low carry non-boolean, so it is
-        // unprovable.
+        // Constrain `to_pc_least_sig_bit + to_pc` to rs1 + imm as a low-32-bit addition.
+        // RISC-V clears bit 0; requiring the resulting low limb to be divisible by four also
+        // rejects targets with bit 1 set.
         builder.assert_bool(to_pc_least_sig_bit);
-        let carry = (rs1[0] + imm - to_pc_limbs[0] * pc_step - to_pc_least_sig_bit) * inv;
+        let carry = (rs1[0] + imm - to_pc_limbs[0] - to_pc_least_sig_bit) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
 
         // Sign-extend the 16-bit immediate into the high u16 limb.
@@ -124,15 +116,14 @@ where
         builder.when(is_valid).assert_bool(carry.clone());
         builder.when(is_valid).assert_eq(carry, imm_sign);
 
-        // The limb widths bound the target pc index by 2^PC_BITS, i.e. the byte target by
-        // 2^32; together with the boolean carries this pins the integer value of rs1 + imm.
+        // The limb widths bind the target to the 32-bit byte-PC domain.
         self.range_bus
             .range_check(to_pc_limbs[1], U16_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(to_pc_limbs[0], PC_IDX_LOW_BITS)
+            .range_check(to_pc_limbs[0] * pc_step_inv, U16_BITS - 2)
             .eval(builder, is_valid);
-        let to_pc = to_pc_limbs[0] + to_pc_limbs[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
+        let to_pc = to_pc_limbs[0] + to_pc_limbs[1] * AB::F::from_u32(1 << U16_BITS);
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
         let rs1_data = expand_to_block(&rs1);
@@ -184,23 +175,17 @@ impl JalrFiller {
         to_pc: u32,
         rd_data: [u16; BLOCK_FE_WIDTH],
     ) {
-        // `to_pc` is the raw byte target; bit 0 is cleared per RISC-V and bit 1 is zero
-        // (misaligned targets are rejected by `try_run_jalr`).
         debug_assert_eq!(to_pc & 0b10, 0);
-        let to_pc_idx = (to_pc & !1) >> PC_STEP_BITS;
-        let to_pc_limbs = [
-            to_pc_idx & ((1 << PC_IDX_LOW_BITS) - 1),
-            to_pc_idx >> PC_IDX_LOW_BITS,
-        ];
+        let to_pc_limbs = ptr_to_u16_limbs(to_pc & !1).map(u32::from);
         self.range_checker_chip
-            .add_count(to_pc_limbs[0], PC_IDX_LOW_BITS);
+            .add_count(to_pc_limbs[0] / DEFAULT_PC_STEP, U16_BITS - 2);
         self.range_checker_chip.add_count(to_pc_limbs[1], U16_BITS);
 
         let rd_low_u16_lo = rd_data[0];
         let rd_low_u16_hi = rd_data[1];
 
         self.range_checker_chip
-            .add_count(u32::from(rd_low_u16_lo) >> PC_STEP_BITS, PC_IDX_LOW_BITS);
+            .add_count(u32::from(rd_low_u16_lo) / DEFAULT_PC_STEP, U16_BITS - 2);
         self.range_checker_chip
             .add_count(rd_low_u16_hi as u32, U16_BITS);
 

@@ -3,7 +3,6 @@ use std::{borrow::BorrowMut, mem::size_of};
 use air::DummyExecutionInteractionCols;
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::program::pc_to_idx;
 use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
@@ -23,7 +22,7 @@ pub use cuda::*;
 pub struct ExecutionTester<F: Field> {
     pub bus: ExecutionBus,
     pub records: Vec<DummyExecutionInteractionCols<F>>,
-    /// The raw byte-pc states of the last execution (the records hold pc indices).
+    /// The byte-PC states of the last execution.
     pub last_states: Option<(ExecutionState<u32>, ExecutionState<u32>)>,
 }
 
@@ -36,20 +35,16 @@ impl<F: PrimeField32> ExecutionTester<F> {
         }
     }
 
-    /// The states carry byte pcs; the execution bus carries pc indices.
+    /// The states carry byte pcs as two little-endian u16 limbs.
     pub fn execute(
         &mut self,
         initial_state: ExecutionState<u32>,
         final_state: ExecutionState<u32>,
     ) {
-        let to_idx = |state: ExecutionState<u32>| ExecutionState {
-            pc: pc_to_idx(state.pc),
-            timestamp: state.timestamp,
-        };
         self.records.push(DummyExecutionInteractionCols {
             count: F::NEG_ONE, // send
-            initial_state: to_idx(initial_state).map(F::from_u32),
-            final_state: to_idx(final_state).map(F::from_u32),
+            initial_state: initial_state.map(F::from_u32),
+            final_state: final_state.map(F::from_u32),
         });
         self.last_states = Some((initial_state, final_state));
     }
@@ -57,13 +52,13 @@ impl<F: PrimeField32> ExecutionTester<F> {
     /// Byte pc of the last execution's initial state. Returned as a `u32` because byte pcs
     /// span the full 32-bit range and do not fit in a field element.
     pub fn last_from_pc(&self) -> u32 {
-        self.last_states.unwrap().0.pc
+        self.last_states.unwrap().0.byte_pc()
     }
 
     /// Byte pc of the last execution's final state. Returned as a `u32` because byte pcs
     /// span the full 32-bit range and do not fit in a field element.
     pub fn last_to_pc(&self) -> u32 {
-        self.last_states.unwrap().1.pc
+        self.last_states.unwrap().1.byte_pc()
     }
 }
 

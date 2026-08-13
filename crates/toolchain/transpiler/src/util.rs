@@ -106,7 +106,7 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
 /// Create a new [`Instruction`] from a B-type instruction.
 ///
 /// The immediate stays a byte offset; the AIR scales it by `inverse(DEFAULT_PC_STEP)` because
-/// circuit-visible pc values are pc indices. A misaligned offset therefore has no sound
+/// circuit-visible pc values are aligned byte addresses. A misaligned offset therefore has no sound
 /// encoding, but it cannot be rejected here: the transpiler decodes every word of `.text`,
 /// including embedded data and never-taken branches that merely *look* like misaligned
 /// branches. Misalignment is enforced where the target is actually used — the interpreter

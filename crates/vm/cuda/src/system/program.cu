@@ -19,7 +19,7 @@ __global__ void program_cached_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, rec.pc);
+        COL_WRITE_ARRAY(row, ProgramExecutionCols, pc, rec.pc);
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, rec.opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, rec.a);
         COL_WRITE_VALUE(row, ProgramExecutionCols, b, rec.b);
@@ -29,8 +29,9 @@ __global__ void program_cached_tracegen(
         COL_WRITE_VALUE(row, ProgramExecutionCols, f, rec.f);
         COL_WRITE_VALUE(row, ProgramExecutionCols, g, rec.g);
     } else {
-        // The pc column contains pc indices; records are already converted host-side.
-        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, program::pc_to_idx(pc_base) + idx);
+        uint32_t pc = pc_base + idx * program::DEFAULT_PC_STEP;
+        uint32_t pc_limbs[program::PC_LIMBS] = {program::pc_lo(pc), program::pc_hi(pc)};
+        COL_WRITE_ARRAY(row, ProgramExecutionCols, pc, pc_limbs);
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, terminate_opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, Fp::zero());
         COL_WRITE_VALUE(row, ProgramExecutionCols, b, Fp::zero());

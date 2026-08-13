@@ -168,7 +168,9 @@ where
         // unconstrained.
         let mut when_section_transition = builder.when(next.section_idx);
 
-        when_section_transition.assert_eq(local.from_state.pc, next.from_state.pc);
+        for i in 0..2 {
+            when_section_transition.assert_eq(local.from_state.pc[i], next.from_state.pc[i]);
+        }
         when_section_transition.assert_eq(local.from_state.timestamp, next.from_state.timestamp);
         when_section_transition.assert_eq(local.rd_ptr, next.rd_ptr);
         when_section_transition.assert_eq(local.rs_ptr, next.rs_ptr);
@@ -450,7 +452,7 @@ where
                 local.from_state,
                 (local.section_idx * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS))
                     + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + 2),
-                (1, None),
+                (openvm_instructions::program::DEFAULT_PC_STEP, None),
             )
             .eval(builder, local.is_last);
     }

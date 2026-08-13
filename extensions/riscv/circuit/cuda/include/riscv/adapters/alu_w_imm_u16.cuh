@@ -19,7 +19,7 @@ template <typename T> struct BaseAluWImmU16AdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
-static_assert(sizeof(BaseAluWImmU16AdapterCols<uint8_t>) == 15);
+static_assert(sizeof(BaseAluWImmU16AdapterCols<uint8_t>) == 16);
 
 struct BaseAluWImmU16AdapterRecord {
     uint32_t from_pc;
@@ -82,7 +82,7 @@ struct BaseAluWImmU16Adapter {
         COL_WRITE_VALUE(
             row, BaseAluWImmU16AdapterCols, from_state.timestamp, from_timestamp
         );
-        COL_WRITE_VALUE(row, BaseAluWImmU16AdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
+        COL_WRITE_PC(row, BaseAluWImmU16AdapterCols, from_state.pc, from_pc);
     }
 
     __device__ void fill_trace_row(RowSlice row, BaseAluWImmU16AdapterRecord record) {

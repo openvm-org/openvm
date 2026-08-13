@@ -236,6 +236,7 @@ impl GpuPostflightPlan {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // Used by CUDA integration tests, which are not built in every feature set.
     pub(super) const fn connector_boundary_for_test(&self) -> GpuPostflightBoundary {
         let (from, to, exit_code) = self.connector_boundary();
         GpuPostflightBoundary::new(from, to, exit_code)

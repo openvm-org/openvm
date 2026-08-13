@@ -5,16 +5,14 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_STEP_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalLuiOpcode::{self, JAL, LUI};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{get_signed_imm, run_jal_lui, JalLuiChip, JalLuiCoreCols, LUI_IMM_LOW_BITS};
-use crate::adapters::{
-    CondRdWriteAdapterCols, CondRdWriteAdapterFiller, PC_IDX_LOW_BITS, U16_BITS,
-};
+use crate::adapters::{CondRdWriteAdapterCols, CondRdWriteAdapterFiller, U16_BITS};
 
 /// Generates the JAL/LUI trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
@@ -91,7 +89,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             if is_jal {
                 chip.inner
                     .range_checker_chip
-                    .add_count((rd_lo as u32) >> PC_STEP_BITS, PC_IDX_LOW_BITS);
+                    .add_count((rd_lo as u32) / DEFAULT_PC_STEP, U16_BITS - 2);
             } else {
                 let sign_check = 2u32 * (rd_hi as u32) - (is_sign_extend as u32) * (1 << U16_BITS);
                 chip.inner

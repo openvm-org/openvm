@@ -287,7 +287,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
 
     pub fn from_state(&self) -> ExecutionState<u32> {
         let first = self.history.program[0];
-        ExecutionState::new(first.pc, first.timestamp)
+        ExecutionState::from_byte_pc(first.pc, first.timestamp)
     }
 
     pub fn to_state(&self) -> ExecutionState<u32> {
@@ -296,7 +296,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             .program
             .last()
             .expect("postflight requires a final sentinel");
-        ExecutionState::new(last.pc, last.timestamp)
+        ExecutionState::from_byte_pc(last.pc, last.timestamp)
     }
 
     pub fn exit_code(&self) -> Option<u32> {

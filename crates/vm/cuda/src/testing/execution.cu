@@ -20,7 +20,7 @@ __global__ void execution_testing_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
         COL_WRITE_VALUE(row, DummyExecutionInteractionCols, count, record.count);
-        COL_WRITE_VALUE(
+        COL_WRITE_ARRAY(
             row, DummyExecutionInteractionCols, initial_state.pc, record.initial_state.pc
         );
         COL_WRITE_VALUE(
@@ -29,7 +29,7 @@ __global__ void execution_testing_tracegen(
             initial_state.timestamp,
             record.initial_state.timestamp
         );
-        COL_WRITE_VALUE(row, DummyExecutionInteractionCols, final_state.pc, record.final_state.pc);
+        COL_WRITE_ARRAY(row, DummyExecutionInteractionCols, final_state.pc, record.final_state.pc);
         COL_WRITE_VALUE(
             row, DummyExecutionInteractionCols, final_state.timestamp, record.final_state.timestamp
         );

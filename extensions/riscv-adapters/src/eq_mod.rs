@@ -208,12 +208,12 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (openvm_instructions::program::DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         let cols: &IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }

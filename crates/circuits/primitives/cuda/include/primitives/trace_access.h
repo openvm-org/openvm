@@ -71,6 +71,14 @@ struct RowSlice {
 /// Write a single value into `FIELD` of struct `STRUCT<T>` at a given row.
 #define COL_WRITE_VALUE(ROW, STRUCT, FIELD, VALUE) (ROW).write(COL_INDEX(STRUCT, FIELD), VALUE)
 
+/// Write a byte program counter as two little-endian u16 limbs.
+#define COL_WRITE_PC(ROW, STRUCT, FIELD, PC)                                                       \
+    do {                                                                                          \
+        uint32_t pc__ = (PC);                                                                     \
+        (ROW).write(COL_INDEX(STRUCT, FIELD), pc__ & UINT16_MAX);                                 \
+        (ROW).write(COL_INDEX(STRUCT, FIELD) + 1, pc__ >> 16);                                    \
+    } while (false)
+
 /// Write an array of values into the fixed‐length `FIELD` array of `STRUCT<T>` for one row.
 #define COL_WRITE_ARRAY(ROW, STRUCT, FIELD, VALUES)                                                \
     (ROW).write_array(COL_INDEX(STRUCT, FIELD), COL_ARRAY_LEN(STRUCT, FIELD), VALUES)

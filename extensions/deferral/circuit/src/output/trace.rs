@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
@@ -252,7 +252,7 @@ fn fill_output_section<F: VmField>(
         cols.is_first = F::from_bool(row_idx == 0);
         cols.is_last = F::from_bool(row_idx + 1 == num_rows);
         cols.section_idx = F::from_usize(row_idx);
-        cols.from_state.pc = F::from_u32(pc_to_idx(section.from_pc));
+        cols.from_state.pc = pc_to_limbs(section.from_pc).map(F::from_u32);
         cols.from_state.timestamp = F::from_u32(section.from_timestamp);
         cols.rd_ptr = F::from_u32(section.rd_ptr);
         cols.rs_ptr = F::from_u32(section.rs_ptr);

@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
@@ -44,7 +44,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 
         let row: &mut PhantomCols<F> =
             trace.values[row_index * width..(row_index + 1) * width].borrow_mut();
-        row.pc = F::from_u32(pc_to_idx(pc));
+        row.pc = pc_to_limbs(pc).map(F::from_u32);
         row.operands = [instruction.a, instruction.b, instruction.c];
         row.timestamp = F::from_u32(timestamp);
         row.is_valid = F::ONE;

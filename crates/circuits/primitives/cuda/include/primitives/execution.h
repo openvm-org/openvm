@@ -1,6 +1,6 @@
 #pragma once
 
 template <typename T> struct ExecutionState {
-    T pc;
+    T pc[2];
     T timestamp;
 };

@@ -21,7 +21,7 @@ pub struct ProgramCols<T> {
 #[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
 #[repr(C)]
 pub struct ProgramExecutionCols<T> {
-    pub pc: T,
+    pub pc: [T; 2],
 
     pub opcode: T,
     pub a: T,

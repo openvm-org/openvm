@@ -54,7 +54,7 @@ pub fn generate_record(
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
-    let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc], F::ZERO);
+    let padded_initial_pc = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_pc, F::ZERO);
 
     let perm = poseidon2_perm();
     let program_commit_hash = perm.permute(padded_program_commit)[..DIGEST_SIZE]

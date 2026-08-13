@@ -305,7 +305,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: pad_slice_to_poseidon2_input(
-                    &[local.child_vm_pvs.initial_pc.into()],
+                    &local.child_vm_pvs.initial_pc.map(Into::into),
                     AB::Expr::ZERO,
                 ),
                 output: local.initial_pc_hash.map(Into::into),

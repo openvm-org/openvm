@@ -15,7 +15,7 @@ template <typename T> struct JalrCoreCols {
     T rd_high[PTR_U16_LIMBS - 1];      // high u16 limb of low-32 rd
     T is_valid;                             // 1 byte
     T to_pc_least_sig_bit;                  // 1 byte
-    T to_pc_limbs[PTR_U16_LIMBS];      // target pc index after the low-bit split
+    T to_pc_limbs[PTR_U16_LIMBS];      // little-endian u16 limbs of the byte target
     T imm_sign;                             // 1 byte
 };
 
@@ -56,20 +56,17 @@ struct JalrCore {
         uint16_t rd_data[BLOCK_FE_WIDTH];
         run_jalr(from_pc, rs1_val, imm, imm_sign, to_pc, rd_data);
 
-        // to_pc_limbs decompose the target pc *index* (see the Rust filler).
-        uint32_t to_pc_idx = (to_pc & ~1u) >> PC_STEP_BITS;
-        uint32_t to_pc_limbs[2] = {
-            to_pc_idx & ((1u << PC_IDX_LOW_BITS) - 1), to_pc_idx >> PC_IDX_LOW_BITS
-        };
-        rc.add_count(to_pc_limbs[0], PC_IDX_LOW_BITS);
+        // Raw byte target after RISC-V clears bit 0, as little-endian u16 limbs.
+        uint32_t cleared_to_pc = to_pc & ~1u;
+        uint32_t to_pc_limbs[2] = {pc_lo(cleared_to_pc), pc_hi(cleared_to_pc)};
+        rc.add_count(to_pc_limbs[0] / DEFAULT_PC_STEP, U16_BITS - 2);
         rc.add_count(to_pc_limbs[1], U16_BITS);
 
         uint32_t rd_low_u16_lo = rd_data[0];
         uint32_t rd_low_u16_hi = rd_data[1];
 
-        // rd writes the byte return address 4 * (from_pc_idx + 1). The low limb is
-        // DEFAULT_PC_STEP-aligned with a PC_IDX_LOW_BITS-bit quotient; the high limb is a u16.
-        rc.add_count(rd_low_u16_lo >> PC_STEP_BITS, PC_IDX_LOW_BITS);
+        // rd writes the raw byte return address. Its low limb is aligned and the high limb is u16.
+        rc.add_count(rd_low_u16_lo / DEFAULT_PC_STEP, U16_BITS - 2);
         rc.add_count(rd_low_u16_hi, U16_BITS);
 
         uint16_t rs1_limbs[PTR_U16_LIMBS];

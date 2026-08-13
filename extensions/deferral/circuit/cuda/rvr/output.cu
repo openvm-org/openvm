@@ -432,7 +432,7 @@ __global__ void deferral_output_replay_tracegen(
     COL_WRITE_VALUE(row, DeferralOutputCols, is_first, is_first);
     COL_WRITE_VALUE(row, DeferralOutputCols, is_last, is_last);
     COL_WRITE_VALUE(row, DeferralOutputCols, section_idx, section_idx);
-    COL_WRITE_VALUE(row, DeferralOutputCols, from_state.pc, ::program::pc_to_idx(from.pc));
+    COL_WRITE_PC(row, DeferralOutputCols, from_state.pc, from.pc);
     COL_WRITE_VALUE(row, DeferralOutputCols, from_state.timestamp, from.timestamp);
     COL_WRITE_VALUE(row, DeferralOutputCols, rd_ptr, rd_ptr);
     COL_WRITE_VALUE(row, DeferralOutputCols, rs_ptr, rs_ptr);

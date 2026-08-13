@@ -14,7 +14,7 @@ __global__ void program_testing_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < num_records) {
         auto record = reinterpret_cast<ProgramExecutionCols<Fp> *>(records)[idx];
-        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, record.pc);
+        COL_WRITE_ARRAY(row, ProgramExecutionCols, pc, record.pc);
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, record.opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, record.a);
         COL_WRITE_VALUE(row, ProgramExecutionCols, b, record.b);

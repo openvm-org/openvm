@@ -13,7 +13,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     riscv::{IMM_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
 };
 use openvm_stark_backend::{
@@ -116,12 +116,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluImmAdapterAir {
                 ],
                 local.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (openvm_instructions::program::DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         let cols: &BaseAluImmAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
@@ -181,7 +181,7 @@ impl BaseAluImmAdapterFiller {
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(rd_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-        adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
+        adapter_row.from_state.pc = pc_to_limbs(from_pc).map(F::from_u32);
 
         Ok((input, output))
     }

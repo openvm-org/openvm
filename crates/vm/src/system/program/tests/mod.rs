@@ -3,7 +3,7 @@ use std::{iter, sync::Arc};
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, Program, DEFAULT_PC_STEP},
     LocalOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
@@ -62,15 +62,17 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     };
     let ctx = chip.generate_proving_ctx_with_frequencies(&filtered_exec_frequencies);
 
-    let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
+    let counter_air = DummyInteractionAir::new(10, true, bus.inner.index);
     let mut program_cells = vec![];
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = exe.program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {
+            let pc = exe.program.pc_base + index as u32 * DEFAULT_PC_STEP;
+            let [pc_lo, pc_hi] = pc_to_limbs(pc);
             program_cells.extend([
                 BabyBear::from_u32(frequency),
-                // The program bus carries pc indices; with pc_base = 0 that is the slot index.
-                BabyBear::from_usize(index),
+                BabyBear::from_u32(pc_lo),
+                BabyBear::from_u32(pc_hi),
                 instruction.opcode.to_field(),
                 instruction.a,
                 instruction.b,
@@ -84,12 +86,12 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     }
 
     // Pad program cells with zeroes to make height a power of two.
-    let width = 10;
+    let width = 11;
     let desired_height = original_height.next_power_of_two();
     let cells_to_add = (desired_height - original_height) * width;
     program_cells.extend(iter::repeat_n(BabyBear::ZERO, cells_to_add));
 
-    let counter_trace = RowMajorMatrix::new(program_cells, 10);
+    let counter_trace = RowMajorMatrix::new(program_cells, width);
     println!("trace height = {original_height}");
     println!("counter trace height = {}", Matrix::height(&counter_trace));
 
@@ -173,12 +175,14 @@ fn test_program_negative() {
     };
     let ctx = chip.generate_proving_ctx_with_frequencies(&execution_frequencies);
 
-    let counter_air = DummyInteractionAir::new(7, true, bus.inner.index);
+    let counter_air = DummyInteractionAir::new(8, true, bus.inner.index);
     let mut program_rows = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
+        let [pc_lo, pc_hi] = pc_to_limbs(pc_idx as u32 * DEFAULT_PC_STEP);
         program_rows.extend(vec![
             BabyBear::from_u32(execution_frequencies[pc_idx]),
-            BabyBear::from_usize(pc_idx * DEFAULT_PC_STEP as usize),
+            BabyBear::from_u32(pc_lo),
+            BabyBear::from_u32(pc_hi),
             instruction.opcode.to_field(),
             instruction.a,
             instruction.b,
@@ -187,7 +191,7 @@ fn test_program_negative() {
             instruction.e,
         ]);
     }
-    let width = 8;
+    let width = 9;
     let mut counter_trace = RowMajorMatrix::new(program_rows, width);
     counter_trace.row_mut(1)[1] = BabyBear::ZERO;
     let rows_used = Matrix::height(&counter_trace);

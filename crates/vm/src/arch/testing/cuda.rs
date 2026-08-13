@@ -325,7 +325,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn execution_final_state(&self) -> ExecutionState<u32> {
-        // Byte-pc state; the records themselves hold pc indices.
+        // Byte-pc state represented as two little-endian u16 limbs.
         self.execution.0.last_states.unwrap().1
     }
 

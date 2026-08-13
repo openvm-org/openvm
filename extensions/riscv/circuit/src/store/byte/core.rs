@@ -81,7 +81,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &StoreByteCoreCols<AB::Var> = (*local_core).borrow();
         self.encoder.eval(builder, &cols.selector);

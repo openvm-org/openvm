@@ -197,7 +197,6 @@ struct AuipcPrankValues {
     pub rd_data: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_low_8: Option<u32>,
     pub imm_high_16: Option<u32>,
-    pub pc_high: Option<u32>,
 }
 
 fn pack_rd_u8_limbs(limbs: [u32; WORD_NUM_LIMBS]) -> [u32; PTR_U16_LIMBS] {
@@ -249,9 +248,6 @@ fn run_negative_auipc_test(
         }
         if let Some(val) = prank_vals.imm_high_16 {
             core_cols.imm_high_16 = F::from_u32(val);
-        }
-        if let Some(val) = prank_vals.pc_high {
-            core_cols.pc_high = F::from_u32(val);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());

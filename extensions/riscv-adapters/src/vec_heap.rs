@@ -22,7 +22,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::pc_to_idx,
+    program::pc_to_limbs,
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
@@ -206,7 +206,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> VecHeapAdapterFiller<NUM_READS
                 *cols_ptr = F::from_u32(*ptr);
             });
         cols.from_state.timestamp = F::from_u32(input.from_timestamp);
-        cols.from_state.pc = F::from_u32(pc_to_idx(input.from_pc));
+        cols.from_state.pc = pc_to_limbs(input.from_pc).map(F::from_u32);
     }
 }
 
@@ -352,12 +352,12 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (openvm_instructions::program::DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc(&self, local: &[AB::Var]) -> [AB::Var; 2] {
         let cols: &VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             local.borrow();
         cols.from_state.pc

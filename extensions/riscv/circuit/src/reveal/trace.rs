@@ -5,7 +5,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     riscv::REGISTER_AS,
     LocalOpcode, PUBLIC_VALUES_AS,
 };
@@ -112,7 +112,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 
         let cols: &mut RevealCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
-        cols.from_state.pc = F::from_u32(pc_to_idx(from_pc));
+        cols.from_state.pc = pc_to_limbs(from_pc).map(F::from_u32);
         cols.from_state.timestamp = F::from_u32(from_timestamp);
         cols.base_ptr = F::from_u32(base_ptr);
         cols.base_ptr_limbs = ptr_to_field_u16_limbs(base_value);

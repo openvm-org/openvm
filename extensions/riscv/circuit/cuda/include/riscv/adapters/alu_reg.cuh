@@ -50,7 +50,7 @@ struct BaseAluRegAdapter {
         uint32_t write_prev_timestamp,
         uint16_t const (&write_prev_data)[BLOCK_FE_WIDTH]
     ) {
-        COL_WRITE_VALUE(row, BaseAluRegAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
+        COL_WRITE_PC(row, BaseAluRegAdapterCols, from_state.pc, from_pc);
         COL_WRITE_VALUE(row, BaseAluRegAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, BaseAluRegAdapterCols, rd_ptr, rd_ptr);
         COL_WRITE_VALUE(row, BaseAluRegAdapterCols, rs1_ptr, rs1_ptr);
@@ -76,7 +76,7 @@ struct BaseAluRegAdapter {
     }
 
     __device__ void fill_trace_row(RowSlice row, BaseAluRegAdapterRecord record) {
-        COL_WRITE_VALUE(row, BaseAluRegAdapterCols, from_state.pc, ::program::pc_to_idx(record.from_pc));
+        COL_WRITE_PC(row, BaseAluRegAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(
             row, BaseAluRegAdapterCols, from_state.timestamp, record.from_timestamp
         );

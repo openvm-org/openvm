@@ -8,7 +8,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, U16_BITS};
-use openvm_instructions::{program::pc_to_idx, LocalOpcode};
+use openvm_instructions::{program::pc_to_limbs, LocalOpcode};
 use openvm_riscv_circuit::adapters::{
     add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
     ptr_to_u16_limbs, u32_to_ptr_limbs,
@@ -138,7 +138,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
 
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(replay.timestamp);
-        cols.instruction.from_state.pc = F::from_u32(pc_to_idx(replay.from_pc));
+        cols.instruction.from_state.pc = pc_to_limbs(replay.from_pc).map(F::from_u32);
         *cols.instruction.dst_reg_ptr = F::from_u32(replay.dst_reg_ptr);
         *cols.instruction.state_reg_ptr = F::from_u32(replay.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(replay.input_reg_ptr);

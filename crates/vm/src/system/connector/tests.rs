@@ -2,7 +2,11 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
-    exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
+    exe::VmExe,
+    instruction::Instruction,
+    program::{pc_to_limbs, Program, MAX_ALLOWED_PC},
+    LocalOpcode,
+    SystemOpcode::TERMINATE,
 };
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing, prover::AirProvingContext, verifier::VerifierError,
@@ -98,7 +102,26 @@ fn test_vm_connector_wrong_is_terminate() {
     });
 }
 
+#[test]
+fn test_vm_connector_max_u32_pc() {
+    test_impl_at_pc(true, 0, MAX_ALLOWED_PC, |air_ctx| {
+        let pvs: &VmConnectorPvs<F> = air_ctx.public_values.as_slice().borrow();
+        let expected = pc_to_limbs(MAX_ALLOWED_PC).map(F::from_u32);
+        assert_eq!(pvs.initial_pc, expected);
+        assert_eq!(pvs.final_pc, expected);
+    });
+}
+
 fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingContext<PB>)) {
+    test_impl_at_pc(should_pass, exit_code, 0, f);
+}
+
+fn test_impl_at_pc(
+    should_pass: bool,
+    exit_code: u32,
+    pc_base: u32,
+    f: impl FnOnce(&mut AirProvingContext<PB>),
+) {
     let vm_config = SystemConfig::default();
     let engine = test_cpu_engine();
     let (mut vm, pk) =
@@ -114,19 +137,19 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         0,
     )];
 
-    let program = Program::from_instructions(&instructions);
+    let program = Program::new_without_debug_infos(&instructions, pc_base);
     let vm_exe: VmExe<F> = program.into();
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
-    let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
+    let from_state = VmState::new_with_defaults(pc_base, memory, Streams::default(), 0);
     let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
     let output = interpreter
         .execute_preflight_from_state(from_state, None)
         .unwrap();
     assert_eq!(output.history.program.len(), 2);
     assert_eq!(output.history.program[0], output.history.program[1]);
-    assert_eq!(output.history.program[0].pc, 0);
+    assert_eq!(output.history.program[0].pc, pc_base);
     assert_eq!(output.history.program[0].timestamp, 1);
     assert!(output.history.memory.accesses.is_empty());
     assert!(output.history.memory.initial_writes.is_empty());

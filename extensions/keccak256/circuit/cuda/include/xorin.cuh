@@ -11,7 +11,7 @@ inline constexpr size_t XORIN_REGISTER_READS = 3;
 
 template <typename T>
 struct XorinInstructionCols {
-    T pc;
+    T pc[2];
     T is_enabled;
     T buffer_reg_ptr;
     T input_reg_ptr;

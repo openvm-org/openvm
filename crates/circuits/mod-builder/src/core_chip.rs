@@ -138,7 +138,7 @@ where
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
         self.expr.eval(builder, local);

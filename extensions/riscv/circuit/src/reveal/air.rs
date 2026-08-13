@@ -171,7 +171,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
 
         // Bind the row to the dedicated opcode and its four memory events.
         self.execution_bridge
-            .execute(
+            .execute_and_increment_pc(
                 AB::Expr::from_usize(RevealOpcode::REVEAL.global_opcode().as_usize()),
                 [
                     cols.src_ptr.into(),
@@ -183,10 +183,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
                     cols.imm_sign.into(),
                 ],
                 cols.from_state,
-                ExecutionState {
-                    pc: cols.from_state.pc + AB::F::ONE,
-                    timestamp: timestamp + AB::F::from_usize(REVEAL_TIMESTAMP_DELTA),
-                },
+                AB::F::from_usize(REVEAL_TIMESTAMP_DELTA),
             )
             .eval(builder, is_valid);
     }

@@ -1146,7 +1146,7 @@ impl GpuPostflightPlan {
         let (endpoint_kind, resume_pc, final_timestamp) = if boundary.2.is_some() {
             (0, 0, 0)
         } else {
-            (1, boundary.1.pc, boundary.1.timestamp)
+            (1, boundary.1.byte_pc(), boundary.1.timestamp)
         };
         unsafe {
             postflight::program_index(

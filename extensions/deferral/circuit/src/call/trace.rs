@@ -14,7 +14,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    program::{pc_to_idx, DEFAULT_PC_STEP},
+    program::{pc_to_limbs, DEFAULT_PC_STEP},
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
@@ -404,7 +404,7 @@ fn fill_call_adapter<F: VmField>(
     cols.rs_ptr = F::from_u32(replay.rs_ptr);
     cols.rd_ptr = F::from_u32(replay.rd_ptr);
     cols.from_state.timestamp = F::from_u32(replay.from_timestamp);
-    cols.from_state.pc = F::from_u32(pc_to_idx(replay.from_pc));
+    cols.from_state.pc = pc_to_limbs(replay.from_pc).map(F::from_u32);
 }
 
 fn fill_call_core<F: VmField>(

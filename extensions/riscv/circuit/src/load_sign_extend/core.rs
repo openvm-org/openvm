@@ -111,7 +111,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc: [AB::Var; 2],
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadSignExtendCoreCols<AB::Var, NUM_OVERLAP_CELLS> = (*local_core).borrow();
         let width = LOAD_WIDTH / U16_CELL_SIZE;

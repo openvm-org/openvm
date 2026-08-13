@@ -134,7 +134,7 @@ impl XorinVmAir {
                     AB::Expr::from_u32(REGISTER_AS),
                     AB::Expr::from_u32(MEMORY_AS),
                 ],
-                ExecutionState::new(instruction.pc, instruction.start_timestamp),
+                ExecutionState::from_pc_limbs(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
             )
             .eval(builder, is_enabled);
