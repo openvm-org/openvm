@@ -12,9 +12,7 @@ use openvm_circuit::arch::{
     },
     MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
 };
-use openvm_circuit_primitives::bigint::utils::{
-    secp256k1_coord_prime, secp256k1_scalar_prime, secp256r1_coord_prime,
-};
+use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
 use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
@@ -34,6 +32,7 @@ use {
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
+    openvm_circuit_primitives::bigint::utils::secp256k1_scalar_prime,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
