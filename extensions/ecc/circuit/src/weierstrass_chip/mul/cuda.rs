@@ -104,6 +104,11 @@ fn is_projective_fast_path_program<const NUM_LIMBS: usize, const BLOCKS: usize>(
     serialized == &expected
 }
 
+/// The zero-`a` formulas are selected only after the complete direct-program check succeeds.
+fn is_zero_a_projective_fast_path(projective_fast_path: bool, expr: &FieldExpr) -> bool {
+    projective_fast_path && expr.program().setup_values()[0] == BigUint::from(0u8)
+}
+
 /// Gathers every `EC_MUL` and `SETUP_EC_MUL` projection for one curve, in execution order.
 ///
 /// The replay plan partitions steps by opcode, so the two opcodes arrive concatenated rather than
@@ -309,6 +314,7 @@ pub(crate) struct EcMulTracegenGpu {
     pointer_max_bits: u32,
     timestamp_max_bits: u32,
     projective_fast_path: bool,
+    zero_a_projective_fast_path: bool,
 }
 
 impl EcMulTracegenGpu {
@@ -354,6 +360,8 @@ impl EcMulTracegenGpu {
             &serialized,
             chip.range_checker.bus(),
         );
+        let zero_a_projective_fast_path =
+            is_zero_a_projective_fast_path(projective_fast_path, &chip.expr);
 
         let device_ctx = range_checker.device_ctx.clone();
         let program = serialized.blob.as_slice().to_device_on(&device_ctx)?;
@@ -383,6 +391,7 @@ impl EcMulTracegenGpu {
                 },
             )?,
             projective_fast_path,
+            zero_a_projective_fast_path,
             range_checker,
         })
     }
@@ -483,6 +492,7 @@ impl EcMulTracegenGpu {
                     BLOCKS,
                     &projection,
                     &self.program,
+                    self.zero_a_projective_fast_path,
                     &vars,
                     &projective,
                     &scratch,
@@ -579,7 +589,8 @@ impl EcMulTracegenGpu {
 mod tests {
     use num_traits::Zero;
     use openvm_circuit_primitives::{
-        bigint::utils::secp256k1_coord_prime, var_range::VariableRangeCheckerBus,
+        bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
+        var_range::VariableRangeCheckerBus,
     };
 
     use super::*;
@@ -672,5 +683,37 @@ mod tests {
             &serialize(&expr),
             bus,
         ));
+        assert!(is_zero_a_projective_fast_path(true, &expr));
+    }
+
+    #[test]
+    fn zero_a_specialization_requires_exact_zero_coefficient_program() {
+        let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
+        let modulus = secp256k1_coord_prime();
+        let config = ExprBuilderConfig {
+            modulus,
+            num_limbs: 32,
+            limb_bits: 8,
+        };
+        let zero_a = ec_mul_step_expr(config.clone(), bus, BigUint::zero());
+        assert!(is_zero_a_projective_fast_path(true, &zero_a));
+        assert!(!is_zero_a_projective_fast_path(false, &zero_a));
+
+        let p256_modulus = secp256r1_coord_prime();
+        let p256 = ec_mul_step_expr(
+            ExprBuilderConfig {
+                modulus: p256_modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            },
+            bus,
+            p256_modulus - BigUint::from(3u32),
+        );
+        assert!(is_projective_fast_path_program::<32, 8>(
+            &p256,
+            &serialize(&p256),
+            bus,
+        ));
+        assert!(!is_zero_a_projective_fast_path(true, &p256));
     }
 }

@@ -80,7 +80,7 @@ struct EcMulProjectiveField {
     }
 };
 
-template <uint32_t K>
+template <uint32_t K, bool ZERO_A>
 static __device__ __noinline__ void ec_mul_projective_double(
     const EcMulProjectiveField<K> &f,
     const uint32_t *x,
@@ -106,10 +106,12 @@ static __device__ __noinline__ void ec_mul_projective_double(
     f.add(tmp2, tmp2, d);
     f.add(a, a, tmp);
     f.add(tmp, a, e);
-    f.square(z, tmp);
-    f.square(tmp, tmp2);
-    f.mul(curve_a, tmp2, tmp);
-    f.add(e, tmp, e);
+    if constexpr (!ZERO_A) {
+        f.square(z, tmp);
+        f.square(tmp, tmp2);
+        f.mul(curve_a, tmp2, tmp);
+        f.add(e, tmp, e);
+    }
     f.copy(e, slope_numerator);
     f.square(e, tmp);
     f.add(d, d, tmp2);
@@ -170,7 +172,7 @@ static __device__ __noinline__ void ec_mul_projective_add_base(
     f.sub(tmp, tmp2, yo);
 }
 
-template <uint32_t K, size_t BLOCKS>
+template <uint32_t K, size_t BLOCKS, bool ZERO_A>
 static __device__ __noinline__ bool ec_mul_projective_build_projective(
     const FieldExprProg &s,
     const EcMulTraceInput<BLOCKS> &input,
@@ -186,13 +188,15 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
         preflight_set_error(error, EC_MUL_BAD_PROGRAM);
         return false;
     }
-    uint32_t px[K] = {}, py[K], curve_a[K], neg_py[K] = {}, x[K], y[K], z[K];
+    uint32_t px[K] = {}, py[K], curve_a[K] = {}, neg_py[K] = {}, x[K], y[K], z[K];
     uint32_t nx[K], ny[K], nz[K], numerator[K];
-    uint8_t a_bytes[48] = {};
-    for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
-        a_bytes[byte] = static_cast<uint8_t>(s.setup_values[byte]);
+    if constexpr (!ZERO_A) {
+        uint8_t a_bytes[48] = {};
+        for (uint32_t byte = 0; byte < s.num_limbs; byte++) {
+            a_bytes[byte] = static_cast<uint8_t>(s.setup_values[byte]);
+        }
+        f.canonical_bytes_to_mont(a_bytes, curve_a);
     }
-    f.canonical_bytes_to_mont(a_bytes, curve_a);
     f.canonical_bytes_to_mont(point, px);
     f.canonical_bytes_to_mont(point + s.num_limbs, py);
     f.copy(px, x);
@@ -207,7 +211,7 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
         for (size_t step = 0; step < EC_MUL_STEPS_PER_ROW; step++) {
             size_t state_idx = row * EC_MUL_PROJECTIVE_STATES_PER_ROW + 2 * step;
             uint32_t *d = rows + state_idx * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
-            ec_mul_projective_double<K>(
+            ec_mul_projective_double<K, ZERO_A>(
                 f, x, y, z, curve_a, numerator, nx, ny, nz, temps
             );
             if (limbs_are_zero(nz, K)) {
