@@ -2441,7 +2441,7 @@ mod ec_mul_tests {
         gpu_transcript.synchronize().unwrap();
         assert_eq!(gpu_transcript.error_code().unwrap(), 0);
 
-        let postflight = Postflight::new_for_test(&program, &history, &memory_config).unwrap();
+        let postflight = Postflight::new(&program, &history, &memory_config, Some(0)).unwrap();
         let cpu_trace = generate_ec_mul_trace_from_postflight(
             &harness.cpu_chip,
             &postflight,
