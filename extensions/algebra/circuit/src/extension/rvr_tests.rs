@@ -375,7 +375,7 @@ fn modular_checkpoint_executor_records_only_irreducible_results() {
     // SETUP_ADDSUB and SETUP_ISEQ are derivable without replay values. ADD needs
     // four output words and IS_EQ needs one result bit.
     assert_eq!(execution.retired, 5);
-    assert_eq!(execution.to_state.pc, 16);
+    assert_eq!(execution.to_state.byte_pc(), 16);
     assert_eq!(execution.to_state.timestamp, 53);
     assert_eq!(execution.transcript.replay_values, [12, 0, 0, 0, 1]);
 }

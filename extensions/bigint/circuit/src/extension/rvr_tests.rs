@@ -110,7 +110,7 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
         let execution = checkpoint
             .execute_from_state(state, PreflightLimits::new(3, 5, 1))
             .unwrap();
-        assert_eq!(execution.to_state.pc, expected_pc);
+        assert_eq!(execution.to_state.byte_pc(), expected_pc);
         assert_eq!(execution.to_state.timestamp, 26);
         let mut expected_replay_values = add_replay_values(equal).to_vec();
         expected_replay_values.push(expected_branch_replay_value);

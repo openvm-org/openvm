@@ -128,7 +128,7 @@ impl PreflightReplayProgram {
             )));
         }
         if execution.from_state.timestamp != 1
-            || execution.to_state.pc != execution.state.pc()
+            || execution.to_state.byte_pc() != execution.state.pc()
             || execution.to_state.timestamp >= (1u32 << self.program.timestamp_max_bits())
         {
             return Err(GpuPostflightError::InvalidTranscript(
@@ -206,7 +206,7 @@ impl PreflightReplayProgram {
         let boundary = self.validate_execution(execution, num_insns)?;
         let final_registers = read_registers(&execution.state);
         let mut final_anchor = RvrCheckpoint {
-            pc: execution.to_state.pc,
+            pc: execution.to_state.byte_pc(),
             timestamp: execution.to_state.timestamp,
             retired: execution.retired,
             replay_value_cursor: boundary.replay_value_cursor,
@@ -237,7 +237,7 @@ impl PreflightReplayProgram {
                 address_spaces,
                 self.byte_pointer_max_bits,
                 program.cell_pointer_max_bits(),
-                execution.from_state.pc,
+                execution.from_state.byte_pc(),
                 execution.from_state.timestamp,
                 boundary.endpoint_kind,
                 &event_counts,
@@ -289,7 +289,7 @@ impl PreflightReplayProgram {
                 address_spaces,
                 self.byte_pointer_max_bits,
                 program.cell_pointer_max_bits(),
-                execution.from_state.pc,
+                execution.from_state.byte_pc(),
                 execution.from_state.timestamp,
                 boundary.endpoint_kind,
                 program_log.view(),

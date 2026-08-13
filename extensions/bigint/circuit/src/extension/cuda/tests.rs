@@ -264,7 +264,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         .execute_from_state(state, PreflightLimits::new(cases.len() + 1, 50, 1))
         .unwrap();
 
-    assert_eq!(execution.to_state.pc, (cases.len() * 4) as u32);
+    assert_eq!(execution.to_state.byte_pc(), (cases.len() * 4) as u32);
     assert_eq!(execution.to_state.timestamp, 226);
     assert_eq!(execution.transcript.replay_values.len(), 50);
     assert_eq!(
@@ -493,7 +493,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             .execute_from_state(state, PreflightLimits::new(4, 5, 1))
             .unwrap();
 
-        assert_eq!(execution.to_state.pc, expected_pc);
+        assert_eq!(execution.to_state.byte_pc(), expected_pc);
         assert_eq!(execution.to_state.timestamp, 28);
         assert_eq!(execution.transcript.replay_values.len(), 5);
         assert_eq!(
