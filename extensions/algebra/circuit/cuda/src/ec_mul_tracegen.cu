@@ -7,6 +7,8 @@
 #include "algebra/ec_mul_projective.cuh"
 #include "launcher.cuh"
 
+static constexpr uint32_t EC_MUL_PREPARE_THREADS = 8;
+
 template <uint32_t K, size_t BLOCKS>
 static __global__ void ec_mul_projective_prepare_pass(
     const EcMulTraceInput<BLOCKS> *projection,
@@ -125,7 +127,8 @@ static int launch_ec_mul_projective_vars(
         scratch_words < aux_words)
         return cudaErrorInvalidValue;
     auto *inputs = static_cast<const EcMulTraceInput<BLOCKS> *>(projection);
-    auto [instruction_grid, instruction_block] = kernel_launch_params(num_instructions, 64);
+    auto [instruction_grid, instruction_block] =
+        kernel_launch_params(num_instructions, EC_MUL_PREPARE_THREADS);
     ec_mul_projective_prepare_pass<K, BLOCKS><<<instruction_grid, instruction_block, 0, stream>>>(
         inputs, num_instructions, blob, projective, error
     );
