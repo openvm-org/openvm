@@ -14,10 +14,7 @@ openvm::init!("openvm_init_ec_mul_k256.rs");
 openvm::entry!(main);
 
 /// Reference implementation: the windowed table, called directly.
-fn windowed_reference(
-    base: Secp256k1Point,
-    scalar: Secp256k1Scalar,
-) -> Secp256k1Point {
+fn windowed_reference(base: Secp256k1Point, scalar: Secp256k1Scalar) -> Secp256k1Point {
     let base = [base];
     let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&base, 4);
     table.windowed_mul(&[scalar])
@@ -46,10 +43,7 @@ pub fn main() {
     // route through the `n - k` substitution and a negation.
     for k in [0u64, 1, 2, 3, 255, 0x1234_5678, u32::MAX as u64] {
         let scalar = Secp256k1Scalar::from_u64(k);
-        assert_eq!(
-            g.mul_scalar(&scalar),
-            windowed_reference(g.clone(), scalar)
-        );
+        assert_eq!(g.mul_scalar(&scalar), windowed_reference(g.clone(), scalar));
     }
 
     // `mul_scalar` accepts an unreduced scalar, which is what callers get from
