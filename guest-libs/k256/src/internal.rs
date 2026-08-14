@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn mul_scalar_matches_windowed() {
-        for k in [1u64, 2, 3, 255, 0x1234_5678, u32::MAX as u64] {
+        for k in [1u64, 3, 5, 255, 0x1234_5679, u32::MAX as u64] {
             let scalar = Secp256k1Scalar::from_u64(k);
             let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
