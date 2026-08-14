@@ -3,7 +3,7 @@ name: Build and Serve Crate Docs
 on:
   workflow_call:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     tags:
       - v*.*.*
   pull_request:

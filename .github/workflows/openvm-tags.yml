@@ -3,7 +3,7 @@ name: Documentation Checks
 on:
   workflow_call:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     tags:
       - v*.*.*
   pull_request:

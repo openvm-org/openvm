@@ -12,7 +12,7 @@ name: CLI Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     tags: ["v*"]
   pull_request:
     branches: ["**"]
