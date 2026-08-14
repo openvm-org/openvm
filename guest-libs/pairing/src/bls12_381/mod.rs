@@ -84,20 +84,23 @@ impl G1Affine {
             return <Self as Group>::IDENTITY;
         }
 
-        // The intrinsic needs an odd scalar below n; substitute the odd n - k and negate the
-        // product, since (n - k) * P = -(k * P).
+        // The intrinsic needs an odd scalar below n. The cofactor-1 curves substitute the odd
+        // n - k and negate, but (n - k) * P = -(k * P) only holds for points of order dividing
+        // n, and this curve's cofactor admits on-curve points outside the prime-order subgroup.
+        // Compute (k - 1) * P + P instead, which assumes nothing about the point's order.
         let odd = reduced.as_le_bytes()[0] & 1 == 1;
         if !odd {
-            reduced.neg_assign();
+            reduced -= Scalar::from_u8(1);
         }
         let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
-        // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
-        // Subgroup membership is the caller's precondition; see the note on `G1Affine`.
+        // SAFETY: `self` is not the identity, and the scalar is odd and below the group order.
+        // For a point outside the prime-order subgroup the result is still exact; only the
+        // trace's provability is the caller's concern (see the note on `G1Affine`).
         let product = unsafe { self.mul_scalar_le_unchecked::<true>(&bytes) };
         if odd {
             product
         } else {
-            -product
+            product + self
         }
     }
 }

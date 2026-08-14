@@ -698,6 +698,39 @@ mod bls12_381 {
         Ok(())
     }
 
+    /// `G1Affine::mul_scalar` stays exact for an on-curve point outside the prime-order
+    /// subgroup. Execute-only: the chip's totality argument assumes prime order, so proving an
+    /// off-subgroup trace is a separate concern.
+    #[test]
+    fn test_bls_offsubgroup_mul() -> Result<()> {
+        let curve = CurveConfig {
+            struct_name: BLS12_381_ECC_STRUCT_NAME.to_string(),
+            modulus: BLS12_381_MODULUS.clone(),
+            scalar: BLS12_381_ORDER.clone(),
+            a: BigUint::ZERO,
+            b: BigUint::from_u8(4).unwrap(),
+        };
+        let config = test_rv64weierstrass_config(vec![curve]);
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!("tests/programs"),
+            "bls_offsubgroup_mul",
+            ["bls12_381"],
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        let executor = openvm_circuit::arch::VmExecutor::new(config)?;
+        let _ = executor.instance(&openvm_exe)?.execute(vec![])?;
+        Ok(())
+    }
+
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let config = get_testing_config();
