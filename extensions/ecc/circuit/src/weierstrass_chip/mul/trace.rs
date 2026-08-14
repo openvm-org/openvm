@@ -552,9 +552,8 @@ pub(crate) fn build_ec_mul_dummy_expr<F: PrimeField32>(
     dummy
 }
 
-/// Fills the trace from already-replayed instruction data, shared by both prover backends so
-/// neither can drift from the other's row encoding.
-pub(crate) fn build_ec_mul_trace<
+/// Fills the trace from already-replayed instruction data.
+fn build_ec_mul_trace<
     F: PrimeField32 + Send + Sync,
     const NUM_LIMBS: usize,
     const BLOCKS: usize,

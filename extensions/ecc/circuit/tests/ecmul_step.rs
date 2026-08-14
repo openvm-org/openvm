@@ -6,26 +6,15 @@
 
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
-use openvm_circuit_primitives::{
-    bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
-    var_range::VariableRangeCheckerBus,
-};
+use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
 use openvm_ecc_circuit::{
-    ec_mul_step_expr, ec_mul_step_program, EC_MUL_COMPUTE_ROWS, EC_MUL_SCALAR_BITS,
-    EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW,
+    ec_mul_step_program, EC_MUL_COMPUTE_ROWS, EC_MUL_SCALAR_BITS, EC_MUL_SIGN_PATTERNS,
+    EC_MUL_STEPS_PER_ROW,
 };
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_backend::p3_air::BaseAir;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
-type F = BabyBear;
 
 const LIMB_BITS: usize = 8;
 const RANGE_MAX_BITS: usize = 17;
-
-fn bus() -> VariableRangeCheckerBus {
-    VariableRangeCheckerBus::new(1, RANGE_MAX_BITS)
-}
 
 // Reference affine EC arithmetic over BigUint, independent of the expression under test.
 
@@ -161,27 +150,6 @@ fn curves() -> Vec<Curve> {
 }
 
 #[test]
-fn step_expr_width() {
-    for c in curves() {
-        let config = ExprBuilderConfig {
-            modulus: c.p.clone(),
-            num_limbs: 32,
-            limb_bits: LIMB_BITS,
-        };
-        let expr = ec_mul_step_expr(config, bus(), c.a.clone());
-        let p = expr.program();
-        println!(
-            "{:<10} inputs={} vars={} flags={} core_width={}",
-            c.name,
-            p.num_inputs(),
-            p.num_vars(),
-            p.num_flags(),
-            <_ as BaseAir<F>>::width(&expr),
-        );
-    }
-}
-
-#[test]
 fn step_expr_matches_reference_ladder() {
     for c in curves() {
         let config = ExprBuilderConfig {
@@ -226,6 +194,5 @@ fn step_expr_matches_reference_ladder() {
                 c.name, k
             );
         }
-        println!("{}: all scalars match reference", c.name);
     }
 }

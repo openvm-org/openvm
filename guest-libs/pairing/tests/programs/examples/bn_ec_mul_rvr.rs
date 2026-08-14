@@ -6,14 +6,14 @@
 
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{CyclicGroup, Group};
-use openvm_pairing::bn254::{Bn254G1Affine, Scalar};
+use openvm_pairing::bn254::{Bn254G1Affine, Bn254Scalar};
 
 openvm::init!("openvm_init_bn_ec_mul_rvr_bn254.rs");
 
 openvm::entry!(main);
 
 fn raw_mul(base: &Bn254G1Affine, scalar: u64) -> Bn254G1Affine {
-    let scalar = Scalar::from_u64(scalar);
+    let scalar = Bn254Scalar::from_u64(scalar);
     let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
     // SAFETY: This fixture intentionally exercises the RVR handler's raw EC_MUL contract,
     // including its defined behavior for an even scalar and the identity base.

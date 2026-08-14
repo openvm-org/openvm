@@ -215,10 +215,8 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             local.is_real_final,
             local.is_final * (AB::Expr::ONE - local.is_setup),
         );
-        let in_instruction = continuation.clone();
-
         let mut when_in_instruction = builder.when_transition();
-        let mut when_in_instruction = when_in_instruction.when(in_instruction);
+        let mut when_in_instruction = when_in_instruction.when(continuation);
 
         when_in_instruction.assert_eq(next.row_idx, local.row_idx + AB::Expr::ONE);
         // `is_setup` is constant across the instruction.
