@@ -1,10 +1,10 @@
 // Trace generation for the `EC_MUL` chip. The per-row and per-instruction bodies are in
-// `algebra/ec_mul_tracegen.cuh`; this file supplies the kernels and the launch policy.
+// `ecc/ec_mul_tracegen.cuh`; this file supplies the kernels and the launch policy.
 //
 // Like the `EC_MUL` projection gather, this lives in the algebra crate because that is the crate
 // compiling CUDA for the extension stack; the ECC circuit crate has no CUDA build of its own.
-#include "algebra/ec_mul_tracegen.cuh"
-#include "algebra/ec_mul_projective.cuh"
+#include "ecc/ec_mul_tracegen.cuh"
+#include "ecc/ec_mul_projective.cuh"
 #include "launcher.cuh"
 
 static constexpr uint32_t EC_MUL_PREPARE_THREADS = 8;

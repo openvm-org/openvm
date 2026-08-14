@@ -1,9 +1,6 @@
 #include "launcher.cuh"
-#include "riscv-adapters/ec_mul_replay.cuh"
+#include "ecc/ec_mul_replay.cuh"
 
-// The `EC_MUL` gather lives alongside the other replay launchers because this crate is the one that
-// compiles CUDA for the extension stack; the ECC circuit crate has no CUDA build of its own. The
-// kernel itself is in `riscv-adapters`, next to the vec-heap gather whose event helper it reuses.
 
 template <size_t BLOCKS>
 static int launch_ec_mul_replay_gather(

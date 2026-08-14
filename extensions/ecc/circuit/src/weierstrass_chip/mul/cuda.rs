@@ -8,10 +8,7 @@
 use std::sync::Arc;
 
 use num_bigint::BigUint;
-use openvm_algebra_circuit::cuda::{
-    ec_mul_projective_generate_vars, ec_mul_tracegen, gather_ec_mul, merge_range_counts,
-    EcMulFillLaunchConfig,
-};
+use openvm_algebra_circuit::cuda::merge_range_counts;
 use openvm_circuit::{
     arch::cuda::postflight::{
         GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
@@ -42,6 +39,9 @@ use super::{
     blocks_to_bytes, build_ec_mul_dummy_expr, ec_mul_step_expr, ec_mul_width,
     execution::sign_pattern_for_row, setup_row_inputs, EcMulChip, EcMulTraceInput,
     EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW,
+};
+use crate::cuda_abi::{
+    ec_mul_projective_generate_vars, ec_mul_tracegen, gather_ec_mul, EcMulFillLaunchConfig,
 };
 
 /// Device memory the row-filling pass may use for per-thread scratch.

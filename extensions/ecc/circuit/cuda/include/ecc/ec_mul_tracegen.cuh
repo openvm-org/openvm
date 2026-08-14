@@ -1,7 +1,7 @@
 #pragma once
 
 #include "algebra/field_expr_core.cuh"
-#include "riscv-adapters/ec_mul_columns.cuh"
+#include "ecc/ec_mul_columns.cuh"
 
 #include <cstddef>
 #include <cstdint>

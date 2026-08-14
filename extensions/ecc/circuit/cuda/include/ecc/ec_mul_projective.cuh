@@ -1,6 +1,6 @@
 #pragma once
 
-#include "algebra/ec_mul_tracegen.cuh"
+#include "ecc/ec_mul_tracegen.cuh"
 
 // Generic short-Weierstrass ladder acceleration in the program's Montgomery domain. Each state
 // stores its Jacobian X/Y/Z, the projective slope numerator, and a prefix-product slot for the

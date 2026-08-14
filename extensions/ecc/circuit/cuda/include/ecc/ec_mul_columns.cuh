@@ -3,7 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
-#include "riscv-adapters/ec_mul_replay.cuh"
+#include "ecc/ec_mul_replay.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -13,7 +13,7 @@
 using namespace riscv;
 
 // Device mirror of the `EC_MUL` row layout; the expression-dependent passes are in
-// `algebra/ec_mul_tracegen.cuh`. The column structs must match the host's columns.rs field for
+// `ecc/ec_mul_tracegen.cuh`. The column structs must match the host's columns.rs field for
 // field: `COL_INDEX` resolves a column by `offsetof`, so a reordered field writes to the wrong
 // column rather than failing to compile.
 

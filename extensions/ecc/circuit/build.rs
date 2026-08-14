@@ -14,6 +14,7 @@ fn main() {
             .include("../../../crates/vm/cuda/include")
             .include("../../../crates/vm/cuda/rvr/include")
             .include("cuda/include")
+            .include("../../algebra/circuit/cuda/include")
             .include("../../riscv/circuit/cuda/include")
             .include("../../riscv-adapters/cuda/include")
             .watch("cuda")
@@ -21,13 +22,12 @@ fn main() {
             .watch("../../../crates/vm/cuda/include")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
             .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/replay.cuh")
+            .watch("../../algebra/circuit/cuda/include")
             .watch("../../riscv/circuit/cuda/include")
             .watch("../../riscv-adapters/cuda/include")
-            .library_name("tracegen_gpu_algebra")
-            .file("cuda/src/field_expr_replay.cu")
-            .file("cuda/src/modular_is_eq.cu")
-            .file("cuda/src/modular_addsub_replay.cu")
-            .file("cuda/src/vec_heap_projection.cu");
+            .library_name("tracegen_gpu_ecc")
+            .file("cuda/src/ec_mul_projection.cu")
+            .file("cuda/src/ec_mul_tracegen.cu");
 
         builder.emit_link_directives();
         builder.build();

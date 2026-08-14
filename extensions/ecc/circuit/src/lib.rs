@@ -4,6 +4,8 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
 
+#[cfg(feature = "cuda")]
+pub(crate) mod cuda_abi;
 mod extension;
 mod weierstrass_chip;
 

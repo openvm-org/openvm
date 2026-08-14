@@ -44,6 +44,9 @@ cfg-if = { workspace = true }
 halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true }
 
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
+
 [dev-dependencies]
 rvr-state = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
@@ -63,6 +66,7 @@ rvr = [
     "openvm-algebra-circuit/rvr",
 ]
 cuda = [
+    "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",
