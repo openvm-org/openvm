@@ -92,7 +92,8 @@ impl G1Affine {
         }
         let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
         // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
-        let product = unsafe { self.mul_scalar_le_unchecked(&bytes) };
+        // Subgroup membership is the caller's precondition; see the note on `G1Affine`.
+        let product = unsafe { self.mul_scalar_le_unchecked::<true>(&bytes) };
         if odd {
             product
         } else {

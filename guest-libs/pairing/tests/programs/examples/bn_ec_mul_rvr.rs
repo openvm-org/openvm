@@ -17,7 +17,7 @@ fn raw_mul(base: &Bn254G1Affine, scalar: u64) -> Bn254G1Affine {
     let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
     // SAFETY: This fixture intentionally exercises the RVR handler's raw EC_MUL contract,
     // including its defined behavior for an even scalar and the identity base.
-    unsafe { base.mul_scalar_le_unchecked(&bytes) }
+    unsafe { base.mul_scalar_le_unchecked::<true>(&bytes) }
 }
 
 pub fn main() {

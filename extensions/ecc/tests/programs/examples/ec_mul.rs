@@ -30,7 +30,7 @@ pub fn main() {
         let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
         for base in [g.clone(), neg_g.clone(), generic.clone()] {
-            let via_chip = unsafe { base.mul_scalar_le_unchecked(&bytes) };
+            let via_chip = unsafe { base.mul_scalar_le_unchecked::<true>(&bytes) };
             assert_eq!(via_chip, windowed_reference(base, scalar.clone()));
         }
     }

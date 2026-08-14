@@ -89,7 +89,7 @@ impl Secp256k1Point {
         }
         let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
         // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
-        let product = unsafe { self.mul_scalar_le_unchecked(&bytes) };
+        let product = unsafe { self.mul_scalar_le_unchecked::<true>(&bytes) };
         if odd {
             product
         } else {
@@ -124,7 +124,8 @@ mod tests {
             let scalar = Secp256k1Scalar::from_u64(k);
             let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
 
-            let via_ladder = unsafe { Secp256k1Point::GENERATOR.mul_scalar_le_unchecked(&bytes) };
+            let via_ladder =
+                unsafe { Secp256k1Point::GENERATOR.mul_scalar_le_unchecked::<true>(&bytes) };
 
             assert_eq!(via_ladder, windowed_reference(scalar), "k = {k}");
         }
