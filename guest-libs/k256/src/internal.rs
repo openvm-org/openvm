@@ -1,4 +1,4 @@
-use core::ops::{Add, Neg};
+use core::ops::Neg;
 
 use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
@@ -56,10 +56,7 @@ impl IntrinsicCurve for Secp256k1 {
     type Scalar = Secp256k1Scalar;
     type Point = Secp256k1Point;
 
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
         openvm_ecc_guest::msm_via_ec_mul(coeffs, bases)
     }
 }
@@ -75,31 +72,17 @@ impl Secp256k1Point {
         <Self as WeierstrassPoint>::y(self).to_be_bytes()
     }
 
-    /// Returns `scalar * self`, for any scalar representation and any point.
-    ///
-    /// [`Secp256k1Point::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar
-    /// that is odd and below the group order; this discharges all three preconditions, so it is
-    /// total.
-    ///
-    /// `Secp256k1Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
-    /// `from_be_bytes_unchecked` do not reduce. secp256k1 has cofactor 1, so every point on the
-    /// curve has order dividing the group order and reducing the scalar leaves the product
-    /// unchanged.
     pub fn mul_scalar(&self, scalar: &Secp256k1Scalar) -> Self {
         if self.is_identity() {
             return <Self as Group>::IDENTITY;
         }
         let mut reduced = Secp256k1Scalar::reduce_le_bytes(scalar.as_le_bytes());
-        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
         if reduced == Secp256k1Scalar::ZERO {
             return <Self as Group>::IDENTITY;
         }
 
-        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
-        // every choice of signs; an even scalar therefore has no digit assignment and would produce
-        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
-        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
-        // negating the result recovers the product.
+        // The intrinsic needs an odd scalar below n; substitute the odd n - k and negate the
+        // product, since (n - k) * P = -(k * P).
         let odd = reduced.as_le_bytes()[0] & 1 == 1;
         if !odd {
             reduced.neg_assign();
@@ -121,9 +104,6 @@ impl ScalarMul<Secp256k1Scalar> for Secp256k1Point {
     }
 }
 
-// Host-side coverage for the ladder that `sw_declare!` generates for non-openvm targets. Guest
-// programs are run on the host through that path, so it has to agree with an independent
-// implementation; the windowed table, which `msm` itself no longer uses, serves as that reference.
 #[cfg(all(test, not(any(openvm_intrinsics, target_os = "openvm"))))]
 mod tests {
     use hex_literal::hex;
@@ -132,10 +112,6 @@ mod tests {
 
     use super::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
 
-    /// Reference implementation: the windowed table, called directly.
-    ///
-    /// `IntrinsicCurve::msm` cannot serve as the reference any more, because it now routes
-    /// small MSMs to `mul_scalar` and would compare the ladder against itself.
     fn windowed_reference(scalar: Secp256k1Scalar) -> Secp256k1Point {
         let base = [Secp256k1Point::GENERATOR];
         let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&base, 4);
@@ -156,8 +132,7 @@ mod tests {
 
     #[test]
     fn mul_scalar_reduces_the_scalar() {
-        // `n + 5`, one group order above a small scalar. `Secp256k1Scalar` stores it verbatim, so
-        // this is the representation `mul_scalar` has to reduce before reaching the ladder.
+        // n + 5
         let unreduced = Secp256k1Scalar::from_be_bytes_unchecked(&hex!(
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364146"
         ));
@@ -169,15 +144,12 @@ mod tests {
 
     #[test]
     fn mul_scalar_handles_the_identity() {
-        // `k * O = O` for every `k`. The ladder itself cannot prove this case, so `mul_scalar`
-        // short-circuits it.
         let identity = <Secp256k1Point as Group>::IDENTITY;
         for k in [0u64, 1, 7] {
             let scalar = Secp256k1Scalar::from_u64(k);
             assert!(identity.mul_scalar(&scalar).is_identity(), "k = {k}");
         }
 
-        // A zero scalar sends any point to the identity.
         let zero = Secp256k1Scalar::ZERO;
         assert!(Secp256k1Point::GENERATOR.mul_scalar(&zero).is_identity());
     }

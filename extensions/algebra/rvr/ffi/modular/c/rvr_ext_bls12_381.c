@@ -13,8 +13,6 @@ static constexpr uint32_t RVR_WORD_SIZE = 8;
 static constexpr uint32_t BLS12_381_FP_BYTES = 48;
 static constexpr uint32_t BLS12_381_FP_WORDS = BLS12_381_FP_BYTES / RVR_WORD_SIZE;
 static constexpr uint32_t BLS12_381_FR_BYTES = 32;
-static constexpr uint32_t BLS12_381_SCALAR_BYTES = 32;
-static constexpr uint32_t BLS12_381_SCALAR_WORDS = BLS12_381_SCALAR_BYTES / RVR_WORD_SIZE;
 static constexpr uint32_t BLS12_381_FR_WORDS = BLS12_381_FR_BYTES / RVR_WORD_SIZE;
 
 /* ── Fp helpers ────────────────────────────────────────────────────────── */
@@ -370,15 +368,15 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bls12_381(
     base.y = fp_read(state, rs1_ptr + BLS12_381_FP_BYTES);
 
     /* EC_MUL requires an odd scalar: the chip's digits are all +-1, whose sum is never even. */
-    uint64_t words[BLS12_381_SCALAR_WORDS];
-    read_mem_u64_range(state, rs2_ptr, words, BLS12_381_SCALAR_WORDS);
+    uint64_t words[BLS12_381_FR_WORDS];
+    read_mem_u64_range(state, rs2_ptr, words, BLS12_381_FR_WORDS);
     const byte *scalar = (const byte *)words;
     assert_assume(scalar[0] & 1);
 
     blst_p1 jacobian;
     blst_p1_from_affine(&jacobian, &base);
     blst_p1 product;
-    blst_p1_unchecked_mult(&product, &jacobian, scalar, BLS12_381_SCALAR_BYTES * 8);
+    blst_p1_unchecked_mult(&product, &jacobian, scalar, BLS12_381_FR_BYTES * 8);
 
     blst_p1_affine affine;
     blst_p1_to_affine(&affine, &product);

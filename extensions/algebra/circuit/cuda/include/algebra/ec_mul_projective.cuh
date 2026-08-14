@@ -2,9 +2,8 @@
 
 #include "algebra/ec_mul_tracegen.cuh"
 
-// Generic short-Weierstrass ladder acceleration. Values remain in the program's Montgomery domain.
-// Every row contains two `D = 2R`, `R' = D + sigma*P` steps. Each state stores its
-// Jacobian X/Y/Z, the projective slope numerator, and a prefix-product slot used by the single
+// Generic short-Weierstrass ladder acceleration in the program's Montgomery domain. Each state
+// stores its Jacobian X/Y/Z, the projective slope numerator, and a prefix-product slot for the
 // instruction-wide batch inversion.
 template <uint32_t K>
 static constexpr size_t EC_MUL_PROJECTIVE_STATE_WORDS = 5 * K;
@@ -15,13 +14,7 @@ template <uint32_t K>
 static constexpr size_t EC_MUL_PROJECTIVE_INSTRUCTION_WORDS =
     EC_MUL_PROJECTIVE_STATES * EC_MUL_PROJECTIVE_STATE_WORDS<K>;
 
-// Per-thread arithmetic workspaces. These live in dynamic shared memory so address-taken field
-// arrays name explicit kernel-owned storage rather than caller-local arrays.
-//
-// Prepare: Montgomery work (2K+2), curve temporaries (11K), and 12 field values. `nx` is reused
-// as conversion scratch before the ladder and the dead zero slot becomes canonical one. Batch
-// inversion: Montgomery work plus running/inverse/output values. Materialization: Montgomery work,
-// inverse powers/value/canonical output, and canonical one. Each stride has one padding word so
+// Per-thread arithmetic workspaces in dynamic shared memory. Each stride has one padding word so
 // adjacent thread slices do not begin in the same shared-memory bank.
 template <uint32_t K>
 static constexpr size_t EC_MUL_PROJECTIVE_PREPARE_SCRATCH_WORDS = 25 * K + 3;
@@ -228,9 +221,8 @@ static __device__ __noinline__ bool ec_mul_projective_build_projective(
     f.canonical_bytes_to_mont(point + s.num_limbs, nx, py);
     f.copy(px, x);
     f.copy(py, y);
-    // Keep the zero input distinct from the output. Besides making the intended `-py` operation
-    // explicit, this avoids carrying an aliased input/output pointer through the nested device
-    // arithmetic helpers.
+    // Keep the zero input distinct from the output, avoiding an aliased pointer through the
+    // nested arithmetic helpers.
     f.sub(zero, py, neg_py);
     // `zero` is dead after point negation, so reuse it for canonical one.
     zero[0] = 1;

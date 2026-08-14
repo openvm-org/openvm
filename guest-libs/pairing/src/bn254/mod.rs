@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use core::ops::{Add, Neg};
+use core::ops::Neg;
 
 use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
@@ -64,32 +64,17 @@ impl CyclicGroup for G1Affine {
 }
 
 impl G1Affine {
-    /// Returns `scalar * self`, for any scalar representation and any point.
-    ///
-    /// [`G1Affine::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar below
-    /// the group order. EIP-196 `ECMUL` guarantees neither — the scalar is an arbitrary 32-byte
-    /// word and `(0, 0)` encodes the point at infinity — so callers handling untrusted input want
-    /// this total form.
-    ///
-    /// `Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
-    /// `from_be_bytes_unchecked` do not reduce. BN254 G1 has cofactor 1, so every point on the
-    /// curve has order dividing the group order and reducing the scalar leaves the product
-    /// unchanged.
     pub fn mul_scalar(&self, scalar: &Scalar) -> Self {
         if self.is_identity() {
             return <Self as Group>::IDENTITY;
         }
         let mut reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
-        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
         if reduced == Scalar::ZERO {
             return <Self as Group>::IDENTITY;
         }
 
-        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
-        // every choice of signs; an even scalar therefore has no digit assignment and would produce
-        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
-        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
-        // negating the result recovers the product.
+        // The intrinsic needs an odd scalar below n; substitute the odd n - k and negate the
+        // product, since (n - k) * P = -(k * P).
         let odd = reduced.as_le_bytes()[0] & 1 == 1;
         if !odd {
             reduced.neg_assign();
@@ -199,10 +184,7 @@ impl IntrinsicCurve for Bn254 {
     type Scalar = Scalar;
     type Point = G1Affine;
 
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
         openvm_ecc_guest::msm_via_ec_mul(coeffs, bases)
     }
 }

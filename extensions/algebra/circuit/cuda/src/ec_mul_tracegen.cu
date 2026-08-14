@@ -285,7 +285,7 @@ static __global__ void ec_mul_fill(
     uint32_t *aux = scratch + tid * aux_words;
     uint8_t in_limbs[EC_MUL_EXPR_NUM_INPUTS * NUM_LIMBS];
     uint8_t accumulator[2 * NUM_LIMBS];
-    const size_t used_rows = num_instructions * EC_MUL_TOTAL_ROWS;
+    const size_t used_rows = num_instructions * EC_MUL_COMPUTE_ROWS;
 
     for (size_t row_index = tid; row_index < height; row_index += threads) {
         if (!ec_mul_fill_row<K, NUM_LIMBS, BLOCKS>(
@@ -342,7 +342,7 @@ static int launch_ec_mul_tracegen(
         fill_grid_blocks > UINT32_MAX || fill_block_threads > 1024) {
         return cudaErrorInvalidValue;
     }
-    if (num_instructions > height / EC_MUL_TOTAL_ROWS || scratch_words < aux_words ||
+    if (num_instructions > height / EC_MUL_COMPUTE_ROWS || scratch_words < aux_words ||
         fill_grid_blocks * fill_block_threads * aux_words > scratch_words) {
         return cudaErrorInvalidValue;
     }

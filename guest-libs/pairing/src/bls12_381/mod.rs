@@ -75,33 +75,17 @@ impl CyclicGroup for G1Affine {
 }
 
 impl G1Affine {
-    /// Returns `scalar * self`, for any scalar representation and any point in the prime-order
-    /// subgroup.
-    ///
-    /// [`G1Affine::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar that
-    /// is odd and below the group order; this discharges those preconditions. Unlike BN254, the
-    /// curve has a nontrivial cofactor, so subgroup membership stays a caller precondition (see
-    /// the note on [`G1Affine`]): for a point outside the subgroup, reducing the scalar changes
-    /// the product and the intrinsic's ladder is not total.
-    ///
-    /// `Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
-    /// `from_be_bytes_unchecked` do not reduce; reduction is exact because the order of a
-    /// subgroup point divides the group order.
     pub fn mul_scalar(&self, scalar: &Scalar) -> Self {
         if self.is_identity() {
             return <Self as Group>::IDENTITY;
         }
         let mut reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
-        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
         if reduced == Scalar::ZERO {
             return <Self as Group>::IDENTITY;
         }
 
-        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
-        // every choice of signs; an even scalar therefore has no digit assignment and would produce
-        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
-        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
-        // negating the result recovers the product.
+        // The intrinsic needs an odd scalar below n; substitute the odd n - k and negate the
+        // product, since (n - k) * P = -(k * P).
         let odd = reduced.as_le_bytes()[0] & 1 == 1;
         if !odd {
             reduced.neg_assign();

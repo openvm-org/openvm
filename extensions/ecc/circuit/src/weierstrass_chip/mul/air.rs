@@ -1,28 +1,12 @@
 //! AIR for the `EC_MUL` chip.
 //!
-//! Constrains the ladder across rows, and the memory accesses on the final ladder row.
+//! Two accumulators run together: the point `R = m*P` in the expression, and the sign bits `B` in
+//! the header, tied by the invariant `m = 2B + 1` (seeded at `m = 1`, `B = 0`, preserved by
+//! `m' = 2m + sigma`). Checking `2B + 1` against the scalar on the final row therefore checks
+//! `R = k*P`.
 //!
-//! Two accumulators run together: the point `R = m*P` in the expression, and the bits `B` of the
-//! signs chosen so far in [`EcMulHeaderCols::scalar_acc`]. `B` is never a multiplier, only
-//! bookkeeping. An invariant ties them, and every step preserves it:
-//!
-//! ```text
-//! m  = 2B + 1
-//! m' = 2m + sigma = 2(2B + 1) + (2b - 1) = 2(2B + b) + 1 = 2B' + 1
-//! ```
-//!
-//! It holds at the seed, where `m = 1` and `B = 0`. So checking `2B + 1` against the scalar on the
-//! final row — after completing `B` with that row's own digits — checks that `m = k`, and hence
-//! that `R = k*P`. Wrong signs give a different `B` and fail the check. Even operands fail it too,
-//! since `2B + 1` is odd for every `B`.
-//!
-//! Three things are assumed rather than constrained:
-//!
-//! - The scalar is below the curve order. The `mul` module's argument that the incomplete affine
-//!   formulas never degenerate needs this. Callers enforce it, as they do for `EC_ADD_NE`.
-//! - The guest called `SETUP_EC_MUL`. Under continuations only the first segment sees the setup
-//!   row, so this is enforced at the program level.
-//! - The base point is on the curve.
+//! Assumed rather than constrained: the scalar is below the curve order, the guest called
+//! `SETUP_EC_MUL`, and the base point is on the curve.
 
 use std::borrow::Borrow;
 
@@ -104,9 +88,7 @@ impl<F: Field, const NUM_LIMBS: usize, const BLOCKS: usize> BaseAir<F>
     }
 }
 
-// No column names provided: the row layout embeds a `FieldExpr` sub-row whose width is only known
-// at runtime, so it is built dynamically rather than from a `StructReflection` struct — the same
-// reason `FieldExpr` and `FieldExpressionCoreAir` have empty impls.
+// No column names: the row layout embeds a runtime-sized `FieldExpr` sub-row.
 impl<const NUM_LIMBS: usize, const BLOCKS: usize> ColumnsAir for EcMulAir<NUM_LIMBS, BLOCKS> {}
 
 impl<F: Field, const NUM_LIMBS: usize, const BLOCKS: usize> BaseAirWithPublicValues<F>
@@ -143,17 +125,14 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         builder.assert_bool(local.is_final);
         builder.assert_bool(local.is_first_compute);
         builder.assert_bool(local.is_setup);
-        // The I/O-bearing row is a ladder row itself; padding rows carry no selector.
+        // `is_final` and `is_first_compute` imply `is_compute`.
         builder.assert_zero(local.is_final * (AB::Expr::ONE - local.is_compute));
-        // `is_first_compute` implies `is_compute`.
         builder.assert_zero(local.is_first_compute * (AB::Expr::ONE - local.is_compute));
 
-        // The expression is active exactly on compute rows. Elsewhere its region still has to hold
-        // a consistent witness, since several of its constraints are ungated; trace generation
-        // supplies one built from the setup inputs.
+        // `FieldExpr` reads `is_valid` from its first column; padding rows still hold a
+        // consistent witness since several expression constraints are ungated.
         builder.assert_eq(local_expr[0], local.is_compute);
 
-        // Evaluate the ladder step. `FieldExpr` reads `is_valid` from `local_expr[0]`.
         SubAir::eval(&self.expr, builder, local_expr);
 
         let FieldExprCols {
@@ -164,9 +143,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         } = self.expr.load_vars(local_expr);
         let next_cols = self.expr.load_vars(next_expr);
 
-        // This row's scalar bits, read off the one-hot sign flags instead of being stored:
-        // `b_j = sum of flag_f over the patterns whose j-th sign is positive`, which is degree 1.
-        // Packed most significant first, they are the accumulator limb this row contributes.
+        // This row's scalar bits, packed most significant first, read off the one-hot sign flags.
         let digits: AB::Expr = (0..EC_MUL_STEPS_PER_ROW)
             .map(|step| {
                 let bit: AB::Expr = (0..EC_MUL_SIGN_PATTERNS)
@@ -177,57 +154,42 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             })
             .sum();
 
-        // `is_setup` must agree with the value `FieldExpr` derives internally,
-        // `is_valid − Σflags`. On a compute row `is_valid == is_compute`.
+        // `is_setup` mirrors the value `FieldExpr` derives internally, `is_valid - Σflags`.
         let flag_sum: AB::Expr = flags.iter().map(|&f| f.into()).sum();
         builder
             .when(local.is_compute)
             .assert_eq(local.is_setup, local.is_compute - flag_sum);
 
         // ==== Sequencing =====================================================================
-        // A compute chain must begin at `is_first_compute`, which is the only constraint pinning
-        // the initial accumulator and `scalar_acc` to zero. Without this a ladder could start
-        // part-way through with both chosen freely.
+        // A compute chain must begin at `is_first_compute`.
         builder
             .when_first_row()
             .when(local.is_compute)
             .assert_one(local.is_first_compute);
-        // A continuation row extends a compute predecessor. The gate is boolean because
-        // `is_first_compute` implies `is_compute`.
+        // A continuation row extends a compute predecessor.
         builder
             .when_transition()
             .when(next.is_compute - next.is_first_compute)
             .assert_one(local.is_compute);
-        // An instruction may begin only after padding or after a *completed* chain, so a fresh
-        // start cannot cut a ladder short of its I/O row.
+        // A fresh start may follow only padding or a completed chain.
         builder
             .when_transition()
             .when(next.is_first_compute)
             .assert_zero(local.is_compute - local.is_final);
-        // The final row terminates its chain: whatever follows must start fresh or be padding.
-        // Without this a chain could fire its I/O at row `EC_MUL_FINAL_ROW_IDX` and keep going.
+        // The final row terminates its chain.
         builder
             .when_transition()
             .assert_zero(local.is_final * (next.is_compute - next.is_first_compute));
 
         // ==== Row index =====================================================================
-        // The I/O row is pinned by value. Together with `is_first_compute` forcing index zero and
-        // the increment below, an `is_final` row provably terminates a complete
-        // [`EC_MUL_FINAL_ROW_IDX`]-predecessor chain. A chain that never sets `is_final` fires no
-        // interaction and merely wastes its rows.
         builder.assert_zero(
             local.is_final * (local.row_idx - AB::Expr::from_usize(EC_MUL_FINAL_ROW_IDX)),
         );
-        // The first compute row is index 0.
         builder.assert_zero(local.is_first_compute * local.row_idx);
 
         // ==== First compute row ==============================================================
-        // The accumulator starts at `P`. The most significant digit is `+1` for every odd scalar
-        // in range, so the ladder seeds itself from the point it already holds, with no memory read
-        // and no sign to store.
-        //
-        // Gated on `!is_setup`, since a setup row's leading inputs are already pinned to the prime
-        // and `a` by `FieldExpr`. Without the gate it would have to satisfy both at once.
+        // The accumulator seeds at `P`: the most significant digit of every odd in-range scalar
+        // is `+1`. Gated on `!is_setup`, whose leading inputs `FieldExpr` pins to the modulus.
         let first_real_compute = local.is_first_compute * (AB::Expr::ONE - local.is_setup);
         for (acc, p) in inputs[IN_ACC_X].iter().zip(&inputs[IN_PX]) {
             builder.when(first_real_compute.clone()).assert_eq(*acc, *p);
@@ -235,31 +197,20 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         for (acc, p) in inputs[IN_ACC_Y].iter().zip(&inputs[IN_PY]) {
             builder.when(first_real_compute.clone()).assert_eq(*acc, *p);
         }
-        // The bit accumulator starts empty. This also holds on setup rows, where every flag is
-        // clear, so the contributed limb is zero and the accumulator stays zero.
         for &limb in local.scalar_acc.iter() {
             builder.when(local.is_first_compute).assert_zero(limb);
         }
 
         // ==== Transitions ===================================================================
-        // Both selectors are degree 1, which leaves room to further gate them on `!is_setup` below.
-        // `continuation` is 1 exactly when `next` continues `local`'s ladder: it is boolean
-        // because `is_first_compute` implies `is_compute`, and the sequencing rules above make a
-        // set value mean precisely "same instruction as the previous row".
+        // 1 exactly when `next` continues `local`'s ladder.
         let continuation: AB::Expr = next.is_compute - next.is_first_compute;
-        // is_ladder = is_compute AND NOT is_setup AND NOT is_first_compute, so it can gate the data
-        // links at degree 1.
+        // Stored so the data links below can be gated at degree 1.
         builder.assert_eq(
             local.is_ladder,
             local.is_compute
                 * (AB::Expr::ONE - local.is_setup)
                 * (AB::Expr::ONE - local.is_first_compute),
         );
-        // Both stored selectors must be *defined*, not merely written by trace generation. Without
-        // this, `is_real_final` is a free column: clearing it on a real final row disables the
-        // scalar binding below while the memory and execution interactions, gated by `is_final`,
-        // still fire. A prover could then read any scalar and prove nothing connects it to the
-        // rows' sign flags.
         builder.assert_eq(
             local.is_real_final,
             local.is_final * (AB::Expr::ONE - local.is_setup),
@@ -269,31 +220,23 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         let mut when_in_instruction = builder.when_transition();
         let mut when_in_instruction = when_in_instruction.when(in_instruction);
 
-        // row_idx increments.
         when_in_instruction.assert_eq(next.row_idx, local.row_idx + AB::Expr::ONE);
-        // NOTE: the two constraints below live outside this block; see `eval`'s sequencing
-        // section. They are what force a compute chain to *begin* at `is_first_compute`.
         // `is_setup` is constant across the instruction.
         when_in_instruction.assert_eq(next.is_setup, local.is_setup);
-        // A continuation row is never a first row.
         when_in_instruction.assert_zero(next.is_first_compute);
 
-        // B' = 2^EC_MUL_STEPS_PER_ROW * B + digits. With limbs sized to one row's contribution
-        // this is a shift: the new low limb holds this row's digits and the rest copy a neighbour,
-        // so there is nothing to carry and nothing to range check.
+        // B' = 2^EC_MUL_STEPS_PER_ROW * B + digits: a pure shift, nothing to carry or range check.
         when_in_instruction.assert_eq(next.scalar_acc[0], digits.clone());
         for i in 1..SCALAR_ACC_LIMBS {
             when_in_instruction.assert_eq(next.scalar_acc[i], local.scalar_acc[i - 1]);
         }
 
-        // Setup rows are excluded from the data links below: every setup row must carry the prime
-        // and the setup values in the accumulator inputs, so those inputs are re-supplied each row
-        // rather than threaded from the previous one.
+        // Setup rows re-supply their inputs each row, so they are excluded from the data links.
         let mut when_both_compute = builder.when_transition();
         let mut when_both_compute = when_both_compute.when(next.is_ladder);
 
-        // The accumulator is carried through the trace rather than memory: the next row's
-        // accumulator inputs are this row's outputs.
+        // The accumulator is threaded through the trace: the next row's inputs are this row's
+        // outputs.
         let out_x = &vars[self.expr.program().output_indices()[0]];
         let out_y = &vars[self.expr.program().output_indices()[1]];
         for i in 0..NUM_LIMBS {
@@ -305,11 +248,8 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         }
 
         // ==== Final row =====================================================================
-        // The scalar read from memory must equal `2B + 1`, where `B` is the accumulator completed
-        // with this row's own digits: limb 0 is the degree-1 digit form and every other limb is
-        // the entering accumulator shifted by one, exactly the shift the transition constraint
-        // would apply. See the note on binding at the top of this file. Skipped for setup, whose
-        // scalar operand is a placeholder.
+        // The scalar read from memory must equal `2B + 1`, with `B` completed by this row's own
+        // digits. Skipped for setup, whose scalar operand is a placeholder.
         let completed_acc = |limb: usize| -> AB::Expr {
             if limb == 0 {
                 digits.clone()
@@ -322,7 +262,6 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         }
         let mut carry_in = AB::Expr::ONE;
         for i in 0..SCALAR_LIMBS {
-            // Byte `i` of the completed `B`, from the limbs it spans, least significant first.
             let b_byte: AB::Expr = (0..SCALAR_ACC_LIMBS_PER_BYTE)
                 .map(|j| {
                     completed_acc(i * SCALAR_ACC_LIMBS_PER_BYTE + j)
@@ -335,7 +274,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             );
             carry_in = local_io.scalar_carry[i].into();
         }
-        // No carry may leave the top byte, which pins `2B + 1 < 2^256` and so the scalar's width.
+        // No carry may leave the top byte, pinning `2B + 1 < 2^256`.
         builder
             .when(local.is_real_final)
             .assert_zero(local_io.scalar_carry[SCALAR_LIMBS - 1]);
@@ -351,14 +290,9 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 }
 
 impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
-    /// The instruction's memory accesses, all gated by `is_final`, so one `EC_MUL` costs
-    /// `EC_MUL_REGISTER_READS + BLOCKS + SCALAR_BLOCKS + BLOCKS` accesses regardless of the number
-    /// of ladder steps.
-    ///
-    /// The base point and the result have no stored copies: `point` is the final row's expression
-    /// inputs, constrained constant across the instruction's rows (and pinned to `(modulus, a)` on
-    /// setup rows), and `result` is that row's expression outputs. Reading and writing those
-    /// columns directly is what ties the memory operands to the ladder.
+    /// The instruction's memory accesses, all gated by `is_final`. The base point and result are
+    /// read and written directly from the final row's expression columns, which ties the memory
+    /// operands to the ladder.
     fn eval_io<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -377,8 +311,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
         };
 
         // ==== Register reads =================================================================
-        // rs1 (point pointer), rs2 (scalar pointer), then rd, matching the order the executor
-        // reads them and the convention the vec-heap adapter uses.
+        // rs1, rs2, then rd, matching the executor's read order.
         for ((ptr, val), aux) in [
             (io.rs1_ptr, &io.rs1_val),
             (io.rs2_ptr, &io.rs2_val),
@@ -417,8 +350,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
 
         let heap = AB::F::from_u32(MEMORY_AS);
 
-        // A point is stored as `x ‖ y`, so block `blk` spans limbs
-        // `[blk * MEMORY_BLOCK_BYTES, (blk+1) * MEMORY_BLOCK_BYTES)` of that concatenation.
+        // A point is stored as `x ‖ y`.
         let coord_block =
             |x: &[AB::Var], y: &[AB::Var], blk: usize| -> [AB::Expr; MEMORY_BLOCK_BYTES] {
                 std::array::from_fn(|i| {

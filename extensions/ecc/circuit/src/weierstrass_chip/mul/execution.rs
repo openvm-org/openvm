@@ -1,13 +1,13 @@
 //! Execution for `EC_MUL` and `SETUP_EC_MUL`.
 //!
-//! Instruction fields are parsed once at program load into [`EcMulPreCompute`], after which a
+//! Instruction fields are parsed once at program load, after which a
 //! handler monomorphised on the curve is selected, so the hot path branches on nothing.
 //!
 //! For a recognised curve the result comes from native field arithmetic; otherwise the ladder is
-//! interpreted through the [`FieldExpressionProgram`]. Either way the bytes written here must match
+//! interpreted through the field expression program. Either way the bytes written here must match
 //! what trace generation records, since the memory argument compares them.
 //!
-//! Metered execution reports [`EC_MUL_TOTAL_ROWS`] rather than one row per instruction. An
+//! Metered execution reports the full row count rather than one row per instruction. An
 //! incorrect height here does not fail any unit test; it mis-sizes segments.
 
 use std::borrow::{Borrow, BorrowMut};
@@ -30,7 +30,7 @@ use strum::EnumCount;
 
 use super::{
     setup_row_inputs, EcMulExecutor, EC_MUL_COMPUTE_ROWS, EC_MUL_SCALAR_BITS, EC_MUL_SIGN_PATTERNS,
-    EC_MUL_STEPS_PER_ROW, EC_MUL_TOTAL_ROWS, SCALAR_BLOCKS, SCALAR_LIMBS,
+    EC_MUL_STEPS_PER_ROW, SCALAR_BLOCKS, SCALAR_LIMBS,
 };
 use crate::weierstrass_chip::curves::{ec_mul, get_curve_type, CurveType};
 
@@ -110,11 +110,8 @@ macro_rules! dispatch {
 }
 
 impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcMulExecutor<BLOCKS> {
-    /// Distinguishes the setup row from a real multiplication.
-    ///
-    /// Both cost [`EC_MUL_TOTAL_ROWS`] rows, and a program that merely declares a curve emits one
-    /// setup, so folding them under a single name makes an execution histogram unreadable: a count
-    /// of one cannot be told apart from one scalar multiplication.
+    /// Distinguishes the setup row from a real multiplication, keeping execution histograms
+    /// readable.
     fn get_opcode_name(&self, opcode: usize) -> String {
         let local = opcode.wrapping_sub(WeierstrassOpcode::CLASS_OFFSET) % WeierstrassOpcode::COUNT;
         if local == WeierstrassOpcode::SETUP_EC_MUL as usize {
@@ -239,10 +236,8 @@ unsafe fn execute_e12_impl<
     let scalar: &[u8; SCALAR_LIMBS] = scalar_blocks.as_flattened().try_into().unwrap();
 
     if IS_SETUP {
-        // The point operand carries (modulus, a), as for SETUP_EC_ADD_NE and SETUP_EC_DOUBLE.
-        // `FieldExpr`'s setup constraint pins both, and the AIR links them to this read, so both
-        // are checked here too: a mismatch reports a clear error rather than an unsatisfiable
-        // trace, and the rvr path rejects the same inputs. The scalar operand is unused by setup.
+        // The point operand carries (modulus, a), as for the other setup opcodes; a mismatch
+        // reports a clear error rather than an unsatisfiable trace. The scalar operand is unused.
         let coord_bytes = BLOCKS / 2;
         let input_prime = BigUint::from_bytes_le(point_data[..coord_bytes].as_flattened());
         if &input_prime != pre_compute.program.prime() {
@@ -276,11 +271,8 @@ unsafe fn execute_e12_impl<
     Ok(())
 }
 
-/// Interprets the ladder through the field expression, one row per
-/// [`EC_MUL_STEPS_PER_ROW`] digits, selecting the one-hot sign flag as the AIR and trace filler do.
-///
-/// Used for unrecognised curves and for `SETUP_EC_MUL`, whose rows carry the modulus and setup
-/// values instead of a point and set no flag.
+/// Interprets the ladder through the field expression, selecting the one-hot sign flag as the AIR
+/// and trace filler do. Used for unrecognised curves and for setup.
 fn run_ladder_via_expr<const BLOCKS: usize>(
     program: &FieldExpressionProgram,
     point_data: &[[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
@@ -323,9 +315,7 @@ fn run_ladder_via_expr<const BLOCKS: usize>(
 }
 
 /// The one-hot flag index for compute row `row`, packing its digits most significant first.
-///
-/// Digit `i` is bit `i + 1` of the scalar, since the ladder's value is `2B + 1` for
-/// `B = sum b_i 2^i`. Row 0 takes the top digits.
+/// Digit `i` is bit `i + 1` of the scalar, since the ladder's value is `2B + 1`.
 pub(super) fn sign_pattern_for_row(scalar: &[u8], row: usize) -> usize {
     let mut pattern = 0usize;
     for step in 0..EC_MUL_STEPS_PER_ROW {
@@ -367,9 +357,9 @@ unsafe fn execute_e2_impl<
     let e2_pre_compute: &E2PreCompute<EcMulPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcMulPreCompute>>())
             .borrow();
-    // One instruction contributes EC_MUL_TOTAL_ROWS rows, not one.
+    // One instruction contributes EC_MUL_COMPUTE_ROWS rows, not one.
     exec_state
         .ctx
-        .on_height_change(e2_pre_compute.chip_idx as usize, EC_MUL_TOTAL_ROWS as u32);
+        .on_height_change(e2_pre_compute.chip_idx as usize, EC_MUL_COMPUTE_ROWS as u32);
     execute_e12_impl::<_, BLOCKS, CURVE_TYPE, IS_SETUP>(&e2_pre_compute.data, exec_state)
 }

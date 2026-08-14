@@ -44,10 +44,7 @@ fn expr_ladder(
     (rx, ry)
 }
 
-/// `k * P` by repeated addition, for small odd `k`.
-///
-/// An independent reference for both the native ladder and the expression: it shares none of the
-/// digit recoding, so it is what actually checks that `2B + 1` is the value the ladder computes.
+/// `k * P` by repeated addition: an independent reference sharing none of the digit recoding.
 fn repeated_addition<F: halo2curves_axiom::ff::Field + From<u64>, const NEG_A: u64>(
     gx: F,
     gy: F,
@@ -174,10 +171,6 @@ fn native_ladder_matches_field_expression() {
     );
 }
 
-/// The order check must accept every configured curve and reject the case its proof cannot cover.
-///
-/// For `n = 3 (mod 4)` the prefix `(n - 1)/2` is odd, hence reachable, and makes the incomplete
-/// addition's denominator vanish. See the module documentation.
 #[test]
 fn supported_scalar_orders_are_accepted() {
     for hex in [
@@ -205,12 +198,8 @@ fn scalar_order_three_mod_four_is_rejected() {
     super::assert_supported_scalar_order(&BigUint::from(23u32));
 }
 
-/// Pins the row layout the GPU prover's device mirror restates.
-///
-/// `extensions/riscv-adapters/cuda/include/riscv-adapters/ec_mul_columns.cuh` declares these column
-/// structs in C++ and resolves each column by `offsetof`, so a field added, removed, or reordered
-/// here would write to the wrong column there rather than fail to compile. Both sides assert the
-/// same three widths.
+/// Pins the row layout the CUDA mirror restates by offsetof; a reordered field there would write
+/// to the wrong column rather than fail to compile.
 #[test]
 fn ec_mul_column_widths_match_the_cuda_mirror() {
     use crate::{ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48};

@@ -1,20 +1,10 @@
 #pragma once
 
 // Device-side interpreter for the mod-builder "device program" blob produced by
-// device_program.rs (see that file for the semantics contract).
-//
-// This header holds only the per-row core: loading and validating the blob, the Montgomery field
-// helpers, and `field_expr_fill_core_row`, which evaluates one instance of an expression and
-// writes its core columns plus range-check counts. It carries no notion of adapter layout, row
-// count, or launch policy, so a chip whose trace is many rows per instruction can call it in a
-// loop, chaining one row's outputs into the next row's inputs.
-//
-// Such a caller supplies its own `FieldExprRowMode`, passes a null logged output, and reads each
-// row's results back through `field_expr_var_limbs`.
-//
-// The interpreter is validated bit-exact against `FieldExpressionFiller::fill_trace_row` (rows and
-// range-checker histograms) on EcAddNe, MulDiv (flags/Select/Div-under-Select/setup rows) and
-// IntMul/IntAdd expressions.
+// device_program.rs. This header holds only the per-row core: loading and validating the blob, the
+// Montgomery field helpers, and `field_expr_fill_core_row`, which evaluates one instance of an
+// expression and writes its core columns plus range-check counts. It carries no notion of adapter
+// layout, row count, or launch policy.
 
 #include "arch/rvr/preflight.cuh" // preflight_set_error
 #include "launcher.cuh"

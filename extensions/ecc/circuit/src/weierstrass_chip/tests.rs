@@ -2126,7 +2126,7 @@ mod ec_mul_tests {
         build_ec_mul_dummy_expr, ec_mul_header_width, extension::HybridEcMulChip, get_ec_mul_air,
         get_ec_mul_chip, get_ec_mul_executor,
         weierstrass_chip::generate_ec_mul_trace_from_postflight, EcMulAir, EcMulChip,
-        EcMulExecutor, EC_MUL_TOTAL_ROWS, SCALAR_LIMBS,
+        EcMulExecutor, EC_MUL_COMPUTE_ROWS, SCALAR_LIMBS,
     };
 
     type EcMulGpuHarness<const NUM_LIMBS: usize, const BLOCKS: usize> = GpuTestChipHarness<
@@ -2439,7 +2439,7 @@ mod ec_mul_tests {
             .buffer()
             .to_host_on(&device_ctx)
             .unwrap();
-        let used_rows = REPETITIONS * EC_MUL_TOTAL_ROWS;
+        let used_rows = REPETITIONS * EC_MUL_COMPUTE_ROWS;
         assert!(used_rows < gpu_height, "fixture must exercise padding rows");
         let dummy_expr =
             build_ec_mul_dummy_expr(&harness.cpu_chip.expr, harness.cpu_chip.range_checker.bus());

@@ -538,16 +538,7 @@ pub fn serialize_field_expr<A>(
     build_device_program(filler)?.serialize()
 }
 
-/// Serializes an expression that no [`FieldExpressionFiller`] owns.
-///
-/// A chip using the adapter/core split holds its opcode metadata in a filler and should use
-/// [`serialize_field_expr`]. This entry point is for one whose row layout is its own, which holds a
-/// bare [`FieldExpr`] and supplies the metadata separately.
-///
-/// `local_opcode_idx` and `opcode_flag_idx` must satisfy the layout rule the filler enforces: with
-/// setup, one trailing setup opcode carrying no flag; without it, exactly one opcode and no flags.
-/// A caller driving the flags per row must still declare a legal table, since the device validates
-/// its shape before running.
+/// Serializes an expression that no `filler` owns.
 pub fn serialize_field_expr_from_parts(
     expr: &FieldExpr,
     local_opcode_idx: &[usize],
@@ -1179,7 +1170,6 @@ mod tests {
         );
     }
 
-    /// A filler whose one output variable is a flag-selected multiplication or division.
     fn division_output_filler() -> FieldExpressionFiller<()> {
         let prime = secp256k1_coord_prime();
         let (range_checker, builder) = setup(&prime);
@@ -1232,7 +1222,6 @@ mod tests {
         assert_eq!(load.a, 0);
     }
 
-    /// With no logged write to load from, the output's division is replayed like any other value.
     #[test]
     fn computed_outputs_replay_their_division_and_load_nothing() {
         let filler = division_output_filler();
@@ -1253,8 +1242,6 @@ mod tests {
             .iter()
             .all(|op| op.opcode != ValueOpcode::LoadOutput as u32));
 
-        // The output index is unchanged, so a chained caller can still find the value to seed the
-        // next row.
         let serialized = serialize_field_expr_from_parts(
             &filler.expr,
             &filler.local_opcode_idx,

@@ -1,12 +1,9 @@
 //! GPU trace generation for the `EC_MUL` chip.
 //!
-//! The shared vec-heap gather cannot describe this opcode: its two heap reads have different block
-//! counts, and its trace is [`EC_MUL_TOTAL_ROWS`] rows per instruction rather than one. A dedicated
-//! kernel gathers the same fields the host postflight projects. Supported shapes advance the
-//! dependent ladder in projective coordinates, batch-normalize its rows, then evaluate independent
-//! rows into a variable-major buffer; other shapes retain the host evaluator. The fill kernel
-//! writes the trace on the device one thread per row. Dedicated tests compare both paths cell for
-//! cell and prove their outputs.
+//! A dedicated kernel gathers the same fields the host postflight projects. Supported shapes
+//! advance the ladder in projective coordinates, batch-normalize its rows, then evaluate them into
+//! a variable-major buffer; other shapes retain the host evaluator. The fill kernel writes the
+//! trace one thread per row.
 
 use std::sync::Arc;
 
@@ -44,20 +41,16 @@ use openvm_stark_backend::{
 use super::{
     blocks_to_bytes, build_ec_mul_dummy_expr, ec_mul_step_expr, ec_mul_width,
     execution::sign_pattern_for_row, setup_row_inputs, EcMulChip, EcMulTraceInput,
-    EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, EC_MUL_TOTAL_ROWS,
+    EC_MUL_COMPUTE_ROWS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW,
 };
 
 /// Device memory the row-filling pass may use for per-thread scratch.
 const MAX_EC_MUL_SCRATCH_BYTES: usize = 128 << 20;
 const EC_MUL_FILL_BLOCK_THREADS: usize = 128;
 
-/// Returns whether `serialized` is the exact expression implemented by the projective kernels.
-///
-/// The direct kernels materialize saved variables at hard-coded semantic positions. Matching only
-/// the counts is insufficient: a different expression can have the same number of inputs, flags,
-/// variables, and outputs while assigning different meanings to those variables. Rebuilding the
-/// canonical expression and comparing its complete serialized device program makes the fast path
-/// fail closed on any arithmetic, constraint, carry-layout, or opcode-metadata change.
+/// Returns whether `serialized` is the exact expression implemented by the projective kernels,
+/// which materialize saved variables at hard-coded positions. Comparing the complete serialized
+/// program makes the fast path fail closed on any expression change.
 fn is_projective_fast_path_program<const NUM_LIMBS: usize, const BLOCKS: usize>(
     expr: &FieldExpr,
     serialized: &SerializedFieldExpr,
@@ -109,14 +102,9 @@ fn is_zero_a_projective_fast_path(projective_fast_path: bool, expr: &FieldExpr) 
     projective_fast_path && expr.program().setup_values()[0] == BigUint::from(0u8)
 }
 
-/// Gathers every `EC_MUL` and `SETUP_EC_MUL` projection for one curve, in execution order.
-///
-/// The replay plan partitions steps by opcode, so the two opcodes arrive concatenated rather than
-/// interleaved. Sorting is not required for soundness: every transition constraint is gated on
-/// `in_instruction`, which is zero at an instruction boundary, and `scalar_acc` is reset by a local
-/// constraint on `is_first_compute`, so each instruction is self-contained and their order is free.
-/// It matches the host postflight, so both backends emit the same trace and one can check the
-/// other.
+/// Gathers every `EC_MUL` and `SETUP_EC_MUL` projection for one curve, in execution order,
+/// matching the host postflight so both backends emit the same trace. Instruction order is free
+/// for soundness: each instruction's rows are self-contained.
 fn gather_projections<const BLOCKS: usize>(
     ptr_max_bits: usize,
     opcode_base: usize,
@@ -246,13 +234,9 @@ fn write_vars_row(out: &mut [u32], u32_limbs: usize, vars: &[BigUint]) {
     }
 }
 
-/// Computes one instruction's saved-variable buffer for the fill kernel.
-///
-/// A ladder row's inputs are the previous row's outputs, so evaluation is sequential within an
-/// instruction — the wrong shape for a device thread, whose Fermat inversions leave the
-/// evaluation throughput-bound. On the host an inversion is an extended gcd and instructions
-/// parallelize across cores. A setup instruction carries the same variables on every row, so it
-/// is evaluated once and copied.
+/// Computes one instruction's saved-variable buffer for the fill kernel. Evaluation is sequential
+/// within an instruction, so instructions parallelize across host cores; a setup instruction is
+/// evaluated once and copied.
 fn fill_instruction_vars<const BLOCKS: usize>(
     expr: &FieldExpr,
     u32_limbs: usize,
@@ -320,9 +304,8 @@ impl EcMulTracegenGpu {
         opcode_base: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Result<Self, GpuPostflightError> {
-        // The ladder drives its flags per row rather than per opcode, so the table declares only
-        // the setup opcode. It exists to satisfy the device validator's shape rule; the kernels
-        // never look an opcode up in it.
+        // The table declares only the setup opcode to satisfy the device validator's shape rule;
+        // the kernels never look an opcode up in it.
         let serialized = serialize_field_expr_from_parts(
             &chip.expr,
             &[WeierstrassOpcode::SETUP_EC_MUL as usize],
@@ -349,9 +332,7 @@ impl EcMulTracegenGpu {
             ));
         }
 
-        // This validation happens before the program or any projective scratch is uploaded. The
-        // expression is immutable after construction, so the cached decision remains exact for
-        // every proving segment generated by this tracegen instance.
+        // Validated once at construction; the expression is immutable afterwards.
         let projective_fast_path = is_projective_fast_path_program::<NUM_LIMBS, BLOCKS>(
             &chip.expr,
             &serialized,
@@ -418,7 +399,7 @@ impl EcMulTracegenGpu {
         let num_instructions = inputs.len();
         let width = ec_mul_width::<NUM_LIMBS, BLOCKS>(self.expr_width);
         let unpadded_height = num_instructions
-            .checked_mul(EC_MUL_TOTAL_ROWS)
+            .checked_mul(EC_MUL_COMPUTE_ROWS)
             .ok_or_else(|| {
                 GpuPostflightError::InvalidConfiguration(
                     "EC_MUL trace height overflows usize".to_string(),

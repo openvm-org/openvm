@@ -1,4 +1,4 @@
-use core::ops::{Add, Neg};
+use core::ops::Neg;
 
 use hex_literal::hex;
 use openvm_algebra_guest::{IntMod, Reduce};
@@ -57,10 +57,7 @@ impl IntrinsicCurve for NistP256 {
     type Scalar = P256Scalar;
     type Point = P256Point;
 
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
         openvm_ecc_guest::msm_via_ec_mul(coeffs, bases)
     }
 }
@@ -76,29 +73,17 @@ impl P256Point {
         <Self as WeierstrassPoint>::y(self).to_be_bytes()
     }
 
-    /// Returns `scalar * self`, for any scalar representation and any point.
-    ///
-    /// [`P256Point::mul_scalar_le_unchecked`] requires a non-identity base point and a scalar below
-    /// the group order; this discharges both preconditions, so it is total.
-    ///
-    /// `P256Scalar` admits unreduced representations, since `from_le_bytes_unchecked` and
-    /// `from_be_bytes_unchecked` do not reduce. P-256 has cofactor 1, so every point on the curve
-    /// has order dividing the group order and reducing the scalar leaves the product unchanged.
     pub fn mul_scalar(&self, scalar: &P256Scalar) -> Self {
         if self.is_identity() {
             return <Self as Group>::IDENTITY;
         }
         let mut reduced = P256Scalar::reduce_le_bytes(scalar.as_le_bytes());
-        // Zero admits no odd representative: negating it yields `n - 0 = 0`.
         if reduced == P256Scalar::ZERO {
             return <Self as Group>::IDENTITY;
         }
 
-        // The intrinsic expands the scalar into digits drawn from `{+1, -1}`, whose sum is odd for
-        // every choice of signs; an even scalar therefore has no digit assignment and would produce
-        // an unprovable trace. Substituting `n - k` restores oddness, `n` itself being odd, and
-        // preserves the order bound. The substitution is exact: `(n - k) * P = -(k * P)`, so
-        // negating the result recovers the product.
+        // The intrinsic needs an odd scalar below n; substitute the odd n - k and negate the
+        // product, since (n - k) * P = -(k * P).
         let odd = reduced.as_le_bytes()[0] & 1 == 1;
         if !odd {
             reduced.neg_assign();

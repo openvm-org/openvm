@@ -5,7 +5,6 @@
 
 #include <mcl/bn_c384_256.h>
 
-#include <stdatomic.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -19,41 +18,13 @@ static constexpr uint32_t BN254_FIELD_WORDS = BN254_FIELD_BYTES / WORD_SIZE;
 static constexpr uint32_t BN254_SCALAR_BYTES = 32;
 static constexpr uint32_t BN254_SCALAR_WORDS = BN254_SCALAR_BYTES / WORD_SIZE;
 
-static constexpr uint32_t MCL_UNINITIALIZED = 0;
-static constexpr uint32_t MCL_INITIALIZING = 1;
-static constexpr uint32_t MCL_READY = 2;
-static constexpr uint32_t MCL_FAILED = 3;
-static atomic_uint mcl_init_state;
+static bool mcl_bn254_ready;
 
-/* MCL initialization is process-global and not thread-safe. */
-static void ensure_mcl_bn254_initialized(void) {
-    uint32_t state = atomic_load_explicit(&mcl_init_state, memory_order_acquire);
-    if (likely(state == MCL_READY)) {
-        return;
-    }
-
-    uint32_t expected = MCL_UNINITIALIZED;
-    if (atomic_compare_exchange_strong_explicit(
-            &mcl_init_state, &expected, MCL_INITIALIZING, memory_order_acq_rel, memory_order_acquire
-        )) {
-        bool initialized = mclBn_init(MCL_BN_SNARK1, MCLBN_COMPILED_TIME_VAR) == 0 &&
-                           mclBn_getFpByteSize() == 32 && mclBn_getFrByteSize() == 32;
-        state = initialized ? MCL_READY : MCL_FAILED;
-        atomic_store_explicit(&mcl_init_state, state, memory_order_release);
-    } else {
-        do {
-            state = atomic_load_explicit(&mcl_init_state, memory_order_acquire);
-        } while (state == MCL_INITIALIZING);
-    }
-
-    if (unlikely(state != MCL_READY)) {
-        __builtin_trap();
-    }
-}
-
-/* Initialize before the compiled RVR instance can be shared across threads. */
+/* MCL initialization is process-global and not thread-safe; run it at load, before the compiled
+ * RVR instance can be shared across threads. */
 __attribute__((constructor)) static void initialize_mcl_bn254_at_load(void) {
-    ensure_mcl_bn254_initialized();
+    mcl_bn254_ready = mclBn_init(MCL_BN_SNARK1, MCLBN_COMPILED_TIME_VAR) == 0 &&
+                      mclBn_getFpByteSize() == 32 && mclBn_getFrByteSize() == 32;
 }
 
 __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
@@ -62,7 +33,9 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
     uint64_t rs1_ptr,
     uint64_t rs2_ptr
 ) {
-    ensure_mcl_bn254_initialized();
+    if (unlikely(!mcl_bn254_ready)) {
+        __builtin_trap();
+    }
 
     uint64_t x[BN254_FIELD_WORDS];
     uint64_t y[BN254_FIELD_WORDS];

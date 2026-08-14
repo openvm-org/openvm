@@ -9,9 +9,8 @@
 // Trace generation for the `EC_MUL` chip: the passes driving the field-expression interpreter. The
 // row layout they write around is in `ec_mul_columns.cuh`.
 
-// The accumulator a setup row carries, mirroring `SETUP_ACC` in `mul/field_expr.rs`. The setup
-// check does not pin it, but both backends must choose the same value or the memory argument will
-// not balance.
+// The accumulator a setup row carries, mirroring `SETUP_ACC` in `mul/field_expr.rs`; both
+// backends must choose the same value.
 static constexpr uint32_t EC_MUL_SETUP_ACC_X = 2;
 static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 
@@ -19,11 +18,9 @@ static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 static constexpr uint32_t EC_MUL_EXPR_NUM_INPUTS = 4;
 static constexpr uint32_t EC_MUL_EXPR_NUM_OUTPUTS = 2;
 
-// A ladder row's inputs are the previous row's outputs. The generic path uploads host-computed
-// saved variables; supported device shapes replace the serial affine chain with projective
-// preparation, batch normalization, and row-parallel evaluation. `ec_mul_fill_row` consumes either
-// row-major host variables or variable-major device variables one thread per row. Witness
-// generation depends only on a row's own variables and performs no modular inversions.
+// The generic path uploads host-computed saved variables; supported device shapes prepare them in
+// projective coordinates and batch-normalize. The fill consumes either layout one thread per row
+// and performs no modular inversions.
 
 // Checks that a blob describes this chip's ladder step before any row relies on its shape.
 static __device__ bool ec_mul_program_matches(const FieldExprProg &s, uint32_t num_limbs) {
@@ -115,12 +112,8 @@ static __device__ FieldExprRowMode ec_mul_row_mode(
                             false, false};
 }
 
-// Writes one row of the trace.
-//
-// `dummy_expr` is the inactive expression witness that padding rows carry, computed once per
-// trace. It cannot be all zero: the curve's `a` coefficient is folded in as a constant, so on a
-// zero row the lambda constraint evaluates to `-a` and the ungated carry recurrences are
-// unsatisfiable whenever `a != 0`.
+// Writes one row of the trace. `dummy_expr` is the inactive witness padding rows carry; an
+// all-zero region is unsatisfiable whenever the curve's `a` is nonzero.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
 static __device__ __noinline__ bool ec_mul_fill_row(
     const FieldExprProg &s,
@@ -150,8 +143,8 @@ static __device__ __noinline__ bool ec_mul_fill_row(
         return true;
     }
 
-    const size_t instruction = row_index / EC_MUL_TOTAL_ROWS;
-    const size_t local_row = row_index % EC_MUL_TOTAL_ROWS;
+    const size_t instruction = row_index / EC_MUL_COMPUTE_ROWS;
+    const size_t local_row = row_index % EC_MUL_COMPUTE_ROWS;
     const EcMulTraceInput<BLOCKS> &input = projection[instruction];
     const bool is_setup = input.is_setup != 0;
     const uint8_t *scalar_bytes = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
@@ -161,7 +154,7 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     // The witness reads saved variables in place. Projective generation stores them variable-major,
     // so adjacent row threads load each word coalesced; the host fallback remains row-major.
     const size_t vars_index = instruction * EC_MUL_COMPUTE_ROWS + local_row;
-    const size_t vars_rows = (used_rows / EC_MUL_TOTAL_ROWS) * EC_MUL_COMPUTE_ROWS;
+    const size_t vars_rows = used_rows;
     FieldExprSavedVarsView<K> saved_vars = vars_transposed
         ? FieldExprSavedVarsView<K>{vars + vars_index, vars_rows}
         : FieldExprSavedVarsView<K>{vars + vars_index * s.num_vars * K, 1};
@@ -201,11 +194,8 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     return true;
 }
 
-// Checks the host's trace shape and buffer sizing against the blob before any row is written.
-//
-// The host derives the width and the variable-buffer length from its own copies of these constants,
-// so a mismatch means one side changed without the other, which would otherwise be an
-// out-of-bounds write rather than a failure.
+// Checks the host's trace shape and buffer sizing against the blob before any row is written; a
+// mismatch would otherwise be an out-of-bounds write rather than a failure.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
 static __device__ bool ec_mul_validate_trace_shape(
     const FieldExprProg &s,
@@ -216,6 +206,6 @@ static __device__ bool ec_mul_validate_trace_shape(
 ) {
     return ec_mul_program_matches(s, static_cast<uint32_t>(NUM_LIMBS)) && s.k == K &&
            width == EC_MUL_HEADER_WIDTH + s.width + EC_MUL_IO_WIDTH<NUM_LIMBS, BLOCKS> &&
-           num_instructions * EC_MUL_TOTAL_ROWS <= height &&
+           num_instructions * EC_MUL_COMPUTE_ROWS <= height &&
            vars_words >= num_instructions * EC_MUL_COMPUTE_ROWS * s.num_vars * K;
 }

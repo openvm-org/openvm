@@ -8,14 +8,8 @@ static constexpr size_t EC_MUL_REGISTER_READS = 3;
 /// Memory blocks spanned by the 256-bit scalar operand.
 static constexpr size_t EC_MUL_SCALAR_BLOCKS = 4;
 
-/// Projection of one `EC_MUL` or `SETUP_EC_MUL` instruction.
-///
-/// The opcode reads a base point and a fixed-width scalar and writes a point, so its two heap reads
-/// have different block counts. That asymmetry is why `VecHeapTraceInput`, which carries a single
-/// `BLOCKS` for every read, cannot describe it.
-///
-/// Field order matches the Rust `EcMulTraceInput`: every `uint32_t` ahead of every `uint16_t` array,
-/// leaving no interior padding so both sides can assert the same size.
+/// Projection of one `EC_MUL` or `SETUP_EC_MUL` instruction. Field order matches the Rust side:
+/// every `uint32_t` ahead of every `uint16_t` array, so there is no interior padding.
 template <size_t BLOCKS> struct EcMulTraceInput {
     uint32_t from_pc;
     uint32_t from_timestamp;
@@ -90,10 +84,8 @@ static __device__ bool ec_mul_replay_blocks(
     return true;
 }
 
-/// Gathers `EC_MUL` projections from the replayed memory history.
-///
-/// The access order is the one the AIR assigns timestamps in, and the one the host postflight walks:
-/// `rs1`, `rs2`, `rd`, the point blocks, the scalar blocks, then the result writes.
+/// Gathers `EC_MUL` projections from the replayed memory history, in the order the AIR assigns
+/// timestamps: rs1, rs2, rd, the point blocks, the scalar blocks, then the result writes.
 template <size_t BLOCKS>
 __global__ void ec_mul_replay_gather(
     EcMulTraceInput<BLOCKS> *output,

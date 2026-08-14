@@ -123,10 +123,6 @@ where
 }
 
 /// Multi-scalar multiplication using one `EC_MUL` scalar product per base.
-///
-/// Each product routes through the curve's [`ScalarMul`] implementation, which discharges the
-/// intrinsic's preconditions, so any scalar representation and identity points are handled. On a
-/// curve with a cofactor, every base must lie in the prime-order subgroup.
 pub fn msm_via_ec_mul<EcPoint, Scalar>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where
     EcPoint: Group + ScalarMul<Scalar>,

@@ -12,20 +12,16 @@
 
 using namespace riscv;
 
-// Device mirror of the `EC_MUL` row layout: the per-row header and the digest row's memory
-// witnesses. The expression-dependent passes are in `algebra/ec_mul_tracegen.cuh`.
-//
-// The column structs must match `extensions/ecc/circuit/src/weierstrass_chip/mul/columns.rs` field
-// for field. `COL_INDEX` resolves a column by `offsetof` on the `uint8_t` instantiation, so a
-// reordered field writes to the wrong column rather than failing to compile. The width asserts
-// below and `ec_mul_column_widths_match_the_cuda_mirror` pin the same three numbers.
+// Device mirror of the `EC_MUL` row layout; the expression-dependent passes are in
+// `algebra/ec_mul_tracegen.cuh`. The column structs must match the host's columns.rs field for
+// field: `COL_INDEX` resolves a column by `offsetof`, so a reordered field writes to the wrong
+// column rather than failing to compile.
 
 // Restated from `mul/mod.rs` so the column structs are fixed-size.
 static constexpr size_t EC_MUL_SCALAR_BITS = 256;
 static constexpr size_t EC_MUL_STEPS_PER_ROW = 2;
 static constexpr size_t EC_MUL_SIGN_PATTERNS = size_t(1) << EC_MUL_STEPS_PER_ROW;
 static constexpr size_t EC_MUL_COMPUTE_ROWS = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
-static constexpr size_t EC_MUL_TOTAL_ROWS = EC_MUL_COMPUTE_ROWS;
 static constexpr size_t EC_MUL_FINAL_ROW_IDX = EC_MUL_COMPUTE_ROWS - 1;
 static constexpr size_t EC_MUL_SCALAR_LIMBS = EC_MUL_SCALAR_BITS / 8;
 // Sized to one row's contribution, making the accumulator recurrence a shift.
@@ -95,10 +91,8 @@ static __device__ __forceinline__ uint8_t ec_mul_block_byte(
     return static_cast<uint8_t>(byte % 2 == 0 ? cell : cell >> 8);
 }
 
-// The one-hot flag index for compute row `row`, digits most significant first.
-//
-// Digit `i` is bit `i + 1` of the scalar, since the multiplier is `2B + 1`. The most significant
-// digit has no bit above it and is always negative, so the accumulator seeds itself from `P`.
+// The one-hot flag index for compute row `row`, digits most significant first. Digit `i` is bit
+// `i + 1` of the scalar, since the multiplier is `2B + 1`.
 static __device__ __forceinline__ uint32_t ec_mul_sign_pattern_for_row(
     const uint8_t *scalar, size_t row
 ) {
@@ -113,12 +107,9 @@ static __device__ __forceinline__ uint32_t ec_mul_sign_pattern_for_row(
     return pattern;
 }
 
-// Fills the header columns of one row. `row` points at the first header column.
-//
-// `scalar_acc` holds the accumulator entering the row, so on compute row `r` limb `j` is the sign
-// pattern of row `r - 1 - j` for `j < r` and zero above. The host produces the same values by
-// shifting a rolling array; writing them positionally costs the same and needs no carried state. A
-// setup row never accumulates, so its limbs stay zero.
+// Fills the header columns of one row. `row` points at the first header column. The accumulator
+// entering compute row `r` has limb `j` equal to the sign pattern of row `r - 1 - j`; a setup row
+// never accumulates.
 static __device__ void fill_ec_mul_header(
     RowSlice row, const uint8_t *scalar, size_t row_idx, bool is_setup
 ) {
@@ -210,10 +201,8 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
     }
 
   private:
-    // Carries for the `2B + 1 == scalar` check, byte by byte; byte 0's incoming carry is the
-    // `+1`. `B` is the completed accumulator: limb `j` is the sign pattern of compute row
-    // `EC_MUL_COMPUTE_ROWS - 1 - j`, with limb 0 contributed by the final row itself. A setup row
-    // leaves the carries zero, its accumulator having stayed zero and the check gated off.
+    // Carries for the `2B + 1 == scalar` check; byte 0's incoming carry is the `+1`. A setup row
+    // leaves them zero, the check being gated off.
     __device__ bool fill_scalar_carries(
         RowSlice row, const EcMulTraceInput<BLOCKS> &input, bool is_setup, uint32_t *err
     ) {
@@ -227,8 +216,7 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
             uint32_t accumulated = 0;
             for (size_t limb = 0; limb < EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE; limb++) {
                 size_t index = byte * EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE + limb;
-                // Limb `j` of the completed accumulator came from compute row
-                // `EC_MUL_COMPUTE_ROWS - 1 - j`.
+                // Limb `j` came from compute row `EC_MUL_COMPUTE_ROWS - 1 - j`.
                 uint32_t pattern = ec_mul_sign_pattern_for_row(
                     scalar_bytes, EC_MUL_COMPUTE_ROWS - 1 - index
                 );

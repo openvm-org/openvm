@@ -1,12 +1,10 @@
 //! Trace generation for the `EC_MUL` chip.
 //!
-//! Each selected postflight step becomes [`EC_MUL_TOTAL_ROWS`] consecutive rows, produced by
-//! evaluating the step [`FieldExpr`] once per group of [`EC_MUL_STEPS_PER_ROW`] digits and
+//! Each selected postflight step becomes one instruction's consecutive rows, produced by
+//! evaluating the step expression once per group of digits and
 //! carrying the accumulator forward; the last row additionally holds the memory witnesses.
-//!
-//! Digest and padding rows carry an inactive expression witness with `is_valid` cleared, rather
-//! than being all-zero; [`build_ec_mul_trace`] explains why zeros satisfy neither the ungated
-//! constraints nor witness generation.
+//! Padding rows carry an inactive expression witness with `is_valid` cleared, since several
+//! expression constraints are ungated.
 
 use std::{
     borrow::BorrowMut,
@@ -40,15 +38,12 @@ use openvm_stark_backend::{
 use super::{
     ec_mul_header_width, ec_mul_io_offset, ec_mul_width, execution::sign_pattern_for_row,
     setup_row_inputs, EcMulHeaderCols, EcMulIoCols, EC_MUL_COMPUTE_ROWS, EC_MUL_FINAL_ROW_IDX,
-    EC_MUL_REGISTER_READS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, EC_MUL_TOTAL_ROWS,
-    SCALAR_ACC_LIMBS, SCALAR_ACC_LIMBS_PER_BYTE, SCALAR_BLOCKS, SCALAR_LIMBS,
+    EC_MUL_REGISTER_READS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, SCALAR_ACC_LIMBS,
+    SCALAR_ACC_LIMBS_PER_BYTE, SCALAR_BLOCKS, SCALAR_LIMBS,
 };
 
-/// Prover-side state for one curve's `EC_MUL` chip.
-///
-/// Not a `VmChipWrapper`: the row layout is header / expression / io rather than adapter /
-/// core, so the vec-heap adapter's filler does not apply.
-/// `ChipInventory::add_executor_chip_with_tracegen` accepts any `'static` type.
+/// Prover-side state for one curve's `EC_MUL` chip. Not a `VmChipWrapper`: the row layout is
+/// header / expression / io rather than adapter / core.
 pub struct EcMulChip<F, const NUM_LIMBS: usize, const BLOCKS: usize> {
     pub expr: FieldExpr,
     pub range_checker: SharedVariableRangeCheckerChip,
@@ -72,11 +67,9 @@ impl<F, const NUM_LIMBS: usize, const BLOCKS: usize> EcMulChip<F, NUM_LIMBS, BLO
     }
 }
 
-/// One instruction's replayed values, before field encoding.
-///
-/// The layout is the ABI shared with the GPU gather kernel, so it is `repr(C)` with every `u32`
-/// field ahead of every `u16` array. That ordering leaves no interior padding, which lets both
-/// sides assert the same size; see [`ec_mul_trace_input_bytes`].
+/// One instruction's replayed values, before field encoding. The layout is the ABI shared with
+/// the GPU gather kernel: `repr(C)`, every `u32` field ahead of every `u16` array, so there is no
+/// interior padding.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EcMulTraceInput<const BLOCKS: usize> {
@@ -117,7 +110,7 @@ impl<const BLOCKS: usize> EcMulTraceInput<BLOCKS> {
     }
 }
 
-/// Byte size of [`EcMulTraceInput`], stated independently of the struct so a layout change fails to
+/// Byte size of the trace input, stated independently of the struct so a layout change fails to
 /// compile on both sides of the FFI rather than silently reinterpreting device memory.
 pub(crate) const fn ec_mul_trace_input_bytes(blocks: usize) -> usize {
     let words = 3 + 3 * EC_MUL_REGISTER_READS + blocks + SCALAR_BLOCKS + blocks;
@@ -279,7 +272,7 @@ pub(super) fn blocks_to_bytes<const N: usize>(blocks: &[[u16; BLOCK_FE_WIDTH]; N
     out
 }
 
-/// Fills one instruction's [`EC_MUL_TOTAL_ROWS`] rows.
+/// Fills one instruction's rows.
 #[allow(clippy::too_many_arguments)]
 fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize>(
     expr: &FieldExpr,
@@ -390,8 +383,8 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
     }
 
     // ---- final-row I/O ---------------------------------------------------------------
-    // The write's memory-bridge data is the final row's expression outputs, so the recorded
-    // write must match them or the memory argument cannot balance against later readers.
+    // The recorded write must match the final row's expression outputs, or the memory argument
+    // cannot balance.
     let write_bytes = blocks_to_bytes(&input.write_blocks);
     {
         let row_base = EC_MUL_FINAL_ROW_IDX * width;
@@ -429,10 +422,8 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         io.scalar_data[i] = F::from_u8(*byte);
     }
 
-    // Carries for the final row's `2B + 1 == scalar` check, byte by byte. The incoming carry of
-    // byte 0 is the `+1`, and `acc_limbs` holds the completed accumulator after the loop's last
-    // shift, matching the AIR's reconstruction from the entering value plus the row's digits. On a
-    // setup row the accumulator stayed zero and the check is gated off, so these are left zero.
+    // Carries for the final row's `2B + 1 == scalar` check; the incoming carry of byte 0 is the
+    // `+1`. On a setup row the check is gated off, so these are left zero.
     if input.is_setup == 0 {
         let mut carry = 1u16;
         for i in 0..SCALAR_LIMBS {
@@ -537,24 +528,16 @@ pub fn generate_ec_mul_trace_from_postflight<
     build_ec_mul_trace::<F, NUM_LIMBS, BLOCKS>(chip, &inputs)
 }
 
-/// Builds the canonical inactive expression witness shared by digest and padding rows.
-///
-/// The expression's range checks are intentionally accumulated in a private chip and discarded:
-/// the AIR emits no range checks when `is_valid` is zero. Keeping this helper next to the CPU
-/// trace builder gives the CPU and GPU backends one definition of the otherwise nonzero padding
-/// expression.
+/// Builds the canonical inactive expression witness for padding rows, shared by the CPU and GPU
+/// backends. Its range checks accumulate in a private chip and are discarded: the AIR emits none
+/// when `is_valid` is zero.
 pub(crate) fn build_ec_mul_dummy_expr<F: PrimeField32>(
     expr: &FieldExpr,
     range_bus: VariableRangeCheckerBus,
 ) -> Vec<F> {
-    // An inactive expression region cannot be zero: the curve's `a` coefficient is folded in as a
-    // constant, so on an all-zero row the lambda constraint evaluates to `-a` and the ungated
-    // carry recurrences are unsatisfiable whenever `a != 0`. Build one consistent witness with
-    // `is_valid` cleared, as `fill_dummy_core_row` does for the single-row chips.
-    //
-    // The witness is built from `setup_row_inputs` rather than zeros. Zeros would put `0` in the
-    // accumulator, and the expression divides by `2*acc_y` without a guard, so computing the
-    // witness would divide by zero.
+    // An all-zero region is unsatisfiable whenever `a != 0`, and zero inputs would make the
+    // witness computation divide by zero, so build one consistent witness from
+    // `setup_row_inputs` with `is_valid` cleared.
     let discard = VariableRangeCheckerChip::new(range_bus);
     let mut dummy = F::zero_vec(BaseAir::<F>::width(expr));
     expr.generate_subrow(
@@ -569,11 +552,8 @@ pub(crate) fn build_ec_mul_dummy_expr<F: PrimeField32>(
     dummy
 }
 
-/// Fills the trace from already-replayed instruction data.
-///
-/// Split from the postflight walk above so both prover backends share one row layout: the CPU
-/// prover projects from a host [`Postflight`], while the GPU prover gathers the same fields from
-/// the device transcript. Neither can drift from the other's row encoding.
+/// Fills the trace from already-replayed instruction data, shared by both prover backends so
+/// neither can drift from the other's row encoding.
 pub(crate) fn build_ec_mul_trace<
     F: PrimeField32 + Send + Sync,
     const NUM_LIMBS: usize,
@@ -583,7 +563,7 @@ pub(crate) fn build_ec_mul_trace<
     inputs: &[EcMulTraceInput<BLOCKS>],
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let width = ec_mul_width::<NUM_LIMBS, BLOCKS>(BaseAir::<F>::width(&chip.expr));
-    let used_rows = inputs.len() * EC_MUL_TOTAL_ROWS;
+    let used_rows = inputs.len() * EC_MUL_COMPUTE_ROWS;
     let height = if used_rows == 0 {
         0
     } else {
@@ -604,7 +584,7 @@ pub(crate) fn build_ec_mul_trace<
     let mem_helper = helper_owner.as_borrowed();
 
     trace.values[..used_rows * width]
-        .par_chunks_exact_mut(EC_MUL_TOTAL_ROWS * width)
+        .par_chunks_exact_mut(EC_MUL_COMPUTE_ROWS * width)
         .zip(inputs.par_iter())
         .try_for_each(|(rows, input)| {
             fill_instruction::<F, NUM_LIMBS, BLOCKS>(

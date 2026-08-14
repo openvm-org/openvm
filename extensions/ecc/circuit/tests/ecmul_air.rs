@@ -21,7 +21,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus,
 };
 use openvm_ecc_circuit::{
-    ec_mul_step_expr, EcMulAir, ECC_BLOCKS_32, EC_MUL_TOTAL_ROWS, NUM_LIMBS_32,
+    ec_mul_step_expr, EcMulAir, ECC_BLOCKS_32, EC_MUL_COMPUTE_ROWS, NUM_LIMBS_32,
 };
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
@@ -95,9 +95,9 @@ fn report(name: &str, air: &EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>) -> usize {
         constraints.interactions.len(),
     );
     println!(
-        "{:<12} cells / scalar-mul = {width} x {EC_MUL_TOTAL_ROWS} rows = {}",
+        "{:<12} cells / scalar-mul = {width} x {EC_MUL_COMPUTE_ROWS} rows = {}",
         "",
-        width * EC_MUL_TOTAL_ROWS
+        width * EC_MUL_COMPUTE_ROWS
     );
     let header = openvm_ecc_circuit::ec_mul_header_width();
     let io = openvm_ecc_circuit::ec_mul_io_width::<NUM_LIMBS_32, ECC_BLOCKS_32>();
@@ -107,11 +107,11 @@ fn report(name: &str, air: &EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>) -> usize {
         header + expr_width + io
     );
     println!(
-        "{:<12} io region idle on {} of {EC_MUL_TOTAL_ROWS} rows = {} cells ({:.1}% of chip)",
+        "{:<12} io region idle on {} of {EC_MUL_COMPUTE_ROWS} rows = {} cells ({:.1}% of chip)",
         "",
-        EC_MUL_TOTAL_ROWS - 1,
-        io * (EC_MUL_TOTAL_ROWS - 1),
-        100.0 * (io * (EC_MUL_TOTAL_ROWS - 1)) as f64 / (width * EC_MUL_TOTAL_ROWS) as f64
+        EC_MUL_COMPUTE_ROWS - 1,
+        io * (EC_MUL_COMPUTE_ROWS - 1),
+        100.0 * (io * (EC_MUL_COMPUTE_ROWS - 1)) as f64 / (width * EC_MUL_COMPUTE_ROWS) as f64
     );
     degree
 }
