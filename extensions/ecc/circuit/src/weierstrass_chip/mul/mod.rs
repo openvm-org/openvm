@@ -20,8 +20,8 @@
 //! For an odd scalar below the prime order `n`, every intermediate multiplier `m_i` is an odd
 //! prefix with `0 < |m_i| < n`, so the accumulator is never the identity and the doubling never
 //! degenerates. The addition `2R + sigma*P` is exceptional only for the prefix `+-(n - 1)/2`,
-//! which is reachable exactly when it is odd, i.e. when `n = 3 (mod 4)`. Registration therefore
-//! requires `n = 1 (mod 4)` at registration.
+//! which is reachable exactly when it is odd, i.e. when `n = 3 (mod 4)`. The chip therefore
+//! requires `n = 1 (mod 4)`, asserted at registration.
 //!
 //! # Preconditions
 //!

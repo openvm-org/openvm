@@ -2580,9 +2580,9 @@ mod ec_mul_tests {
         );
     }
 
-    /// Pins the first row's fixed negative digit and the following positive-digit path against
-    /// the generic FieldExpr witness. Scalar 1 starts with `2G + (-G)`, while setting bit 254
-    /// selects `+G` in the row's second mixed addition.
+    /// Pins the sign selection against the generic FieldExpr witness. Scalar 1 makes every digit
+    /// negative, starting with `2G + (-G)`; setting bit 254 makes the second row's first addition
+    /// use `+G`.
     #[test]
     fn test_ec_mul_cuda_k256_first_row_signs() {
         let gx = BigUint::from_str_radix(
@@ -2595,14 +2595,14 @@ mod ec_mul_tests {
             16,
         )
         .unwrap();
-        let scalar_with_positive_second_digit =
+        let scalar_with_one_positive_digit =
             (BigUint::from(1u32) << 254usize) + BigUint::from(1u32);
         run_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
             WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             BigUint::zero(),
             &[(gx, gy)],
-            &[BigUint::from(1u32), scalar_with_positive_second_digit],
+            &[BigUint::from(1u32), scalar_with_one_positive_digit],
         );
     }
 

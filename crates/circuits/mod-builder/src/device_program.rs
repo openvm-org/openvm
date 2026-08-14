@@ -668,8 +668,9 @@ fn build_device_program_inner(
     }
     for (variable, compute) in builder.computes.iter().enumerate() {
         serializer.next_value_slot = serializer.value_slot_base;
-        // Output variables are already present in the read-only execution transcript.
-        // Load them directly; the constraint tape below validates their relation to the inputs.
+        // Under `Logged`, output variables are already present in the read-only execution
+        // transcript and are loaded directly; under `Computed` they are recomputed like any
+        // other variable.
         let load_output = output_positions[variable]
             .filter(|_| outputs == DeviceOutputSource::Logged)
             .map(|output_position| {

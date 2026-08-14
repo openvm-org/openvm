@@ -280,12 +280,11 @@ unsafe fn ec_double_setup(
 
 /// `SETUP_EC_MUL` reads `(modulus, a)` from the point operand, like `SETUP_EC_DOUBLE`.
 ///
-/// The circuit evaluates a setup row from the program's own setup inputs — the modulus, then the
-/// setup values, then zero padding — rather than from the base-point operand, so the validated
-/// operand bytes are extended with zeros to the expression's full input width.
+/// The circuit evaluates a setup row from `setup_row_inputs` — the modulus, the setup values,
+/// then the fixed setup accumulator — rather than from the base-point operand.
 ///
-/// The scalar operand's value is unused, but it is still read: the chip reads it on every row,
-/// setup included, and the replayed access sequence has to match.
+/// The scalar operand's value is unused, but it is still read: the chip performs its full access
+/// sequence on the final row, setup included, and the replayed access sequence has to match.
 unsafe fn ec_mul_setup(
     state: *mut c_void,
     rd_ptr: u64,
@@ -520,6 +519,8 @@ ecc_mul_setup_entry!(
 #[cfg(test)]
 mod tests {
     use halo2curves_axiom::group::prime::PrimeCurveAffine;
+    use num_bigint::BigUint;
+    use openvm_ecc_circuit::SETUP_ACC;
 
     use super::*;
 
@@ -627,9 +628,6 @@ mod tests {
             assert_eq!(coordinates(product), (zero, zero), "k = {k}");
         }
     }
-
-    use num_bigint::BigUint;
-    use openvm_ecc_circuit::SETUP_ACC;
 
     fn write_le(value: &BigUint, out: &mut [u8]) {
         let bytes = value.to_bytes_le();

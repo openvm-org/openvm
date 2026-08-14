@@ -5,8 +5,7 @@
 //! flags: step `j` uses `sum_f flag_f * sigma_j(f)`, which is degree 1.
 //!
 //! Steps run as `(2R) + sigma*P`: the alternative `(R + sigma*P) + R` needs `R != +-sigma*P`,
-//! which fails on the first step where `R = P`. The doubling's `y` is inlined rather than saved,
-//! keeping five saved variables per step.
+//! which fails on the first step where `R = P`. The doubling's `y` is inlined rather than saved.
 
 use std::{cell::RefCell, rc::Rc};
 

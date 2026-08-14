@@ -269,9 +269,9 @@ impl ExtInstr for EcMulInstr {
         }
         let suffix = self.curve.c_suffix();
         if self.is_setup {
-            // Setup reads `(modulus, a)` from the point operand and ignores the scalar's value, but
-            // still reads it: the chip reads the scalar on every row, so the access sequences
-            // match.
+            // Setup reads `(modulus, a)` from the point operand and ignores the scalar's value,
+            // but still reads it: the chip performs its full access sequence on the final row,
+            // setup included, so the replay matches.
             let name = format!("rvr_ext_setup_ec_mul_{suffix}");
             ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2]);
         } else {

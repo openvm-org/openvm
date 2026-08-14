@@ -1,6 +1,7 @@
 // Build the ECC FFI staticlib alongside this crate so callers don't have
 // to. The path to the resulting `librvr_openvm_ext_ecc_ffi.a` is exposed
-// to the source via the `RVR_ECC_FFI_STATICLIB` cargo env var.
+// to the source via the `RVR_ECC_FFI_STATICLIB` cargo env var. The MCL
+// submodule is cmake-built the same way and exposed via `RVR_ECC_MCL_STATICLIB`.
 
 use std::{
     env,
