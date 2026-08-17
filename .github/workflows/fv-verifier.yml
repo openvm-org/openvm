@@ -18,6 +18,7 @@ on:
       - "rust-toolchain.toml"
       - ".github/actions/sccache/**"
       - ".github/workflows/fv-verifier.yml"
+      - "ci/scripts/check_swirl_verifier_extraction.sh"
       - "ci/scripts/check_swirl_verifier_c.sh"
 
 concurrency:
@@ -91,8 +92,9 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
+  # TODO[INT-9153]: update used repos and references
   swirl-rbr-fv-tests:
-    name: Generated C matches upstream
+    name: Locked Rust extraction and generated C consistency
     runs-on: ubuntu-latest
 
     steps:
@@ -108,6 +110,20 @@ jobs:
         run: |
           git clone --filter=blob:none git@github.com:axiom-crypto/swirl-rbr-fv.git swirl-rbr-fv
           echo "revision=$(git -C swirl-rbr-fv rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Route the private rust-to-lean clone through SSH
+        run: |
+          git config --global \
+            url."git@github.com:axiom-crypto/rust-to-lean".insteadOf \
+            "https://github.com/axiom-crypto/rust-to-lean"
+
+      - name: Install Rust extraction toolchain
+        run: |
+          source swirl-rbr-fv/verifier-lean/extraction/sources.lock
+          rustup toolchain install "$R2L_RUST_TOOLCHAIN" --profile minimal
+
+      - name: Check Lean model against OpenVM's locked Rust verifier
+        run: bash ci/scripts/check_swirl_verifier_extraction.sh swirl-rbr-fv
 
       - name: Install Lean toolchain
         run: |
