@@ -31,23 +31,8 @@ runs:
         fi
         echo "cuda_arch=$CUDA_ARCH" >> "$GITHUB_OUTPUT"
 
-    - name: Hash CUDA build inputs
-      id: cuda-build-inputs
-      shell: bash
-      run: |
-        source_hash="$({
-          git ls-files -z -- \
-            .github/actions/rust-cache-cuda/action.yml \
-            ':(glob)**/build.rs' \
-            ':(glob)**/cuda/**' |
-            sort -z |
-            xargs -0 sha256sum
-        } | sha256sum | cut -d ' ' -f 1)"
-        echo "hash=$source_hash" >> "$GITHUB_OUTPUT"
-        echo "SCCACHE_C_CUSTOM_CACHE_BUSTER=$source_hash" >> "$GITHUB_ENV"
-
     - name: Rust cache
       uses: Swatinem/rust-cache@v2
       with:
         cache-on-failure: ${{ inputs.cache-on-failure }}
-        key: ${{ inputs.key }}${{ inputs.key && '-' || '' }}cuda-${{ steps.gpu-arch.outputs.cuda_arch }}-src-${{ steps.cuda-build-inputs.outputs.hash }}
+        key: ${{ inputs.key }}${{ inputs.key && '-' || '' }}cuda-${{ steps.gpu-arch.outputs.cuda_arch }}
