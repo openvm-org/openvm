@@ -84,10 +84,6 @@ impl G1Affine {
             return <Self as Group>::IDENTITY;
         }
 
-        // The intrinsic needs an odd scalar below n. The cofactor-1 curves substitute the odd
-        // n - k and negate, but (n - k) * P = -(k * P) only holds for points of order dividing
-        // n, and this curve's cofactor admits on-curve points outside the prime-order subgroup.
-        // Compute (k - 1) * P + P instead, which assumes nothing about the point's order.
         let odd = reduced.as_le_bytes()[0] & 1 == 1;
         if !odd {
             reduced -= Scalar::from_u8(1);

@@ -50,7 +50,11 @@ pub fn main() {
     assert_eq!(p.mul_scalar(&two), expected, "mul_scalar(2) == 2*P");
 
     // Odd scalars take the ladder directly; `3 * P = 2 * P + P` for any point.
-    assert_eq!(p.mul_scalar(&three), expected.clone() + &p, "mul_scalar(3) == 3*P");
+    assert_eq!(
+        p.mul_scalar(&three),
+        expected.clone() + &p,
+        "mul_scalar(3) == 3*P"
+    );
 
     // `Bls12_381::msm` routes every base through the same `mul_scalar`.
     assert_eq!(Bls12_381::msm(&[two], &[p]), expected, "msm(2, P) == 2*P");

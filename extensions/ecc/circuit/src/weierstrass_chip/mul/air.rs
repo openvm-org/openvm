@@ -1,13 +1,3 @@
-//! AIR for the `EC_MUL` chip.
-//!
-//! Two accumulators run together: the point `R = m*P` in the expression, and the sign bits `B` in
-//! the header, tied by the invariant `m = 2B + 1` (seeded at `m = 1`, `B = 0`, preserved by
-//! `m' = 2m + sigma`). Checking `2B + 1` against the scalar on the final row therefore checks
-//! `R = k*P`.
-//!
-//! Assumed rather than constrained: the scalar is below the curve order, the guest called
-//! `SETUP_EC_MUL`, and the base point is on the curve.
-
 use std::borrow::Borrow;
 
 use openvm_circuit::{
