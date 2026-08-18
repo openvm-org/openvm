@@ -125,8 +125,8 @@ pub const EC_MUL_STEPS_PER_ROW: usize = 2;
 /// One-hot flags per compute row, one per sign pattern of its digits.
 pub const EC_MUL_SIGN_PATTERNS: usize = 1 << EC_MUL_STEPS_PER_ROW;
 
-/// Trace rows per instruction. The most significant digit seeds the accumulator, leaving the
-/// remaining digits to divide evenly among the rows.
+/// Trace rows per instruction. The accumulator seed supplies a leading `+1`. The rows process all
+/// 256 signed digits that follow it.
 pub const EC_MUL_COMPUTE_ROWS: usize = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
 
 const _: () = assert!(EC_MUL_SCALAR_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));

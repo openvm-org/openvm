@@ -541,9 +541,8 @@ mod tests {
     /// The circuit's ladder, evaluated in affine coordinates with `(0, 0)` for the identity and the
     /// same incomplete formulas the `EC_ADD_NE` and `EC_DOUBLE` opcodes use.
     ///
-    /// [`ec_mul_ladder`] must agree with this for every odd scalar below the group order. Oddness
-    /// is what makes the two comparable at all, since [`ec_mul_ladder`] forces the low bit; the
-    /// order bound is what keeps the doubling and addition steps non-exceptional.
+    /// [`ec_mul_ladder`] must agree with this for every odd scalar below the group order. These
+    /// requirements keep the doubling and addition steps non-exceptional.
     fn affine_ladder<C: CurveAffine>(
         px: C::Base,
         py: C::Base,

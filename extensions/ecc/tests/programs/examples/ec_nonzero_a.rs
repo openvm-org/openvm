@@ -7,7 +7,7 @@
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup, Group};
-use openvm_p256::{P256Coord, P256Point};
+use openvm_p256::{P256Coord, P256Point, P256Scalar};
 
 openvm::entry!(main);
 
@@ -41,6 +41,10 @@ pub fn main() {
     if double.x() != p4.x() || double.y() != p4.y() {
         panic!();
     }
+
+    // Compare EC_MUL with complete group operations on a curve with nonzero `a`.
+    let expected_mul = &(&p4 + &p4) + &p2;
+    assert_eq!(p2.mul_scalar(&P256Scalar::from_u32(5)), expected_mul);
 
     // Test generator
     let (gen_x, gen_y) = P256Point::GENERATOR.into_coords();
