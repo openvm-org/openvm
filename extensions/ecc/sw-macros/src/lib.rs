@@ -90,6 +90,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_setup_mul_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name_str.to_lowercase());
+        let aligned_scalar_name = format_ident!("{}AlignedScalar", struct_name_str);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
@@ -106,6 +107,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 x: #intmod_type,
                 y: #intmod_type,
             }
+
+            /// An EC_MUL scalar aligned for one OpenVM memory block.
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+            #[allow(non_camel_case_types)]
+            #[repr(align(8))]
+            struct #aligned_scalar_name([u8; 32]);
+
             #[allow(non_upper_case_globals)]
 
             impl #struct_name {
@@ -144,13 +152,14 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                         if CHECK_SETUP {
                             Self::set_up_mul_once();
                         }
+                        let scalar = #aligned_scalar_name(*scalar);
                         let mut uninit: core::mem::MaybeUninit<Self> =
                             core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_mul_extern_func(
                                 uninit.as_mut_ptr() as usize,
                                 self as *const Self as usize,
-                                scalar.as_ptr() as usize,
+                                scalar.0.as_ptr() as usize,
                             );
                             uninit.assume_init()
                         }
@@ -251,16 +260,18 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                         // p1 is (x1, y1), and x1 must be the modulus.
                         // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
                         let modulus_bytes = <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                        let mut one = [0u8; <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
-                        one[0] = 1;
-                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
-                        // p1 should be (p, a)
-                        let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
+                        let p1 = Self {
+                            x: #intmod_type::from_const_bytes(modulus_bytes),
+                            y: <#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A,
+                        };
                         // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
-                        let p2 = [one.as_ref(), one.as_ref()].concat();
+                        let p2 = Self {
+                            x: <#intmod_type as openvm_algebra_guest::IntMod>::ONE,
+                            y: <#intmod_type as openvm_algebra_guest::IntMod>::ONE,
+                        };
                         let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();
 
-                        unsafe { #sw_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
+                        unsafe { #sw_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, &p1 as *const Self as *const u8, &p2 as *const Self as *const u8); }
                         <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         true
                     });
@@ -275,16 +286,18 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     is_setup.get_or_init(|| {
                         <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         let modulus_bytes = <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
-                        let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
+                        let p1 = Self {
+                            x: #intmod_type::from_const_bytes(modulus_bytes),
+                            y: <#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A,
+                        };
                         // SETUP_EC_MUL reads a fixed-width scalar operand but does not use its value.
-                        let scalar = [0u8; 32];
+                        let scalar = #aligned_scalar_name([0u8; 32]);
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_setup_mul_extern_func(
                                 uninit.as_mut_ptr() as *mut core::ffi::c_void,
-                                p1.as_ptr(),
-                                scalar.as_ptr(),
+                                &p1 as *const Self as *const u8,
+                                scalar.0.as_ptr(),
                             );
                         }
                         true
